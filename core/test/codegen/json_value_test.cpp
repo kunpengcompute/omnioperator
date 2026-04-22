@@ -361,4 +361,99 @@ TEST(JsonValueTest, ExtendedNullInput)
     delete context;
 }
 
+// Test JsonSplitScalar function
+static void JsonSplitScalarTest(const std::string &jsonStr,
+                                const std::string &expectedResult, bool expectIsNull)
+{
+    auto context = new ExecutionContext();
+    int64_t contextPtr = reinterpret_cast<int64_t>(context);
+    
+    bool outIsNull = false;
+    int32_t outLen = 0;
+    
+    const char *result = JsonSplitScalar(
+        contextPtr,
+        jsonStr.c_str(), static_cast<int32_t>(jsonStr.size()), false,
+        &outIsNull, &outLen
+    );
+    
+    if (expectIsNull) {
+        EXPECT_TRUE(outIsNull);
+        EXPECT_EQ(outLen, 0);
+    } else {
+        EXPECT_FALSE(outIsNull);
+        EXPECT_EQ(expectedResult, std::string(result, outLen));
+    }
+    
+    delete context;
+}
+
+TEST(JsonSplitScalarTest, SimpleArray)
+{
+    JsonSplitScalarTest(R"(["a","b","c"])", "a\r\nb\r\nc", false);
+}
+
+TEST(JsonSplitScalarTest, NumericArray)
+{
+    JsonSplitScalarTest(R"([1,2,3,4,5])", "1\r\n2\r\n3\r\n4\r\n5", false);
+}
+
+TEST(JsonSplitScalarTest, MixedArray)
+{
+    JsonSplitScalarTest(R"(["string",123,true,null])", "string\r\n123\r\ntrue\r\nnull", false);
+}
+
+TEST(JsonSplitScalarTest, NestedArray)
+{
+    JsonSplitScalarTest(R"([[1,2],[3,4]])", "[1,2]\r\n[3,4]", false);
+}
+
+TEST(JsonSplitScalarTest, ObjectArray)
+{
+    JsonSplitScalarTest(R"([{"name":"Alice"},{"name":"Bob"}])", "{\"name\":\"Alice\"}\r\n{\"name\":\"Bob\"}", false);
+}
+
+TEST(JsonSplitScalarTest, SingleElementArray)
+{
+    JsonSplitScalarTest(R"(["only"])", "only", false);
+}
+
+TEST(JsonSplitScalarTest, EmptyArray)
+{
+    JsonSplitScalarTest(R"([])", "", false);
+}
+
+TEST(JsonSplitScalarTest, NotArray)
+{
+    JsonSplitScalarTest(R"({"key":"value"})", "", true);
+    JsonSplitScalarTest(R"("string")", "", true);
+    JsonSplitScalarTest(R"(123)", "", true);
+}
+
+TEST(JsonSplitScalarTest, NullInput)
+{
+    auto context = new ExecutionContext();
+    int64_t contextPtr = reinterpret_cast<int64_t>(context);
+    
+    bool outIsNull = false;
+    int32_t outLen = 0;
+    
+    // Test with null input
+    const char *result = JsonSplitScalar(
+        contextPtr,
+        nullptr, 0, true,
+        &outIsNull, &outLen
+    );
+    EXPECT_TRUE(outIsNull);
+    EXPECT_EQ(outLen, 0);
+    
+    delete context;
+}
+
+TEST(JsonSplitScalarTest, InvalidJson)
+{
+    JsonSplitScalarTest("invalid json", "", true);
+    JsonSplitScalarTest("[1,2,", "", true);
+}
+
 } // namespace omniruntime

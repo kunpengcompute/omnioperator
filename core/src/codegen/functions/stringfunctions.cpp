@@ -216,8 +216,7 @@ namespace {
     thread_local JsonCache THREAD_LOCAL_JSON_CACHE;
 }
 
-// Enhanced JSON path parser supporting $.a.b, $[0], $['key'], $["key"], and nested combinations
-// Also handles keys with special characters when quoted
+// Legacy function for backward compatibility - converts advanced segments to simple keys
 static std::vector<std::string> ParseJsonPath(const std::string& path)
 {
     std::vector<std::string> keys;
@@ -632,6 +631,97 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
             *outLen = 0;
             return nullptr;
         }
+    }
+}
+
+// JSON_SPLIT_SCALAR function: splits JSON array and joins all elements with CRLF
+// Matches the semantics of the jsontest UDF (1 STRING argument -> STRING result)
+extern "C" DLLEXPORT const char* JsonSplitScalar(
+    int64_t contextPtr,
+    const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+    bool *outIsNull, int32_t *outLen)
+{
+    if (outIsNull == nullptr || outLen == nullptr) {
+        return nullptr;
+    }
+
+    // Handle NULL input
+    if (jsonStrIsNull || jsonStr == nullptr || jsonStrLen <= 0) {
+        *outIsNull = true;
+        *outLen = 0;
+        return nullptr;
+    }
+
+    std::string jsonContent(jsonStr, jsonStrLen);
+
+    try {
+        // Parse JSON
+        nlohmann::json jsonData;
+        try {
+            jsonData = nlohmann::json::parse(jsonContent);
+        } catch (...) {
+            // Try to fix escaped quotes
+            std::string fixedJsonContent;
+            fixedJsonContent.reserve(jsonContent.size());
+            for (size_t j = 0; j < jsonContent.size(); j++) {
+                if (jsonContent[j] == '\\') {
+                    if (j + 1 < jsonContent.size()) {
+                        char next = jsonContent[j + 1];
+                        if (next == '\\' || next == '"') {
+                            fixedJsonContent += jsonContent[j];
+                        } else {
+                            fixedJsonContent += '"';
+                        }
+                    } else {
+                        fixedJsonContent += '"';
+                    }
+                } else {
+                    fixedJsonContent += jsonContent[j];
+                }
+            }
+            jsonData = nlohmann::json::parse(fixedJsonContent);
+        }
+
+        // Check if it's an array
+        if (!jsonData.is_array()) {
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
+        }
+
+        // Join all elements with CRLF delimiter
+        std::string result;
+        for (size_t i = 0; i < jsonData.size(); i++) {
+            if (i > 0) {
+                result += "\r\n";
+            }
+            const nlohmann::json& element = jsonData[i];
+            if (element.is_string()) {
+                result += element.get<std::string>();
+            } else if (element.is_number_integer()) {
+                result += std::to_string(element.get<int64_t>());
+            } else if (element.is_number_float()) {
+                result += std::to_string(element.get<double>());
+            } else if (element.is_boolean()) {
+                result += element.get<bool>() ? "true" : "false";
+            } else if (element.is_null()) {
+                result += "null";
+            } else {
+                // For objects and arrays, return JSON string
+                result += element.dump();
+            }
+        }
+
+        *outIsNull = false;
+        *outLen = static_cast<int32_t>(result.size());
+        auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
+        memcpy_s(ret, *outLen + 1, result.c_str(), *outLen + 1);
+        return ret;
+
+    } catch (const std::exception&) {
+        *outIsNull = true;
+        *outLen = 0;
+        return nullptr;
     }
 }
 

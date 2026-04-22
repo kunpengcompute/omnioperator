@@ -62,6 +62,15 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
     int32_t errorBehavior, const char *defaultOnError, int32_t defaultOnErrorLen, bool defaultOnErrorIsNull,
     bool *outIsNull, int32_t *outLen);
 
+
+// JSON_SPLIT_SCALAR function for splitting JSON array and joining all elements
+// Returns all elements joined with CRLF delimiter (matches jsontest UDF semantics)
+// This function takes only 1 argument (the JSON string) and returns a single VARCHAR
+extern "C" DLLEXPORT const char* JsonSplitScalar(
+    int64_t contextPtr,
+    const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+    bool *outIsNull, int32_t *outLen);
+
 extern "C" DLLEXPORT const char *ConcatStrStr(int64_t contextPtr, const char *ap, int32_t apLen, const char *bp,
     int32_t bpLen, bool isNull, int32_t *outLen);
 
