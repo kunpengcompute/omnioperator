@@ -15,6 +15,8 @@ std::vector<Function> DateTimeFunctionRegistry::GetFunctions()
     std::vector<Function> dateTimeFnRegistry = {
         Function(reinterpret_cast<void *>(GetHourFromTimestamp), "get_hour", {},
                  {OMNI_LONG}, OMNI_INT, INPUT_DATA),
+        Function(reinterpret_cast<void *>(GetHourFromTimestampWithTz), "get_hour_with_tz", {},
+                 {OMNI_LONG, OMNI_LONG}, OMNI_INT, INPUT_DATA),
         Function(reinterpret_cast<void *>(UnixTimestampFromStr), "unix_timestamp", {},
             { OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR }, OMNI_LONG, INPUT_DATA_AND_NULL_AND_RETURN_NULL),
         Function(reinterpret_cast<void *>(UnixTimestampFromDate), "unix_timestamp", {},
@@ -25,6 +27,8 @@ std::vector<Function> DateTimeFunctionRegistry::GetFunctions()
             { OMNI_LONG, OMNI_VARCHAR, OMNI_VARCHAR }, OMNI_VARCHAR, INPUT_DATA_AND_OVERFLOW_NULL, true),
         Function(reinterpret_cast<void *>(FromUnixTimeWithoutTz), "from_unixtime_without_tz", {},
                  { OMNI_LONG, OMNI_VARCHAR }, OMNI_VARCHAR, INPUT_DATA, true),
+        Function(reinterpret_cast<void *>(FromUnixTimeWithTz), "from_unixtime_with_tz", {},
+                 { OMNI_LONG, OMNI_VARCHAR, OMNI_LONG }, OMNI_VARCHAR, INPUT_DATA, true),
         Function(reinterpret_cast<void *>(DateTrunc), "trunc_date", {}, { OMNI_DATE32, OMNI_VARCHAR },
             OMNI_DATE32, INPUT_DATA, true),
         Function(reinterpret_cast<void *>(DateTruncRetNull), "trunc_date_null", {}, { OMNI_DATE32, OMNI_VARCHAR },

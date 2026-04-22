@@ -32,6 +32,9 @@ extern "C" DLLEXPORT char *FromUnixTimeRetNull(int64_t contextPtr, bool *isNull,
 extern "C" DLLEXPORT char *FromUnixTimeWithoutTz(int64_t contextPtr, int64_t timestamp, const char *fmtStr,
                                                  int32_t fmtLen, bool isNull, int32_t *outLen);
 
+extern "C" DLLEXPORT char *FromUnixTimeWithTz(int64_t contextPtr, int64_t timestamp, const char *fmtStr,
+    int32_t fmtLen, int64_t zoneOffsetSeconds, bool isNull, int32_t *outLen);
+
 extern "C" DLLEXPORT int32_t DateTrunc(int64_t contextPtr, int32_t days, const char *levelStr, int32_t len);
 
 extern "C" DLLEXPORT int32_t DateTruncRetNull(bool *isNull, int32_t days, const char *levelStr, int32_t len);
@@ -48,5 +51,7 @@ std::string toOmniTimeFormat(const std::string& format);
 extern "C" DLLEXPORT int32_t GetHourFromTimestamp(int64_t timestamp, bool isNull);
 
 extern "C" DLLEXPORT int32_t DateDiff(int32_t endDate, bool endIsNull, int32_t startDate, bool startIsNull, bool *retIsNull);
+
+extern "C" DLLEXPORT int32_t GetHourFromTimestampWithTz(int64_t timestamp, int64_t zoneOffsetSeconds, bool isNull);
 }
 #endif // OMNI_RUNTIME_DATETIME_FUNCTIONS_H

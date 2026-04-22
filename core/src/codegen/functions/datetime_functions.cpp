@@ -95,6 +95,26 @@ extern "C" DLLEXPORT char *FromUnixTimeWithoutTz(int64_t contextPtr, int64_t tim
     return result;
 }
 
+extern "C" DLLEXPORT char *FromUnixTimeWithTz(int64_t contextPtr, int64_t timestamp, const char *fmtStr,
+                                                       int32_t fmtLen, int64_t zoneOffsetSeconds, bool isNull, int32_t *outLen)
+{
+    if (isNull) {
+        *outLen = 0;
+        return nullptr;
+    }
+
+    struct tm ltm;
+    int64_t adjusted_seconds = (timestamp >= 0) ? (timestamp / 1000) : ((timestamp - 999) / 1000);
+    adjusted_seconds += zoneOffsetSeconds;
+    gmtime_r(&adjusted_seconds, &ltm);
+    std::string fmt(fmtStr, fmtLen);
+    int32_t resultLen = fmtLen + 3;
+    auto result = ArenaAllocatorMalloc(contextPtr, resultLen);
+    int ret = strftime(result, resultLen, fmt.c_str(), &ltm);
+    *outLen = ret;
+    return result;
+}
+
 extern "C" DLLEXPORT char *FromUnixTime(int64_t contextPtr, bool *isNull, int64_t timestamp, const char *fmtStr,
     int32_t fmtLen, const char *tzStr, int32_t tzLen, int32_t *outLen)
 {
@@ -182,6 +202,11 @@ extern "C" DLLEXPORT int32_t GetHourFromTimestamp(int64_t timestamp, bool isNull
     int32_t result = totalHours % 24;
 
     return result;
+}
+
+extern "C" DLLEXPORT int32_t GetHourFromTimestampWithTz(int64_t timestamp, int64_t zoneOffsetSeconds, bool isNull)
+{
+    return GetHourFromTimestamp(timestamp + zoneOffsetSeconds * 1000, isNull);
 }
 
 extern "C" DLLEXPORT int32_t DateAdd(int32_t right, int32_t left)
