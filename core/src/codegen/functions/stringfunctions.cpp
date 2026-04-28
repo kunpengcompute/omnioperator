@@ -1134,6 +1134,16 @@ extern "C" DLLEXPORT int64_t LengthStr(const char *str, int32_t strLen, bool isN
     return isNull ? 0 : omniruntime::Utf8Util::CountCodePoints(str, strLen);
 }
 
+extern "C" DLLEXPORT int32_t CharLengthStr(const char *str, int32_t strLen, bool isNull)
+{
+    return isNull ? 0 : omniruntime::Utf8Util::CountCodePoints(str, strLen);
+}
+
+extern "C" DLLEXPORT int32_t CharLengthChar(const char *str, int32_t strWidth, int32_t strLen, bool isNull)
+{
+    return isNull ? 0 : strWidth;
+}
+
 extern "C" DLLEXPORT const char *ReplaceStrStrStrWithRepNotReplace(int64_t contextPtr, const char *str, int32_t strLen,
     const char *searchStr, int32_t searchLen, const char *replaceStr, int32_t replaceLen, bool isNull, int32_t *outLen)
 {

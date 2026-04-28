@@ -43,6 +43,22 @@ void Date32TruncTest(const std::string &input, const std::string &level, const s
 }
 #endif
 
+TEST(FunctionTest, ToTimestampLtz) {
+  bool retIsNull = false;
+  EXPECT_EQ(1625097600000L,
+            ToTimestampLtz(1625097600000L, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  EXPECT_EQ(1625097600000L,
+            ToTimestampLtz(1625097600L, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, true, 3, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 3, true, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+}
 /*
  * context helper tests
  */
@@ -2790,6 +2806,31 @@ TEST(FunctionTest, LengthStrZh)
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     auto len = LengthStr(str.c_str(), str.length(), false);
     EXPECT_EQ(len, 37);
+}
+
+TEST(FunctionTest, CharLengthStr)
+{
+    std::string test = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
+    auto len = CharLengthStr(test.c_str(), test.length(), false);
+    EXPECT_EQ(len, 37);
+
+    std::string str = "m";
+    len = CharLengthStr(str.c_str(), str.length(), false);
+    EXPECT_EQ(len, 1);
+
+    len = CharLengthStr(nullptr, 0, true);
+    EXPECT_EQ(len, 0);
+}
+
+TEST(FunctionTest, CharLengthChar)
+{
+    std::string test = "abc       ";
+    int32_t width = 10;
+    auto len = CharLengthChar(test.c_str(), width, test.length(), false);
+    EXPECT_EQ(len, 10);
+
+    len = CharLengthChar(nullptr, width, 0, true);
+    EXPECT_EQ(len, 0);
 }
 
 TEST(FunctionTest, ReplaceStrStrStrWithRep)

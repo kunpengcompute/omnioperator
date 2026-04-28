@@ -263,4 +263,20 @@ extern "C" DLLEXPORT int32_t DateDiff(int32_t endDate, bool endIsNull, int32_t s
     }
     return endDate - startDate;
 }
+extern "C" DLLEXPORT int64_t ToTimestampLtz(int64_t numeric, bool isNull1,
+                                            int32_t precision, bool isNull2,
+                                            bool* retIsNull) {
+  if (isNull1 || isNull2) {
+    *retIsNull = true;
+    return 0;
+  }
+  *retIsNull = false;
+  if (precision == 3) {
+    return numeric;
+  } else if (precision == 0) {
+    return numeric * 1000;
+  } else {
+    return numeric;
+  }
+}
 }

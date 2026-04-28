@@ -99,6 +99,12 @@ const std::string LengthFnStr()
     return lengthFnStr;
 }
 
+const std::string CharLengthFnStr()
+{
+    const std::string charLengthFnStr = "char_length";
+    return charLengthFnStr;
+}
+
 const std::string CastNullFnStr()
 {
     const std::string castNullFnStr = "CAST_null";
@@ -298,6 +304,9 @@ std::vector<Function> StringFunctionRegistry::GetFunctions()
         Function(reinterpret_cast<void *>(CountChar), CountCharFnStr(), {}, { OMNI_VARCHAR, OMNI_CHAR }, OMNI_LONG),
         Function(reinterpret_cast<void *>(LengthChar), LengthFnStr(), {}, { OMNI_CHAR }, OMNI_LONG, INPUT_DATA),
         Function(reinterpret_cast<void *>(LengthStr), LengthFnStr(), {}, { OMNI_VARCHAR }, OMNI_LONG, INPUT_DATA),
+
+        Function(reinterpret_cast<void *>(CharLengthStr), CharLengthFnStr(), {}, { OMNI_VARCHAR }, OMNI_INT, INPUT_DATA),
+        Function(reinterpret_cast<void *>(CharLengthChar), CharLengthFnStr(), {}, { OMNI_CHAR }, OMNI_INT, INPUT_DATA),
 
         // replace functions
         Function(reinterpret_cast<void *>(LengthCharReturnInt32), LengthFnStr(), {}, { OMNI_CHAR }, OMNI_INT,

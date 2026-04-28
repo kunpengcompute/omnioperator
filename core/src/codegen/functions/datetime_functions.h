@@ -53,5 +53,9 @@ extern "C" DLLEXPORT int32_t GetHourFromTimestamp(int64_t timestamp, bool isNull
 extern "C" DLLEXPORT int32_t DateDiff(int32_t endDate, bool endIsNull, int32_t startDate, bool startIsNull, bool *retIsNull);
 
 extern "C" DLLEXPORT int32_t GetHourFromTimestampWithTz(int64_t timestamp, int64_t zoneOffsetSeconds, bool isNull);
+
+extern "C" DLLEXPORT int64_t ToTimestampLtz(int64_t numeric, bool isNull1,
+                                            int32_t precision, bool isNull2,
+                                            bool* retIsNull);
 }
 #endif // OMNI_RUNTIME_DATETIME_FUNCTIONS_H
