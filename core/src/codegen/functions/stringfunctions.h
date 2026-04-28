@@ -51,6 +51,10 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
                                                    const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
                                                    bool *outIsNull, int32_t *outLen);
 
+extern "C" DLLEXPORT const char* JsonQueryRetNull(int64_t contextPtr, const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+                                                   const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
+                                                   bool *outIsNull, int32_t *outLen);
+
 // Extended JSON_VALUE function with ON EMPTY/ERROR behaviors
 // emptyBehavior: 0=NULL, 1=ERROR, 2=DEFAULT
 // errorBehavior: 0=NULL, 1=ERROR, 2=DEFAULT

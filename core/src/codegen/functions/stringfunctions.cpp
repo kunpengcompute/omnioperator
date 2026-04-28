@@ -320,6 +320,78 @@ static std::vector<std::string> ParseJsonPath(const std::string& path)
     return keys;
 }
 
+static nlohmann::json* GetParsedJsonWithCache(std::string& jsonContent)
+{
+    if (THREAD_LOCAL_JSON_CACHE.IsCacheValid(jsonContent)) {
+        return &THREAD_LOCAL_JSON_CACHE.parsedJson;
+    }
+
+    nlohmann::json newJson;
+    try {
+        newJson = nlohmann::json::parse(jsonContent);
+    } catch (...) {
+        std::string fixedJsonContent;
+        fixedJsonContent.reserve(jsonContent.size());
+        for (size_t j = 0; j < jsonContent.size(); j++) {
+            if (jsonContent[j] == '\\') {
+                if (j + 1 < jsonContent.size()) {
+                    char next = jsonContent[j + 1];
+                    if (next == '\\' || next == '"') {
+                        fixedJsonContent += jsonContent[j];
+                    } else {
+                        fixedJsonContent += '"';
+                    }
+                } else {
+                    fixedJsonContent += '"';
+                }
+            } else {
+                fixedJsonContent += jsonContent[j];
+            }
+        }
+        newJson = nlohmann::json::parse(fixedJsonContent);
+        jsonContent = fixedJsonContent;
+    }
+
+    THREAD_LOCAL_JSON_CACHE.SetCache(jsonContent, newJson);
+    return &THREAD_LOCAL_JSON_CACHE.parsedJson;
+}
+
+static nlohmann::json* ResolveJsonPathTarget(nlohmann::json* jsonData, const std::string& pathContent)
+{
+    std::vector<std::string> keys = ParseJsonPath(pathContent);
+    if (keys.empty()) {
+        return nullptr;
+    }
+
+    nlohmann::json* current = jsonData;
+    for (const auto& key : keys) {
+        if (current->is_object()) {
+            if (!current->contains(key)) {
+                return nullptr;
+            }
+            current = &(*current)[key];
+            continue;
+        }
+
+        if (current->is_array()) {
+            try {
+                size_t index = std::stoul(key);
+                if (index >= current->size()) {
+                    return nullptr;
+                }
+                current = &(*current)[index];
+                continue;
+            } catch (...) {
+                return nullptr;
+            }
+        }
+
+        return nullptr;
+    }
+
+    return current;
+}
+
 extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
                                                    const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
                                                    bool *outIsNull, int32_t *outLen)
@@ -338,90 +410,14 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
     std::string pathContent(pathStr, pathStrLen);
     
     try {
-        // Use cached JSON if available, otherwise parse and cache
-        nlohmann::json* jsonData;
-        if (THREAD_LOCAL_JSON_CACHE.IsCacheValid(jsonContent)) {
-            jsonData = &THREAD_LOCAL_JSON_CACHE.parsedJson;
-        } else {
-            nlohmann::json newJson;
-            // Try parsing the original JSON first
-            try {
-                newJson = nlohmann::json::parse(jsonContent);
-            } catch (...) {
-                // If parsing fails, try to fix escaped quotes
-                // This handles cases where input has \ instead of " for JSON string delimiters
-                std::string fixedJsonContent;
-                fixedJsonContent.reserve(jsonContent.size());
-                for (size_t j = 0; j < jsonContent.size(); j++) {
-                    if (jsonContent[j] == '\\') {
-                        if (j + 1 < jsonContent.size()) {
-                            char next = jsonContent[j + 1];
-                            if (next == '\\' || next == '"') {
-                                fixedJsonContent += jsonContent[j];
-                            } else {
-                                fixedJsonContent += '"';
-                            }
-                        } else {
-                            fixedJsonContent += '"';
-                        }
-                    } else {
-                        fixedJsonContent += jsonContent[j];
-                    }
-                }
-                newJson = nlohmann::json::parse(fixedJsonContent);
-                jsonContent = fixedJsonContent; // Update for cache validation
-            }
-            THREAD_LOCAL_JSON_CACHE.SetCache(jsonContent, newJson);
-            jsonData = &THREAD_LOCAL_JSON_CACHE.parsedJson;
-        }
-        
-        std::vector<std::string> keys = ParseJsonPath(pathContent);
-        
-        // If path parsing failed (empty keys), return null
-        if (keys.empty()) {
+        nlohmann::json* jsonData = GetParsedJsonWithCache(jsonContent);
+        nlohmann::json* current = ResolveJsonPathTarget(jsonData, pathContent);
+        if (current == nullptr || current->is_null()) {
             *outIsNull = true;
             *outLen = 0;
             return nullptr;
         }
-        
-        nlohmann::json* current = jsonData;
-        for (const auto& key : keys) {
-            if (current->is_object()) {
-                if (current->contains(key)) {
-                    current = &(*current)[key];
-                } else {
-                    *outIsNull = true;
-                    *outLen = 0;
-                    return nullptr;
-                }
-            } else if (current->is_array()) {
-                try {
-                    size_t index = std::stoul(key);
-                    if (index < current->size()) {
-                        current = &(*current)[index];
-                    } else {
-                        *outIsNull = true;
-                        *outLen = 0;
-                        return nullptr;
-                    }
-                } catch (...) {
-                    *outIsNull = true;
-                    *outLen = 0;
-                    return nullptr;
-                }
-            } else {
-                *outIsNull = true;
-                *outLen = 0;
-                return nullptr;
-            }
-        }
-        
-        if (current->is_null()) {
-            *outIsNull = true;
-            *outLen = 0;
-            return nullptr;
-        }
-        
+
         std::string result;
         if (current->is_string()) {
             result = current->get<std::string>();
@@ -441,6 +437,45 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
         memcpy_s(ret, *outLen + 1, result.c_str(), *outLen + 1);
         return ret;
         
+    } catch (const std::exception&) {
+        *outIsNull = true;
+        *outLen = 0;
+        return nullptr;
+    }
+}
+
+extern "C" DLLEXPORT const char* JsonQueryRetNull(int64_t contextPtr, const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+                                                   const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
+                                                   bool *outIsNull, int32_t *outLen)
+{
+    if (outIsNull == nullptr || outLen == nullptr) {
+        return nullptr;
+    }
+
+    if (jsonStrIsNull || pathStrIsNull) {
+        *outIsNull = true;
+        *outLen = 0;
+        return nullptr;
+    }
+
+    std::string jsonContent(jsonStr, jsonStrLen);
+    std::string pathContent(pathStr, pathStrLen);
+
+    try {
+        nlohmann::json* jsonData = GetParsedJsonWithCache(jsonContent);
+        nlohmann::json* current = ResolveJsonPathTarget(jsonData, pathContent);
+        if (current == nullptr || current->is_null() || (!current->is_object() && !current->is_array())) {
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
+        }
+
+        std::string result = current->dump();
+        *outIsNull = false;
+        *outLen = static_cast<int32_t>(result.size());
+        auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
+        memcpy_s(ret, *outLen + 1, result.c_str(), *outLen + 1);
+        return ret;
     } catch (const std::exception&) {
         *outIsNull = true;
         *outLen = 0;
