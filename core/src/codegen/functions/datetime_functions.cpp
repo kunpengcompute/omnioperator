@@ -263,20 +263,49 @@ extern "C" DLLEXPORT int32_t DateDiff(int32_t endDate, bool endIsNull, int32_t s
     }
     return endDate - startDate;
 }
+// Valid epoch time range constants (same as Flink's DateTimeUtils)
+static constexpr int64_t MIN_EPOCH_MILLS = -62167219200000LL;     // '0000-01-01 00:00:00.000 UTC+0'
+static constexpr int64_t MAX_EPOCH_MILLS = 253402300799999LL;     // '9999-12-31 23:59:59.999 UTC+0'
+static constexpr int64_t MIN_EPOCH_SECONDS = -62167219200LL;       // '0000-01-01 00:00:00 UTC+0'
+static constexpr int64_t MAX_EPOCH_SECONDS = 253402300799LL;       // '9999-12-31 23:59:59 UTC+0'
+static constexpr int64_t MILLIS_PER_SECOND = 1000LL;
+
 extern "C" DLLEXPORT int64_t ToTimestampLtz(int64_t numeric, bool isNull1,
                                             int32_t precision, bool isNull2,
                                             bool* retIsNull) {
+  
   if (isNull1 || isNull2) {
     *retIsNull = true;
     return 0;
   }
+  
   *retIsNull = false;
-  if (precision == 3) {
-    return numeric;
-  } else if (precision == 0) {
-    return numeric * 1000;
-  } else {
-    return numeric;
+  
+  switch (precision) {
+    case 0: {
+      // precision=0: input is epoch seconds
+      if (numeric >= MIN_EPOCH_SECONDS && numeric <= MAX_EPOCH_SECONDS) {
+        int64_t epochMills = numeric * MILLIS_PER_SECOND;
+        if (epochMills >= MIN_EPOCH_MILLS && epochMills <= MAX_EPOCH_MILLS) {
+          return epochMills;
+        }
+      }
+      *retIsNull = true;
+      return 0;
+    }
+    case 3: {
+      // precision=3: input is epoch milliseconds
+      if (numeric >= MIN_EPOCH_MILLS && numeric <= MAX_EPOCH_MILLS) {
+        return numeric;
+      }
+      *retIsNull = true;
+      return 0;
+    }
+    default: {
+      // Unsupported precision, set return null (equivalent to Flink's TableException)
+      *retIsNull = true;
+      return 0;
+    }
   }
 }
 }

@@ -45,19 +45,79 @@ void Date32TruncTest(const std::string &input, const std::string &level, const s
 
 TEST(FunctionTest, ToTimestampLtz) {
   bool retIsNull = false;
+
+  // Normal cases: precision=3 (milliseconds)
   EXPECT_EQ(1625097600000L,
             ToTimestampLtz(1625097600000L, false, 3, false, &retIsNull));
   EXPECT_FALSE(retIsNull);
 
+  // Normal cases: precision=0 (seconds)
   EXPECT_EQ(1625097600000L,
             ToTimestampLtz(1625097600L, false, 0, false, &retIsNull));
   EXPECT_FALSE(retIsNull);
 
+  // Null input cases
   EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, true, 3, false, &retIsNull));
   EXPECT_TRUE(retIsNull);
 
   EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 3, true, &retIsNull));
   EXPECT_TRUE(retIsNull);
+
+  // Boundary values for precision=3 (milliseconds)
+  // MIN_EPOCH_MILLS = -62167219200000LL ('0000-01-01 00:00:00.000 UTC+0')
+  EXPECT_EQ(-62167219200000LL,
+            ToTimestampLtz(-62167219200000LL, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // MAX_EPOCH_MILLS = 253402300799999LL ('9999-12-31 23:59:59.999 UTC+0')
+  EXPECT_EQ(253402300799999LL,
+            ToTimestampLtz(253402300799999LL, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Boundary values for precision=0 (seconds)
+  // MIN_EPOCH_SECONDS = -62167219200LL ('0000-01-01 00:00:00 UTC+0')
+  EXPECT_EQ(-62167219200000LL,
+            ToTimestampLtz(-62167219200LL, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // MAX_EPOCH_SECONDS = 253402300799LL ('9999-12-31 23:59:59 UTC+0')
+  EXPECT_EQ(253402300799000LL,
+            ToTimestampLtz(253402300799LL, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Out of range values should return null
+  // Below MIN_EPOCH_MILLS for precision=3
+  EXPECT_EQ(0L, ToTimestampLtz(-62167219200001LL, false, 3, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Above MAX_EPOCH_MILLS for precision=3
+  EXPECT_EQ(0L, ToTimestampLtz(253402300800000LL, false, 3, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Below MIN_EPOCH_SECONDS for precision=0
+  EXPECT_EQ(0L, ToTimestampLtz(-62167219201LL, false, 0, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Above MAX_EPOCH_SECONDS for precision=0
+  EXPECT_EQ(0L, ToTimestampLtz(253402300800LL, false, 0, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Unsupported precision values should return null
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 1, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 6, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, -1, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Zero value test
+  EXPECT_EQ(0L, ToTimestampLtz(0L, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtz(0L, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
 }
 /*
  * context helper tests
