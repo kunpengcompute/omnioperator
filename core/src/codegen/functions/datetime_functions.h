@@ -33,7 +33,7 @@ extern "C" DLLEXPORT char *FromUnixTimeWithoutTz(int64_t contextPtr, int64_t tim
                                                  int32_t fmtLen, bool isNull, int32_t *outLen);
 
 extern "C" DLLEXPORT char *FromUnixTimeWithTz(int64_t contextPtr, int64_t timestamp, const char *fmtStr,
-    int32_t fmtLen, int64_t zoneOffsetSeconds, bool isNull, int32_t *outLen);
+    int32_t fmtLen, const char *tzStr, int32_t tzLen, bool isNull, int32_t *outLen);
 
 extern "C" DLLEXPORT int32_t DateTrunc(int64_t contextPtr, int32_t days, const char *levelStr, int32_t len);
 
@@ -52,7 +52,7 @@ extern "C" DLLEXPORT int32_t GetHourFromTimestamp(int64_t timestamp, bool isNull
 
 extern "C" DLLEXPORT int32_t DateDiff(int32_t endDate, bool endIsNull, int32_t startDate, bool startIsNull, bool *retIsNull);
 
-extern "C" DLLEXPORT int32_t GetHourFromTimestampWithTz(int64_t timestamp, int64_t zoneOffsetSeconds, bool isNull);
+extern "C" DLLEXPORT int32_t GetHourFromTimestampWithTz(int64_t timestamp, const char *tzStr, int32_t tzLen, bool isNull);
 
 extern "C" DLLEXPORT int64_t ToTimestampLtz(int64_t numeric, bool isNull1,
                                             int32_t precision, bool isNull2,

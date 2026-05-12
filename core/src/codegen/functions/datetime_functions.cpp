@@ -96,21 +96,21 @@ extern "C" DLLEXPORT char *FromUnixTimeWithoutTz(int64_t contextPtr, int64_t tim
 }
 
 extern "C" DLLEXPORT char *FromUnixTimeWithTz(int64_t contextPtr, int64_t timestamp, const char *fmtStr,
-                                                       int32_t fmtLen, int64_t zoneOffsetSeconds, bool isNull, int32_t *outLen)
+                                                       int32_t fmtLen, const char *tzStr, int32_t tzLen, bool isNull, int32_t *outLen)
 {
     if (isNull) {
         *outLen = 0;
         return nullptr;
     }
-
+    int64_t timeStampVal = (timestamp >= 0) ? (timestamp / 1000) : ((timestamp - 999) / 1000);
+    setenv("TZ", TimeZoneUtil::GetTZ(tzStr), 1);
+    tzset();
     struct tm ltm;
-    int64_t adjusted_seconds = (timestamp >= 0) ? (timestamp / 1000) : ((timestamp - 999) / 1000);
-    adjusted_seconds += zoneOffsetSeconds;
-    gmtime_r(&adjusted_seconds, &ltm);
-    std::string fmt(fmtStr, fmtLen);
+    localtime_r(&timeStampVal, &ltm);
     int32_t resultLen = fmtLen + 3;
     auto result = ArenaAllocatorMalloc(contextPtr, resultLen);
-    int ret = strftime(result, resultLen, fmt.c_str(), &ltm);
+    std::string fmt(fmtStr, fmtLen);
+    auto ret = strftime(result, resultLen, fmt.c_str(), &ltm);
     *outLen = ret;
     return result;
 }
@@ -204,9 +204,20 @@ extern "C" DLLEXPORT int32_t GetHourFromTimestamp(int64_t timestamp, bool isNull
     return result;
 }
 
-extern "C" DLLEXPORT int32_t GetHourFromTimestampWithTz(int64_t timestamp, int64_t zoneOffsetSeconds, bool isNull)
+extern "C" DLLEXPORT int32_t GetHourFromTimestampWithTz(int64_t timestamp, const char *tzStr, int32_t tzLen, bool isNull)
 {
-    return GetHourFromTimestamp(timestamp + zoneOffsetSeconds * 1000, isNull);
+    if (isNull) {
+        return 0;
+    }
+    int64_t timeStampVal = (timestamp >= 0) ? (timestamp / 1000) : ((timestamp - 999) / 1000);
+    setenv("TZ", TimeZoneUtil::GetTZ(tzStr), 1);
+    tzset();
+    struct tm ltm;
+    localtime_r(&timeStampVal, &ltm);
+    // 格式化为字符串
+    char buffer[80];
+    strftime(buffer, sizeof(buffer), "%H", &ltm);
+    return atoi(buffer);
 }
 
 extern "C" DLLEXPORT int32_t DateAdd(int32_t right, int32_t left)
