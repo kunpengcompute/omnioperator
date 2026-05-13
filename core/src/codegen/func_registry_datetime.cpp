@@ -40,6 +40,9 @@ std::vector<Function> DateTimeFunctionRegistry::GetFunctions()
         Function(reinterpret_cast<void *>(DateDiff), "date_diff", {}, { OMNI_DATE32, OMNI_DATE32 }, OMNI_INT, INPUT_DATA_AND_NULL_AND_RETURN_NULL),
         Function(reinterpret_cast<void*>(ToTimestampLtz), "to_timestamp_ltz", {},
             {OMNI_LONG, OMNI_INT}, OMNI_LONG,
+            INPUT_DATA_AND_NULL_AND_RETURN_NULL),
+        Function(reinterpret_cast<void*>(ToTimestampLtzInt), "to_timestamp_ltz", {},
+            {OMNI_INT, OMNI_INT}, OMNI_LONG,
             INPUT_DATA_AND_NULL_AND_RETURN_NULL)
     };
     return dateTimeFnRegistry;

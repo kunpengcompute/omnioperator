@@ -319,4 +319,56 @@ extern "C" DLLEXPORT int64_t ToTimestampLtz(int64_t numeric, bool isNull1,
     }
   }
 }
+
+extern "C" DLLEXPORT int64_t ToTimestampLtzInt(int32_t numeric, bool isNull1,
+                                            int32_t precision, bool isNull2,
+                                            bool* retIsNull) {
+  
+  if (isNull1 || isNull2) {
+    *retIsNull = true;
+    return 0;
+  }
+  
+  *retIsNull = false;
+  
+  int64_t numeric64 = static_cast<int64_t>(numeric);
+  
+  switch (precision) {
+    case 0: {
+      // precision=0: input is epoch seconds
+      // For INT type, the range is more limited than BIGINT
+      // INT range: -2147483648 to 2147483647
+      // For precision=0, valid epoch seconds range needs to be within INT bounds
+      // MIN_EPOCH_SECONDS = -62167219200LL (too small for INT)
+      // MAX_EPOCH_SECONDS = 253402300799LL (too large for INT)
+      // So INT with precision=0 can only represent a subset of valid timestamps
+      // The valid INT range for epoch seconds is approximately:
+      // -2147483648 seconds = 1930-03-19 to 2147483647 seconds = 2038-01-19
+      // We still apply the validation to ensure it's a reasonable timestamp
+      int64_t epochMills = numeric64 * MILLIS_PER_SECOND;
+      if (epochMills >= MIN_EPOCH_MILLS && epochMills <= MAX_EPOCH_MILLS) {
+        return epochMills;
+      }
+      *retIsNull = true;
+      return 0;
+    }
+    case 3: {
+      // precision=3: input is epoch milliseconds
+      // For INT type with precision=3, the range is very limited
+      // INT range: -2147483648 to 2147483647 milliseconds
+      // This represents timestamps from approximately 1969-12-31 to 1970-01-26
+      // We still validate against the full range
+      if (numeric64 >= MIN_EPOCH_MILLS && numeric64 <= MAX_EPOCH_MILLS) {
+        return numeric64;
+      }
+      *retIsNull = true;
+      return 0;
+    }
+    default: {
+      // Unsupported precision, set return null (equivalent to Flink's TableException)
+      *retIsNull = true;
+      return 0;
+    }
+  }
+}
 }

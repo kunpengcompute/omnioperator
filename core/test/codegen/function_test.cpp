@@ -119,6 +119,59 @@ TEST(FunctionTest, ToTimestampLtz) {
   EXPECT_EQ(0L, ToTimestampLtz(0L, false, 0, false, &retIsNull));
   EXPECT_FALSE(retIsNull);
 }
+
+TEST(FunctionTest, ToTimestampLtzInt) {
+  bool retIsNull = false;
+
+  // Normal cases: precision=0 (seconds) - INT can represent epoch seconds
+  EXPECT_EQ(1625097600000L,
+            ToTimestampLtzInt(1625097600, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Null input cases
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, true, 0, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 0, true, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Boundary values for precision=0 (seconds) within INT range
+  // INT_MAX = 2147483647 seconds (approximately 2038-01-19)
+  // Note: INT_MAX seconds * 1000 = 2147483647000 milliseconds, which is within valid range
+  EXPECT_EQ(2147483647000LL,
+            ToTimestampLtzInt(2147483647, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // INT_MIN = -2147483648 seconds (approximately 1930-03-19)
+  // Note: INT_MIN seconds * 1000 = -2147483648000 milliseconds, which is within valid range
+  EXPECT_EQ(-2147483648000LL,
+            ToTimestampLtzInt(-2147483648, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Zero value test for precision=0
+  EXPECT_EQ(0L, ToTimestampLtzInt(0, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // For precision=3 (milliseconds), INT range is very limited
+  // INT can only represent timestamps from approximately 1969-12-31 to 1970-01-26
+  // Valid INT milliseconds values within the broader timestamp range
+  // precision=3 means input is already milliseconds, so it returns directly
+  EXPECT_EQ(1LL, ToTimestampLtzInt(1, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  EXPECT_EQ(0LL, ToTimestampLtzInt(0, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Unsupported precision values should return null
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 1, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 6, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, -1, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+}
 /*
  * context helper tests
  */
