@@ -3,8 +3,10 @@
  * Description:
  */
 #include "jsonparser.h"
+#include <algorithm>
 #include <vector>
 #include <fstream> // for testing
+#include <cassert>
 #include <limits>
 
 using namespace std;
@@ -15,6 +17,10 @@ using Json = nlohmann::json;
 
 Expr *JSONParser::ParseJSONFieldRef(const Json &jsonExpr)
 {
+    if (!jsonExpr.is_object() || !jsonExpr.contains("dataType") || !jsonExpr.contains("colVal")) {
+        return nullptr;
+    }
+
     auto typeId = static_cast<DataTypeId>(jsonExpr["dataType"].get<int32_t>());
     DataTypePtr retType;
     if (jsonExpr.find("input") != jsonExpr.end()) {
@@ -35,6 +41,9 @@ Expr *JSONParser::ParseJSONFieldRef(const Json &jsonExpr)
             retType = std::make_shared<VarcharDataType>(width);
         }
     } else if (TypeUtil::IsDecimalType(typeId)) {
+        if (!jsonExpr.contains("precision") || !jsonExpr.contains("scale")) {
+            return nullptr;
+        }
         int precision = jsonExpr["precision"].get<int32_t>();
         int scale = jsonExpr["scale"].get<int32_t>();
         if (typeId == OMNI_DECIMAL64) {
@@ -421,6 +430,152 @@ Expr *JSONParser::ParseJsonIsNotNull(const Json &jsonExpr)
     return new UnaryExpr(Operator::NOT, isNullExpr, std::make_shared<BooleanDataType>());
 }
 
+namespace {
+constexpr int32_t JSON_VALUE_NULL_BEHAVIOR = 0;
+constexpr int32_t JSON_VALUE_ERROR_BEHAVIOR = 1;
+constexpr int32_t JSON_VALUE_DEFAULT_BEHAVIOR = 2;
+
+LiteralExpr *CreateJsonValueBehaviorLiteral(int32_t behavior)
+{
+    return new LiteralExpr(behavior, std::make_shared<IntDataType>());
+}
+
+LiteralExpr *CreateNullableVarcharLiteral()
+{
+    auto *expr = new LiteralExpr(new string(""), std::make_shared<VarcharDataType>(std::numeric_limits<int32_t>::max()));
+    expr->isNull = true;
+    return expr;
+}
+
+LiteralExpr *CreateVarcharLiteral(const std::string &value)
+{
+    auto width = std::max<int32_t>(1, static_cast<int32_t>(value.size()));
+    return new LiteralExpr(new string(value), std::make_shared<VarcharDataType>(width));
+}
+
+Expr *CreateJsonValueDefaultExpr(const Json &defaultValueJson)
+{
+    if (!defaultValueJson.is_object() || !defaultValueJson.contains("exprType")) {
+        return nullptr;
+    }
+    if (defaultValueJson["exprType"].get<string>() != "LITERAL") {
+        Expr *defaultExpr = JSONParser::ParseJSON(defaultValueJson);
+        if (defaultExpr == nullptr) {
+            return nullptr;
+        }
+        if (defaultExpr->GetReturnTypeId() == OMNI_VARCHAR) {
+            return defaultExpr;
+        }
+        if (defaultExpr->GetReturnTypeId() == OMNI_CHAR && defaultExpr->GetType() == ExprType::LITERAL_E) {
+            auto literalExpr = static_cast<LiteralExpr *>(defaultExpr);
+            auto *converted = CreateVarcharLiteral(literalExpr->stringVal == nullptr ? "" : *literalExpr->stringVal);
+            converted->isNull = literalExpr->isNull;
+            delete defaultExpr;
+            return converted;
+        }
+        delete defaultExpr;
+        return nullptr;
+    }
+    if (defaultValueJson["isNull"].get<bool>()) {
+        return CreateNullableVarcharLiteral();
+    }
+
+    auto typeId = static_cast<DataTypeId>(defaultValueJson["dataType"].get<int32_t>());
+    switch (typeId) {
+        case OMNI_CHAR:
+        case OMNI_VARCHAR:
+            return CreateVarcharLiteral(defaultValueJson["value"].get<string>());
+        case OMNI_BOOLEAN:
+            return CreateVarcharLiteral(defaultValueJson["value"].get<bool>() ? "true" : "false");
+        case OMNI_BYTE:
+        case OMNI_SHORT:
+        case OMNI_INT:
+        case OMNI_DATE32:
+            return CreateVarcharLiteral(std::to_string(defaultValueJson["value"].get<int32_t>()));
+        case OMNI_LONG:
+        case OMNI_TIMESTAMP:
+            return CreateVarcharLiteral(std::to_string(defaultValueJson["value"].get<int64_t>()));
+        case OMNI_DOUBLE:
+            return CreateVarcharLiteral(defaultValueJson["value"].dump());
+        default:
+            return nullptr;
+    }
+}
+
+bool ParseJsonValueBehavior(const Json &jsonExpr, const char *behaviorKey, int32_t *behaviorCode, Expr **defaultExpr)
+{
+    *behaviorCode = JSON_VALUE_NULL_BEHAVIOR;
+    *defaultExpr = CreateNullableVarcharLiteral();
+    if (!jsonExpr.contains(behaviorKey)) {
+        return true;
+    }
+
+    const auto &behaviorJson = jsonExpr[behaviorKey];
+    if (!behaviorJson.is_object() || !behaviorJson.contains("type")) {
+        return false;
+    }
+
+    const auto behaviorType = behaviorJson["type"].get<string>();
+    if (behaviorType == "NULL") {
+        return true;
+    }
+    if (behaviorType == "ERROR") {
+        *behaviorCode = JSON_VALUE_ERROR_BEHAVIOR;
+        return true;
+    }
+    if (behaviorType != "DEFAULT") {
+        return false;
+    }
+
+    *behaviorCode = JSON_VALUE_DEFAULT_BEHAVIOR;
+    delete *defaultExpr;
+    *defaultExpr = CreateNullableVarcharLiteral();
+    if (!behaviorJson.contains("defaultValue")) {
+        return true;
+    }
+
+    Expr *parsedDefaultExpr = CreateJsonValueDefaultExpr(behaviorJson["defaultValue"]);
+    if (parsedDefaultExpr == nullptr) {
+        return false;
+    }
+    delete *defaultExpr;
+    *defaultExpr = parsedDefaultExpr;
+    return true;
+}
+
+bool BuildJsonValueArguments(const Json &jsonExpr, std::vector<Expr *> *args)
+{
+    for (const auto &item : jsonExpr["arguments"].items()) {
+        Expr *arg = JSONParser::ParseJSON(item.value());
+        if (arg != nullptr) {
+            args->push_back(arg);
+        } else {
+            return false;
+        }
+    }
+
+    int32_t emptyBehavior = JSON_VALUE_NULL_BEHAVIOR;
+    int32_t errorBehavior = JSON_VALUE_NULL_BEHAVIOR;
+    Expr *defaultOnEmpty = nullptr;
+    Expr *defaultOnError = nullptr;
+    if (!ParseJsonValueBehavior(jsonExpr, "emptyBehavior", &emptyBehavior, &defaultOnEmpty)) {
+        delete defaultOnEmpty;
+        return false;
+    }
+    if (!ParseJsonValueBehavior(jsonExpr, "errorBehavior", &errorBehavior, &defaultOnError)) {
+        delete defaultOnEmpty;
+        delete defaultOnError;
+        return false;
+    }
+
+    args->push_back(CreateJsonValueBehaviorLiteral(emptyBehavior));
+    args->push_back(defaultOnEmpty);
+    args->push_back(CreateJsonValueBehaviorLiteral(errorBehavior));
+    args->push_back(defaultOnError);
+    return true;
+}
+} // namespace
+
 Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
 {
     string funcName = jsonExpr["function_name"];
@@ -431,13 +586,20 @@ Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
     int32_t precision;
     int32_t scale;
 
-    for (const auto &item : jsonExpr["arguments"].items()) {
-        Expr *arg = ParseJSON(item.value());
-        if (arg != nullptr) {
-            args.push_back(arg);
-        } else {
+    if (funcName == "json_value") {
+        if (!BuildJsonValueArguments(jsonExpr, &args)) {
             Expr::DeleteExprs(args);
             return nullptr;
+        }
+    } else {
+        for (const auto &item : jsonExpr["arguments"].items()) {
+            Expr *arg = ParseJSON(item.value());
+            if (arg != nullptr) {
+                args.push_back(arg);
+            } else {
+                Expr::DeleteExprs(args);
+                return nullptr;
+            }
         }
     }
 

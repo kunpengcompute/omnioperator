@@ -12,16 +12,20 @@
 #include "dtoa.h"
 #include "type/string_Impl.h"
 #include "type/TimestampConversion.h"
+#include <algorithm>
 #include <nlohmann/json.hpp>
 #include <cctype>
 #include <functional>
 #include <unordered_map>
+#include <vector>
 
 namespace omniruntime::codegen::function {
 
 const char *INT64_MIN_STR = "-9223372036854775808";
 
 constexpr int32_t INT64_MAX_LEN = 20;
+
+using JsonDocument = nlohmann::ordered_json;
 
 extern "C" DLLEXPORT int64_t CountChar(const char *str, int32_t strLen, const char *target, int32_t targetWidth, int32_t targetLen, bool isNull)
 {
@@ -195,7 +199,7 @@ namespace {
 
     struct JsonCache {
         uint64_t hash = 0;
-        nlohmann::json parsedJson;
+        JsonDocument parsedJson;
         std::string lastJsonContent;
         
         bool IsCacheValid(const std::string& jsonContent) const
@@ -203,7 +207,7 @@ namespace {
             return hash == HashJsonContent(jsonContent) && lastJsonContent == jsonContent;
         }
         
-        void SetCache(const std::string& jsonContent, const nlohmann::json& json)
+        void SetCache(const std::string& jsonContent, const JsonDocument& json)
         {
             hash = HashJsonContent(jsonContent);
             lastJsonContent = jsonContent;
@@ -320,15 +324,15 @@ static std::vector<std::string> ParseJsonPath(const std::string& path)
     return keys;
 }
 
-static nlohmann::json* GetParsedJsonWithCache(std::string& jsonContent)
+static JsonDocument* GetParsedJsonWithCache(std::string& jsonContent)
 {
     if (THREAD_LOCAL_JSON_CACHE.IsCacheValid(jsonContent)) {
         return &THREAD_LOCAL_JSON_CACHE.parsedJson;
     }
 
-    nlohmann::json newJson;
+    JsonDocument newJson;
     try {
-        newJson = nlohmann::json::parse(jsonContent);
+        newJson = JsonDocument::parse(jsonContent);
     } catch (...) {
         std::string fixedJsonContent;
         fixedJsonContent.reserve(jsonContent.size());
@@ -348,7 +352,7 @@ static nlohmann::json* GetParsedJsonWithCache(std::string& jsonContent)
                 fixedJsonContent += jsonContent[j];
             }
         }
-        newJson = nlohmann::json::parse(fixedJsonContent);
+        newJson = JsonDocument::parse(fixedJsonContent);
         jsonContent = fixedJsonContent;
     }
 
@@ -356,14 +360,14 @@ static nlohmann::json* GetParsedJsonWithCache(std::string& jsonContent)
     return &THREAD_LOCAL_JSON_CACHE.parsedJson;
 }
 
-static nlohmann::json* ResolveJsonPathTarget(nlohmann::json* jsonData, const std::string& pathContent)
+static JsonDocument* ResolveJsonPathTarget(JsonDocument* jsonData, const std::string& pathContent)
 {
     std::vector<std::string> keys = ParseJsonPath(pathContent);
     if (keys.empty()) {
         return nullptr;
     }
 
-    nlohmann::json* current = jsonData;
+    JsonDocument* current = jsonData;
     for (const auto& key : keys) {
         if (current->is_object()) {
             if (!current->contains(key)) {
@@ -392,6 +396,60 @@ static nlohmann::json* ResolveJsonPathTarget(nlohmann::json* jsonData, const std
     return current;
 }
 
+static bool TryFormatJsonValueScalar(const JsonDocument& value, std::string *result)
+{
+    if (result == nullptr) {
+        return false;
+    }
+
+    if (value.is_string()) {
+        *result = value.get<std::string>();
+        return true;
+    }
+
+    if (value.is_boolean()) {
+        *result = value.get<bool>() ? "true" : "false";
+        return true;
+    }
+
+    if (value.is_number_integer()) {
+        *result = std::to_string(value.get<JsonDocument::number_integer_t>());
+        return true;
+    }
+
+    if (value.is_number_unsigned()) {
+        *result = std::to_string(value.get<JsonDocument::number_unsigned_t>());
+        return true;
+    }
+
+    if (value.is_number_float()) {
+        *result = DoubleToString::DoubleToStringConverter(value.get<double>());
+        return true;
+    }
+
+    return false;
+}
+
+static const char *HandleJsonValueEmptyBehavior(int64_t contextPtr, int32_t emptyBehavior,
+    const char *defaultOnEmpty, int32_t defaultOnEmptyLen, bool defaultOnEmptyIsNull, bool *outIsNull,
+    int32_t *outLen)
+{
+    if (emptyBehavior == 2 && !defaultOnEmptyIsNull) {
+        *outIsNull = false;
+        *outLen = defaultOnEmptyLen;
+        auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
+        memcpy_s(ret, *outLen + 1, defaultOnEmpty, *outLen + 1);
+        return ret;
+    }
+
+    if (emptyBehavior == 1) {
+        SetError(contextPtr, "JSON_VALUE error: Empty result");
+    }
+    *outIsNull = true;
+    *outLen = 0;
+    return nullptr;
+}
+
 extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
                                                    const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
                                                    bool *outIsNull, int32_t *outLen)
@@ -410,8 +468,8 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
     std::string pathContent(pathStr, pathStrLen);
     
     try {
-        nlohmann::json* jsonData = GetParsedJsonWithCache(jsonContent);
-        nlohmann::json* current = ResolveJsonPathTarget(jsonData, pathContent);
+        JsonDocument* jsonData = GetParsedJsonWithCache(jsonContent);
+        JsonDocument* current = ResolveJsonPathTarget(jsonData, pathContent);
         if (current == nullptr || current->is_null()) {
             *outIsNull = true;
             *outLen = 0;
@@ -419,16 +477,10 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
         }
 
         std::string result;
-        if (current->is_string()) {
-            result = current->get<std::string>();
-        } else if (current->is_number_integer()) {
-            result = std::to_string(current->get<int64_t>());
-        } else if (current->is_number_float()) {
-            result = std::to_string(current->get<double>());
-        } else if (current->is_boolean()) {
-            result = current->get<bool>() ? "true" : "false";
-        } else {
-            result = current->dump();
+        if (!TryFormatJsonValueScalar(*current, &result)) {
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
         }
         
         *outIsNull = false;
@@ -462,8 +514,8 @@ extern "C" DLLEXPORT const char* JsonQueryRetNull(int64_t contextPtr, const char
     std::string pathContent(pathStr, pathStrLen);
 
     try {
-        nlohmann::json* jsonData = GetParsedJsonWithCache(jsonContent);
-        nlohmann::json* current = ResolveJsonPathTarget(jsonData, pathContent);
+        JsonDocument* jsonData = GetParsedJsonWithCache(jsonContent);
+        JsonDocument* current = ResolveJsonPathTarget(jsonData, pathContent);
         if (current == nullptr || current->is_null() || (!current->is_object() && !current->is_array())) {
             *outIsNull = true;
             *outLen = 0;
@@ -523,13 +575,13 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
     
     try {
         // Use cached JSON if available, otherwise parse and cache
-        nlohmann::json* jsonData;
+        JsonDocument* jsonData;
         if (THREAD_LOCAL_JSON_CACHE.IsCacheValid(jsonContent)) {
             jsonData = &THREAD_LOCAL_JSON_CACHE.parsedJson;
         } else {
-            nlohmann::json newJson;
+            JsonDocument newJson;
             try {
-                newJson = nlohmann::json::parse(jsonContent);
+                newJson = JsonDocument::parse(jsonContent);
             } catch (...) {
                 std::string fixedJsonContent;
                 fixedJsonContent.reserve(jsonContent.size());
@@ -549,7 +601,7 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
                         fixedJsonContent += jsonContent[j];
                     }
                 }
-                newJson = nlohmann::json::parse(fixedJsonContent);
+                newJson = JsonDocument::parse(fixedJsonContent);
                 jsonContent = fixedJsonContent;
             }
             THREAD_LOCAL_JSON_CACHE.SetCache(jsonContent, newJson);
@@ -578,7 +630,7 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
             }
         }
         
-        nlohmann::json* current = jsonData;
+        JsonDocument* current = jsonData;
         bool found = true;
         
         for (const auto& key : keys) {
@@ -609,36 +661,14 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
         }
         
         if (!found || current->is_null()) {
-            // Empty result - apply empty behavior
-            if (emptyBehavior == 2 && !defaultOnEmptyIsNull) { // DEFAULT
-                *outIsNull = false;
-                *outLen = defaultOnEmptyLen;
-                auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
-                memcpy_s(ret, *outLen + 1, defaultOnEmpty, *outLen + 1);
-                return ret;
-            } else if (emptyBehavior == 1) { // ERROR
-                SetError(contextPtr, "JSON_VALUE error: Empty result");
-                *outIsNull = true;
-                *outLen = 0;
-                return nullptr;
-            } else { // NULL
-                *outIsNull = true;
-                *outLen = 0;
-                return nullptr;
-            }
+            return HandleJsonValueEmptyBehavior(contextPtr, emptyBehavior, defaultOnEmpty, defaultOnEmptyLen,
+                defaultOnEmptyIsNull, outIsNull, outLen);
         }
-        
+
         std::string result;
-        if (current->is_string()) {
-            result = current->get<std::string>();
-        } else if (current->is_number_integer()) {
-            result = std::to_string(current->get<int64_t>());
-        } else if (current->is_number_float()) {
-            result = std::to_string(current->get<double>());
-        } else if (current->is_boolean()) {
-            result = current->get<bool>() ? "true" : "false";
-        } else {
-            result = current->dump();
+        if (!TryFormatJsonValueScalar(*current, &result)) {
+            return HandleJsonValueEmptyBehavior(contextPtr, emptyBehavior, defaultOnEmpty, defaultOnEmptyLen,
+                defaultOnEmptyIsNull, outIsNull, outLen);
         }
         
         *outIsNull = false;
@@ -669,6 +699,385 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
     }
 }
 
+extern "C" DLLEXPORT const char* JsonValueWithBehaviors(
+    int64_t contextPtr,
+    const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+    const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
+    int32_t emptyBehavior, bool emptyBehaviorIsNull,
+    const char *defaultOnEmpty, int32_t defaultOnEmptyLen, bool defaultOnEmptyIsNull,
+    int32_t errorBehavior, bool errorBehaviorIsNull,
+    const char *defaultOnError, int32_t defaultOnErrorLen, bool defaultOnErrorIsNull,
+    bool *outIsNull, int32_t *outLen)
+{
+    static_cast<void>(pathStrWidth);
+    int32_t normalizedEmptyBehavior = emptyBehaviorIsNull ? 0 : emptyBehavior;
+    int32_t normalizedErrorBehavior = errorBehaviorIsNull ? 0 : errorBehavior;
+    return JsonValueExtended(contextPtr, jsonStr, jsonStrLen, jsonStrIsNull, pathStr, pathStrWidth, pathStrLen,
+        pathStrIsNull, normalizedEmptyBehavior, defaultOnEmpty, defaultOnEmptyLen, defaultOnEmptyIsNull,
+        normalizedErrorBehavior, defaultOnError, defaultOnErrorLen, defaultOnErrorIsNull, outIsNull, outLen);
+}
+
+namespace {
+bool TryParseJson(const std::string &jsonContent, JsonDocument *jsonData)
+{
+    try {
+        *jsonData = JsonDocument::parse(jsonContent);
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+std::string RepairEscapedQuotes(const std::string &jsonContent)
+{
+    std::string fixedJsonContent;
+    fixedJsonContent.reserve(jsonContent.size());
+    for (size_t index = 0; index < jsonContent.size(); index++) {
+        if (jsonContent[index] == '\\') {
+            if (index + 1 < jsonContent.size()) {
+                char next = jsonContent[index + 1];
+                if (next == '\\' || next == '"') {
+                    fixedJsonContent += jsonContent[index];
+                } else {
+                    fixedJsonContent += '"';
+                }
+            } else {
+                fixedJsonContent += '"';
+            }
+        } else {
+            fixedJsonContent += jsonContent[index];
+        }
+    }
+    return fixedJsonContent;
+}
+
+std::string NormalizeSingleQuotedJsonLike(const std::string &jsonContent)
+{
+    std::string normalized;
+    normalized.reserve(jsonContent.size() + 8);
+    bool inSingleQuotedString = false;
+    bool inDoubleQuotedString = false;
+    for (size_t index = 0; index < jsonContent.size(); index++) {
+        char current = jsonContent[index];
+        if (inSingleQuotedString) {
+            if (current == '\\') {
+                if (index + 1 < jsonContent.size()) {
+                    char next = jsonContent[index + 1];
+                    if (next == '\'' ) {
+                        normalized += '\'';
+                        index++;
+                        continue;
+                    }
+                    if (next == '"') {
+                        normalized += "\\\"";
+                        index++;
+                        continue;
+                    }
+                    if (next == '\\') {
+                        normalized += "\\\\";
+                        index++;
+                        continue;
+                    }
+                }
+                normalized += "\\\\";
+                continue;
+            }
+            if (current == '\'') {
+                inSingleQuotedString = false;
+                normalized += '"';
+                continue;
+            }
+            if (current == '"') {
+                normalized += "\\\"";
+                continue;
+            }
+            normalized += current;
+            continue;
+        }
+        if (inDoubleQuotedString) {
+            normalized += current;
+            if (current == '\\' && index + 1 < jsonContent.size()) {
+                normalized += jsonContent[++index];
+                continue;
+            }
+            if (current == '"') {
+                inDoubleQuotedString = false;
+            }
+            continue;
+        }
+        if (current == '\'') {
+            inSingleQuotedString = true;
+            normalized += '"';
+            continue;
+        }
+        if (current == '"') {
+            inDoubleQuotedString = true;
+        }
+        normalized += current;
+    }
+    return normalized;
+}
+
+uint32_t DecodeUtf8CodePoint(const std::string &value, size_t *index)
+{
+    unsigned char firstByte = static_cast<unsigned char>(value[*index]);
+    if (firstByte < 0x80) {
+        ++(*index);
+        return firstByte;
+    }
+
+    if ((firstByte & 0xE0) == 0xC0 && *index + 1 < value.size()) {
+        uint32_t codePoint = (static_cast<uint32_t>(firstByte & 0x1F) << 6) |
+            static_cast<uint32_t>(static_cast<unsigned char>(value[*index + 1]) & 0x3F);
+        *index += 2;
+        return codePoint;
+    }
+
+    if ((firstByte & 0xF0) == 0xE0 && *index + 2 < value.size()) {
+        uint32_t codePoint = (static_cast<uint32_t>(firstByte & 0x0F) << 12) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(value[*index + 1]) & 0x3F) << 6) |
+            static_cast<uint32_t>(static_cast<unsigned char>(value[*index + 2]) & 0x3F);
+        *index += 3;
+        return codePoint;
+    }
+
+    if ((firstByte & 0xF8) == 0xF0 && *index + 3 < value.size()) {
+        uint32_t codePoint = (static_cast<uint32_t>(firstByte & 0x07) << 18) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(value[*index + 1]) & 0x3F) << 12) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(value[*index + 2]) & 0x3F) << 6) |
+            static_cast<uint32_t>(static_cast<unsigned char>(value[*index + 3]) & 0x3F);
+        *index += 4;
+        return codePoint;
+    }
+
+    ++(*index);
+    return firstByte;
+}
+
+uint32_t JavaStringHash(const std::string &value)
+{
+    uint32_t hash = 0;
+    for (size_t index = 0; index < value.size();) {
+        uint32_t codePoint = DecodeUtf8CodePoint(value, &index);
+        if (codePoint <= 0xFFFF) {
+            hash = 31U * hash + codePoint;
+            continue;
+        }
+
+        codePoint -= 0x10000;
+        uint32_t highSurrogate = 0xD800U + (codePoint >> 10);
+        uint32_t lowSurrogate = 0xDC00U + (codePoint & 0x3FFU);
+        hash = 31U * hash + highSurrogate;
+        hash = 31U * hash + lowSurrogate;
+    }
+    return hash;
+}
+
+size_t JavaHashMapCapacity(size_t size)
+{
+    size_t capacity = 16;
+    while (size > (capacity * 3) / 4) {
+        capacity <<= 1;
+    }
+    return capacity;
+}
+
+size_t JavaHashMapBucket(const std::string &key, size_t capacity)
+{
+    uint32_t hash = JavaStringHash(key);
+    hash ^= (hash >> 16);
+    return static_cast<size_t>(hash & static_cast<uint32_t>(capacity - 1));
+}
+
+std::string SerializeJsonSplitValue(const JsonDocument &value);
+
+struct JsonSplitObjectEntry {
+    std::string key;
+    const JsonDocument *value;
+    size_t insertionIndex;
+    size_t bucket;
+};
+
+std::string SerializeJsonSplitObject(const JsonDocument &value)
+{
+    std::vector<JsonSplitObjectEntry> entries;
+    entries.reserve(value.size());
+    size_t capacity = JavaHashMapCapacity(value.size());
+    size_t insertionIndex = 0;
+    for (auto it = value.begin(); it != value.end(); ++it, ++insertionIndex) {
+        entries.push_back({ it.key(), &it.value(), insertionIndex, JavaHashMapBucket(it.key(), capacity) });
+    }
+
+    std::stable_sort(entries.begin(), entries.end(), [](const JsonSplitObjectEntry &left, const JsonSplitObjectEntry &right) {
+        if (left.bucket != right.bucket) {
+            return left.bucket < right.bucket;
+        }
+        return left.insertionIndex < right.insertionIndex;
+    });
+
+    std::string result = "{";
+    for (size_t index = 0; index < entries.size(); ++index) {
+        if (index > 0) {
+            result += ",";
+        }
+        result += JsonDocument(entries[index].key).dump();
+        result += ":";
+        result += SerializeJsonSplitValue(*entries[index].value);
+    }
+    result += "}";
+    return result;
+}
+
+std::string SerializeJsonSplitArray(const JsonDocument &value)
+{
+    std::string result = "[";
+    for (size_t index = 0; index < value.size(); ++index) {
+        if (index > 0) {
+            result += ",";
+        }
+        result += SerializeJsonSplitValue(value[index]);
+    }
+    result += "]";
+    return result;
+}
+
+std::string SerializeJsonSplitNumber(const JsonDocument &value)
+{
+    std::string result = value.dump();
+    std::replace(result.begin(), result.end(), 'e', 'E');
+    return result;
+}
+
+std::string TrimJsonSplitToken(const std::string &token)
+{
+    size_t start = 0;
+    while (start < token.size() && std::isspace(static_cast<unsigned char>(token[start]))) {
+        ++start;
+    }
+
+    size_t end = token.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(token[end - 1]))) {
+        --end;
+    }
+    return token.substr(start, end - start);
+}
+
+bool ExtractJsonSplitTopLevelElements(const std::string &jsonContent, std::vector<std::string> *elements)
+{
+    if (elements == nullptr) {
+        return false;
+    }
+
+    elements->clear();
+    std::string trimmedContent = TrimJsonSplitToken(jsonContent);
+    if (trimmedContent.size() < 2 || trimmedContent.front() != '[' || trimmedContent.back() != ']') {
+        return false;
+    }
+
+    size_t contentStart = 1;
+    size_t contentEnd = trimmedContent.size() - 1;
+    size_t elementStart = contentStart;
+    int32_t nestedDepth = 0;
+    bool inString = false;
+    bool isEscaped = false;
+
+    for (size_t index = contentStart; index < contentEnd; ++index) {
+        char current = trimmedContent[index];
+        if (inString) {
+            if (isEscaped) {
+                isEscaped = false;
+                continue;
+            }
+            if (current == '\\') {
+                isEscaped = true;
+                continue;
+            }
+            if (current == '"') {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (current == '"') {
+            inString = true;
+            continue;
+        }
+        if (current == '[' || current == '{') {
+            ++nestedDepth;
+            continue;
+        }
+        if (current == ']' || current == '}') {
+            --nestedDepth;
+            continue;
+        }
+        if (current == ',' && nestedDepth == 0) {
+            elements->push_back(TrimJsonSplitToken(trimmedContent.substr(elementStart, index - elementStart)));
+            elementStart = index + 1;
+        }
+    }
+
+    std::string lastElement = TrimJsonSplitToken(trimmedContent.substr(elementStart, contentEnd - elementStart));
+    if (!lastElement.empty()) {
+        elements->push_back(lastElement);
+    }
+    return true;
+}
+
+std::string NormalizeJsonSplitNumberToken(const std::string &token)
+{
+    std::string normalized = TrimJsonSplitToken(token);
+    std::replace(normalized.begin(), normalized.end(), 'e', 'E');
+    return normalized;
+}
+
+std::string SerializeJsonSplitValue(const JsonDocument &value)
+{
+    if (value.is_object()) {
+        return SerializeJsonSplitObject(value);
+    }
+    if (value.is_array()) {
+        return SerializeJsonSplitArray(value);
+    }
+    if (value.is_number()) {
+        return SerializeJsonSplitNumber(value);
+    }
+    return value.dump();
+}
+
+bool TryParseJsonSplitContent(const std::string &jsonContent, JsonDocument *jsonData,
+    std::string *parsedJsonContent = nullptr)
+{
+    if (TryParseJson(jsonContent, jsonData)) {
+        if (parsedJsonContent != nullptr) {
+            *parsedJsonContent = jsonContent;
+        }
+        return true;
+    }
+    std::string repairedJsonContent = RepairEscapedQuotes(jsonContent);
+    if (repairedJsonContent != jsonContent && TryParseJson(repairedJsonContent, jsonData)) {
+        if (parsedJsonContent != nullptr) {
+            *parsedJsonContent = repairedJsonContent;
+        }
+        return true;
+    }
+    std::string normalizedJsonContent = NormalizeSingleQuotedJsonLike(jsonContent);
+    if (normalizedJsonContent != jsonContent && TryParseJson(normalizedJsonContent, jsonData)) {
+        if (parsedJsonContent != nullptr) {
+            *parsedJsonContent = normalizedJsonContent;
+        }
+        return true;
+    }
+    std::string repairedNormalizedJsonContent = RepairEscapedQuotes(normalizedJsonContent);
+    if (normalizedJsonContent != repairedJsonContent && TryParseJson(repairedNormalizedJsonContent, jsonData)) {
+        if (parsedJsonContent != nullptr) {
+            *parsedJsonContent = repairedNormalizedJsonContent;
+        }
+        return true;
+    }
+    return false;
+}
+} // namespace
+
 // JSON_SPLIT_SCALAR function: splits JSON array and joins all elements with CRLF
 // Matches the semantics of the jsontest UDF (1 STRING argument -> STRING result)
 extern "C" DLLEXPORT const char* JsonSplitScalar(
@@ -690,31 +1099,12 @@ extern "C" DLLEXPORT const char* JsonSplitScalar(
     std::string jsonContent(jsonStr, jsonStrLen);
 
     try {
-        // Parse JSON
-        nlohmann::json jsonData;
-        try {
-            jsonData = nlohmann::json::parse(jsonContent);
-        } catch (...) {
-            // Try to fix escaped quotes
-            std::string fixedJsonContent;
-            fixedJsonContent.reserve(jsonContent.size());
-            for (size_t j = 0; j < jsonContent.size(); j++) {
-                if (jsonContent[j] == '\\') {
-                    if (j + 1 < jsonContent.size()) {
-                        char next = jsonContent[j + 1];
-                        if (next == '\\' || next == '"') {
-                            fixedJsonContent += jsonContent[j];
-                        } else {
-                            fixedJsonContent += '"';
-                        }
-                    } else {
-                        fixedJsonContent += '"';
-                    }
-                } else {
-                    fixedJsonContent += jsonContent[j];
-                }
-            }
-            jsonData = nlohmann::json::parse(fixedJsonContent);
+        JsonDocument jsonData;
+        std::string parsedJsonContent;
+        if (!TryParseJsonSplitContent(jsonContent, &jsonData, &parsedJsonContent)) {
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
         }
 
         // Check if it's an array
@@ -724,26 +1114,24 @@ extern "C" DLLEXPORT const char* JsonSplitScalar(
             return nullptr;
         }
 
+        std::vector<std::string> rawElements;
+        bool hasRawElements = ExtractJsonSplitTopLevelElements(parsedJsonContent, &rawElements)
+            && rawElements.size() == jsonData.size();
+
         // Join all elements with CRLF delimiter
         std::string result;
         for (size_t i = 0; i < jsonData.size(); i++) {
             if (i > 0) {
                 result += "\r\n";
             }
-            const nlohmann::json& element = jsonData[i];
+            const JsonDocument& element = jsonData[i];
             if (element.is_string()) {
                 result += element.get<std::string>();
-            } else if (element.is_number_integer()) {
-                result += std::to_string(element.get<int64_t>());
-            } else if (element.is_number_float()) {
-                result += std::to_string(element.get<double>());
-            } else if (element.is_boolean()) {
-                result += element.get<bool>() ? "true" : "false";
-            } else if (element.is_null()) {
-                result += "null";
+            } else if (hasRawElements && element.is_number()) {
+                // Preserve the original numeric token so json_split matches Fastjson BigDecimal text semantics.
+                result += NormalizeJsonSplitNumberToken(rawElements[i]);
             } else {
-                // For objects and arrays, return JSON string
-                result += element.dump();
+                result += SerializeJsonSplitValue(element);
             }
         }
 
@@ -758,6 +1146,15 @@ extern "C" DLLEXPORT const char* JsonSplitScalar(
         *outLen = 0;
         return nullptr;
     }
+}
+
+extern "C" DLLEXPORT const char* JsonSplitScalarChar(
+    int64_t contextPtr,
+    const char *jsonStr, int32_t jsonStrWidth, int32_t jsonStrLen, bool jsonStrIsNull,
+    bool *outIsNull, int32_t *outLen)
+{
+    static_cast<void>(jsonStrWidth);
+    return JsonSplitScalar(contextPtr, jsonStr, jsonStrLen, jsonStrIsNull, outIsNull, outLen);
 }
 
 extern "C" DLLEXPORT const char *ConcatCharStr(int64_t contextPtr, const char *ap, int32_t aWidth, int32_t apLen,

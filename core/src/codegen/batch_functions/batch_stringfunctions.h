@@ -150,6 +150,27 @@ extern "C" DLLEXPORT void BatchToLowerStr(int64_t contextPtr, uint8_t **str, int
 extern "C" DLLEXPORT void BatchToLowerChar(int64_t contextPtr, uint8_t **str, int32_t width, int32_t *strLen,
     bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt);
 
+extern "C" DLLEXPORT void BatchJsonSplitStr(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
+    bool *jsonStrIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt);
+
+extern "C" DLLEXPORT void BatchJsonSplitChar(int64_t contextPtr, uint8_t **jsonStr, int32_t jsonStrWidth,
+    int32_t *jsonStrLen, bool *jsonStrIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt);
+
+extern "C" DLLEXPORT void BatchJsonValue(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
+    bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
+    bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt);
+
+extern "C" DLLEXPORT void BatchJsonValueWithBehaviors(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
+    bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
+    int32_t *emptyBehavior, bool *emptyBehaviorIsNull, uint8_t **defaultOnEmpty, int32_t *defaultOnEmptyLen,
+    bool *defaultOnEmptyIsNull, int32_t *errorBehavior, bool *errorBehaviorIsNull, uint8_t **defaultOnError,
+    int32_t *defaultOnErrorLen, bool *defaultOnErrorIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen,
+    int32_t rowCnt);
+
+extern "C" DLLEXPORT void BatchJsonQuery(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
+    bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
+    bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt);
+
 extern "C" DLLEXPORT void BatchLikeStr(uint8_t **str, int32_t *strLen, uint8_t **regexToMatch, int32_t *regexLen,
     bool *isAnyNull, bool *output, int32_t rowCnt);
 

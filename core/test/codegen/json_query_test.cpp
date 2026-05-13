@@ -55,6 +55,12 @@ TEST(JsonQueryTest, ExtractNestedArrayElementObject)
         "$.roomInfos[0].attrs", R"({"status":"open"})", false);
 }
 
+TEST(JsonQueryTest, PreserveObjectKeyOrder)
+{
+    JsonQueryTest(R"({"user":{"name":"Haley Johnson","age":20,"tags":["x","y"]}})",
+        "$.user", R"({"name":"Haley Johnson","age":20,"tags":["x","y"]})", false);
+}
+
 TEST(JsonQueryTest, MissingPathReturnsNull)
 {
     JsonQueryTest(R"({"roomInfos":[]})", "$.missing", "", true);

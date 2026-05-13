@@ -36,6 +36,9 @@ const std::string MD5_STR = "batch_Md5";
 const std::string EMPTY2NULL_STR = "batch_empty2null";
 const std::string CONTAINS_FN_STR = "batch_Contains";
 const std::string GREATEST_STR_FN_STR = "batch_Greatest";
+const std::string JSON_VALUE_FN_STR = "batch_json_value";
+const std::string JSON_QUERY_FN_STR = "batch_json_query";
+const std::string JSON_SPLIT_FN_STR = "batch_json_split";
 const std::string BATCH_STATIC_INVOKE_VARCHARTYPE_CHECK_FN_STR = "batch_StaticInvokeVarcharTypeWriteSideCheck";
 const std::string BATCH_STATIC_INVOKE_CHAR_READ_PADDING_FN_STR = "batch_StaticInvokeCharReadPadding";
 }
@@ -153,6 +156,17 @@ std::vector<Function> BatchStringFunctionRegistry::GetFunctions()
             OMNI_BOOLEAN, INPUT_DATA),
         Function(reinterpret_cast<void *>(BatchGreatestStr), GREATEST_STR_FN_STR, {},
             { OMNI_VARCHAR, OMNI_VARCHAR }, OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL),
+        Function(reinterpret_cast<void *>(BatchJsonValue), JSON_VALUE_FN_STR, {}, { OMNI_VARCHAR, OMNI_CHAR },
+            OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
+        Function(reinterpret_cast<void *>(BatchJsonValueWithBehaviors), JSON_VALUE_FN_STR, {},
+            { OMNI_VARCHAR, OMNI_CHAR, OMNI_INT, OMNI_VARCHAR, OMNI_INT, OMNI_VARCHAR },
+            OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
+        Function(reinterpret_cast<void *>(BatchJsonQuery), JSON_QUERY_FN_STR, {}, { OMNI_VARCHAR, OMNI_CHAR },
+            OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
+        Function(reinterpret_cast<void *>(BatchJsonSplitChar), JSON_SPLIT_FN_STR, {}, { OMNI_CHAR }, OMNI_VARCHAR,
+            INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
+        Function(reinterpret_cast<void *>(BatchJsonSplitStr), JSON_SPLIT_FN_STR, {}, { OMNI_VARCHAR }, OMNI_VARCHAR,
+            INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
         Function(reinterpret_cast<void *>(BatchEmptyToNull), EMPTY2NULL_STR, {}, { OMNI_VARCHAR }, OMNI_VARCHAR,
             INPUT_DATA, false),
         Function(reinterpret_cast<void *>(BatchStaticInvokeVarcharTypeWriteSideCheck),

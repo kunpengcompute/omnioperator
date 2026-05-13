@@ -5,6 +5,7 @@
 #include "batch_stringfunctions.h"
 #include <iostream>
 #include <regex>
+#include "codegen/functions/stringfunctions.h"
 #include "type/data_operations.h"
 #include "type/date32.h"
 #include "codegen/functions/md5.h"
@@ -803,6 +804,84 @@ extern "C" DLLEXPORT void BatchToLowerChar(int64_t contextPtr, uint8_t **str, in
     bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     BatchToLowerStr(contextPtr, str, strLen, isAnyNull, output, outLen, rowCnt);
+}
+
+extern "C" DLLEXPORT void BatchJsonSplitStr(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
+    bool *jsonStrIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+{
+    for (int32_t i = 0; i < rowCnt; ++i) {
+        bool rowOutIsNull = false;
+        int32_t rowOutLen = 0;
+        const char *result = JsonSplitScalar(contextPtr,
+            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i], &rowOutIsNull, &rowOutLen);
+        outIsNull[i] = rowOutIsNull;
+        outLen[i] = rowOutLen;
+        output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(result));
+    }
+}
+
+extern "C" DLLEXPORT void BatchJsonSplitChar(int64_t contextPtr, uint8_t **jsonStr, int32_t jsonStrWidth,
+    int32_t *jsonStrLen, bool *jsonStrIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+{
+    static_cast<void>(jsonStrWidth);
+    BatchJsonSplitStr(contextPtr, jsonStr, jsonStrLen, jsonStrIsNull, outIsNull, output, outLen, rowCnt);
+}
+
+extern "C" DLLEXPORT void BatchJsonValue(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
+    bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
+    bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+{
+    for (int32_t i = 0; i < rowCnt; ++i) {
+        bool rowOutIsNull = false;
+        int32_t rowOutLen = 0;
+        const char *result = JsonValueRetNull(contextPtr,
+            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
+            reinterpret_cast<const char *>(pathStr[i]), pathStrWidth, pathStrLen[i], pathStrIsNull[i],
+            &rowOutIsNull, &rowOutLen);
+        outIsNull[i] = rowOutIsNull;
+        outLen[i] = rowOutLen;
+        output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(result));
+    }
+}
+
+extern "C" DLLEXPORT void BatchJsonValueWithBehaviors(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
+    bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
+    int32_t *emptyBehavior, bool *emptyBehaviorIsNull, uint8_t **defaultOnEmpty, int32_t *defaultOnEmptyLen,
+    bool *defaultOnEmptyIsNull, int32_t *errorBehavior, bool *errorBehaviorIsNull, uint8_t **defaultOnError,
+    int32_t *defaultOnErrorLen, bool *defaultOnErrorIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen,
+    int32_t rowCnt)
+{
+    for (int32_t i = 0; i < rowCnt; ++i) {
+        bool rowOutIsNull = false;
+        int32_t rowOutLen = 0;
+        const char *result = JsonValueWithBehaviors(contextPtr,
+            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
+            reinterpret_cast<const char *>(pathStr[i]), pathStrWidth, pathStrLen[i], pathStrIsNull[i],
+            emptyBehavior[i], emptyBehaviorIsNull[i], reinterpret_cast<const char *>(defaultOnEmpty[i]),
+            defaultOnEmptyLen[i], defaultOnEmptyIsNull[i], errorBehavior[i], errorBehaviorIsNull[i],
+            reinterpret_cast<const char *>(defaultOnError[i]), defaultOnErrorLen[i], defaultOnErrorIsNull[i],
+            &rowOutIsNull, &rowOutLen);
+        outIsNull[i] = rowOutIsNull;
+        outLen[i] = rowOutLen;
+        output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(result));
+    }
+}
+
+extern "C" DLLEXPORT void BatchJsonQuery(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
+    bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
+    bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+{
+    for (int32_t i = 0; i < rowCnt; ++i) {
+        bool rowOutIsNull = false;
+        int32_t rowOutLen = 0;
+        const char *result = JsonQueryRetNull(contextPtr,
+            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
+            reinterpret_cast<const char *>(pathStr[i]), pathStrWidth, pathStrLen[i], pathStrIsNull[i],
+            &rowOutIsNull, &rowOutLen);
+        outIsNull[i] = rowOutIsNull;
+        outLen[i] = rowOutLen;
+        output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(result));
+    }
 }
 
 extern "C" DLLEXPORT void BatchLikeStr(uint8_t **str, int32_t *strLen, uint8_t **regexToMatch, int32_t *regexLen,

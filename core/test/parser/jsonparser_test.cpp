@@ -124,6 +124,14 @@ string GetFieldRefTestJson(int32_t dt, int32_t colval)
     return ss.str();
 }
 
+string GetStringFieldRefTestJson(int32_t dt, int32_t colval, int32_t width)
+{
+    ss.str("");
+    ss << R"({ "exprType": "FIELD_REFERENCE", "dataType": )" << dt << R"(, "colVal": )" << colval <<
+        R"(, "width": )" << width << R"(})";
+    return ss.str();
+}
+
 string GetDecimalFieldRefTestJson(int32_t dt, int32_t colval, int32_t precision, int32_t scale)
 {
     ss.str("");
@@ -904,6 +912,76 @@ TEST(JSONParserTest, FuncExpr_substr)
         new TestLiteralExpr(INT32_VAL, IntType()) };
     TestFuncExpr expectedExpr(VarcharType(), "substr", args);
     expectedExpr.isEqual(funcExpr);
+    delete funcExpr;
+}
+
+TEST(JSONParserTest, FuncExpr_jsonSplitCharInput)
+{
+    vector<string> argsJson = { GetStringFieldRefTestJson(OMNI_CHAR, COL_NUM, 8) };
+    string unparsedFuncJson = GetFuncTestJson(OMNI_VARCHAR, "json_split", argsJson);
+    Expr *funcExpr = JSONParser::ParseJSON(nlohmann::json::parse(unparsedFuncJson));
+
+    ASSERT_NE(funcExpr, nullptr);
+    EXPECT_EQ(funcExpr->GetType(), ExprType::FUNC_E);
+    EXPECT_EQ(funcExpr->GetReturnTypeId(), OMNI_VARCHAR);
+
+    auto typedFuncExpr = dynamic_cast<FuncExpr *>(funcExpr);
+    ASSERT_NE(typedFuncExpr, nullptr);
+    ASSERT_EQ(typedFuncExpr->arguments.size(), 1);
+    EXPECT_EQ(typedFuncExpr->arguments[0]->GetReturnTypeId(), OMNI_CHAR);
+
+    delete funcExpr;
+}
+
+TEST(JSONParserTest, FieldReference_StringWithoutWidth)
+{
+    string unparsedFieldRefJson = GetFieldRefTestJson(OMNI_CHAR, COL_NUM);
+    Expr *fieldRefExpr = JSONParser::ParseJSON(nlohmann::json::parse(unparsedFieldRefJson));
+
+    EXPECT_EQ(fieldRefExpr, nullptr);
+}
+
+TEST(JSONParserTest, FuncExpr_jsonValueWithBehaviors)
+{
+    string unparsedFuncJson = R"({
+        "exprType": "FUNCTION",
+        "returnType": 15,
+        "function_name": "json_value",
+        "arguments": [
+            { "exprType": "FIELD_REFERENCE", "dataType": 15, "colVal": 0, "width": 32 },
+            { "exprType": "LITERAL", "dataType": 16, "isNull": false, "value": "$.age", "width": 5 }
+        ],
+        "emptyBehavior": {
+            "type": "DEFAULT",
+            "defaultValue": { "exprType": "LITERAL", "dataType": 15, "isNull": false, "value": "unknown", "width": 7 }
+        },
+        "errorBehavior": {
+            "type": "ERROR"
+        },
+        "width": 32
+    })";
+    Expr *funcExpr = JSONParser::ParseJSON(nlohmann::json::parse(unparsedFuncJson));
+
+    ASSERT_NE(funcExpr, nullptr);
+    auto typedFuncExpr = dynamic_cast<FuncExpr *>(funcExpr);
+    ASSERT_NE(typedFuncExpr, nullptr);
+    ASSERT_EQ(typedFuncExpr->arguments.size(), 6);
+    EXPECT_EQ(typedFuncExpr->arguments[2]->GetReturnTypeId(), OMNI_INT);
+    EXPECT_EQ(typedFuncExpr->arguments[3]->GetReturnTypeId(), OMNI_VARCHAR);
+    EXPECT_EQ(typedFuncExpr->arguments[4]->GetReturnTypeId(), OMNI_INT);
+    EXPECT_EQ(typedFuncExpr->arguments[5]->GetReturnTypeId(), OMNI_VARCHAR);
+
+    auto emptyBehaviorExpr = dynamic_cast<LiteralExpr *>(typedFuncExpr->arguments[2]);
+    auto errorBehaviorExpr = dynamic_cast<LiteralExpr *>(typedFuncExpr->arguments[4]);
+    auto defaultOnEmptyExpr = dynamic_cast<LiteralExpr *>(typedFuncExpr->arguments[3]);
+    ASSERT_NE(emptyBehaviorExpr, nullptr);
+    ASSERT_NE(errorBehaviorExpr, nullptr);
+    ASSERT_NE(defaultOnEmptyExpr, nullptr);
+    EXPECT_EQ(emptyBehaviorExpr->intVal, 2);
+    EXPECT_EQ(errorBehaviorExpr->intVal, 1);
+    ASSERT_NE(defaultOnEmptyExpr->stringVal, nullptr);
+    EXPECT_EQ(*defaultOnEmptyExpr->stringVal, "unknown");
+
     delete funcExpr;
 }
 

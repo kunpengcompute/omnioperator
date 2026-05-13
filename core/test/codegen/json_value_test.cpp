@@ -91,7 +91,7 @@ TEST(JsonValueTest, DifferentValueTypes)
     JsonValueTest(R"({"negative":-100})", "$.negative", "-100", false);
     
     // Float
-    JsonValueTest(R"({"price":19.99})", "$.price", "19.990000", false);
+    JsonValueTest(R"({"price":19.99})", "$.price", "19.99", false);
 }
 
 // Test complex nested structures
@@ -177,14 +177,11 @@ TEST(JsonValueTest, EscapedCharactersInJson)
     JsonValueTest(R"({"path":"C:\\Users\\test"})", "$.path", R"(C:\Users\test)", false);
 }
 
-// Test object and array to string conversion
-TEST(JsonValueTest, ComplexTypeConversion)
+// JSON_VALUE is scalar-only. Non-scalar object/array results become NULL by default.
+TEST(JsonValueTest, ComplexTypesReturnNull)
 {
-    // Nested object as string
-    JsonValueTest(R"({"data":{"x":1,"y":2}})", "$.data", R"({"x":1,"y":2})", false);
-    
-    // Array as string
-    JsonValueTest(R"({"items":[1,2,3]})", "$.items", "[1,2,3]", false);
+    JsonValueTest(R"({"data":{"x":1,"y":2}})", "$.data", "", true);
+    JsonValueTest(R"({"items":[1,2,3]})", "$.items", "", true);
 }
 
 // Test mixed bracket and dot notation
@@ -278,6 +275,33 @@ TEST(JsonValueTest, ExtendedOnEmptyDefault)
     delete context;
 }
 
+TEST(JsonValueTest, ExtendedComplexTypesUseEmptyBehavior)
+{
+    auto context = new ExecutionContext();
+    int64_t contextPtr = reinterpret_cast<int64_t>(context);
+
+    bool outIsNull = false;
+    int32_t outLen = 0;
+
+    std::string json = R"({"data":{"x":1,"y":2}})";
+    std::string path = "$.data";
+    std::string defaultValue = "missing";
+
+    const char *result = JsonValueExtended(
+        contextPtr,
+        json.c_str(), static_cast<int32_t>(json.size()), false,
+        path.c_str(), 0, static_cast<int32_t>(path.size()), false,
+        2, defaultValue.c_str(), static_cast<int32_t>(defaultValue.size()), false,
+        0, nullptr, 0, true,
+        &outIsNull, &outLen
+    );
+
+    EXPECT_FALSE(outIsNull);
+    EXPECT_EQ("missing", std::string(result, outLen));
+
+    delete context;
+}
+
 TEST(JsonValueTest, ExtendedOnErrorNull)
 {
     auto context = new ExecutionContext();
@@ -361,6 +385,29 @@ TEST(JsonValueTest, ExtendedNullInput)
     delete context;
 }
 
+TEST(JsonValueTest, WrappedExtendedOnEmptyDefault)
+{
+    auto context = new ExecutionContext();
+    int64_t contextPtr = reinterpret_cast<int64_t>(context);
+
+    bool outIsNull = false;
+    int32_t outLen = 0;
+    std::string json = R"({"name":"John"})";
+    std::string path = "$.age";
+    std::string defaultValue = "unknown";
+
+    const char *result = JsonValueWithBehaviors(contextPtr,
+        json.c_str(), static_cast<int32_t>(json.size()), false,
+        path.c_str(), 0, static_cast<int32_t>(path.size()), false,
+        2, false, defaultValue.c_str(), static_cast<int32_t>(defaultValue.size()), false,
+        0, false, nullptr, 0, true, &outIsNull, &outLen);
+
+    EXPECT_FALSE(outIsNull);
+    EXPECT_EQ("unknown", std::string(result, outLen));
+
+    delete context;
+}
+
 // Test JsonSplitScalar function
 static void JsonSplitScalarTest(const std::string &jsonStr,
                                 const std::string &expectedResult, bool expectIsNull)
@@ -388,14 +435,55 @@ static void JsonSplitScalarTest(const std::string &jsonStr,
     delete context;
 }
 
+    static void JsonSplitScalarCharTest(const std::string &jsonStr, int32_t width,
+                                        const std::string &expectedResult, bool expectIsNull)
+    {
+        auto context = new ExecutionContext();
+        int64_t contextPtr = reinterpret_cast<int64_t>(context);
+
+        bool outIsNull = false;
+        int32_t outLen = 0;
+
+        const char *result = JsonSplitScalarChar(
+            contextPtr,
+            jsonStr.c_str(), width, static_cast<int32_t>(jsonStr.size()), false,
+            &outIsNull, &outLen
+        );
+
+        if (expectIsNull) {
+            EXPECT_TRUE(outIsNull);
+            EXPECT_EQ(outLen, 0);
+        } else {
+            EXPECT_FALSE(outIsNull);
+            EXPECT_EQ(expectedResult, std::string(result, outLen));
+        }
+
+        delete context;
+    }
+
 TEST(JsonSplitScalarTest, SimpleArray)
 {
     JsonSplitScalarTest(R"(["a","b","c"])", "a\r\nb\r\nc", false);
 }
 
+TEST(JsonSplitScalarTest, CharInput)
+{
+    JsonSplitScalarCharTest(R"(["'dIPFMXtJL"])", 1, "'dIPFMXtJL", false);
+}
+
 TEST(JsonSplitScalarTest, NumericArray)
 {
     JsonSplitScalarTest(R"([1,2,3,4,5])", "1\r\n2\r\n3\r\n4\r\n5", false);
+}
+
+TEST(JsonSplitScalarTest, FloatingPointFormatting)
+{
+    JsonSplitScalarTest(R"([1.2,3.14,-2.5])", "1.2\r\n3.14\r\n-2.5", false);
+}
+
+TEST(JsonSplitScalarTest, ScientificNotationFormatting)
+{
+    JsonSplitScalarTest(R"([1.171815966525443e+77])", "1.171815966525443E+77", false);
 }
 
 TEST(JsonSplitScalarTest, MixedArray)
@@ -411,6 +499,16 @@ TEST(JsonSplitScalarTest, NestedArray)
 TEST(JsonSplitScalarTest, ObjectArray)
 {
     JsonSplitScalarTest(R"([{"name":"Alice"},{"name":"Bob"}])", "{\"name\":\"Alice\"}\r\n{\"name\":\"Bob\"}", false);
+}
+
+TEST(JsonSplitScalarTest, SingleQuotedStringArray)
+{
+    JsonSplitScalarTest(R"(['apple','banana'])", "apple\r\nbanana", false);
+}
+
+TEST(JsonSplitScalarTest, SingleQuotedJsonStringArray)
+{
+    JsonSplitScalarTest(R"(['{"id":865,"name":"Alice"}'])", "{\"id\":865,\"name\":\"Alice\"}", false);
 }
 
 TEST(JsonSplitScalarTest, SingleElementArray)
