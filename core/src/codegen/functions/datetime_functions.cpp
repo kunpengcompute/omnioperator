@@ -10,6 +10,7 @@
 #include "util/TimeUtils.h"
 #include "type/tzdb/tzdb_list.h"
 #include <algorithm>
+#include <stdexcept>
 
 namespace omniruntime::codegen::function {
 namespace {
@@ -280,6 +281,26 @@ static constexpr int64_t MAX_EPOCH_MILLS = 253402300799999LL;     // '9999-12-31
 static constexpr int64_t MIN_EPOCH_SECONDS = -62167219200LL;       // '0000-01-01 00:00:00 UTC+0'
 static constexpr int64_t MAX_EPOCH_SECONDS = 253402300799LL;       // '9999-12-31 23:59:59 UTC+0'
 static constexpr int64_t MILLIS_PER_SECOND = 1000LL;
+static constexpr int64_t MILLIS_PER_DAY = 86400000LL;
+
+extern "C" DLLEXPORT int64_t DateAddDays(int64_t timestamp, bool isNullTimestamp, int32_t days, bool isNullDays, bool* retIsNull)
+{
+    if (isNullTimestamp || isNullDays) {
+        *retIsNull = true;
+        return 0;
+    }
+    
+    int64_t daysInMillis = static_cast<int64_t>(days) * MILLIS_PER_DAY;
+    int64_t result = timestamp + daysInMillis;
+    
+    if (result < MIN_EPOCH_MILLS || result > MAX_EPOCH_MILLS) {
+        *retIsNull = true;
+        return 0;
+    }
+    
+    *retIsNull = false;
+    return result;
+}
 
 extern "C" DLLEXPORT int64_t ToTimestampLtz(int64_t numeric, bool isNull1,
                                             int32_t precision, bool isNull2,
@@ -370,5 +391,13 @@ extern "C" DLLEXPORT int64_t ToTimestampLtzInt(int32_t numeric, bool isNull1,
       return 0;
     }
   }
+}
+
+extern "C" DLLEXPORT int64_t CurrentTimestamp()
+{
+    auto now = std::chrono::system_clock::now();
+    auto duration = now.time_since_epoch();
+    int64_t epochMillis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    return epochMillis;
 }
 }

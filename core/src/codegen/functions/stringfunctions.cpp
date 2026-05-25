@@ -18,6 +18,8 @@
 #include <functional>
 #include <unordered_map>
 #include <vector>
+#include <ctime>
+#include <chrono>
 
 namespace omniruntime::codegen::function {
 
@@ -26,6 +28,12 @@ const char *INT64_MIN_STR = "-9223372036854775808";
 constexpr int32_t INT64_MAX_LEN = 20;
 
 using JsonDocument = nlohmann::ordered_json;
+
+
+// Valid epoch time range constants (same as Flink's DateTimeUtils)
+static constexpr int64_t MIN_EPOCH_MILLS = -62167219200000LL;     // '0000-01-01 00:00:00.000 UTC+0'
+static constexpr int64_t MAX_EPOCH_MILLS = 253402300799999LL;     // '9999-12-31 23:59:59.999 UTC+0'
+static constexpr int64_t MILLIS_PER_SECOND = 1000LL;
 
 extern "C" DLLEXPORT int64_t CountChar(const char *str, int32_t strLen, const char *target, int32_t targetWidth, int32_t targetLen, bool isNull)
 {
@@ -1979,8 +1987,22 @@ extern "C" DLLEXPORT int64_t CastStringToLong(int64_t contextPtr, const char *st
     if (isNull) {
         return 0;
     }
+
     int64_t result;
-    Status status = ConvertStringToInteger<int64_t, false>(result, str, strLen);
+    Status status = ConvertDateStringToInteger(result, str, strLen);
+    if (status == Status::CONVERT_SUCCESS) {
+        return result;
+    }
+
+    if (status == Status::CONVERT_OVERFLOW) {
+        std::string s(str, strLen);
+        std::ostringstream errorMessage;
+        errorMessage << "Cannot cast '" << s << "' to BIGINT. Date year out of range (0-9999).";
+        SetError(contextPtr, errorMessage.str());
+        return 0;
+    }
+
+    status = ConvertStringToInteger<int64_t, false>(result, str, strLen);
     if (status == Status::IS_NOT_A_NUMBER) {
         std::string s = std::string(str, strLen);
         std::ostringstream errorMessage;

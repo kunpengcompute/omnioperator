@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <thread>
 #include "gtest/gtest.h"
 #include "expression/expressions.h"
 #include "codegen/functions/stringfunctions.h"
@@ -4287,4 +4288,95 @@ TEST(FunctionTest, GetJsonObject)
     delete context;
 }
 #endif
+
+TEST(FunctionTest, CurrentTimestamp)
+{
+    int64_t timestamp1 = CurrentTimestamp();
+    EXPECT_GT(timestamp1, 0);
+    
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    int64_t timestamp2 = CurrentTimestamp();
+    EXPECT_GT(timestamp2, timestamp1);
+    
+    auto now = std::chrono::system_clock::now();
+    auto duration = now.time_since_epoch();
+    int64_t expectedMillis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    int64_t diff = std::abs(timestamp1 - expectedMillis);
+    EXPECT_LT(diff, 100);
+}
+
+TEST(FunctionTest, DateAddDays)
+{
+    bool retIsNull = false;
+    
+    constexpr int64_t MILLIS_PER_DAY = 86400000LL;
+    constexpr int64_t MIN_EPOCH_MILLS = -62167219200000LL;
+    constexpr int64_t MAX_EPOCH_MILLS = 253402300799999LL;
+    
+    int64_t timestamp = 1625097600000L;
+    
+    int64_t result = DateAddDays(timestamp, false, 1, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp + MILLIS_PER_DAY);
+    
+    result = DateAddDays(timestamp, false, 7, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp + 7 * MILLIS_PER_DAY);
+    
+    result = DateAddDays(timestamp, false, -1, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp - MILLIS_PER_DAY);
+    
+    result = DateAddDays(timestamp, false, -30, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp - 30 * MILLIS_PER_DAY);
+    
+    result = DateAddDays(timestamp, false, 0, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp);
+    
+    result = DateAddDays(timestamp, true, 1, false, &retIsNull);
+    EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(result, 0);
+    
+    result = DateAddDays(timestamp, false, 1, true, &retIsNull);
+    EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(result, 0);
+    
+    int64_t nearMax = MAX_EPOCH_MILLS - MILLIS_PER_DAY;
+    result = DateAddDays(nearMax, false, 1, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, MAX_EPOCH_MILLS);
+    
+    result = DateAddDays(MAX_EPOCH_MILLS, false, 1, false, &retIsNull);
+    EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(result, 0);
+    
+    int64_t nearMin = MIN_EPOCH_MILLS + MILLIS_PER_DAY;
+    result = DateAddDays(nearMin, false, -1, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, MIN_EPOCH_MILLS);
+    
+    result = DateAddDays(MIN_EPOCH_MILLS, false, -1, false, &retIsNull);
+    EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(result, 0);
+    
+    result = DateAddDays(0L, false, 365, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, 365 * MILLIS_PER_DAY);
+    
+    result = DateAddDays(365 * MILLIS_PER_DAY, false, -365, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, 0L);
+    
+    int64_t epochTimestamp = 0L;
+    result = DateAddDays(epochTimestamp, false, 1000, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, 1000 * MILLIS_PER_DAY);
+    
+    result = DateAddDays(epochTimestamp, false, -1000, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, -1000 * MILLIS_PER_DAY);
+}
+
 }

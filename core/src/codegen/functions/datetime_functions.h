@@ -61,5 +61,8 @@ extern "C" DLLEXPORT int64_t ToTimestampLtz(int64_t numeric, bool isNull1,
 extern "C" DLLEXPORT int64_t ToTimestampLtzInt(int32_t numeric, bool isNull1,
                                             int32_t precision, bool isNull2,
                                             bool* retIsNull);
+
+extern "C" DLLEXPORT int64_t CurrentTimestamp();
+extern "C" DLLEXPORT int64_t DateAddDays(int64_t timestamp, bool isNullTimestamp, int32_t days, bool isNullDays, bool* retIsNull);
 }
 #endif // OMNI_RUNTIME_DATETIME_FUNCTIONS_H

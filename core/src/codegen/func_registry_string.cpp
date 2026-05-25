@@ -255,7 +255,7 @@ std::vector<Function> StringFunctionRegistry::GetFunctions()
 
         Function(reinterpret_cast<void *>(StrEquals), StrEqualFnStr(), {}, { OMNI_VARCHAR, OMNI_VARCHAR },
             OMNI_BOOLEAN),
-
+        // cast functions
         Function(reinterpret_cast<void *>(CastIntToString), CastFnStr(), {}, { OMNI_INT }, OMNI_VARCHAR, INPUT_DATA,
             true),
         Function(reinterpret_cast<void *>(CastInt16ToString), CastFnStr(), {}, { OMNI_SHORT }, OMNI_VARCHAR, INPUT_DATA,

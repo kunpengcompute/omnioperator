@@ -43,6 +43,12 @@ std::vector<Function> DateTimeFunctionRegistry::GetFunctions()
             INPUT_DATA_AND_NULL_AND_RETURN_NULL),
         Function(reinterpret_cast<void*>(ToTimestampLtzInt), "to_timestamp_ltz", {},
             {OMNI_INT, OMNI_INT}, OMNI_LONG,
+            INPUT_DATA_AND_NULL_AND_RETURN_NULL),
+        Function(reinterpret_cast<void*>(CurrentTimestamp), "current_timestamp", {},
+            {}, OMNI_LONG,
+            INPUT_DATA),
+        Function(reinterpret_cast<void*>(DateAddDays), "date_add_days", {},
+            {OMNI_LONG, OMNI_INT}, OMNI_LONG,
             INPUT_DATA_AND_NULL_AND_RETURN_NULL)
     };
     return dateTimeFnRegistry;
