@@ -201,12 +201,12 @@ namespace {
         uint64_t hash = 0;
         JsonDocument parsedJson;
         std::string lastJsonContent;
-        
+
         bool IsCacheValid(const std::string& jsonContent) const
         {
             return hash == HashJsonContent(jsonContent) && lastJsonContent == jsonContent;
         }
-        
+
         void SetCache(const std::string& jsonContent, const JsonDocument& json)
         {
             hash = HashJsonContent(jsonContent);
@@ -214,7 +214,7 @@ namespace {
             parsedJson = json;
         }
     };
-    
+
     // Thread-local cache for JSON parsing
     // This avoids re-parsing the same JSON in the same thread
     thread_local JsonCache THREAD_LOCAL_JSON_CACHE;
@@ -227,21 +227,21 @@ static std::vector<std::string> ParseJsonPath(const std::string& path)
     if (path.empty() || path[0] != '$') {
         return keys;
     }
-    
+
     enum State {
         EXPECT_DOT_OR_BRACKET,  // After key, expect . or [
         IN_DOT_NOTATION,         // After ., reading key until . or [
         IN_BRACKET,              // After [, reading content until ]
         IN_QUOTED_KEY            // Inside quotes within bracket
     };
-    
+
     State state = EXPECT_DOT_OR_BRACKET;
     std::string currentKey;
     char quoteChar = '\0';
-    
+
     for (size_t i = 1; i < path.size(); ++i) {
         char c = path[i];
-        
+
         switch (state) {
             case EXPECT_DOT_OR_BRACKET:
                 if (c == '.') {
@@ -253,7 +253,7 @@ static std::vector<std::string> ParseJsonPath(const std::string& path)
                     return keys;
                 }
                 break;
-                
+
             case IN_DOT_NOTATION:
                 if (c == '.') {
                     // Save current key when encountering next dot
@@ -279,7 +279,7 @@ static std::vector<std::string> ParseJsonPath(const std::string& path)
                     currentKey += c;
                 }
                 break;
-                
+
             case IN_BRACKET:
                 if (c == '\'' || c == '"') {
                     quoteChar = c;
@@ -294,7 +294,7 @@ static std::vector<std::string> ParseJsonPath(const std::string& path)
                     currentKey += c;
                 }
                 break;
-                
+
             case IN_QUOTED_KEY:
                 if (c == '\\' && i + 1 < path.size()) {
                     // Handle escape sequences
@@ -315,12 +315,12 @@ static std::vector<std::string> ParseJsonPath(const std::string& path)
                 break;
         }
     }
-    
+
     // Handle remaining key
     if (!currentKey.empty()) {
         keys.push_back(currentKey);
     }
-    
+
     return keys;
 }
 
@@ -496,10 +496,171 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
     }
 }
 
-extern "C" DLLEXPORT const char* JsonQueryRetNull(int64_t contextPtr, const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
-                                                   const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
-                                                   bool *outIsNull, int32_t *outLen)
+namespace {
+constexpr int32_t JSON_QUERY_WITHOUT_ARRAY_WRAPPER = 0;
+constexpr int32_t JSON_QUERY_WITH_CONDITIONAL_ARRAY_WRAPPER = 1;
+constexpr int32_t JSON_QUERY_WITH_UNCONDITIONAL_ARRAY_WRAPPER = 2;
+constexpr int32_t JSON_QUERY_NULL_BEHAVIOR = 0;
+constexpr int32_t JSON_QUERY_EMPTY_ARRAY_BEHAVIOR = 1;
+constexpr int32_t JSON_QUERY_EMPTY_OBJECT_BEHAVIOR = 2;
+constexpr int32_t JSON_QUERY_ERROR_BEHAVIOR = 3;
+
+enum class JsonPathMode {
+    LAX,
+    STRICT
+};
+
+std::string TrimAsciiWhitespace(const std::string &value)
 {
+    size_t start = 0;
+    while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
+        ++start;
+    }
+
+    size_t end = value.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+        --end;
+    }
+    return value.substr(start, end - start);
+}
+
+bool StartsWithIgnoreCase(const std::string &value, const std::string &prefix)
+{
+    if (value.size() < prefix.size()) {
+        return false;
+    }
+    for (size_t index = 0; index < prefix.size(); ++index) {
+        if (std::tolower(static_cast<unsigned char>(value[index]))
+                != std::tolower(static_cast<unsigned char>(prefix[index]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ParseJsonQueryPathSpec(const std::string &rawPath, JsonPathMode *mode, std::string *normalizedPath)
+{
+    std::string trimmed = TrimAsciiWhitespace(rawPath);
+    *mode = JsonPathMode::LAX;
+    if (StartsWithIgnoreCase(trimmed, "strict ")) {
+        *mode = JsonPathMode::STRICT;
+        trimmed = TrimAsciiWhitespace(trimmed.substr(7));
+    } else if (StartsWithIgnoreCase(trimmed, "lax ")) {
+        trimmed = TrimAsciiWhitespace(trimmed.substr(4));
+    }
+
+    if (trimmed.empty()) {
+        return false;
+    }
+    *normalizedPath = trimmed;
+    return true;
+}
+
+bool IsJsonQueryScalar(const JsonDocument &value)
+{
+    return !value.is_null() && !value.is_object() && !value.is_array();
+}
+
+const char *CreateJsonQueryResult(int64_t contextPtr, const std::string &result, bool *outIsNull, int32_t *outLen)
+{
+    *outIsNull = false;
+    *outLen = static_cast<int32_t>(result.size());
+    auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
+    memcpy_s(ret, *outLen + 1, result.c_str(), *outLen + 1);
+    return ret;
+}
+
+const char *HandleJsonQueryEmptyBehavior(int64_t contextPtr, int32_t emptyBehavior, bool *outIsNull, int32_t *outLen)
+{
+    switch (emptyBehavior) {
+        case JSON_QUERY_NULL_BEHAVIOR:
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
+        case JSON_QUERY_EMPTY_ARRAY_BEHAVIOR:
+            return CreateJsonQueryResult(contextPtr, "[]", outIsNull, outLen);
+        case JSON_QUERY_EMPTY_OBJECT_BEHAVIOR:
+            return CreateJsonQueryResult(contextPtr, "{}", outIsNull, outLen);
+        case JSON_QUERY_ERROR_BEHAVIOR:
+            SetError(contextPtr, "Empty result of JSON_QUERY function is not allowed");
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
+        default:
+            SetError(contextPtr, "Illegal empty behavior in JSON_QUERY function");
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
+    }
+}
+
+const char *HandleJsonQueryErrorBehavior(int64_t contextPtr, int32_t errorBehavior, const char *message,
+    bool *outIsNull, int32_t *outLen)
+{
+    switch (errorBehavior) {
+        case JSON_QUERY_NULL_BEHAVIOR:
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
+        case JSON_QUERY_EMPTY_ARRAY_BEHAVIOR:
+            return CreateJsonQueryResult(contextPtr, "[]", outIsNull, outLen);
+        case JSON_QUERY_EMPTY_OBJECT_BEHAVIOR:
+            return CreateJsonQueryResult(contextPtr, "{}", outIsNull, outLen);
+        case JSON_QUERY_ERROR_BEHAVIOR:
+            SetError(contextPtr, message);
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
+        default:
+            SetError(contextPtr, "Illegal error behavior in JSON_QUERY function");
+            *outIsNull = true;
+            *outLen = 0;
+            return nullptr;
+    }
+}
+
+bool ApplyJsonQueryWrapper(const JsonDocument &current, int32_t wrapperBehavior, JsonDocument *wrappedValue)
+{
+    switch (wrapperBehavior) {
+        case JSON_QUERY_WITHOUT_ARRAY_WRAPPER:
+            *wrappedValue = current;
+            return true;
+        case JSON_QUERY_WITH_CONDITIONAL_ARRAY_WRAPPER:
+            if (current.is_array()) {
+                *wrappedValue = current;
+            } else {
+                *wrappedValue = JsonDocument::array();
+                wrappedValue->push_back(current);
+            }
+            return true;
+        case JSON_QUERY_WITH_UNCONDITIONAL_ARRAY_WRAPPER:
+            *wrappedValue = JsonDocument::array();
+            wrappedValue->push_back(current);
+            return true;
+        default:
+            return false;
+    }
+}
+
+JsonDocument *ResolveJsonQueryTarget(JsonDocument *jsonData, const std::string &pathContent)
+{
+    if (pathContent == "$") {
+        return jsonData;
+    }
+    return ResolveJsonPathTarget(jsonData, pathContent);
+}
+}
+
+extern "C" DLLEXPORT const char* JsonQueryWithWrapperAndBehavior(
+    int64_t contextPtr,
+    const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+    const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
+    int32_t wrapperBehavior, bool wrapperBehaviorIsNull,
+    int32_t emptyBehavior, bool emptyBehaviorIsNull,
+    int32_t errorBehavior, bool errorBehaviorIsNull,
+    bool *outIsNull, int32_t *outLen)
+{
+    static_cast<void>(pathStrWidth);
     if (outIsNull == nullptr || outLen == nullptr) {
         return nullptr;
     }
@@ -510,29 +671,56 @@ extern "C" DLLEXPORT const char* JsonQueryRetNull(int64_t contextPtr, const char
         return nullptr;
     }
 
+    int32_t normalizedWrapper = wrapperBehaviorIsNull ? JSON_QUERY_WITHOUT_ARRAY_WRAPPER : wrapperBehavior;
+    int32_t normalizedEmpty = emptyBehaviorIsNull ? JSON_QUERY_NULL_BEHAVIOR : emptyBehavior;
+    int32_t normalizedError = errorBehaviorIsNull ? JSON_QUERY_NULL_BEHAVIOR : errorBehavior;
     std::string jsonContent(jsonStr, jsonStrLen);
-    std::string pathContent(pathStr, pathStrLen);
+    std::string rawPath(pathStr, pathStrLen);
+    JsonPathMode pathMode = JsonPathMode::LAX;
+    std::string pathContent;
+    if (!ParseJsonQueryPathSpec(rawPath, &pathMode, &pathContent)) {
+        return HandleJsonQueryErrorBehavior(contextPtr, normalizedError,
+            "Illegal JSON path in JSON_QUERY function", outIsNull, outLen);
+    }
 
     try {
-        JsonDocument* jsonData = GetParsedJsonWithCache(jsonContent);
-        JsonDocument* current = ResolveJsonPathTarget(jsonData, pathContent);
-        if (current == nullptr || current->is_null() || (!current->is_object() && !current->is_array())) {
-            *outIsNull = true;
-            *outLen = 0;
-            return nullptr;
+        JsonDocument *jsonData = GetParsedJsonWithCache(jsonContent);
+        JsonDocument *current = ResolveJsonQueryTarget(jsonData, pathContent);
+        if (current == nullptr) {
+            if (pathMode == JsonPathMode::STRICT) {
+                return HandleJsonQueryErrorBehavior(contextPtr, normalizedError, "No results for path",
+                    outIsNull, outLen);
+            }
+            return HandleJsonQueryEmptyBehavior(contextPtr, normalizedEmpty, outIsNull, outLen);
         }
 
-        std::string result = current->dump();
-        *outIsNull = false;
-        *outLen = static_cast<int32_t>(result.size());
-        auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
-        memcpy_s(ret, *outLen + 1, result.c_str(), *outLen + 1);
-        return ret;
-    } catch (const std::exception&) {
-        *outIsNull = true;
-        *outLen = 0;
-        return nullptr;
+        JsonDocument wrappedValue;
+        if (!ApplyJsonQueryWrapper(*current, normalizedWrapper, &wrappedValue)) {
+            return HandleJsonQueryErrorBehavior(contextPtr, normalizedError,
+                "Illegal wrapper behavior in JSON_QUERY function", outIsNull, outLen);
+        }
+
+        if (wrappedValue.is_null() || (pathMode == JsonPathMode::LAX && IsJsonQueryScalar(wrappedValue))) {
+            return HandleJsonQueryEmptyBehavior(contextPtr, normalizedEmpty, outIsNull, outLen);
+        }
+        if (pathMode == JsonPathMode::STRICT && IsJsonQueryScalar(wrappedValue)) {
+            return HandleJsonQueryErrorBehavior(contextPtr, normalizedError,
+                "Array or object value required in strict mode of JSON_QUERY function", outIsNull, outLen);
+        }
+
+        return CreateJsonQueryResult(contextPtr, wrappedValue.dump(), outIsNull, outLen);
+    } catch (const std::exception &e) {
+        return HandleJsonQueryErrorBehavior(contextPtr, normalizedError, e.what(), outIsNull, outLen);
     }
+}
+
+extern "C" DLLEXPORT const char* JsonQueryRetNull(int64_t contextPtr, const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+                                                   const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
+                                                   bool *outIsNull, int32_t *outLen)
+{
+    return JsonQueryWithWrapperAndBehavior(contextPtr, jsonStr, jsonStrLen, jsonStrIsNull, pathStr, pathStrWidth,
+        pathStrLen, pathStrIsNull, JSON_QUERY_WITHOUT_ARRAY_WRAPPER, false, JSON_QUERY_NULL_BEHAVIOR, false,
+        JSON_QUERY_NULL_BEHAVIOR, false, outIsNull, outLen);
 }
 
 // Extended JSON_VALUE function with ON EMPTY/ERROR behaviors
@@ -585,119 +773,119 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
             } catch (...) {
                 std::string fixedJsonContent;
                 fixedJsonContent.reserve(jsonContent.size());
-                for (size_t j = 0; j < jsonContent.size(); j++) {
-                    if (jsonContent[j] == '\\') {
-                        if (j + 1 < jsonContent.size()) {
-                            char next = jsonContent[j + 1];
-                            if (next == '\\' || next == '"') {
-                                fixedJsonContent += jsonContent[j];
+                        for (size_t j = 0; j < jsonContent.size(); j++) {
+                            if (jsonContent[j] == '\\') {
+                                if (j + 1 < jsonContent.size()) {
+                                    char next = jsonContent[j + 1];
+                                    if (next == '\\' || next == '"') {
+                                        fixedJsonContent += jsonContent[j];
+                                    } else {
+                                        fixedJsonContent += '"';
+                                    }
+                                } else {
+                                    fixedJsonContent += '"';
+                                }
                             } else {
-                                fixedJsonContent += '"';
+                                fixedJsonContent += jsonContent[j];
                             }
-                        } else {
-                            fixedJsonContent += '"';
                         }
-                    } else {
-                        fixedJsonContent += jsonContent[j];
+                        newJson = JsonDocument::parse(fixedJsonContent);
+                        jsonContent = fixedJsonContent;
+                    }
+                    THREAD_LOCAL_JSON_CACHE.SetCache(jsonContent, newJson);
+                    jsonData = &THREAD_LOCAL_JSON_CACHE.parsedJson;
+                }
+
+                std::vector<std::string> keys = ParseJsonPath(pathContent);
+
+                if (keys.empty()) {
+                    // Invalid path - treat as error
+                    if (errorBehavior == 2 && !defaultOnErrorIsNull) { // DEFAULT
+                        *outIsNull = false;
+                        *outLen = defaultOnErrorLen;
+                        auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
+                        memcpy_s(ret, *outLen + 1, defaultOnError, *outLen + 1);
+                        return ret;
+                    } else if (errorBehavior == 1) { // ERROR
+                        SetError(contextPtr, "JSON_VALUE error: Invalid JSON path");
+                        *outIsNull = true;
+                        *outLen = 0;
+                        return nullptr;
+                    } else { // NULL
+                        *outIsNull = true;
+                        *outLen = 0;
+                        return nullptr;
                     }
                 }
-                newJson = JsonDocument::parse(fixedJsonContent);
-                jsonContent = fixedJsonContent;
-            }
-            THREAD_LOCAL_JSON_CACHE.SetCache(jsonContent, newJson);
-            jsonData = &THREAD_LOCAL_JSON_CACHE.parsedJson;
-        }
-        
-        std::vector<std::string> keys = ParseJsonPath(pathContent);
-        
-        if (keys.empty()) {
-            // Invalid path - treat as error
-            if (errorBehavior == 2 && !defaultOnErrorIsNull) { // DEFAULT
-                *outIsNull = false;
-                *outLen = defaultOnErrorLen;
-                auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
-                memcpy_s(ret, *outLen + 1, defaultOnError, *outLen + 1);
-                return ret;
-            } else if (errorBehavior == 1) { // ERROR
-                SetError(contextPtr, "JSON_VALUE error: Invalid JSON path");
-                *outIsNull = true;
-                *outLen = 0;
-                return nullptr;
-            } else { // NULL
-                *outIsNull = true;
-                *outLen = 0;
-                return nullptr;
-            }
-        }
-        
-        JsonDocument* current = jsonData;
-        bool found = true;
-        
-        for (const auto& key : keys) {
-            if (current->is_object()) {
-                if (current->contains(key)) {
-                    current = &(*current)[key];
-                } else {
-                    found = false;
-                    break;
-                }
-            } else if (current->is_array()) {
-                try {
-                    size_t index = std::stoul(key);
-                    if (index < current->size()) {
-                        current = &(*current)[index];
+
+                JsonDocument* current = jsonData;
+                bool found = true;
+
+                for (const auto& key : keys) {
+                    if (current->is_object()) {
+                        if (current->contains(key)) {
+                            current = &(*current)[key];
+                        } else {
+                            found = false;
+                            break;
+                        }
+                    } else if (current->is_array()) {
+                        try {
+                            size_t index = std::stoul(key);
+                            if (index < current->size()) {
+                                current = &(*current)[index];
+                            } else {
+                                found = false;
+                                break;
+                            }
+                        } catch (...) {
+                            found = false;
+                            break;
+                        }
                     } else {
                         found = false;
                         break;
                     }
-                } catch (...) {
-                    found = false;
-                    break;
                 }
-            } else {
-                found = false;
-                break;
-            }
-        }
-        
-        if (!found || current->is_null()) {
-            return HandleJsonValueEmptyBehavior(contextPtr, emptyBehavior, defaultOnEmpty, defaultOnEmptyLen,
-                defaultOnEmptyIsNull, outIsNull, outLen);
-        }
 
-        std::string result;
-        if (!TryFormatJsonValueScalar(*current, &result)) {
-            return HandleJsonValueEmptyBehavior(contextPtr, emptyBehavior, defaultOnEmpty, defaultOnEmptyLen,
-                defaultOnEmptyIsNull, outIsNull, outLen);
-        }
-        
-        *outIsNull = false;
-        *outLen = static_cast<int32_t>(result.size());
-        auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
-        memcpy_s(ret, *outLen + 1, result.c_str(), *outLen + 1);
-        return ret;
-        
-    } catch (const std::exception& e) {
-        // Error during processing - apply error behavior
-        if (errorBehavior == 2 && !defaultOnErrorIsNull) { // DEFAULT
-            *outIsNull = false;
-            *outLen = defaultOnErrorLen;
-            auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
-            memcpy_s(ret, *outLen + 1, defaultOnError, *outLen + 1);
-            return ret;
-        } else if (errorBehavior == 1) { // ERROR
-            std::string errMsg = std::string("JSON_VALUE error: ") + e.what();
-            SetError(contextPtr, errMsg.c_str());
-            *outIsNull = true;
-            *outLen = 0;
-            return nullptr;
-        } else { // NULL
-            *outIsNull = true;
-            *outLen = 0;
-            return nullptr;
-        }
+                if (!found || current->is_null()) {
+                    return HandleJsonValueEmptyBehavior(contextPtr, emptyBehavior, defaultOnEmpty, defaultOnEmptyLen,
+                        defaultOnEmptyIsNull, outIsNull, outLen);
+                }
+
+                std::string result;
+                if (!TryFormatJsonValueScalar(*current, &result)) {
+                    return HandleJsonValueEmptyBehavior(contextPtr, emptyBehavior, defaultOnEmpty, defaultOnEmptyLen,
+                        defaultOnEmptyIsNull, outIsNull, outLen);
+                }
+
+                *outIsNull = false;
+                *outLen = static_cast<int32_t>(result.size());
+                auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
+                memcpy_s(ret, *outLen + 1, result.c_str(), *outLen + 1);
+                return ret;
+
+            } catch (const std::exception& e) {
+                // Error during processing - apply error behavior
+                if (errorBehavior == 2 && !defaultOnErrorIsNull) { // DEFAULT
+                    *outIsNull = false;
+                    *outLen = defaultOnErrorLen;
+                    auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
+                    memcpy_s(ret, *outLen + 1, defaultOnError, *outLen + 1);
+                    return ret;
+                } else if (errorBehavior == 1) { // ERROR
+                    std::string errMsg = std::string("JSON_VALUE error: ") + e.what();
+                    SetError(contextPtr, errMsg.c_str());
+                    *outIsNull = true;
+                    *outLen = 0;
+                    return nullptr;
+                } else { // NULL
+                    *outIsNull = true;
+                    *outLen = 0;
+                    return nullptr;
+                }
+            }
     }
-}
 
 extern "C" DLLEXPORT const char* JsonValueWithBehaviors(
     int64_t contextPtr,

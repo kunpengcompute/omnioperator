@@ -171,6 +171,12 @@ extern "C" DLLEXPORT void BatchJsonQuery(int64_t contextPtr, uint8_t **jsonStr, 
     bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
     bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt);
 
+extern "C" DLLEXPORT void BatchJsonQueryWithWrapperAndBehavior(int64_t contextPtr, uint8_t **jsonStr,
+    int32_t *jsonStrLen, bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen,
+    bool *pathStrIsNull, int32_t *wrapperBehavior, bool *wrapperBehaviorIsNull, int32_t *emptyBehavior,
+    bool *emptyBehaviorIsNull, int32_t *errorBehavior, bool *errorBehaviorIsNull, bool *outIsNull,
+    uint8_t **output, int32_t *outLen, int32_t rowCnt);
+
 extern "C" DLLEXPORT void BatchLikeStr(uint8_t **str, int32_t *strLen, uint8_t **regexToMatch, int32_t *regexLen,
     bool *isAnyNull, bool *output, int32_t rowCnt);
 

@@ -884,6 +884,26 @@ extern "C" DLLEXPORT void BatchJsonQuery(int64_t contextPtr, uint8_t **jsonStr, 
     }
 }
 
+extern "C" DLLEXPORT void BatchJsonQueryWithWrapperAndBehavior(int64_t contextPtr, uint8_t **jsonStr,
+    int32_t *jsonStrLen, bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen,
+    bool *pathStrIsNull, int32_t *wrapperBehavior, bool *wrapperBehaviorIsNull, int32_t *emptyBehavior,
+    bool *emptyBehaviorIsNull, int32_t *errorBehavior, bool *errorBehaviorIsNull, bool *outIsNull,
+    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+{
+    for (int32_t i = 0; i < rowCnt; ++i) {
+        bool rowOutIsNull = false;
+        int32_t rowOutLen = 0;
+        const char *result = JsonQueryWithWrapperAndBehavior(contextPtr,
+            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
+            reinterpret_cast<const char *>(pathStr[i]), pathStrWidth, pathStrLen[i], pathStrIsNull[i],
+            wrapperBehavior[i], wrapperBehaviorIsNull[i], emptyBehavior[i], emptyBehaviorIsNull[i],
+            errorBehavior[i], errorBehaviorIsNull[i], &rowOutIsNull, &rowOutLen);
+        outIsNull[i] = rowOutIsNull;
+        outLen[i] = rowOutLen;
+        output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(result));
+    }
+}
+
 extern "C" DLLEXPORT void BatchLikeStr(uint8_t **str, int32_t *strLen, uint8_t **regexToMatch, int32_t *regexLen,
     bool *isAnyNull, bool *output, int32_t rowCnt)
 {

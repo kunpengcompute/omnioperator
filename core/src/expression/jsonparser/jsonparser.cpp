@@ -434,8 +434,25 @@ namespace {
 constexpr int32_t JSON_VALUE_NULL_BEHAVIOR = 0;
 constexpr int32_t JSON_VALUE_ERROR_BEHAVIOR = 1;
 constexpr int32_t JSON_VALUE_DEFAULT_BEHAVIOR = 2;
+constexpr int32_t JSON_QUERY_WITHOUT_ARRAY_WRAPPER = 0;
+constexpr int32_t JSON_QUERY_WITH_CONDITIONAL_ARRAY_WRAPPER = 1;
+constexpr int32_t JSON_QUERY_WITH_UNCONDITIONAL_ARRAY_WRAPPER = 2;
+constexpr int32_t JSON_QUERY_NULL_BEHAVIOR = 0;
+constexpr int32_t JSON_QUERY_EMPTY_ARRAY_BEHAVIOR = 1;
+constexpr int32_t JSON_QUERY_EMPTY_OBJECT_BEHAVIOR = 2;
+constexpr int32_t JSON_QUERY_ERROR_BEHAVIOR = 3;
 
 LiteralExpr *CreateJsonValueBehaviorLiteral(int32_t behavior)
+{
+    return new LiteralExpr(behavior, std::make_shared<IntDataType>());
+}
+
+LiteralExpr *CreateJsonQueryWrapperLiteral(int32_t wrapperBehavior)
+{
+    return new LiteralExpr(wrapperBehavior, std::make_shared<IntDataType>());
+}
+
+LiteralExpr *CreateJsonQueryBehaviorLiteral(int32_t behavior)
 {
     return new LiteralExpr(behavior, std::make_shared<IntDataType>());
 }
@@ -574,6 +591,94 @@ bool BuildJsonValueArguments(const Json &jsonExpr, std::vector<Expr *> *args)
     args->push_back(defaultOnError);
     return true;
 }
+
+bool ParseJsonQueryWrapper(const Json &jsonExpr, int32_t *wrapperBehavior)
+{
+    *wrapperBehavior = JSON_QUERY_WITHOUT_ARRAY_WRAPPER;
+    if (!jsonExpr.contains("wrapperBehavior")) {
+        return true;
+    }
+
+    const auto &wrapperJson = jsonExpr["wrapperBehavior"];
+    if (!wrapperJson.is_object() || !wrapperJson.contains("type")) {
+        return false;
+    }
+
+    const auto wrapperType = wrapperJson["type"].get<string>();
+    if (wrapperType == "WITHOUT_ARRAY") {
+        return true;
+    }
+    if (wrapperType == "WITH_CONDITIONAL_ARRAY") {
+        *wrapperBehavior = JSON_QUERY_WITH_CONDITIONAL_ARRAY_WRAPPER;
+        return true;
+    }
+    if (wrapperType == "WITH_UNCONDITIONAL_ARRAY") {
+        *wrapperBehavior = JSON_QUERY_WITH_UNCONDITIONAL_ARRAY_WRAPPER;
+        return true;
+    }
+    return false;
+}
+
+bool ParseJsonQueryBehavior(const Json &jsonExpr, const char *behaviorKey, int32_t *behaviorCode)
+{
+    *behaviorCode = JSON_QUERY_NULL_BEHAVIOR;
+    if (!jsonExpr.contains(behaviorKey)) {
+        return true;
+    }
+
+    const auto &behaviorJson = jsonExpr[behaviorKey];
+    if (!behaviorJson.is_object() || !behaviorJson.contains("type")) {
+        return false;
+    }
+
+    const auto behaviorType = behaviorJson["type"].get<string>();
+    if (behaviorType == "NULL") {
+        return true;
+    }
+    if (behaviorType == "EMPTY_ARRAY") {
+        *behaviorCode = JSON_QUERY_EMPTY_ARRAY_BEHAVIOR;
+        return true;
+    }
+    if (behaviorType == "EMPTY_OBJECT") {
+        *behaviorCode = JSON_QUERY_EMPTY_OBJECT_BEHAVIOR;
+        return true;
+    }
+    if (behaviorType == "ERROR") {
+        *behaviorCode = JSON_QUERY_ERROR_BEHAVIOR;
+        return true;
+    }
+    return false;
+}
+
+bool BuildJsonQueryArguments(const Json &jsonExpr, std::vector<Expr *> *args)
+{
+    for (const auto &item : jsonExpr["arguments"].items()) {
+        Expr *arg = JSONParser::ParseJSON(item.value());
+        if (arg != nullptr) {
+            args->push_back(arg);
+        } else {
+            return false;
+        }
+    }
+
+    int32_t wrapperBehavior = JSON_QUERY_WITHOUT_ARRAY_WRAPPER;
+    int32_t emptyBehavior = JSON_QUERY_NULL_BEHAVIOR;
+    int32_t errorBehavior = JSON_QUERY_NULL_BEHAVIOR;
+    if (!ParseJsonQueryWrapper(jsonExpr, &wrapperBehavior)) {
+        return false;
+    }
+    if (!ParseJsonQueryBehavior(jsonExpr, "emptyBehavior", &emptyBehavior)) {
+        return false;
+    }
+    if (!ParseJsonQueryBehavior(jsonExpr, "errorBehavior", &errorBehavior)) {
+        return false;
+    }
+
+    args->push_back(CreateJsonQueryWrapperLiteral(wrapperBehavior));
+    args->push_back(CreateJsonQueryBehaviorLiteral(emptyBehavior));
+    args->push_back(CreateJsonQueryBehaviorLiteral(errorBehavior));
+    return true;
+}
 } // namespace
 
 Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
@@ -588,6 +693,11 @@ Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
 
     if (funcName == "json_value") {
         if (!BuildJsonValueArguments(jsonExpr, &args)) {
+            Expr::DeleteExprs(args);
+            return nullptr;
+        }
+    } else if (funcName == "json_query") {
+        if (!BuildJsonQueryArguments(jsonExpr, &args)) {
             Expr::DeleteExprs(args);
             return nullptr;
         }

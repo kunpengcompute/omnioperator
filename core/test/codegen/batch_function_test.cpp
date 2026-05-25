@@ -2589,6 +2589,61 @@ TEST(BatchFunctionTest, BatchJsonQuery)
     delete context;
 }
 
+TEST(BatchFunctionTest, BatchJsonQueryWithWrapperAndBehavior)
+{
+    auto context = new ExecutionContext();
+    auto contextPtr = reinterpret_cast<int64_t>(context);
+    std::vector<std::string> jsonStr {
+        R"({"roomInfos":{"name":"A"}})",
+        R"({"roomInfos":[]})",
+        R"({"roomInfos":[]})" };
+    std::vector<int32_t> jsonStrLen {
+        static_cast<int32_t>(jsonStr[0].length()),
+        static_cast<int32_t>(jsonStr[1].length()),
+        static_cast<int32_t>(jsonStr[2].length()) };
+    std::vector<uint8_t *> jsonStrAddr {
+        reinterpret_cast<uint8_t *>(const_cast<char *>(jsonStr[0].c_str())),
+        reinterpret_cast<uint8_t *>(const_cast<char *>(jsonStr[1].c_str())),
+        reinterpret_cast<uint8_t *>(const_cast<char *>(jsonStr[2].c_str())) };
+    std::vector<std::string> pathStr {
+        "$.roomInfos.name",
+        "lax $.missing",
+        "strict $.missing" };
+    std::vector<int32_t> pathStrLen {
+        static_cast<int32_t>(pathStr[0].length()),
+        static_cast<int32_t>(pathStr[1].length()),
+        static_cast<int32_t>(pathStr[2].length()) };
+    std::vector<uint8_t *> pathStrAddr {
+        reinterpret_cast<uint8_t *>(const_cast<char *>(pathStr[0].c_str())),
+        reinterpret_cast<uint8_t *>(const_cast<char *>(pathStr[1].c_str())),
+        reinterpret_cast<uint8_t *>(const_cast<char *>(pathStr[2].c_str())) };
+    int32_t wrapperBehavior[] = { 1, 0, 0 };
+    int32_t emptyBehavior[] = { 0, 1, 0 };
+    int32_t errorBehavior[] = { 0, 0, 2 };
+    bool jsonStrIsNull[] = { false, false, false };
+    bool pathStrIsNull[] = { false, false, false };
+    bool wrapperBehaviorIsNull[] = { false, false, false };
+    bool emptyBehaviorIsNull[] = { false, false, false };
+    bool errorBehaviorIsNull[] = { false, false, false };
+    bool outIsNull[] = { false, false, false };
+    std::vector<uint8_t *> output(3);
+    std::vector<int32_t> outLen(3);
+
+    BatchJsonQueryWithWrapperAndBehavior(contextPtr, jsonStrAddr.data(), jsonStrLen.data(), jsonStrIsNull,
+        pathStrAddr.data(), 0, pathStrLen.data(), pathStrIsNull, wrapperBehavior, wrapperBehaviorIsNull,
+        emptyBehavior, emptyBehaviorIsNull, errorBehavior, errorBehaviorIsNull, outIsNull, output.data(),
+        outLen.data(), 3);
+
+    EXPECT_FALSE(outIsNull[0]);
+    EXPECT_EQ(std::string(reinterpret_cast<char *>(output[0]), outLen[0]), R"(["A"])");
+    EXPECT_FALSE(outIsNull[1]);
+    EXPECT_EQ(std::string(reinterpret_cast<char *>(output[1]), outLen[1]), "[]");
+    EXPECT_FALSE(outIsNull[2]);
+    EXPECT_EQ(std::string(reinterpret_cast<char *>(output[2]), outLen[2]), "{}");
+    EXPECT_FALSE(context->HasError());
+    delete context;
+}
+
 TEST(BatchFunctionTest, BatchJsonSplitChar)
 {
     auto context = new ExecutionContext();
