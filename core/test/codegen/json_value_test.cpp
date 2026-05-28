@@ -213,6 +213,13 @@ TEST(JsonValueTest, LargeJsonPerformance)
     JsonValueTest(largeJson, "$.level1.level2.level3.level4.level5.value", "deepvalue", false);
 }
 
+TEST(JsonValueTest, CacheResetsAcrossJsonSizes)
+{
+    std::string largeJson = R"({"payload":")" + std::string(8192, 'x') + R"(", "flag": true})";
+    JsonValueTest(largeJson, "$.payload", std::string(8192, 'x'), false);
+    JsonValueTest(R"({"payload":"small","flag":false})", "$.payload", "small", false);
+}
+
 // Test paths with whitespace (should handle gracefully)
 TEST(JsonValueTest, PathsWithWhitespace)
 {

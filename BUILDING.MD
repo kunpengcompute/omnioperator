@@ -185,7 +185,7 @@ Run the command `apt-get install autoconf `
   sudo make install
   ```
 
-### Install json
+### Install nlohmann json
 
 The json version of OmniOperator requires at least 3.7.3. If the GCC version is 10.., choose a later version of json such as 3.9.1. Otherwise, it will result in compilation failure.If the GCC version is 7.3.0,the json version 3.7.3 is recommended.
 
@@ -202,8 +202,18 @@ The json version of OmniOperator requires at least 3.7.3. If the GCC version is 
   make
   make install
   ```
-
 Notice:The installation procedures for versions 3.9.1 and 3.7.3 are the same.
+
+### Install rapid json
+The RapidJSON dependency can be installed by placing the RapidJSON header files under /usr/local/include. RapidJSON is a header-only C++ library, so it does not need to be compiled.
+
+* Download source code from https://github.com/Tencent/rapidjson￼
+* Run the following command to add RapidJSON to /usr/local/include
+```bash
+git clone https://github.com/Tencent/rapidjson.git
+cd rapidjson
+sudo cp -r include/rapidjson /usr/local/include/
+```
 
 ### Install libboundscheck
 
