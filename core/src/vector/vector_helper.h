@@ -887,6 +887,7 @@ public:
             default: {
                 std::string omniExceptionInfo = "In function UnsafeGetValuesDictionary, no such data type " +
                     std::to_string(vector->GetTypeId());
+                delete vector;
                 throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
             }
         }

@@ -131,6 +131,8 @@ public:
                     auto *resultNulls = unsafe::UnsafeBaseVector::GetNulls(result);
                     auto nullsSize = BitUtil::Nbytes(size);
                     memset(resultNulls, 0xFF, nullsSize);
+                    delete numMonthsArg;
+                    delete dateArg;
                     return;
                 }
             } else {
