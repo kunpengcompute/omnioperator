@@ -206,7 +206,7 @@ Gluten社区代码里有一个步骤是遍历部署文件夹下的所有文件�
 
 ```
 cd /home/
-git clone https://szv-open.codehub.huawei.com/OpenSourceCenter/abseil/abseil-cpp.git
+git clone https://github.com/abseil/abseil-cpp.git
 git checkout tags/20250127.0
 cd abseil-cpp/
 mkdir build && cd build

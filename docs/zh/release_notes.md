@@ -339,19 +339,15 @@
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002547210769"></a>
 
 <a name="zh-cn_topic_0000001498002964_table1077520124617"></a>
-<table><tbody><tr id="zh-cn_topic_0000001498002964_row07751817464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.1.1"><p id="zh-cn_topic_0000001498002964_p177751174618"><a name="zh-cn_topic_0000001498002964_p177751174618"></a><a name="zh-cn_topic_0000001498002964_p177751174618"></a>问题单号</p>
+<table><tbody>
+<tr id="zh-cn_topic_0000001498002964_row11775191144616"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.3.1"><p id="zh-cn_topic_0000001498002964_p20775919467"><a name="zh-cn_topic_0000001498002964_p20775919467"></a><a name="zh-cn_topic_0000001498002964_p20775919467"></a>问题描述</p>
 </th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.1.1 "><p id="zh-cn_topic_0000001498002964_p377511134615"><a name="zh-cn_topic_0000001498002964_p377511134615"></a><a name="zh-cn_topic_0000001498002964_p377511134615"></a>DTS2024060329127</p>
+<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.3.1 "><p id="zh-cn_topic_0000001498002964_p1987484454610"><a name="zh-cn_topic_0000001498002964_p1987484454610"></a><a name="zh-cn_topic_0000001498002964_p1987484454610"></a>在Spark执行INSERT语句且只有1个数据分区的场景下，当出现50个表连续SMJ（Sort Merge Join）操作时，可能会导致SMJ算子在堆外内存耗尽时调用new来申请vector内存，从而引发core dump问题。</p>
 </td>
 </tr>
 <tr id="zh-cn_topic_0000001498002964_row157751511464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.2.1"><p id="zh-cn_topic_0000001498002964_p167751810462"><a name="zh-cn_topic_0000001498002964_p167751810462"></a><a name="zh-cn_topic_0000001498002964_p167751810462"></a>严重级别</p>
 </th>
 <td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.2.1 "><p id="zh-cn_topic_0000001498002964_p87750114611"><a name="zh-cn_topic_0000001498002964_p87750114611"></a><a name="zh-cn_topic_0000001498002964_p87750114611"></a>一般</p>
-</td>
-</tr>
-<tr id="zh-cn_topic_0000001498002964_row11775191144616"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.3.1"><p id="zh-cn_topic_0000001498002964_p20775919467"><a name="zh-cn_topic_0000001498002964_p20775919467"></a><a name="zh-cn_topic_0000001498002964_p20775919467"></a>问题描述</p>
-</th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.3.1 "><p id="zh-cn_topic_0000001498002964_p1987484454610"><a name="zh-cn_topic_0000001498002964_p1987484454610"></a><a name="zh-cn_topic_0000001498002964_p1987484454610"></a>在Spark执行INSERT语句且只有1个数据分区的场景下，当出现50个表连续SMJ（Sort Merge Join）操作时，可能会导致SMJ算子在堆外内存耗尽时调用new来申请vector内存，从而引发core dump问题。</p>
 </td>
 </tr>
 </tbody>
@@ -395,19 +391,15 @@
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002547130753"></a>
 
 <a name="zh-cn_topic_0000001498002964_table1077520124617"></a>
-<table><tbody><tr id="zh-cn_topic_0000001498002964_row07751817464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.1.1"><p id="zh-cn_topic_0000001498002964_p177751174618"><a name="zh-cn_topic_0000001498002964_p177751174618"></a><a name="zh-cn_topic_0000001498002964_p177751174618"></a>问题单号</p>
+<table><tbody>
+<tr id="zh-cn_topic_0000001498002964_row11775191144616"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.3.1"><p id="zh-cn_topic_0000001498002964_p20775919467"><a name="zh-cn_topic_0000001498002964_p20775919467"></a><a name="zh-cn_topic_0000001498002964_p20775919467"></a>问题描述</p>
 </th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.1.1 "><p id="zh-cn_topic_0000001498002964_p377511134615"><a name="zh-cn_topic_0000001498002964_p377511134615"></a><a name="zh-cn_topic_0000001498002964_p377511134615"></a>DTS2024060329127</p>
+<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.3.1 "><p id="zh-cn_topic_0000001498002964_p1987484454610"><a name="zh-cn_topic_0000001498002964_p1987484454610"></a><a name="zh-cn_topic_0000001498002964_p1987484454610"></a>在Spark执行INSERT语句且只有1个数据分区的场景下，当出现50个表连续SMJ（Sort Merge Join）操作时，可能会导致SMJ算子在堆外内存耗尽时调用new来申请vector内存，从而引发core dump问题。</p>
 </td>
 </tr>
 <tr id="zh-cn_topic_0000001498002964_row157751511464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.2.1"><p id="zh-cn_topic_0000001498002964_p167751810462"><a name="zh-cn_topic_0000001498002964_p167751810462"></a><a name="zh-cn_topic_0000001498002964_p167751810462"></a>严重级别</p>
 </th>
 <td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.2.1 "><p id="zh-cn_topic_0000001498002964_p87750114611"><a name="zh-cn_topic_0000001498002964_p87750114611"></a><a name="zh-cn_topic_0000001498002964_p87750114611"></a>一般</p>
-</td>
-</tr>
-<tr id="zh-cn_topic_0000001498002964_row11775191144616"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.3.1"><p id="zh-cn_topic_0000001498002964_p20775919467"><a name="zh-cn_topic_0000001498002964_p20775919467"></a><a name="zh-cn_topic_0000001498002964_p20775919467"></a>问题描述</p>
-</th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.3.1 "><p id="zh-cn_topic_0000001498002964_p1987484454610"><a name="zh-cn_topic_0000001498002964_p1987484454610"></a><a name="zh-cn_topic_0000001498002964_p1987484454610"></a>在Spark执行INSERT语句且只有1个数据分区的场景下，当出现50个表连续SMJ（Sort Merge Join）操作时，可能会导致SMJ算子在堆外内存耗尽时调用new来申请vector内存，从而引发core dump问题。</p>
 </td>
 </tr>
 <tr id="zh-cn_topic_0000001498002964_row12775151134619"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.4.1"><p id="zh-cn_topic_0000001498002964_p197756111466"><a name="zh-cn_topic_0000001498002964_p197756111466"></a><a name="zh-cn_topic_0000001498002964_p197756111466"></a>根因分析</p>
@@ -427,7 +419,7 @@
 </tr>
 <tr id="zh-cn_topic_0000001498002964_row1777511154617"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.7.1"><p id="zh-cn_topic_0000001498002964_p87762154616"><a name="zh-cn_topic_0000001498002964_p87762154616"></a><a name="zh-cn_topic_0000001498002964_p87762154616"></a>解决计划</p>
 </th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.7.1 "><a name="zh-cn_topic_0000001498002964_ol7508324455"></a><a name="zh-cn_topic_0000001498002964_ol7508324455"></a><ol id="zh-cn_topic_0000001498002964_ol7508324455"><li>已在特性指南上增加故障案例说明，当用户出现该问题时能够迅速完成定位和规避。</li><li>此问题单遗留，在下一个商用版本Kunpeng BoostKit 24.0.0中解决。</li></ol>
+<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.7.1 "><a name="zh-cn_topic_0000001498002964_ol7508324455"></a><a name="zh-cn_topic_0000001498002964_ol7508324455"></a><ol id="zh-cn_topic_0000001498002964_ol7508324455"><li>已在特性指南上增加故障案例说明，当用户出现该问题时能够迅速完成定位和规避。</li><li>此问题遗留，在下一个商用版本Kunpeng BoostKit 24.0.0中解决。</li></ol>
 </td>
 </tr>
 </tbody>

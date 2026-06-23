@@ -339,19 +339,15 @@ None
 ### Resolved Issues<a name="EN-US_TOPIC_0000002547210769"></a>
 
 <a name="EN-US_topic_0000001498002964_table1077520124617"></a>
-<table><tbody><tr id="EN-US_topic_0000001498002964_row07751817464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.1.1"><p id="EN-US_topic_0000001498002964_p177751174618"><a name="EN-US_topic_0000001498002964_p177751174618"></a><a name="EN-US_topic_0000001498002964_p177751174618"></a>Trouble Ticket No.</p>
+<table><tbody>
+<tr id="EN-US_topic_0000001498002964_row11775191144616"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.3.1"><p id="EN-US_topic_0000001498002964_p20775919467"><a name="EN-US_topic_0000001498002964_p20775919467"></a><a name="EN-US_topic_0000001498002964_p20775919467"></a>Symptom</p>
 </th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.1.1 "><p id="EN-US_topic_0000001498002964_p377511134615"><a name="EN-US_topic_0000001498002964_p377511134615"></a><a name="EN-US_topic_0000001498002964_p377511134615"></a>DTS2024060329127</p>
+<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.3.1 "><p id="EN-US_topic_0000001498002964_p1987484454610"><a name="EN-US_topic_0000001498002964_p1987484454610"></a><a name="EN-US_topic_0000001498002964_p1987484454610"></a>In a scenario where a Spark INSERT statement is executed with only one data partition, if 50 tables undergo consecutive Sort Merge Join (SMJ) operations, it may cause the SMJ operator to allocate vector memory using the new statement when off-heap memory is exhausted, thereby triggering a core dump issue.</p>
 </td>
 </tr>
 <tr id="EN-US_topic_0000001498002964_row157751511464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.2.1"><p id="EN-US_topic_0000001498002964_p167751810462"><a name="EN-US_topic_0000001498002964_p167751810462"></a><a name="EN-US_topic_0000001498002964_p167751810462"></a>Severity</p>
 </th>
 <td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.2.1 "><p id="EN-US_topic_0000001498002964_p87750114611"><a name="EN-US_topic_0000001498002964_p87750114611"></a><a name="EN-US_topic_0000001498002964_p87750114611"></a>Minor</p>
-</td>
-</tr>
-<tr id="EN-US_topic_0000001498002964_row11775191144616"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.3.1"><p id="EN-US_topic_0000001498002964_p20775919467"><a name="EN-US_topic_0000001498002964_p20775919467"></a><a name="EN-US_topic_0000001498002964_p20775919467"></a>Symptom</p>
-</th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.3.1 "><p id="EN-US_topic_0000001498002964_p1987484454610"><a name="EN-US_topic_0000001498002964_p1987484454610"></a><a name="EN-US_topic_0000001498002964_p1987484454610"></a>In a scenario where a Spark INSERT statement is executed with only one data partition, if 50 tables undergo consecutive Sort Merge Join (SMJ) operations, it may cause the SMJ operator to allocate vector memory using the new statement when off-heap memory is exhausted, thereby triggering a core dump issue.</p>
 </td>
 </tr>
 </tbody>
@@ -395,19 +391,14 @@ None
 ### Known Issues<a name="EN-US_TOPIC_0000002547130753"></a>
 
 <a name="EN-US_topic_0000001498002964_table1077520124617"></a>
-<table><tbody><tr id="EN-US_topic_0000001498002964_row07751817464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.1.1"><p id="EN-US_topic_0000001498002964_p177751174618"><a name="EN-US_topic_0000001498002964_p177751174618"></a><a name="EN-US_topic_0000001498002964_p177751174618"></a>Trouble Ticket No.</p>
+<table><tbody><tr id="EN-US_topic_0000001498002964_row11775191144616"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.3.1"><p id="EN-US_topic_0000001498002964_p20775919467"><a name="EN-US_topic_0000001498002964_p20775919467"></a><a name="EN-US_topic_0000001498002964_p20775919467"></a>Symptom</p>
 </th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.1.1 "><p id="EN-US_topic_0000001498002964_p377511134615"><a name="EN-US_topic_0000001498002964_p377511134615"></a><a name="EN-US_topic_0000001498002964_p377511134615"></a>DTS2024060329127</p>
+<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.3.1 "><p id="EN-US_topic_0000001498002964_p1987484454610"><a name="EN-US_topic_0000001498002964_p1987484454610"></a><a name="EN-US_topic_0000001498002964_p1987484454610"></a>In a scenario where a Spark INSERT statement is executed with only one data partition, if 50 tables undergo consecutive Sort Merge Join (SMJ) operations, it may cause the SMJ operator to allocate vector memory using the new statement when off-heap memory is exhausted, thereby triggering a core dump issue.</p>
 </td>
 </tr>
 <tr id="EN-US_topic_0000001498002964_row157751511464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.2.1"><p id="EN-US_topic_0000001498002964_p167751810462"><a name="EN-US_topic_0000001498002964_p167751810462"></a><a name="EN-US_topic_0000001498002964_p167751810462"></a>Severity</p>
 </th>
 <td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.2.1 "><p id="EN-US_topic_0000001498002964_p87750114611"><a name="EN-US_topic_0000001498002964_p87750114611"></a><a name="EN-US_topic_0000001498002964_p87750114611"></a>Minor</p>
-</td>
-</tr>
-<tr id="EN-US_topic_0000001498002964_row11775191144616"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.3.1"><p id="EN-US_topic_0000001498002964_p20775919467"><a name="EN-US_topic_0000001498002964_p20775919467"></a><a name="EN-US_topic_0000001498002964_p20775919467"></a>Symptom</p>
-</th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.3.1 "><p id="EN-US_topic_0000001498002964_p1987484454610"><a name="EN-US_topic_0000001498002964_p1987484454610"></a><a name="EN-US_topic_0000001498002964_p1987484454610"></a>In a scenario where a Spark INSERT statement is executed with only one data partition, if 50 tables undergo consecutive Sort Merge Join (SMJ) operations, it may cause the SMJ operator to allocate vector memory using the new statement when off-heap memory is exhausted, thereby triggering a core dump issue.</p>
 </td>
 </tr>
 <tr id="EN-US_topic_0000001498002964_row12775151134619"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.4.1"><p id="EN-US_topic_0000001498002964_p197756111466"><a name="EN-US_topic_0000001498002964_p197756111466"></a><a name="EN-US_topic_0000001498002964_p197756111466"></a>Cause Analysis</p>

@@ -206,7 +206,7 @@ Install libabsl 2501 or later. Run the following commands to install libabsl:
 
 ```
 cd /home/
-git clone https://szv-open.codehub.huawei.com/OpenSourceCenter/abseil/abseil-cpp.git
+git clone https://github.com/abseil/abseil-cpp.git
 git checkout tags/20250127.0
 cd abseil-cpp/
 mkdir build && cd build
