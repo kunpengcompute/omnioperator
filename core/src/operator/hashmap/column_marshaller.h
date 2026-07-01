@@ -6,6 +6,7 @@
 #define OMNI_RUNTIME_COLUMN_MARSHALLER_H
 
 #include <cstdint>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include "vector/vector_helper.h"
@@ -1875,6 +1876,101 @@ public:
         for (int32_t i = 0; i < groupColNum; ++i) {
             vec::VectorHelper::SetNull(groupOutputVectors[i], rowIdx);
         }
+    }
+
+    /// Serializes one RowContainer key into the same byte representation used by
+    /// SpillExtract, but writes into a reusable caller-owned buffer. The size
+    /// trailer used by the arena allocator is intentionally omitted because it
+    /// is not part of StringRef::size and is never written to the spill file.
+    void SerializeSpillKey(const uint8_t* rowPtr, std::string& key) const
+    {
+        key.clear();
+        auto* row = reinterpret_cast<const char*>(rowPtr);
+
+        const char* mergedVarcharPos = nullptr;
+        if (varcharColIndices.size() > 1) {
+            auto varcharSlotCol = aggRows->ColumnAt(varcharSlotColIdx);
+            mergedVarcharPos = *reinterpret_cast<char* const*>(row + varcharSlotCol.Offset());
+        }
+
+        for (int32_t colIdx = 0; colIdx < static_cast<int32_t>(serializers.size()); ++colIdx) {
+            auto col = aggRows->ColumnAt(colIdx);
+            auto offset = col.Offset();
+            auto nullByte = col.NullByte();
+            auto nullMask = col.NullMask();
+            auto colTypeId = keyTypeIds[colIdx];
+            bool isVarchar = colTypeId == type::OMNI_VARCHAR || colTypeId == type::OMNI_CHAR ||
+                colTypeId == type::OMNI_VARBINARY;
+            bool isMergedVarcharNonSlot =
+                varcharColIndices.size() > 1 && isVarchar && colIdx != varcharSlotColIdx;
+
+            if (keyTypeSizes[colIdx] == 0 && !isMergedVarcharNonSlot) {
+                continue;
+            }
+
+            if (RowContainer::IsNullAt(row, nullByte, nullMask)) {
+                key.push_back('\0');
+                if (varcharColIndices.size() > 1 && mergedVarcharPos != nullptr && isVarchar) {
+                    mergedVarcharPos += 1;
+                }
+                continue;
+            }
+
+            if (isVariableLenType[colIdx]) {
+                const char* dataPtr = nullptr;
+                size_t dataSize = 0;
+                if (isVarchar) {
+                    if (varcharColIndices.size() > 1 && mergedVarcharPos != nullptr) {
+                        dataPtr = mergedVarcharPos;
+                        dataSize = ComputeVarCharSerializedSize(dataPtr);
+                        mergedVarcharPos += dataSize;
+                    } else {
+                        dataPtr = *reinterpret_cast<char* const*>(row + offset);
+                        if (dataPtr != nullptr) {
+                            dataSize = ComputeVarCharSerializedSize(dataPtr);
+                        }
+                    }
+                } else {
+                    dataPtr = *reinterpret_cast<char* const*>(row + offset);
+                    dataSize = *reinterpret_cast<const size_t*>(row + offset + sizeof(char*));
+                }
+                if (dataPtr != nullptr && dataSize > 0) {
+                    key.append(dataPtr, dataSize);
+                }
+            } else {
+                int32_t colSize = keyTypeSizes[colIdx];
+                key.push_back(static_cast<char>(colSize));
+                key.append(row + offset, colSize);
+            }
+        }
+    }
+
+    /// Traverses the hash table without materializing serialized keys. Row
+    /// pointers remain valid until HashAggregationOperator resets its arena
+    /// after the complete spill operation.
+    template <class Func>
+    void SpillExtractRows(int32_t rowsNum, OutputState& outputState, Func func)
+    {
+        auto tblVisitor = [&] {
+            if (outputState.rowBegin) {
+                return table->GetResultVisitor(
+                    outputState.rowBegin, static_cast<uint16_t>(outputState.rowOffset));
+            }
+            return table->GetResultVisitor();
+        }();
+        uint32_t idx = 0;
+        while (idx < rowsNum && !tblVisitor.Finished()) {
+            auto* row = GetRowPtr(tblVisitor.CurVal().buf);
+            uint8_t* valuePtr = row + aggRows->AggStateOffset();
+            func(row, tblVisitor.CurKey(), valuePtr, idx);
+            tblVisitor.Next();
+            idx++;
+        }
+        tblVisitor.SavePos([&](auto ptr, auto tagPos) {
+            outputState.rowBegin = reinterpret_cast<char*>(ptr);
+            outputState.rowOffset = tagPos;
+            outputState.hasBeenOutputNum += idx;
+        });
     }
 
     /// SpillExtract traverses the hash table for spill operations.

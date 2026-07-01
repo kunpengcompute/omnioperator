@@ -135,6 +135,19 @@ public:
         return pipelineStats_;
     }
 
+    /// Release finished operators in cascade. Called when operators_[i].isFinished().
+    ///
+    /// - Non-early-finish operators: all operators in [0..i] are guaranteed
+    ///   finished; each is defensively re-checked before release.
+    /// - Early-finish operators: only the operator itself is released and
+    ///   noMoreInput is propagated upstream; upstream release is deferred until
+    ///   the orphan-drain path drives them to isFinished.
+    void ReleaseFinishedOperators(int32_t finishedIndex);
+
+    /// Collect final stats before closing an operator. Must be called before
+    /// Close(), otherwise stats are lost when the object is destroyed.
+    void CollectStatsBeforeClose(int32_t operatorIdx);
+
 public:
     bool inputDriver{false};
     bool outputDriver{false};

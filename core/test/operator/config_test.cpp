@@ -136,6 +136,22 @@ TEST(ConfigTest, setConfig)
     ASSERT_TRUE(config.spillEnabled());
 }
 
+TEST(ConfigTest, maxBatchRowCount)
+{
+    struct {
+        std::optional<int> maxBatchRowCount;;
+        int expectedMaxBatchRowCount;
+    } testSettings[] = {{std::nullopt, 0}, {2, 2}, {4, 4}, {6, 6}};
+    for (const auto &testConfig : testSettings) {
+        std::unordered_map<std::string, std::string> configData;
+        if (testConfig.maxBatchRowCount.has_value()) {
+            configData.emplace(QueryConfig::KMaxBatchRowCount, std::to_string(testConfig.maxBatchRowCount.value()));
+        }
+        const QueryConfig config(configData);
+        ASSERT_EQ(config.maxBatchRowCount(), testConfig.expectedMaxBatchRowCount);
+    }
+}
+
 TEST(ConfigTest, maxRowCount)
 {
     struct {

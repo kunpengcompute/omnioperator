@@ -33,7 +33,7 @@ StreamedTableWithExprOperatorFactory* StreamedTableWithExprOperatorFactory::Crea
     auto joinType = planNode->GetJoinType();
     auto factory = new StreamedTableWithExprOperatorFactory(streamedDataTypes, streamedKeyExprCols,
         static_cast<int32_t>(streamedKeyExprCols.size()), streamedOutputColsIndex.data(),
-        static_cast<int32_t>(streamedOutputColsIndex.size()), joinType, filterExpression, overflowConfig);
+        static_cast<int32_t>(streamedOutputColsIndex.size()), joinType, filterExpression, overflowConfig, queryConfig);
     delete overflowConfig;
     overflowConfig = nullptr;
     return factory;
@@ -55,6 +55,23 @@ StreamedTableWithExprOperatorFactory::StreamedTableWithExprOperatorFactory(const
         streamedTypes.GetSize());
 }
 
+StreamedTableWithExprOperatorFactory::StreamedTableWithExprOperatorFactory(const type::DataTypes &streamedTypes,
+    const std::vector<omniruntime::expressions::Expr *> &streamedKeyExprCols, int32_t streamedKeyExprColsCnt,
+    int32_t *streamedOutputCols, int32_t streamedOutputColsCnt, JoinType joinType, std::string &filter,
+    OverflowConfig *overflowConfig, const config::QueryConfig &queryConfig)
+    : joinType(joinType), filter(filter), smjOperator(new SortMergeJoinOperator(joinType, filter, queryConfig))
+{
+    this->queryConfig_ = queryConfig;
+    std::vector<DataTypePtr> newBuildTypes;
+    OperatorUtil::CreateProjections(streamedTypes, streamedKeyExprCols, newBuildTypes, projections, streamedKeyCols,
+        overflowConfig);
+    this->streamedTypes = std::make_unique<DataTypes>(newBuildTypes);
+    this->streamedOutputCols.insert(this->streamedOutputCols.end(), streamedOutputCols,
+        streamedOutputCols + streamedOutputColsCnt);
+    smjOperator->ConfigStreamedTblInfo(*(this->streamedTypes), streamedKeyCols, this->streamedOutputCols,
+        streamedTypes.GetSize());
+}
+
 StreamedTableWithExprOperatorFactory::StreamedTableWithExprOperatorFactory(const type::DataTypes& streamedTypes,
     const std::vector<omniruntime::expressions::Expr*>& streamedKeyExprCols, int32_t streamedKeyExprColsCnt,
     int32_t* streamedOutputCols, int32_t streamedOutputColsCnt, JoinType joinType, Expr* filter,
@@ -63,6 +80,25 @@ StreamedTableWithExprOperatorFactory::StreamedTableWithExprOperatorFactory(const
       filterExpr(filter),
       smjOperator(new SortMergeJoinOperator(joinType, filter))
 {
+    std::vector<DataTypePtr> newBuildTypes;
+    OperatorUtil::CreateProjections(
+        streamedTypes, streamedKeyExprCols, newBuildTypes, projections, streamedKeyCols, overflowConfig);
+    this->streamedTypes = std::make_unique<DataTypes>(newBuildTypes);
+    this->streamedOutputCols.insert(
+        this->streamedOutputCols.end(), streamedOutputCols, streamedOutputCols + streamedOutputColsCnt);
+    smjOperator->ConfigStreamedTblInfo(
+        *(this->streamedTypes), streamedKeyCols, this->streamedOutputCols, streamedTypes.GetSize());
+}
+
+StreamedTableWithExprOperatorFactory::StreamedTableWithExprOperatorFactory(const type::DataTypes& streamedTypes,
+    const std::vector<omniruntime::expressions::Expr*>& streamedKeyExprCols, int32_t streamedKeyExprColsCnt,
+    int32_t* streamedOutputCols, int32_t streamedOutputColsCnt, JoinType joinType, Expr* filter,
+    OverflowConfig* overflowConfig, const config::QueryConfig &queryConfig)
+    : joinType(joinType),
+      filterExpr(filter),
+      smjOperator(new SortMergeJoinOperator(joinType, filter, queryConfig))
+{
+    this->queryConfig_ = queryConfig;
     std::vector<DataTypePtr> newBuildTypes;
     OperatorUtil::CreateProjections(
         streamedTypes, streamedKeyExprCols, newBuildTypes, projections, streamedKeyCols, overflowConfig);

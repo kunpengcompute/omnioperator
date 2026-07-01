@@ -139,6 +139,26 @@ TEST(RLikeTest, RLikeNoMatch) {
     delete resultVec;
 }
 
+// Test: RLike with const literal pattern should behave like substring match
+TEST(RLikeTest, RLikeConstLiteralContains) {
+    std::cout << "=== Test: RLike const literal contains ===" << std::endl;
+
+    std::vector<std::string> strValues = {"abc_pkg_list_pkgclick_xyz", "pkg_list_pkgclick", "pkg_list", ""};
+    std::vector<bool> expected = {true, true, false, false};
+
+    BaseVector* strVec = RLikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view("pkg_list_pkgclick"),
+        OMNI_VARCHAR,
+        strValues.size());
+    BaseVector* resultVec = nullptr;
+
+    RLikeFunctionTestHelper::ExecuteRLike(strVec, patternVec, resultVec);
+    RLikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
 // Test: RLike with mixed matches
 TEST(RLikeTest, RLikeMixedMatches) {
     std::cout << "=== Test: RLike with mixed matches ===" << std::endl;
@@ -230,6 +250,24 @@ TEST(RLikeTest, RLikeCharacterClass) {
     std::vector<std::string> strValues = {"Hello", "world", "Test123"};
     std::vector<std::string> patterns = {"^[A-Z].*", "^[a-z].*", "^[A-Z].*"};
     std::vector<bool> expected = {true, true, true};  // All start with letter
+
+    BaseVector* strVec = RLikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = RLikeFunctionTestHelper::CreateStringVector(patterns);
+    BaseVector* resultVec = nullptr;
+
+    RLikeFunctionTestHelper::ExecuteRLike(strVec, patternVec, resultVec);
+    RLikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// Test: literal characters that are regex metacharacters must still use regex semantics.
+TEST(RLikeTest, RLikeRegexMetaStillUsesRegex) {
+    std::cout << "=== Test: RLike regex meta still uses regex ===" << std::endl;
+
+    std::vector<std::string> strValues = {"abc123", "abc", "123"};
+    std::vector<std::string> patterns = {".*123", ".*123", ".*123"};
+    std::vector<bool> expected = {true, false, true};
 
     BaseVector* strVec = RLikeFunctionTestHelper::CreateStringVector(strValues);
     BaseVector* patternVec = RLikeFunctionTestHelper::CreateStringVector(patterns);

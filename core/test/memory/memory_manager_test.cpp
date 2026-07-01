@@ -3,6 +3,7 @@
  */
 
 #include "gtest/gtest.h"
+#include <cstdlib>
 #include "memory_manager.h"
 #include "memory/thread_memory_manager.h"
 #include "vector/vector.h"
@@ -158,6 +159,8 @@ template <class T> auto CreateVector(int vecSize)
 // test: statistics function of Limit
 TEST(MemoryManager, testStatisticsFunctionMemoryLimit)
 {
+    // Enable the exception path explicitly; production defaults disable it.
+    setenv("OMNI_DISABLE_MEM_CAP_EXCEEDED", "0", 1);
     auto threadMemoryManager = mem::ThreadMemoryManager::GetThreadMemoryManager();
     threadMemoryManager->Clear();
 
@@ -175,6 +178,7 @@ TEST(MemoryManager, testStatisticsFunctionMemoryLimit)
 
     globalMemoryAmount = globalMemoryManager->GetMemoryAmount();
     EXPECT_EQ(globalMemoryAmount, 8650768);
+    unsetenv("OMNI_DISABLE_MEM_CAP_EXCEEDED");
 }
 
 TEST(MemoryManager, testFixedVectorStatisticsFunction)
@@ -387,6 +391,8 @@ TEST(MemoryManager, testUnlimitedAccount)
 // test: limited account
 TEST(MemoryManager, testLimitedAccount)
 {
+    // Enable the exception path explicitly; production defaults disable it.
+    setenv("OMNI_DISABLE_MEM_CAP_EXCEEDED", "0", 1);
     auto threadMemoryManager = mem::ThreadMemoryManager::GetThreadMemoryManager();
     threadMemoryManager->Clear();
 
@@ -414,5 +420,6 @@ TEST(MemoryManager, testLimitedAccount)
     int64_t parentMemoryAmount = parentMemoryManager->GetMemoryAmount();
     EXPECT_EQ(parentMemoryAmount, globalThreshold);
     threadMemoryManager->Clear();
+    unsetenv("OMNI_DISABLE_MEM_CAP_EXCEEDED");
 }
 }

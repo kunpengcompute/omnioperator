@@ -42,6 +42,12 @@ public:
 
     OmniStatus Close() override;
 
+    /// Limit can reach isFinished() before noMoreInput (when remainingLimit <= 0).
+    bool isEarlyFinish() const override
+    {
+        return true;
+    }
+
 private:
     int32_t remainingLimit;
     int32_t remainingOffset;

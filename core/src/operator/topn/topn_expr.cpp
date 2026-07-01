@@ -25,6 +25,7 @@ TopNWithExprOperatorFactory::TopNWithExprOperatorFactory(const type::DataTypes &
     : TopNWithExprOperatorFactory(sourceDataTypes, limit, offset, sortKeys, sortAsc, sortNullFirsts, sortKeyCount, overflowConfig)
 {
     this->queryConfig_ = queryConfig;
+    topNOperatorFactory->SetQueryConfig(queryConfig);
 }
 
 TopNWithExprOperatorFactory *TopNWithExprOperatorFactory::CreateTopNWithExprOperatorFactory(

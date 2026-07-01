@@ -83,6 +83,12 @@ public:
 
     OmniStatus Close() override;
 
+    /// DistinctLimit can reach isFinished() before noMoreInput (when remainingLimit <= 0).
+    bool isEarlyFinish() const override
+    {
+        return true;
+    }
+
 private:
     void FillDistinctedTuple(vec::VectorBatch *vectorBatch, int32_t rowIndex, std::vector<ValueState> &tuple,
         ExecutionContext *executionContextPtr);

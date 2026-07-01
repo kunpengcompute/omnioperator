@@ -31,11 +31,19 @@ public:
         const type::DataTypes &streamTypes, const std::vector<omniruntime::expressions::Expr *> &streamJoinKeys,
         const std::vector<int32_t> &streamOutputCols, JoinType inputJoinType, std::string &filterExpr,
         const OperatorConfig &operatorConfig);
+    static StreamedTableWithExprOperatorFactoryV3 *CreateStreamedTableWithExprOperatorFactory(
+        const type::DataTypes &streamTypes, const std::vector<omniruntime::expressions::Expr *> &streamJoinKeys,
+        const std::vector<int32_t> &streamOutputCols, JoinType inputJoinType, std::string &filterExpr,
+        const OperatorConfig &operatorConfig, const config::QueryConfig &queryConfig);
 
     StreamedTableWithExprOperatorFactoryV3(const type::DataTypes &streamTypes,
         const std::vector<omniruntime::expressions::Expr *> &streamJoinKeys,
         const std::vector<int32_t> &streamOutputCols, JoinType joinType, std::string &filterExpr,
         const OperatorConfig &operatorConfig);
+    StreamedTableWithExprOperatorFactoryV3(const type::DataTypes &streamTypes,
+        const std::vector<omniruntime::expressions::Expr *> &streamJoinKeys,
+        const std::vector<int32_t> &streamOutputCols, JoinType joinType, std::string &filterExpr,
+        const OperatorConfig &operatorConfig, const config::QueryConfig &queryConfig);
 
     ~StreamedTableWithExprOperatorFactoryV3() override;
 

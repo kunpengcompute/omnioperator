@@ -583,7 +583,8 @@ static void SetPartitionStructValueFromFlat(vec::BaseVector *inputVec, int32_t i
 
 WindowGroupLimitOperator::WindowGroupLimitOperator(const type::DataTypes &sourceTypes, int32_t n,
     const std::string funcName, const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
-    const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts)
+    const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts,
+    const config::QueryConfig &queryConfig)
     : sourceTypes(sourceTypes),
       n(n),
       funcName(funcName),
@@ -594,6 +595,7 @@ WindowGroupLimitOperator::WindowGroupLimitOperator(const type::DataTypes &source
       sortAscendings(sortAscendings),
       sortNullFirsts(sortNullFirsts)
 {
+    executionContext->SetConfig(queryConfig);
     auto sourceTypeIds = sourceTypes.GetIds();
     for (int32_t i = 0; i < sortColNum; i++) {
         auto type = sourceTypeIds[sortCols[i]];
@@ -624,7 +626,7 @@ WindowGroupLimitOperator::WindowGroupLimitOperator(const type::DataTypes &source
     }
 
     int32_t eachRowSize = OperatorUtil::GetRowSize(sourceTypes.Get());
-    maxRowCount = OperatorUtil::GetMaxRowCount(eachRowSize);
+    maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(eachRowSize, &executionContext->queryConfigRef());
 }
 
 type::StringRef WindowGroupLimitOperator::GenerateWindowPartitionKey(BaseVector **partitionVectors,

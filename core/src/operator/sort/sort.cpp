@@ -15,24 +15,29 @@ using namespace omniruntime::vec;
 
 SortOperatorFactory::SortOperatorFactory(const DataTypes &dataTypes, int32_t *outputCols, int32_t outputColCount,
     int32_t *sortCols, int32_t *sortAscendings, int32_t *sortNullFirsts, int32_t sortColCount,
-    const OperatorConfig &operatorConfig)
+    const OperatorConfig &operatorConfig, const config::QueryConfig &queryConfig)
     : sourceTypes(dataTypes),
       outputCols(outputCols, outputCols + outputColCount),
       sortCols(sortCols, sortCols + sortColCount),
       sortAscendings(sortAscendings, sortAscendings + sortColCount),
       sortNullFirsts(sortNullFirsts, sortNullFirsts + sortColCount),
       operatorConfig(operatorConfig)
-{}
+{
+    this->queryConfig_ = queryConfig;
+}
 
 SortOperatorFactory::SortOperatorFactory(const type::DataTypes &dataTypes, std::vector<int32_t> outputCols,
     std::vector<int32_t> sortCols, std::vector<int32_t> sortAscendings, std::vector<int32_t> sortNullFirsts,
-    const OperatorConfig &&operatorConfig)
+    const OperatorConfig &&operatorConfig, const config::QueryConfig &queryConfig)
     : sourceTypes(dataTypes),
       outputCols(outputCols),
       sortCols(sortCols),
       sortAscendings(sortAscendings),
       sortNullFirsts(sortNullFirsts),
-      operatorConfig(operatorConfig) {}
+      operatorConfig(operatorConfig)
+{
+    this->queryConfig_ = queryConfig;
+}
 
 SortOperatorFactory::~SortOperatorFactory() = default;
 
@@ -46,10 +51,10 @@ SortOperatorFactory *SortOperatorFactory::CreateSortOperatorFactory(const DataTy
 
 SortOperatorFactory *SortOperatorFactory::CreateSortOperatorFactory(const DataTypes &dataTypes, int32_t *outputCols,
     int32_t outputColCount, int32_t *sortCols, int32_t *sortAscendings, int32_t *sortNullFirsts, int32_t sortColCount,
-    const OperatorConfig &operatorConfig)
+    const OperatorConfig &operatorConfig, const config::QueryConfig &queryConfig)
 {
     auto pOperatorFactory = new SortOperatorFactory(dataTypes, outputCols, outputColCount, sortCols, sortAscendings,
-        sortNullFirsts, sortColCount, operatorConfig);
+        sortNullFirsts, sortColCount, operatorConfig, queryConfig);
     return pOperatorFactory;
 }
 
@@ -65,20 +70,22 @@ SortOperatorFactory *SortOperatorFactory::CreateSortOperatorFactory(std::shared_
     auto sortAscending = planNode->GetSortAscending();
     auto sortNullFirsts = planNode->GetNullFirsts();
     auto pOperatorFactory = new SortOperatorFactory(*dataTypes.get(), outputCols, sortCols, sortAscending,
-        sortNullFirsts, std::move(OperatorConfig(spillConfig)));
+        sortNullFirsts, std::move(OperatorConfig(spillConfig)), queryConfig);
     return pOperatorFactory;
 }
 
 Operator *SortOperatorFactory::CreateOperator()
 {
     auto pSortOperator =
-        new SortOperator(sourceTypes, outputCols, sortCols, sortAscendings, sortNullFirsts, operatorConfig);
+        new SortOperator(sourceTypes, outputCols, sortCols, sortAscendings, sortNullFirsts, operatorConfig,
+            queryConfig_);
     return pSortOperator;
 }
 
 // function implements for class Sort
 SortOperator::SortOperator(const DataTypes &dataTypes, std::vector<int32_t> &outputCols, std::vector<int32_t> &sortCols,
-    std::vector<int32_t> &sortAscendings, std::vector<int32_t> &sortNullFirsts, const OperatorConfig &operatorConfig)
+    std::vector<int32_t> &sortAscendings, std::vector<int32_t> &sortNullFirsts, const OperatorConfig &operatorConfig,
+    const config::QueryConfig &queryConfig)
     : sourceTypes(dataTypes),
       outputCols(outputCols),
       sortCols(sortCols),
@@ -87,10 +94,13 @@ SortOperator::SortOperator(const DataTypes &dataTypes, std::vector<int32_t> &out
       pagesIndex(std::make_unique<PagesIndex>(sourceTypes)),
       operatorConfig(operatorConfig)
 {
+    executionContext->SetConfig(queryConfig);
     for (auto outputCol : outputCols) {
         outputTypes.emplace_back(dataTypes.GetType(outputCol));
     }
-    maxRowCountPerBatch = OperatorUtil::GetMaxRowCount(dataTypes.Get(), outputCols.data(), outputCols.size());
+    maxRowCountPerBatch =
+        OperatorUtil::GetConfiguredMaxRowCount(
+            dataTypes.Get(), outputCols.data(), outputCols.size(), &executionContext->queryConfigRef());
     maxRowCountPerBatch = maxRowCountPerBatch == 0 ? 1 : maxRowCountPerBatch;
     if (sourceTypes.GetSize() == 1) {
         const auto &firstSourceTypeId = sourceTypes.GetType(0)->GetId();

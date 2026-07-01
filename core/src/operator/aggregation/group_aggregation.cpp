@@ -4,6 +4,8 @@
  */
 #include "group_aggregation.h"
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include "vector/vector_helper.h"
 #include "operator/status.h"
 #include "operator/util/operator_util.h"
@@ -20,6 +22,13 @@ namespace op {
 using namespace omniruntime::type;
 
 static constexpr int32_t UNSPILL_ROW_COUNT_ONE_BATCH = 128;
+
+static bool EnableLazyAggSpillKeySerialization()
+{
+    const char* value = std::getenv("OMNI_ENABLE_LAZY_AGG_SPILL_KEY_SERIALIZATION");
+    return value != nullptr && (std::strcmp(value, "1") == 0 || std::strcmp(value, "true") == 0 ||
+        std::strcmp(value, "TRUE") == 0 || std::strcmp(value, "yes") == 0 || std::strcmp(value, "on") == 0);
+}
 
 static ALWAYS_INLINE uint8_t PackedBitWidthForType(int32_t typeId)
 {
@@ -168,7 +177,7 @@ Operator *HashAggregationOperatorFactory::CreateOperator()
 
     auto groupByOperator = new HashAggregationOperator(groupByIndex, aggsInputCols, aggInputColsSize, aggInputTypes,
         aggOutputTypes, std::move(aggs), inputRaws, outputPartials, hasAggFilters, operatorConfig, aggFuncTypesVector,
-        step);
+        step, queryConfig_);
     groupByOperator->SetGroupByColumnsHandleType(handleType);
     groupByOperator->Init();
     return groupByOperator;
@@ -340,7 +349,7 @@ OmniStatus HashAggregationOperator::Init()
 
     // 5 init max row when getoutput
     int32_t rowByteSize = InitMaxRowCountAndOutputTypes();
-    rowsPerBatch = OperatorUtil::GetMaxRowCount(rowByteSize);
+    rowsPerBatch = OperatorUtil::GetConfiguredMaxRowCount(rowByteSize, &executionContext->queryConfigRef());
 
     // 7 vector analyzer
     vectorAnalyzer = new VectorAnalyzer(groupByCols);
@@ -556,7 +565,10 @@ void HashAggregationOperator::InitSpillInfos()
     } else {
         groupByCloIdx.resize(1, 0);
     }
-    aggregationSort = std::make_unique<AggregationSort>(aggregators);
+    auto* lazySerializeHandler =
+        serialize != nullptr && EnableLazyAggSpillKeySerialization() ? serialize.get() : nullptr;
+    aggregationSort = std::make_unique<AggregationSort>(
+        aggregators, serialize == nullptr, lazySerializeHandler);
 }
 
 void SetArrayVector(VectorBatch *vecBatch, DataTypePtr elementType, int32_t rowCount)
@@ -1232,12 +1244,19 @@ ErrorCode HashAggregationOperator::SpillToDisk()
     OutputState curOutputState;
     {
         if (serialize != nullptr) {
-            serialize->SpillExtract(totalSpillCount, spillOutputState,
-            [&](const auto &key, int64_t hashVal, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
-                }, [&](const auto &key, int64_t hashVal, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
-            });
+            if (aggregationSort->IsLazyKeySerializationEnabled()) {
+                serialize->SpillExtractRows(totalSpillCount, spillOutputState,
+                    [&](uint8_t* row, int64_t hashVal, uint8_t* value, int32_t idx) mutable {
+                        aggregationSortPtr->ParseHashMapRowToVectorWithHashVal(row, value, idx, hashVal);
+                });
+            } else {
+                serialize->SpillExtract(totalSpillCount, spillOutputState,
+                    [&](const auto& key, int64_t hashVal, uint8_t* value, int32_t idx) mutable {
+                        aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
+                    }, [&](const auto& key, int64_t hashVal, uint8_t* value, int32_t idx) mutable {
+                        aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
+                });
+            }
         } else if (fixedInt32 != nullptr) {
             fixedInt32->Extract(totalSpillCount, spillOutputState,
                 [&](const auto &key, uint8_t *value, int32_t idx) mutable {
@@ -1483,7 +1502,7 @@ VectorBatch *HashAggregationOperator::GetOutputFromDiskWithoutAgg(VectorBatch *o
                 }
             } else if (fixedInt64 != nullptr) {
                 if (keyRef.size > 0) {
-                    auto key = static_cast<int64_t>(std::stoi(keyRef.ToString()));
+                    auto key = std::stoll(keyRef.ToString());
                     fixedInt64->ParseKeyToCols(key, groupOutputVectors, groupColNum, rowIdx);
                 } else {
                     fixedInt64->ParseNull(0, groupOutputVectors, groupColNum, rowIdx);

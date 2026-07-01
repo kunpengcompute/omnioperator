@@ -23,20 +23,25 @@ TopNOperatorFactory::TopNOperatorFactory(const type::DataTypes &sourceTypes, int
 }
 
 TopNOperatorFactory::TopNOperatorFactory(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset,
-                                         std::vector<int32_t> sortCols, std::vector<int32_t> sortAscendings, std::vector<int32_t> sortNullFirsts, int32_t sortColCount)
+    std::vector<int32_t> sortCols, std::vector<int32_t> sortAscendings, std::vector<int32_t> sortNullFirsts,
+    int32_t sortColCount, const config::QueryConfig &queryConfig)
     : sourceTypes(sourceTypes), limit(limit), offset(offset), sortCols(sortCols),
-      sortAscendings(sortAscendings), sortNullFirsts(sortNullFirsts), sortColCount(sortColCount) {}
+      sortAscendings(sortAscendings), sortNullFirsts(sortNullFirsts), sortColCount(sortColCount)
+{
+    this->queryConfig_ = queryConfig;
+}
 
 TopNOperatorFactory::~TopNOperatorFactory() = default;
 
 Operator *TopNOperatorFactory::CreateOperator()
 {
-    return new TopNOperator(sourceTypes, limit, offset, sortCols, sortAscendings, sortNullFirsts, sortColCount);
+    return new TopNOperator(sourceTypes, limit, offset, sortCols, sortAscendings, sortNullFirsts, sortColCount,
+        queryConfig_);
 }
 
 TopNOperator::TopNOperator(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset,
     std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
-    std::vector<int32_t> &sortNullFirsts, int32_t sortColCount)
+    std::vector<int32_t> &sortNullFirsts, int32_t sortColCount, const config::QueryConfig &queryConfig)
     : sourceTypes(sourceTypes),
       sourceTypesCount(this->sourceTypes.GetSize()),
       sortCols(sortCols),
@@ -46,8 +51,9 @@ TopNOperator::TopNOperator(const type::DataTypes &sourceTypes, int32_t limit, in
       sortNullFirsts(sortNullFirsts),
       sortColCount(sortColCount)
 {
+    executionContext->SetConfig(queryConfig);
     int32_t eachRowSize = OperatorUtil::GetRowSize(sourceTypes.Get());
-    maxRowCount = OperatorUtil::GetMaxRowCount(eachRowSize);
+    maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(eachRowSize, &executionContext->queryConfigRef());
 }
 
 TopNOperator::~TopNOperator()

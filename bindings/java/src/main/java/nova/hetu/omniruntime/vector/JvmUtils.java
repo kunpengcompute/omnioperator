@@ -66,21 +66,25 @@ public final class JvmUtils {
             final ByteBuffer direct = ByteBuffer.allocateDirect(1);
             try {
                 final Object directBufferConstructor = AccessController.doPrivileged((PrivilegedAction<Object>) () -> {
-                    final Constructor<?> constructor;
+                    Constructor<?> constructor;
                     try {
-                        constructor = direct.getClass().getDeclaredConstructor(long.class, int.class);
-                        constructor.setAccessible(true);
-                        return constructor;
+                        constructor = direct.getClass().getDeclaredConstructor(long.class, long.class);
                     } catch (NoSuchMethodException e) {
-                        throw new OmniRuntimeException(OmniErrorType.OMNI_NOSUPPORT, e);
+                        try {
+                            constructor = direct.getClass().getDeclaredConstructor(long.class, int.class);
+                        } catch (NoSuchMethodException ex) {
+                            throw new OmniRuntimeException(OmniErrorType.OMNI_NOSUPPORT, ex);
+                        }
                     }
+                    constructor.setAccessible(true);
+                    return constructor;
                 });
 
                 if (directBufferConstructor instanceof Constructor<?>) {
                     address = UNSAFE.allocateMemory(1);
                     // try to use the constructor
                     try {
-                        ((Constructor<?>) directBufferConstructor).newInstance(address, 1);
+                        newDirectBuffer((Constructor<?>) directBufferConstructor, address, 1);
                         DIRECT_BUFFER_CONSTRUCTOR = (Constructor<?>) directBufferConstructor;
                     } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
                         throw new OmniRuntimeException(OmniErrorType.OMNI_NOSUPPORT, e);
@@ -154,14 +158,22 @@ public final class JvmUtils {
 
         if (DIRECT_BUFFER_CONSTRUCTOR == null) {
             throw new OmniRuntimeException(OmniErrorType.OMNI_NOSUPPORT,
-                    "DirectByteBuffer.<ini>(long, int) not available");
+                    "DirectByteBuffer.<init>(long, int/long) not available");
         }
         try {
-            return ((ByteBuffer) DIRECT_BUFFER_CONSTRUCTOR.newInstance(omniBuffer.getAddress(),
-                omniBuffer.getCapacity())).order(ByteOrder.LITTLE_ENDIAN);
+            return newDirectBuffer(DIRECT_BUFFER_CONSTRUCTOR, omniBuffer.getAddress(),
+                omniBuffer.getCapacity()).order(ByteOrder.LITTLE_ENDIAN);
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new OmniRuntimeException(OmniErrorType.OMNI_NOSUPPORT, e);
         }
+    }
+
+    private static ByteBuffer newDirectBuffer(Constructor<?> constructor, long address, int capacity)
+            throws InstantiationException, IllegalAccessException, InvocationTargetException {
+        if (constructor.getParameterTypes()[1] == long.class) {
+            return (ByteBuffer) constructor.newInstance(address, (long) capacity);
+        }
+        return (ByteBuffer) constructor.newInstance(address, capacity);
     }
 
     public static long estimateMaxDirectMemory() {

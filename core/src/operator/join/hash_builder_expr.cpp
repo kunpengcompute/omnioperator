@@ -78,6 +78,7 @@ HashBuilderWithExprOperatorFactory::HashBuilderWithExprOperatorFactory(JoinType 
     : HashBuilderWithExprOperatorFactory(joinType, buildSide, buildTypes, buildHashKeys, hashTableCount, overflowConfig)
 {
     this->queryConfig_ = queryConfig;
+    operatorFactory->SetQueryConfig(queryConfig);
 }
 
 HashBuilderWithExprOperatorFactory::~HashBuilderWithExprOperatorFactory()

@@ -33,6 +33,7 @@ TopNSortWithExprOperatorFactory::TopNSortWithExprOperatorFactory(const type::Dat
         sortNullFirsts, overflowConfig)
 {
     this->queryConfig_ = queryConfig;
+    topNSortOperatorFactory->SetQueryConfig(queryConfig);
 }
 
 TopNSortWithExprOperatorFactory* TopNSortWithExprOperatorFactory::CreateTopNSortWithExprOperatorFactory(

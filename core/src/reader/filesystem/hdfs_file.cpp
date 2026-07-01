@@ -18,9 +18,34 @@
  */
 
 #include "hdfs_file.h"
+#include <cerrno>
+#include <cstring>
 #include "iostream"
 
 namespace fs {
+
+namespace {
+
+Status HdfsOpenError(const std::string &path) {
+    const int errorCode = errno;
+
+    const char *rootCausePtr = hdfsGetLastExceptionRootCause();
+    const std::string rootCause = rootCausePtr == nullptr ? "" : rootCausePtr;
+    const char *stackTracePtr = hdfsGetLastExceptionStackTrace();
+    const std::string stackTrace = stackTracePtr == nullptr ? "" : stackTracePtr;
+
+    std::string message = "Fail to open hdfs file, path is " + path + ", errno=" +
+        std::to_string(errorCode) + ", error=" + std::strerror(errorCode);
+    if (!rootCause.empty()) {
+        message += ", root cause=" + rootCause;
+    }
+    if (!stackTrace.empty()) {
+        message += ", stack trace=" + stackTrace;
+    }
+    return Status::IOError(message);
+}
+
+}
 
 HdfsReadableFile::HdfsReadableFile(std::shared_ptr<HadoopFileSystem> fileSystemPtr,
                                    const std::string &path, int64_t bufferSize)
@@ -53,7 +78,7 @@ Status HdfsReadableFile::OpenFile() {
     }
     hdfsFile handle = hdfsOpenFile(fileSystem_->getFileSystem(), path_.c_str(), O_RDONLY, bufferSize_, 0, 0);
     if (handle == nullptr) {
-        return Status::IOError("Fail to open hdfs file, path is " + path_);
+        return HdfsOpenError(path_);
     }
 
     this->file_ = handle;
@@ -138,7 +163,7 @@ Status HdfsWriteableFile::OpenFile() {
     }
     hdfsFile handle = hdfsOpenFile(fileSystem_->getFileSystem(), path_.c_str(), O_WRONLY, bufferSize_, 0, 0);
     if (handle == nullptr) {
-        return Status::IOError("Fail to open hdfs file, path is " + path_);
+        return HdfsOpenError(path_);
     }
 
     this->file_ = handle;

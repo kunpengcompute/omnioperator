@@ -43,12 +43,17 @@ struct DecimalSumState {
     type::int128_t val;
 };
 
+// still 32B per new
 struct KeyValue {
-    char *keyAddr;
+    union {
+        char *keyAddr;
+        uint8_t *rowAddr;
+    };
     size_t keyLen;
     int64_t hashValue;
     AggregateState *value;
 };
+static_assert(sizeof(KeyValue) == 32, "KeyValue spill staging footprint must remain 32 bytes");
 
 struct UnspillRowInfo {
     AggregateState *state;

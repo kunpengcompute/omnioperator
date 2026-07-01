@@ -60,6 +60,12 @@ public:
 
     bool isFinished();
 
+    /// TableScan can reach isFinished() before noMoreInput (when noMoreSplits_ is set).
+    bool isEarlyFinish() const override
+    {
+        return true;
+    }
+
     /// The name of runtime stats specific to table scan.
     /// The number of running table scan drivers.
     ///

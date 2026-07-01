@@ -20,10 +20,11 @@ class LookupOuterJoinOperatorFactory : public OperatorFactory {
 public:
     LookupOuterJoinOperatorFactory(const type::DataTypes &probeTypes, int32_t *probeOutputCols,
         int32_t probeOutputColsCount, int32_t *buildOutputCols, const type::DataTypes &buildOutputTypes,
-        HashTableVariants *hashTables);
+        HashTableVariants *hashTables, const config::QueryConfig &queryConfig = config::QueryConfig{});
     LookupOuterJoinOperatorFactory(const type::DataTypes &probeTypes, int32_t *probeOutputCols,
         int32_t probeOutputColsCount, int32_t *buildOutputCols, const type::DataTypes &buildOutputTypes,
-        HashTableVariants *hashTables, BuildSide buildSide);
+        HashTableVariants *hashTables, BuildSide buildSide,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
     ~LookupOuterJoinOperatorFactory() override;
     static LookupOuterJoinOperatorFactory *CreateLookupOuterJoinOperatorFactory(const type::DataTypes &probeTypes,
         int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *buildOutputCols,
@@ -64,9 +65,11 @@ private:
 class LookupOuterJoinOperator : public Operator {
 public:
     LookupOuterJoinOperator(DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
-        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables);
+        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
+        const config::QueryConfig &queryConfig);
     LookupOuterJoinOperator(DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
-        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, BuildSide buildSide);
+        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
+        BuildSide buildSide, const config::QueryConfig &queryConfig);
     ~LookupOuterJoinOperator() override;
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override;
     int32_t GetOutput(omniruntime::vec::VectorBatch **outputVecBatch) override;

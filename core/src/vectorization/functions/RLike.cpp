@@ -14,6 +14,31 @@ namespace omniruntime::vectorization {
     using namespace omniruntime::type;
     using namespace omniruntime::vec;
 
+bool RLikeFunction::HasRegexMetaChars(const std::string_view &pattern) const {
+    for (char c : pattern) {
+        switch (c) {
+            case '\\':
+            case '.':
+            case '^':
+            case '$':
+            case '|':
+            case '?':
+            case '*':
+            case '+':
+            case '(':
+            case ')':
+            case '[':
+            case ']':
+            case '{':
+            case '}':
+                return true;
+            default:
+                break;
+        }
+    }
+    return false;
+}
+
 void RLikeFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType,
                           BaseVector *&result, ExecutionContext *context) const {
     auto patternVec = args.top();
@@ -33,7 +58,8 @@ void RLikeFunction::ApplyRLike(BaseVector *strVec, BaseVector *patternVec, BaseV
     result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
 
     if(patternVec->GetEncoding() == OMNI_ENCODING_CONST) {
-       std::string_view pattern = reinterpret_cast<ConstVector<std::string_view> *>(patternVec)->GetConstValue();
+        std::string_view pattern = reinterpret_cast<ConstVector<std::string_view> *>(patternVec)->GetConstValue();
+        bool useLiteralContains = !pattern.empty() && !HasRegexMetaChars(pattern);
         for (int32_t row = 0; row < size; ++row) {
             if (strVec->IsNull(row)) {
                 result->SetNull(row);
@@ -42,7 +68,7 @@ void RLikeFunction::ApplyRLike(BaseVector *strVec, BaseVector *patternVec, BaseV
 
             std::string_view str = GetStringValueFromVector(strVec, row);
 
-            bool matches = MatchRegex(str, pattern);
+            bool matches = useLiteralContains ? (str.find(pattern) != std::string_view::npos) : MatchRegex(str, pattern);
             SetBooleanValueToVector(result, row, matches);
         }
     } else {
@@ -65,18 +91,16 @@ bool RLikeFunction::MatchRegex(const std::string_view &sv, const std::string_vie
     if (pattern.empty()) {
         return true;
     }
-    std::string s(sv);
-    std::string r(pattern);
     thread_local std::string cachedPattern;
     thread_local std::unique_ptr<RE2> cachedRegex;
-    if (cachedPattern != r) {
-        cachedPattern = r;
-        cachedRegex = std::make_unique<RE2>(re2::StringPiece(r.data(), r.length()), RE2::Quiet);
+    if (std::string_view(cachedPattern) != pattern) {
+        cachedPattern.assign(pattern.data(), pattern.size());
+        cachedRegex = std::make_unique<RE2>(re2::StringPiece(cachedPattern.data(), cachedPattern.length()), RE2::Quiet);
         if (!cachedRegex->ok()) {
             OMNI_THROW("RLike regex search Error: ", cachedRegex->error());
         }
     }
-    return RE2::PartialMatch(re2::StringPiece(s.data(), s.length()), *cachedRegex.get());
+    return RE2::PartialMatch(re2::StringPiece(sv.data(), sv.length()), *cachedRegex.get());
 }
 
 std::string_view RLikeFunction::GetStringValueFromVector(BaseVector *vec, int32_t row) const {

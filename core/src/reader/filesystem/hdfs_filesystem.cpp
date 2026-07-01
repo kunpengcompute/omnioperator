@@ -19,12 +19,36 @@
 
 #include "iostream"
 #include "chrono"
+#include "cstdlib"
 #include "map"
+#include "memory"
 #include "mutex"
 #include "hdfs_filesystem.h"
 #include "io_exception.h"
 
 namespace fs {
+
+namespace {
+
+bool IsHdfsFileSystemCacheDisabled()
+{
+    const char *value = std::getenv("OMNI_HDFS_FS_CACHE_DISABLE");
+    return value != nullptr && value[0] == '1' && value[1] == '\0';
+}
+
+std::shared_ptr<HadoopFileSystem> CreateHdfsFileSystem(HdfsOptions &options, bool closeOnDestroy)
+{
+    if (!closeOnDestroy) {
+        return std::make_shared<HadoopFileSystem>(options);
+    }
+
+    return std::shared_ptr<HadoopFileSystem>(new HadoopFileSystem(options), [](HadoopFileSystem *fileSystem) {
+        fileSystem->Close();
+        delete fileSystem;
+    });
+}
+
+} // namespace
 
 void HdfsOptions::ConfigureHost(const std::string &host) {
     this->host_ = host;
@@ -128,15 +152,6 @@ std::shared_ptr<HadoopFileSystem> getHdfsFileSystem(const UriInfo &uri)
     auto port = uri.Port();
     auto scheme = uri.Scheme();
 
-    mutex_.lock();
-    std::string key = host + ":" + port;
-    auto iter = fsMap_.find(key);
-    if (iter != fsMap_.end()) {
-        fileSystemPtr = fsMap_[key];
-        mutex_.unlock();
-        return fileSystemPtr;
-    }
-
     HdfsOptions options;
     options.ConfigureHost(host);
     options.ConfigureScheme(scheme);
@@ -148,7 +163,20 @@ std::shared_ptr<HadoopFileSystem> getHdfsFileSystem(const UriInfo &uri)
         options.ConfigurePort(portInt);
     }
 
-    std::shared_ptr<HadoopFileSystem> fs(new HadoopFileSystem(options));
+    if (IsHdfsFileSystemCacheDisabled()) {
+        return CreateHdfsFileSystem(options, true);
+    }
+
+    mutex_.lock();
+    std::string key = host + ":" + port;
+    auto iter = fsMap_.find(key);
+    if (iter != fsMap_.end()) {
+        fileSystemPtr = fsMap_[key];
+        mutex_.unlock();
+        return fileSystemPtr;
+    }
+
+    std::shared_ptr<HadoopFileSystem> fs = CreateHdfsFileSystem(options, false);
     fileSystemPtr = fs;
     fsMap_[key] = fs;
     mutex_.unlock();

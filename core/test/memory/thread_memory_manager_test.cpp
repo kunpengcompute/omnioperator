@@ -3,6 +3,7 @@
  */
 
 #include "gtest/gtest.h"
+#include <cstdlib>
 #include "thread_memory_manager.h"
 
 namespace omniruntime::mem::test {
@@ -50,6 +51,8 @@ TEST(ThreadMemoryManager, testReportMemoryUsageReachThreshold)
 // expect that untracked memory is 0.
 TEST(ThreadMemoryManager, testReportMemoryUsageReachThresholdWithException)
 {
+    // Enable the exception path explicitly; production defaults disable it.
+    setenv("OMNI_DISABLE_MEM_CAP_EXCEEDED", "0", 1);
     auto threadMemoryManager = mem::ThreadMemoryManager::GetThreadMemoryManager();
     threadMemoryManager->Clear();
 
@@ -66,6 +69,7 @@ TEST(ThreadMemoryManager, testReportMemoryUsageReachThresholdWithException)
     MemoryManager *globalMemoryManager = MemoryManager::GetGlobalMemoryManager();
     int64_t memoryAccount = globalMemoryManager->GetMemoryAmount();
     EXPECT_EQ(memoryAccount, size1);
+    unsetenv("OMNI_DISABLE_MEM_CAP_EXCEEDED");
 }
 
 // test: reclaim memory usage and reach the untrackedMemoryThreshold->

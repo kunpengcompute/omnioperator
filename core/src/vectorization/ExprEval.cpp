@@ -447,7 +447,7 @@ void ExprEval::Visit(const UnaryExpr &e)
     if (e.vectorFunction == nullptr) {
         OMNI_THROW("Vectorization Error:", "Vector function not found for unary expression");
     }
-    auto result = VectorHelper::CreateFlatVector(e.dataType->GetId(), rowSize);
+    BaseVector *result = nullptr;
     e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
 }

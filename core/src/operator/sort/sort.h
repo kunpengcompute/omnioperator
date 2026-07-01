@@ -23,11 +23,11 @@ class SortOperatorFactory : public OperatorFactory {
 public:
     SortOperatorFactory(const type::DataTypes &dataTypes, int32_t *outputCols, int32_t outputColCount,
         int32_t *sortCols, int32_t *sortAscendings, int32_t *sortNullFirsts, int32_t sortColCount,
-        const OperatorConfig &operatorConfig);
+        const OperatorConfig &operatorConfig, const config::QueryConfig &queryConfig = config::QueryConfig{});
 
     SortOperatorFactory(const type::DataTypes &dataTypes, std::vector<int32_t> outputCols,
         std::vector<int32_t> sortCols, std::vector<int32_t> sortAscendings, std::vector<int32_t> sortNullFirsts,
-        const OperatorConfig &&operatorConfig);
+        const OperatorConfig &&operatorConfig, const config::QueryConfig &queryConfig = config::QueryConfig{});
 
     ~SortOperatorFactory() override;
 
@@ -37,7 +37,8 @@ public:
 
     static SortOperatorFactory *CreateSortOperatorFactory(const type::DataTypes &dataTypes, int32_t *outputCols,
         int32_t outputColCount, int32_t *sortCols, int32_t *sortAscendings, int32_t *sortNullFirsts,
-        int32_t sortColCount, const OperatorConfig &operatorConfig);
+        int32_t sortColCount, const OperatorConfig &operatorConfig,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
 
     static SortOperatorFactory *CreateSortOperatorFactory(std::shared_ptr<const OrderByNode> planNode,
         const config::QueryConfig &queryConfig);
@@ -92,7 +93,7 @@ class SortOperator : public Operator {
 public:
     SortOperator(const type::DataTypes &dataTypes, std::vector<int32_t> &outputCols, std::vector<int32_t> &sortCols,
         std::vector<int32_t> &sortAscendings, std::vector<int32_t> &sortNullFirsts,
-        const OperatorConfig &operatorConfig);
+        const OperatorConfig &operatorConfig, const config::QueryConfig &queryConfig);
 
     ~SortOperator() override;
 

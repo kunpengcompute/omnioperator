@@ -337,7 +337,6 @@ void SortMergeJoinOperatorV3::JoinFilterCodeGen(OverflowConfig *overflowConfig)
         return;
     }
 
-    executionContext = new ExecutionContext();
     omniruntime::expressions::Expr *filterExpr = JSONParser::ParseJSON(filter);
     simpleFilter = new SimpleFilter(*filterExpr);
     auto isOk = simpleFilter->Initialize(overflowConfig);
@@ -440,7 +439,8 @@ OmniStatus SortMergeJoinOperatorV3::GetOutput(VectorBatch **outputVecBatch)
 void SortMergeJoinOperatorV3::Prepare()
 {
     int32_t rowSize = OperatorUtil::GetRowSize(outputTypes);
-    maxRowCount = OperatorUtil::GetMaxRowCount(rowSize == 0 ? DEFAULT_ROW_SIZE : rowSize);
+    maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        rowSize == 0 ? DEFAULT_ROW_SIZE : rowSize, executionContext != nullptr ? &executionContext->queryConfigRef() : nullptr);
     streamIndexes.reserve(maxRowCount);
     if (joinType != OMNI_JOIN_TYPE_LEFT_SEMI && joinType != OMNI_JOIN_TYPE_LEFT_ANTI) {
         bufferIndexes.reserve(maxRowCount);
