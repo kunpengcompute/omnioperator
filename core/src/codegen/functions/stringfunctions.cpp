@@ -23,6 +23,7 @@
 #include <vector>
 #include <ctime>
 #include <chrono>
+#include <utility>
 
 namespace omniruntime::codegen::function {
 
@@ -250,6 +251,88 @@ namespace {
     };
 
     thread_local RapidJsonCache RAPIDJSON_CACHE;
+
+    std::string SerializeRapidJsonValue(const rapidjson::Value& value);
+
+    struct JsonQueryResultCacheKey {
+        std::string jsonContent;
+        std::string rawPath;
+        int32_t wrapperBehavior = 0;
+        int32_t emptyBehavior = 0;
+        int32_t errorBehavior = 0;
+
+        bool operator==(const JsonQueryResultCacheKey& other) const
+        {
+            return wrapperBehavior == other.wrapperBehavior &&
+                emptyBehavior == other.emptyBehavior &&
+                errorBehavior == other.errorBehavior &&
+                jsonContent == other.jsonContent &&
+                rawPath == other.rawPath;
+        }
+    };
+
+    struct JsonQueryResultCacheEntry {
+        JsonQueryResultCacheKey key;
+        std::string value;
+    };
+
+    struct JsonQueryResultCache {
+        static constexpr size_t CACHE_SIZE = 16;
+        std::vector<JsonQueryResultCacheEntry> entries;
+
+        bool Get(const JsonQueryResultCacheKey& key, std::string* value)
+        {
+            for (size_t i = 0; i < entries.size(); ++i) {
+                if (!(entries[i].key == key)) {
+                    continue;
+                }
+                *value = entries[i].value;
+                if (i != 0) {
+                    JsonQueryResultCacheEntry hit = entries[i];
+                    entries.erase(entries.begin() + i);
+                    entries.insert(entries.begin(), std::move(hit));
+                }
+                return true;
+            }
+            return false;
+        }
+
+        void Put(const JsonQueryResultCacheKey& key, const std::string& value)
+        {
+            for (size_t i = 0; i < entries.size(); ++i) {
+                if (!(entries[i].key == key)) {
+                    continue;
+                }
+                entries[i].value = value;
+                if (i != 0) {
+                    JsonQueryResultCacheEntry hit = entries[i];
+                    entries.erase(entries.begin() + i);
+                    entries.insert(entries.begin(), std::move(hit));
+                }
+                return;
+            }
+
+            entries.insert(entries.begin(), JsonQueryResultCacheEntry { key, value });
+            if (entries.size() > CACHE_SIZE) {
+                entries.pop_back();
+            }
+        }
+    };
+
+    thread_local JsonQueryResultCache JSON_QUERY_RESULT_CACHE;
+
+    std::string SerializeRapidJsonValueWithCache(
+        const rapidjson::Value& value, const JsonQueryResultCacheKey& cacheKey)
+    {
+        std::string result;
+        if (JSON_QUERY_RESULT_CACHE.Get(cacheKey, &result)) {
+            return result;
+        }
+
+        result = SerializeRapidJsonValue(value);
+        JSON_QUERY_RESULT_CACHE.Put(cacheKey, result);
+        return result;
+    }
 
     rapidjson::Document* GetParsedJsonWithCacheRapidJson(std::string& jsonContent)
     {
@@ -921,7 +1004,11 @@ extern "C" DLLEXPORT const char* JsonQueryWithWrapperAndBehavior(
                 "Array or object value required in strict mode of JSON_QUERY function", outIsNull, outLen);
         }
 
-        return CreateJsonQueryResult(contextPtr, SerializeRapidJsonValue(wrappedValue), outIsNull, outLen);
+        JsonQueryResultCacheKey cacheKey {
+            jsonContent, rawPath, normalizedWrapper, normalizedEmpty, normalizedError
+        };
+        return CreateJsonQueryResult(contextPtr, SerializeRapidJsonValueWithCache(wrappedValue, cacheKey),
+            outIsNull, outLen);
     } catch (const std::exception &e) {
         return HandleJsonQueryErrorBehavior(contextPtr, normalizedError, e.what(), outIsNull, outLen);
     }
