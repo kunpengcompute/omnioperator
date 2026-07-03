@@ -4,6 +4,7 @@
 
 set -e
 
+export OMNI_COMPILER_THREAD_COUNT=${2:-16}
 source $(cd $(dirname ${BASH_SOURCE[0]}) && pwd)/env_check.sh
 
 TARGZ_NAME=boostkit-omniop-operator-2.2.0-aarch64
