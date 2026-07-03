@@ -25,7 +25,9 @@ public:
 
     friend class SimpleFilterCodeGen;
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
     friend class BatchExpressionCodeGen;
+#endif
 
     friend class CodegenBase;
 

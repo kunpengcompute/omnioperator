@@ -85,7 +85,10 @@ else
     done
   fi
 fi
-
+echo "-- Exclude Batch Functions"
+OPTIONS+=" -DEXCLUDE_BATCH_FUNCTIONS=ON"
+echo "-- Exclude Duplicate Codegen Functions"
+OPTIONS+=" -DEXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS=ON"
 print_gcc_lib
 
 # need to delete the CMakeCache.txt to refresh the options
