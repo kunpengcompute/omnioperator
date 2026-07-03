@@ -18,6 +18,7 @@ fi
 # check if required env vars are set
 check_java_home
 check_omni_home
+check_ninja
 
 ### main build begins here ###
 echo "Start building modules using $1"
@@ -76,13 +77,36 @@ case "$1" in
     cd $CWD/core/src/udf/java && mvn clean install
     ;;
   coverage-c++)
+    export CCACHE_LOGFILE=ccache.log
+    export CCACHE_DEBUG=1
+
     setup_dependencies release
-    echo "-- Enable coverage for c++"
-    cd ${CWD} && build coverage:java 
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')]-- Enable coverage for c++"
+    cd ${CWD} && build coverage:java
+    
+    # 清理历史覆盖率文件
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')]-- Clean old coverage files"
+    find ${CWD}/build -name "*.gcda" -delete
+
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')]-- omtest --gtest_output=xm"
     $CWD/build/core/test/omtest --gtest_output=xml:${CWD}/core/build/test_detail.xml
-    lcov --d $CWD/build --c --output-file test.info --rc lcov_branch_coverage=1
-    lcov --remove test.info '*/opt/buildtools/include/*' '*/usr/include/*' '*/usr/lib/*' '*/usr/lib64/*' '*/usr/local/include/*' '*/usr/local/lib/*' '*/usr/local/lib64/*' '*/test/*' '*/core/src/connectors/*' '*/core/src/operator/tablescan/*' '*/core/src/reader/*' '*/core/src/simd/*' '*/core/src/udf/*' '*/bindings/*' '/opt/buildtools/*' '*/core/src/metrics/*' '*/core/src/type/tz/*' '*/core/src/type/tzdb/*' '*/core/src/vectorization/*' '*/core/src/vectorization/functions/*' -o final.info --rc lcov_branch_coverage=1
-    genhtml final.info -o ${CWD}/core/build/test_coverage --branch-coverage --rc lcov_branch_coverage=1
+
+    # 使用fastcov
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')]-- fastcov collecting..."
+    fastcov \
+      -d ${CWD}/build/core \
+      -o test.info \
+      --lcov \
+      --include "${CWD}/core/" \
+      --exclude "/usr/include/" \
+      --exclude "$CWD/build/core/open_source/" \
+      --branch-coverage \
+      -j 16
+  
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')]-- lcov generate html"
+    touch final.info
+    genhtml test.info -o ${CWD}/core/build/test_coverage --branch-coverage --rc lcov_branch_coverage=1
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')]-- Finash coverage for c++"
     ;;
   coverage)
     setup_dependencies package
