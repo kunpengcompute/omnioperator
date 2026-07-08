@@ -181,6 +181,10 @@ public:
     static constexpr const char *KAdaptivePartialAggregationRatio = "adaptive_partial_aggregation_ratio";
     static constexpr const char *KPreferVectorizationExpression = "prefer_vectorization_expression";
 
+    /// When true, each executor builds the BHJ hash table only once and shares it
+    /// across all tasks that probe the same broadcast relation.
+    static constexpr const char *KBuildHashTableOncePerExecutor = "build_hash_table_once_per_executor";
+
     /// Spark partition id for deterministic per-partition behavior (e.g. rand(seed)). Aligned with Velox "spark.partition_id".
     static constexpr const char *kSparkPartitionId = "spark.partition_id";
 
@@ -430,6 +434,12 @@ public:
     {
         constexpr bool kDefaultValue = false;
         return get<bool>(KPreferVectorizationExpression, kDefaultValue);
+    }
+
+    bool buildHashTableOncePerExecutor() const
+    {
+        constexpr bool kDefaultValue = true;
+        return get<bool>(KBuildHashTableOncePerExecutor, kDefaultValue);
     }
 
     /// Spark partition id (aligned with Velox). Default 0 when not set so rand(seed) etc. work without Spark context.

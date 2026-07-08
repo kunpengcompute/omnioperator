@@ -16,6 +16,7 @@
  
 #include "driver.h"
 #include "codegen/time_util.h"
+#include "operator/join/hash_builder.h"
 #include <memory>
 
 namespace omniruntime::compute {
@@ -64,6 +65,10 @@ void OmniDriver::close()
         op = nullptr;
     }
     for (auto &factory : operatorFactories_) {
+        auto* hashBuilderFactory = dynamic_cast<op::HashBuilderOperatorFactory*>(factory);
+        if (hashBuilderFactory != nullptr && hashBuilderFactory->IsCachePinned()) {
+            continue;
+        }
         delete factory;
     }
     closed_ = true;

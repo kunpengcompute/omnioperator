@@ -82,7 +82,9 @@ HashBuilderWithExprOperatorFactory::HashBuilderWithExprOperatorFactory(JoinType 
 
 HashBuilderWithExprOperatorFactory::~HashBuilderWithExprOperatorFactory()
 {
-    delete this->operatorFactory;
+    if (operatorFactory != nullptr && !operatorFactory->IsCachePinned()) {
+        delete operatorFactory;
+    }
 }
 
 Operator *HashBuilderWithExprOperatorFactory::CreateOperator()

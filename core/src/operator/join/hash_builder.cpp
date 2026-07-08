@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include <utility>
+#include "broadcast_hash_table_cache.h"
 #include "join_spill_state.h"
 #include "vector/vector_helper.h"
 
@@ -175,18 +176,49 @@ HashBuilderOperatorFactory *HashBuilderOperatorFactory::CreateHashBuilderOperato
         operatorCount);
 }
 
+HashBuilderOperatorFactory::HashBuilderOperatorFactory(
+    const DataTypes &buildTypes, HashTableVariants *cachedVariants)
+    : buildTypes(buildTypes),
+      hashTablesVariants(cachedVariants),
+      operatorIndex(0),
+      ownsVariants_(false),
+      prebuilt_(true)
+{
+}
+
+HashBuilderOperatorFactory *HashBuilderOperatorFactory::CreateFromCachedVariants(
+    std::shared_ptr<const HashJoinNode> planNode, HashTableVariants* cachedVariants)
+{
+    auto* factory = new HashBuilderOperatorFactory(*planNode->RightOutputType(), cachedVariants);
+    return factory;
+}
+
+void HashBuilderOperatorFactory::InjectCachedVariants(
+    HashTableVariants* cachedVariants, const std::string& broadcastHashTableId)
+{
+    if (ownsVariants_ && hashTablesVariants != nullptr) {
+        delete hashTablesVariants;
+    }
+    hashTablesVariants = cachedVariants;
+    ownsVariants_ = false;
+    prebuilt_ = true;
+    broadcastHashTableId_ = broadcastHashTableId;
+}
+
 Operator *HashBuilderOperatorFactory::CreateOperator()
 {
     /// operatorIndex is start by 0, so partitionIdex is start by 0
     int32_t partitionIndex =
         operatorIndex++ % std::visit([&](auto &&arg) { return arg.GetHashTableCount(); }, *hashTablesVariants);
     return new HashBuilderOperator(this->buildTypes, hashTablesVariants, partitionIndex, joinSpillEnabled_,
-        joinMaxSpillRunRows_, joinSubPartCfg_, buildHashCols, joinSpillState_.get());
+        joinMaxSpillRunRows_, joinSubPartCfg_, buildHashCols, joinSpillState_.get(),
+        prebuilt_, broadcastHashTableId_, this);
 }
 
 HashBuilderOperator::HashBuilderOperator(const DataTypes &buildTypes, HashTableVariants *hashTables,
     int32_t partitionIndex, bool joinSpillEnabled, uint64_t joinMaxSpillRunRows,
-    JoinSubPartitionConfig joinSubPartCfg, std::vector<int32_t> buildHashCols, JoinSpillState *joinSpillState)
+    JoinSubPartitionConfig joinSubPartCfg, std::vector<int32_t> buildHashCols, JoinSpillState *joinSpillState,
+    bool prebuilt, std::string broadcastHashTableId, HashBuilderOperatorFactory* ownerFactory)
     : buildTypes(buildTypes),
       partitionIndex(partitionIndex),
       hashTablesVariants(hashTables),
@@ -197,7 +229,10 @@ HashBuilderOperator::HashBuilderOperator(const DataTypes &buildTypes, HashTableV
           std::visit([&](auto &&arg) { return arg.GetHashTableCount(); }, *hashTables) ==
               joinSubPartCfg.numSubPartitions),
       buildHashCols_(std::move(buildHashCols)),
-      joinSpillState_(joinSpillState)
+      joinSpillState_(joinSpillState),
+      prebuilt_(prebuilt),
+      broadcastHashTableId_(std::move(broadcastHashTableId)),
+      ownerFactory_(ownerFactory)
 {
     SetOperatorName(opNameForHashBuilder);
 }
@@ -264,6 +299,13 @@ bool HashBuilderOperator::AddSubPartitionedInput(omniruntime::vec::VectorBatch *
 
 int32_t HashBuilderOperator::AddInput(omniruntime::vec::VectorBatch *vecBatch)
 {
+    // When using a pre-built table from cache, we must still consume (and discard)
+    // the broadcast input to keep the pipeline in a valid state.
+    if (prebuilt_) {
+        VectorHelper::FreeVecBatch(vecBatch);
+        ResetInputVecBatch();
+        return 0;
+    }
     auto rowCount = vecBatch->GetRowCount();
     if (rowCount <= 0) {
         VectorHelper::FreeVecBatch(vecBatch);
@@ -287,6 +329,14 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
     if (this->isFinished()) {
         return 0;
     }
+
+    // Pre-built path: hash table already ready from executor-level cache; just mark done.
+    if (prebuilt_) {
+        SetStatus(OMNI_STATUS_FINISHED);
+        std::visit([&](auto &&arg) { arg.SetStatus(OMNI_STATUS_FINISHED); }, *hashTablesVariants);
+        return 0;
+    }
+
     std::visit(
         [&](auto &&arg) {
             if (UseJoinSubPartitioning()) {
@@ -308,6 +358,7 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
             }
         },
         *hashTablesVariants);
+
     if (UNLIKELY(IsDebugEnable())) {
         int32_t hashTableSize = 0;
         auto hasgTableType =
@@ -323,6 +374,20 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
     }
     SetStatus(OMNI_STATUS_FINISHED);
     std::visit([&](auto &&arg) { arg.SetStatus(OMNI_STATUS_FINISHED); }, *hashTablesVariants);
+
+    // BHJ cache: publish the built hash table to the executor-level cache so that
+    // subsequent tasks on this executor can reuse it without rebuilding.
+    if (!broadcastHashTableId_.empty()) {
+        // Release ownership in the factory so its destructor won't double-free.
+        if (ownerFactory_ != nullptr) {
+            ownerFactory_->ReleaseVariants();
+            ownerFactory_->MarkCachePinned();
+            BroadcastHashTableCache::getInstance().publish(
+                broadcastHashTableId_, hashTablesVariants, ownerFactory_);
+        } else {
+            BroadcastHashTableCache::getInstance().publish(broadcastHashTableId_, hashTablesVariants, nullptr);
+        }
+    }
     return 0;
 }
 

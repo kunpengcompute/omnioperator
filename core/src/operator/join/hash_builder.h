@@ -6,6 +6,7 @@
 #define __HASH_BUILDER_H__
 
 #include <memory>
+#include <string>
 
 #include "plannode/planNode.h"
 #include "operator/operator_factory.h"
@@ -26,7 +27,10 @@ public:
         const int32_t *buildHashCols, int32_t buildHashColsCount, int32_t operatorCount);
     ~HashBuilderOperatorFactory()
     {
-        delete hashTablesVariants;
+        // Only delete if this factory owns the variants (not injected from cache).
+        if (ownsVariants_) {
+            delete hashTablesVariants;
+        }
     }
     static HashBuilderOperatorFactory *CreateHashBuilderOperatorFactory(JoinType joinType, const DataTypes &buildTypes,
         const int32_t *buildHashCols, int32_t buildHashColsCount, int32_t operatorCount);
@@ -36,6 +40,21 @@ public:
     /// But when Join run with spill, we need muti HashBuilderOperator that every join sub partition o
     static HashBuilderOperatorFactory *CreateHashBuilderOperatorFactory(
         std::shared_ptr<const HashJoinNode> planNode, int32_t operatorCount = 1);
+
+    /**
+     * Create a factory wrapping a pre-built hash table from the executor-level cache.
+     * The factory does NOT own `cachedVariants`; the cache retains ownership.
+     * Operators created from this factory skip AddInput/BuildHashTable entirely.
+     */
+    static HashBuilderOperatorFactory *CreateFromCachedVariants(
+        std::shared_ptr<const HashJoinNode> planNode, HashTableVariants* cachedVariants);
+
+    /**
+     * Replace this factory's hash table with a pre-built one from the executor-level cache.
+     * The factory does NOT take ownership of `cachedVariants`; the cache retains ownership.
+     */
+    void InjectCachedVariants(HashTableVariants* cachedVariants, const std::string& broadcastHashTableId = "");
+
     omniruntime::op::Operator *CreateOperator() override;
     void SetJoinSpillSubPartitionPolicy(bool joinSpillEnabled, uint64_t maxSpillRunRows,
         JoinSubPartitionConfig joinSubPartCfg);
@@ -51,6 +70,44 @@ public:
         return hashTablesVariants;
     }
 
+    /** Set the broadcast hash table id for post-build cache registration. */
+    void SetBroadcastHashTableId(std::string id)
+    {
+        broadcastHashTableId_ = std::move(id);
+    }
+
+    const std::string& GetBroadcastHashTableId() const
+    {
+        return broadcastHashTableId_;
+    }
+
+    /** True when this factory holds a pre-built table injected from cache. */
+    bool IsPrebuilt() const
+    {
+        return prebuilt_;
+    }
+
+    /** Pinning factory lifetime is owned by BroadcastHashTableCache after publish. */
+    void MarkCachePinned()
+    {
+        cachePinned_ = true;
+    }
+
+    bool IsCachePinned() const
+    {
+        return cachePinned_;
+    }
+
+    /**
+     * Transfer ownership of hashTablesVariants to the caller (the cache).
+     * After this call the factory no longer owns or deletes the variants.
+     */
+    HashTableVariants* ReleaseVariants()
+    {
+        ownsVariants_ = false;
+        return hashTablesVariants;
+    }
+
 private:
     DataTypes buildTypes;
     std::vector<int32_t> buildHashCols;
@@ -61,16 +118,27 @@ private:
     JoinSubPartitionConfig joinSubPartCfg_;
     std::shared_ptr<JoinSpillState> joinSpillState_;
 
+    // BHJ cache support
+    std::string broadcastHashTableId_;
+    bool prebuilt_ = false;   // true when variants were injected from cache
+    bool ownsVariants_ = true; // false when variants are owned by cache
+    bool cachePinned_ = false; // true when cache owns this factory after publish
+
     template <class RowRefListType>
     HashTableVariants *InitVariant(int32_t buildHashColsCount, int32_t operatorCount, JoinType joinType,
         BuildSide buildSide = OMNI_BUILD_UNKNOWN, bool isMultiCols = false);
+
+    // Constructor for cache-reuse path: takes pre-built variants directly, no InitVariant call.
+    HashBuilderOperatorFactory(const DataTypes &buildTypes, HashTableVariants *cachedVariants);
 };
 
 class HashBuilderOperator : public Operator {
 public:
     HashBuilderOperator(const DataTypes &buildTypes, HashTableVariants *hashTables, int32_t partitionIndex,
         bool joinSpillEnabled, uint64_t joinMaxSpillRunRows, JoinSubPartitionConfig joinSubPartCfg,
-        std::vector<int32_t> buildHashCols, JoinSpillState *joinSpillState);
+        std::vector<int32_t> buildHashCols, JoinSpillState *joinSpillState,
+        bool prebuilt = false, std::string broadcastHashTableId = "",
+        HashBuilderOperatorFactory* ownerFactory = nullptr);
 
     ~HashBuilderOperator() = default;
 
@@ -122,6 +190,12 @@ private:
     const bool useJoinSubPartitioning_;
     std::vector<int32_t> buildHashCols_;
     JoinSpillState *joinSpillState_ = nullptr;
+
+    // BHJ cache support: skip build and publish when pre-built from cache.
+    const bool prebuilt_ = false;
+    const std::string broadcastHashTableId_;
+    // Back-pointer to factory so we can release its ownership after cache publish.
+    HashBuilderOperatorFactory* ownerFactory_ = nullptr;
 };
 
 int32_t GetTypeLength(int buildHashColsCount, DataTypes& buildTypes, std::vector<int32_t>& buildHashCols);
