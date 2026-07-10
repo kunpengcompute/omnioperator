@@ -1,5 +1,13 @@
 #include "OrcReader.h"
 #include "OmniColReader.hh"
+#include "SelectiveIntegerColumnReader.hh"
+#include "reader/common/Filter.h"
+#include "reader/common/PredicateOperatorType.h"
+#include "reader/common/ScanSpecBuilder.h"
+#include "type/data_type.h"
+#include <nlohmann/json.hpp>
+#include <limits>
+#include <numeric>
 #include "OrcFileOverride.hh"
 #include "RegionCoalescer.h"
 
@@ -26,7 +34,7 @@ uint64_t FilterData(uint8_t *bitMark, std::vector<BaseVector*> *recordBatch, int
         *recordBatch = std::move(resultBatch);
         return (*recordBatch)[0]->GetSize();
     }
-    // 失败返回原始的
+    // On failure, return the original batch
     ClearRecordBatch(resultBatch);
     return vectorSize;
 }
@@ -54,6 +62,28 @@ std::vector<BaseVector*> *recordBatch, uint64_t &batchRowSize, int *omniTypeId, 
     return false;
 }
 
+// Apply residual (unpushed) predicate on an already-compacted batch; reuse compute + FilterData.
+uint64_t ApplyResidualFilter(std::shared_ptr<common::PredicateCondition> &predicateCondition,
+                             std::vector<BaseVector *> *recordBatch, uint64_t rows)
+{
+    if (predicateCondition == nullptr || rows == 0 || recordBatch->empty()) {
+        return rows;
+    }
+    try {
+        uint8_t *bitMark = predicateCondition->compute(*recordBatch);
+        int32_t vectorSize = (*recordBatch)[0]->GetSize();
+        if (omniruntime::BitUtil::CountBits(reinterpret_cast<const uint64_t *>(bitMark), 0, vectorSize) == 0) {
+            ClearRecordBatch(*recordBatch);
+            return 0;
+        }
+        return FilterData(bitMark, recordBatch, vectorSize, predicateCondition->getIsAllNullColumns(),
+                          predicateCondition->getIsAllNotNullColumns());
+    } catch (const std::exception &e) {
+        LogError("ApplyResidualFilter fail: %s", e.what());
+        return rows;
+    }
+}
+
 }
 
 OrcRowReader::OrcRowReader(std::shared_ptr<FileContents> contents, const std::shared_ptr<ReaderOptions>& options)
@@ -66,6 +96,53 @@ OrcRowReader::OrcRowReader(std::shared_ptr<FileContents> contents, const std::sh
     predicatePtr = options->GetPredicatePtr();
     rowType_ = options->GetRowType();
     fileRowType_ = options->GetFileRowType();
+
+    // Capability gate (when switch ON): all selected cols are int family AND at least one
+    // pushable single-column filter → new path; else fall back to legacy.
+    // Success on new path: no log. Any fallback: LogWarn with a distinct reason (no silent fallback).
+    if (options->EnableFilterWhileDecode() && rowType_ != nullptr) {
+        bool allInt = allSelectedColumnsAreInt(*rowType_);
+        const auto &enhancementJson = options->GetEnhancementJson();
+        bool hasPredicate = enhancementJson != nullptr && enhancementJson->contains("vecPredicateCondition");
+        bool usable = false;
+        bool needResidual = false;
+        if (allInt && hasPredicate) {
+            scanSpec_ = makeScanSpec(*rowType_, enhancementJson, usable, needResidual, residualPredicate_);
+        }
+        bool hasPushable = usable && scanSpec_ != nullptr && scanSpec_->hasAnyLeafFilter();
+        useFilterWhileDecode_ = allInt && hasPushable;
+        applyResidual_ = useFilterWhileDecode_ && needResidual;
+
+        // Residual required but evaluator missing → disable new path to avoid under-filtering.
+        if (applyResidual_ && residualPredicate_ == nullptr) {
+            useFilterWhileDecode_ = false;
+            applyResidual_ = false;
+        }
+        if (applyResidual_ && residualPredicate_ != nullptr) {
+            residualPredicate_->init(options->GetBatchLen());
+        }
+
+        if (!useFilterWhileDecode_) {
+            const char *reason = nullptr;
+            if (!allInt) {
+                reason = "selected columns include unsupported types "
+                         "(supports int/bigint/smallint/date only)";
+            } else if (!hasPredicate) {
+                // When Gluten does not push IN etc., C++ sees no JSON — same as pure projection.
+                reason = "no vecPredicateCondition from Gluten "
+                         "(pure projection, or unsupported predicates such as IN that Gluten does not push down)";
+            } else if (!usable) {
+                reason = "predicate JSON could not be parsed into scan filters";
+            } else if (!hasPushable) {
+                reason = "no pushable single-column int filter "
+                         "(e.g. pure cross-column OR/NOT); selective path has no benefit over legacy";
+            } else {
+                reason = "residual remainingFilter was required but could not be built "
+                         "(refusing new path to avoid missing filters)";
+            }
+            LogWarn("filterWhileDecode is enabled but this scan fell back to the legacy ORC path: %s", reason);
+        }
+    }
 }
 
 
@@ -122,7 +199,16 @@ void OrcRowReader::StartNextStripe()
         reader = omniruntime::reader::omniBuildReader(getSelectedType(), stripeStreams,
             (julianPtr == nullptr) ? nullptr : julianPtr.get());
 
-        if (sargsApplier) {
+        // New path: also build SelectiveStructColumnReader (does not wrap the top-level legacy reader).
+        if (useFilterWhileDecode_) {
+            selectiveStructReader_ = std::make_unique<SelectiveStructColumnReader>(
+                getSelectedType(), stripeStreams, scanSpec_.get(),
+                (julianPtr == nullptr) ? nullptr : julianPtr.get());
+        }
+
+        // New path skips intra-stripe row-group seek (not forwarded to selective children);
+        // stripe-level sarg still applies.
+        if (sargsApplier && !useFilterWhileDecode_) {
             // move to the 1st selected row group when PPD is enabled.
             currentRowInStripe = advanceToNextRowGroup(currentRowInStripe, rowsInCurrentStripe,
                                                        footer->rowindexstride(), sargsApplier->getRowGroups());
@@ -219,21 +305,71 @@ uint64_t OrcRowReader::NextDirect(std::vector<BaseVector *> *batch, int *omniTyp
     return rowsToRead;
 }
 
+uint64_t OrcRowReader::NextSelective(std::vector<BaseVector *> *batch, int *omniTypeID, uint64_t batchLen)
+{
+    // If a whole batch is filtered empty, keep reading until rows remain or the stripe ends.
+    while (currentStripe < lastStripe) {
+        if (currentRowInStripe == 0) {
+            StartNextStripe();
+            if (currentStripe >= lastStripe) {
+                break;
+            }
+        }
+
+        uint64_t rowsToRead = std::min(batchLen, rowsInCurrentStripe - currentRowInStripe);
+        if (rowsToRead == 0) {
+            previousRow = lastStripe <= 0 ? footer->numberofrows() :
+                          firstRowOfStripe[lastStripe - 1] +
+                          footer->stripes(static_cast<int>(lastStripe - 1)).numberofrows();
+            return 0;
+        }
+
+        uint64_t survivors = selectiveStructReader_->read(rowsToRead, *batch, omniTypeID);
+        if (applyResidual_ && survivors > 0) {
+            survivors = ApplyResidualFilter(residualPredicate_, batch, survivors);
+        }
+
+        previousRow = firstRowOfStripe[currentStripe] + currentRowInStripe;
+        currentRowInStripe += rowsToRead;
+        if (currentRowInStripe >= rowsInCurrentStripe) {
+            currentStripe += 1;
+            currentRowInStripe = 0;
+        }
+
+        if (survivors > 0) {
+            return survivors;
+        }
+        ClearRecordBatch(*batch);
+    }
+
+    previousRow = (lastStripe > 0)
+        ? firstRowOfStripe[lastStripe - 1] +
+              footer->stripes(static_cast<int>(lastStripe - 1)).numberofrows()
+        : 0;
+    return 0;
+}
+
 uint64_t OrcRowReader::Next(std::vector<BaseVector *> **batch, int *omniTypeID, uint64_t batchLen)
 {
     auto recordBatch = new std::vector<BaseVector *>();
     uint64_t batchRowSize = 0;
-    bool needReadAgain = ReadAndFilterData(*this, recordBatch, batchRowSize, omniTypeID, batchLen);
-    while (needReadAgain) {
-        needReadAgain = ReadAndFilterData(*this, recordBatch, batchRowSize, omniTypeID, batchLen);
+    if (useFilterWhileDecode_) {
+        batchRowSize = NextSelective(recordBatch, omniTypeID, batchLen);
+    } else {
+        bool needReadAgain = ReadAndFilterData(*this, recordBatch, batchRowSize, omniTypeID, batchLen);
+        while (needReadAgain) {
+            needReadAgain = ReadAndFilterData(*this, recordBatch, batchRowSize, omniTypeID, batchLen);
+        }
     }
     *batch = recordBatch;
     if (batchRowSize <= 0) {
         return batchRowSize;
     }
 
-    for (int i = 0; i < fileRowType_->size(); ++i) {
-        if (fileRowType_->childAt(i)->GetId() == type::DataTypeId::OMNI_DATE32) {
+    // DATE32 rebase: new path by rowType_ channel; legacy by fileRowType_.
+    const auto &rebaseRowType = useFilterWhileDecode_ ? rowType_ : fileRowType_;
+    for (int i = 0; i < rebaseRowType->size(); ++i) {
+        if (rebaseRowType->childAt(i)->GetId() == type::DataTypeId::OMNI_DATE32) {
             auto vector = recordBatch->at(i);
             for (int j = 0; j < batchRowSize; ++j) {
                 auto intVector = reinterpret_cast<Vector<int32_t> *>(vector);

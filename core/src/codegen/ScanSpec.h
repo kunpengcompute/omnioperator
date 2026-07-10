@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *          http://license.coscl.org.cn/MulanPSL2
@@ -13,6 +13,7 @@
 
 #include <vector>
 #include "type/data_type.h"
+#include "reader/common/Filter.h"
 
 namespace omniruntime {
 namespace codegen {
@@ -55,6 +56,11 @@ public:
     void setProjectOut(bool projectOut)
     {
         projectOut_ = projectOut;
+    }
+
+    bool projectOut() const
+    {
+        return projectOut_;
     }
 
     // Position in the RowVector returned by the top level scan. Applies
@@ -115,7 +121,7 @@ public:
     {
         switch (type.GetId()) {
             case type::OMNI_ROW: {
-                const RowType &rowType = static_cast<const type::RowType &>(type);
+                const type::RowType &rowType = static_cast<const type::RowType &>(type);
                 for (auto i = 0; i < rowType.size(); ++i) {
                     addFieldRecursively(rowType.nameOf(i), *rowType.childAt(i), i);
                 }
@@ -128,7 +134,7 @@ public:
 
     /// Invoke the function provided on each node of the ScanSpec tree.
     template<typename F>
-    void visit(const DataType &type, F &&f);
+    void visit(const type::DataType &type, F &&f);
 
     void setFlatMapAsStruct(bool value)
     {
@@ -153,8 +159,40 @@ public:
         return it->second;
     }
 
+    // Pushed filter; orthogonal to projectOut_ (filter-only / filter+project).
+    void setFilter(::common::FilterPtr filter)
+    {
+        filter_ = std::move(filter);
+    }
+
+    ::common::Filter *filter() const
+    {
+        return filter_.get();
+    }
+
+    bool hasFilter() const
+    {
+        return filter_ != nullptr;
+    }
+
+    // Whether any leaf filter exists in the subtree (capability gate: no pushable → skip new path).
+    bool hasAnyLeafFilter() const
+    {
+        if (filter_ != nullptr) {
+            return true;
+        }
+        for (const auto &child : children_) {
+            if (child->hasAnyLeafFilter()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 private:
     bool disableStatsBasedFilterReorder_{false};
+
+    ::common::FilterPtr filter_;
 
     std::unordered_map<std::string, ScanSpec *> childByFieldName_;
     // Column name if this is a struct mamber. String key if this
@@ -183,10 +221,10 @@ private:
 };
 
 template<typename F>
-void ScanSpec::visit(const DataType &type, F &&f)
+void ScanSpec::visit(const type::DataType &type, F &&f)
 {
     f(type, *this);
-    const RowType &rowType = static_cast<const type::RowType &>(type);
+    const type::RowType &rowType = static_cast<const type::RowType &>(type);
     for (auto &child: children_) {
         child->visit(*rowType.childAt(child->channel()), std::forward<F>(f));
     }

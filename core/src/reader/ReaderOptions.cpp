@@ -396,6 +396,12 @@ void ReaderOptions::ParseEnhanceJson(const std::string &enhancementJson)
             includedColumnsList_.push_back(col);
         }
     }
+
+    // T0 (filter-while-decode) global switch: injected from Gluten Spark config via enhancementJson,
+    // default false.
+    if (enhancementJson_->contains("filterWhileDecode") && enhancementJson_->at("filterWhileDecode").is_boolean()) {
+        enableFilterWhileDecode_ = enhancementJson_->at("filterWhileDecode").get<bool>();
+    }
 }
 
 void ReaderOptions::ParsePredicate()
@@ -465,6 +471,12 @@ void ReaderOptions::ParseEnhanceJson(const std::string &enhancementJson, FileFor
     }
     if (enhancementJson_->contains("ugi")) {
         ugiString_ = enhancementJson_->at("ugi").get<std::string>();
+    }
+
+    // T0 (filter-while-decode) global switch: injected from Gluten Spark config via enhancementJson,
+    // default false.
+    if (enhancementJson_->contains("filterWhileDecode") && enhancementJson_->at("filterWhileDecode").is_boolean()) {
+        enableFilterWhileDecode_ = enhancementJson_->at("filterWhileDecode").get<bool>();
     }
 }
 }

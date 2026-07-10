@@ -84,6 +84,7 @@ bool unregisterConnector(const std::string& connectorId)
 
 std::shared_ptr<Connector> getConnector(const std::string& connectorId)
 {
+    std::lock_guard<std::mutex> lock(connectors_mutex());
     auto& connMap = connectors();
     auto it = connMap.find(connectorId);
     if (it != connMap.end()) {

@@ -12,6 +12,8 @@
 #include "codegen/Options.h"
 #include "reader/common/PredicateUtil.h"
 #include "orc/StripeStream.hh"
+#include "codegen/ScanSpec.h"
+#include "SelectiveStructColumnReader.hh"
 
 using ::orc::InputStream;
 using ::orc::FileContents;
@@ -42,6 +44,9 @@ public:
 
     uint64_t Next(std::vector<BaseVector *> **batch, int *omniTypeId, uint64_t batchLen) override;
 
+    // Filter-while-decode path; called from Next when the capability gate hits.
+    uint64_t NextSelective(std::vector<BaseVector *> *batch, int *omniTypeId, uint64_t batchLen);
+
     void StartNextStripe();
 
 private:
@@ -51,6 +56,12 @@ private:
     std::shared_ptr <FileContents> contents_;
     std::vector<BaseVector *> *batch;
     int *omniTypeId;
+
+    bool useFilterWhileDecode_ = false;
+    bool applyResidual_ = false;
+    std::shared_ptr<common::PredicateCondition> residualPredicate_; // Unpushed residual subtree
+    std::shared_ptr<codegen::ScanSpec> scanSpec_;
+    std::unique_ptr<SelectiveStructColumnReader> selectiveStructReader_;
 };
 
 class OrcReader : public omniruntime::reader::Reader, public ::orc::ReaderImpl {
