@@ -5,3 +5,5 @@
 #cmakedefine DEBUG_LLVM
 #cmakedefine COVERAGE
 #cmakedefine ENABLE_BENCHMARK
+#cmakedefine EXCLUDE_BATCH_FUNCTIONS
+#cmakedefine EXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS

@@ -14,9 +14,13 @@
 
 #include "operator/execution_context.h"
 #include "codegen/filter_codegen.h"
+#ifndef EXCLUDE_BATCH_FUNCTIONS
 #include "codegen/batch_filter_codegen.h"
+#endif
 #include "codegen/projection_codegen.h"
+#ifndef EXCLUDE_BATCH_FUNCTIONS
 #include "codegen/batch_projection_codegen.h"
+#endif
 #include "util/config_util.h"
 #include "vector/vector_helper.h"
 #include "util/cache_map.h"
@@ -83,7 +87,9 @@ private:
     static CacheMap<std::string, intptr_t> filterFuncCache;
     static CacheMap<std::string, std::shared_ptr<FilterCodeGen>> rtCache;
     std::shared_ptr<FilterCodeGen> codeGen;
+#ifndef EXCLUDE_BATCH_FUNCTIONS
     std::unique_ptr<BatchFilterCodeGen> batchCodeGen;
+#endif
     bool isSupported;
     FilterFunc apply;
 };
@@ -147,7 +153,9 @@ private:
     static CacheMap<std::string, std::shared_ptr<ProjectionCodeGen>> rtCache;
     const omniruntime::expressions::Expr *expr;
     std::shared_ptr<ProjectionCodeGen> codeGen { nullptr };
+#ifndef EXCLUDE_BATCH_FUNCTIONS
     std::unique_ptr<BatchProjectionCodeGen> batchCodeGen { nullptr };
+#endif
     bool isSupported = true;
     bool isColumnProjection = false;
     int columnProjectionIndex = -1;

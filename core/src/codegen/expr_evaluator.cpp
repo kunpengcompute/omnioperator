@@ -123,8 +123,25 @@ std::lock_guard<std::mutex> lock(mtx);
             rtCache.Set(key, this->codeGen);
         }
     } else {
+#ifndef EXCLUDE_BATCH_FUNCTIONS
         this->batchCodeGen = std::make_unique<BatchFilterCodeGen>("filterFunc", expression, overflowConfig);
         f = this->batchCodeGen->GetFunction();
+#else
+        auto overflowKey = overflowConfig ? std::to_string(overflowConfig->IsOverflowAsNull()) : "0";
+        auto key = expression.toString() + overflowKey;
+        auto cacheRtValue = rtCache.Get(key);
+        auto cacheValue = filterFuncCache.Get(key);
+
+        if (cacheValue != std::nullopt) {
+            f = cacheValue.value();
+            this->codeGen = cacheRtValue.value();
+        }  else {
+            this->codeGen = std::make_shared<FilterCodeGen>("filterFunc", expression, overflowConfig);
+            f = this->codeGen->GetFunction(inputDataTypes);
+            filterFuncCache.Set(key, f);
+            rtCache.Set(key, this->codeGen);
+        }
+#endif
     }
     if (f == 0) {
         this->isSupported = false;
@@ -255,9 +272,25 @@ bool Projection::Initialize(bool filter, const DataTypes &inputDataTypes, Overfl
             rtCache.Set(key, this->codeGen);
         }
     } else {
+#ifndef EXCLUDE_BATCH_FUNCTIONS
         this->batchCodeGen = std::make_unique<BatchProjectionCodeGen>("proj_func", *(this->expr), filter,
             overflowConfig);
         f = this->batchCodeGen->GetFunction();
+#else
+        auto overflowKey = overflowConfig ? std::to_string(overflowConfig->IsOverflowAsNull()) : "0";
+        auto key = expr->toString() + overflowKey;
+        auto cacheRtValue = rtCache.Get(key);
+        auto cacheValue = projFuncCache.Get(key);
+        if (cacheValue != std::nullopt)  {
+           f = cacheValue.value();
+           this->codeGen = cacheRtValue.value();
+        }  else {
+            this->codeGen = std::make_shared<ProjectionCodeGen>("proj_func", *(this->expr), filter, overflowConfig);
+            f = this->codeGen->GetFunction(inputDataTypes);
+            projFuncCache.Set(key, f);
+            rtCache.Set(key, this->codeGen);
+        }
+#endif
     }
 
     if (f == 0) {

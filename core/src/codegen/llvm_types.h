@@ -77,7 +77,9 @@ public:
 
     llvm::Type *ToPointerType(omniruntime::type::DataTypeId typeId);
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
     llvm::Type *ToBatchDataPointerType(omniruntime::type::DataTypeId typeId);
+#endif
 
     llvm::Type *GetFunctionReturnType(omniruntime::type::DataTypeId typeId);
 
