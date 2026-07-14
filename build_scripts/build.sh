@@ -79,6 +79,9 @@ else
       elif [ "$i" == '--exclude-test' ]; then
           echo "-- Exclude Test Source"
           OPTIONS+=" -DEXCLUDE_TEST=ON"
+      elif [ "$i" == '--exclude-duplicate-codegen' ]; then
+          echo "-- Exclude Duplicate Codegen Functions"
+          OPTIONS+=" -DEXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS=ON"
       else
           exit_with_message_and_print_help "ERROR: Invalid option: $i"
       fi
@@ -87,8 +90,6 @@ else
 fi
 echo "-- Exclude Batch Functions"
 OPTIONS+=" -DEXCLUDE_BATCH_FUNCTIONS=ON"
-echo "-- Exclude Duplicate Codegen Functions"
-OPTIONS+=" -DEXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS=ON"
 print_gcc_lib
 
 # need to delete the CMakeCache.txt to refresh the options
