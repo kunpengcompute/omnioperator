@@ -736,6 +736,283 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceFixedKeyToNormalHash
 /// partitionIndex is from 0 to hashTableCount - 1
 /// there are always one HashTable for one BuildSize partition, so partitionIndex is always 0
 /// after subpartition function is developed, there are `numSubPartition` HashTables, so it can be from 0 to numSubPartition - 1
+namespace {
+constexpr uint32_t kMaxParallelBuildThreads = 32;
+
+size_t RoundUpToGroupWidth(size_t value)
+{
+    return ((value + Group::kWidth - 1) / Group::kWidth) * Group::kWidth;
+}
+
+int32_t FindBucketPartition(size_t bucketOffset, const std::vector<size_t> &bounds)
+{
+    for (size_t i = 1; i < bounds.size(); ++i) {
+        if (bucketOffset < bounds[i]) {
+            return static_cast<int32_t>(i - 1);
+        }
+    }
+    return static_cast<int32_t>(bounds.size()) - 2;
+}
+
+struct ParallelBuildRowLoc {
+    int32_t vecBatchIdx;
+    uint32_t rowOffset;
+};
+
+template <typename KeyType>
+KeyType ExtractBuildKey(BaseVector *buildVector, uint32_t offset)
+{
+    if (buildVector->GetEncoding() == OMNI_ENCODING_CONST) {
+        return static_cast<ConstVector<KeyType> *>(buildVector)->GetConstValue();
+    }
+    if (buildVector->GetEncoding() == OMNI_DICTIONARY) {
+        return reinterpret_cast<Vector<DictionaryContainer<KeyType>> *>(buildVector)->GetValue(offset);
+    }
+    return reinterpret_cast<Vector<KeyType> *>(buildVector)->GetValue(offset);
+}
+
+template <typename KeyType, typename RowRefListType>
+void ApplyBuildRowRef(InsertResult<RowRefListType *> &ret, mem::SimpleArenaAllocator &arenaAllocator, uint32_t rowOffset,
+    uint32_t vecBatchIdx, size_t sizeOfRowRefList)
+{
+    RowRefListType *rowRef = nullptr;
+    if (ret.IsInsert()) {
+        rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
+        *rowRef = RowRefListType(rowOffset, vecBatchIdx);
+        ret.SetValue(rowRef);
+    } else {
+        rowRef = ret.GetValue();
+        rowRef->Insert({rowOffset, vecBatchIdx}, arenaAllocator);
+    }
+}
+} // namespace
+
+template <typename KeyType, typename RowRefListType>
+bool JoinHashTableVariants<KeyType, RowRefListType>::TryBuildHashTableParallel(int32_t partitionIndex,
+    uint32_t numThreads, uint32_t minRowsPerPartition)
+{
+    if constexpr (std::is_same_v<KeyType, StringRef> || std::is_same_v<KeyType, Decimal128> ||
+                  std::is_same_v<KeyType, int128_t>) {
+        return false;
+    }
+    if (numThreads <= 1 || !isFixedKeys || isMultiCols || hashTableCount != 1) {
+        return false;
+    }
+    if (totalRowCount[partitionIndex] < minRowsPerPartition) {
+        return false;
+    }
+
+    auto initDegree = static_cast<uint8_t>(std::ceil(log2(totalRowCount[partitionIndex] / LOAD_FACTOR)));
+    auto lengthOfArrayHT = static_cast<int64_t>(std::pow(2, initDegree));
+    if (buildHashCols.size() == 1) {
+        switch (buildTypes->GetIds()[buildHashCols[0]]) {
+            case omniruntime::type::OMNI_INT:
+            case omniruntime::type::OMNI_DATE32:
+                if (IsArrayTableEligible<int32_t>(buildHashCols[0], lengthOfArrayHT, partitionIndex)) {
+                    return false;
+                }
+                break;
+            case omniruntime::type::OMNI_SHORT:
+                if (IsArrayTableEligible<int16_t>(buildHashCols[0], lengthOfArrayHT, partitionIndex)) {
+                    return false;
+                }
+                break;
+            case omniruntime::type::OMNI_TIMESTAMP:
+            case omniruntime::type::OMNI_LONG:
+                if (IsArrayTableEligible<int64_t>(buildHashCols[0], lengthOfArrayHT, partitionIndex)) {
+                    return false;
+                }
+                break;
+            case omniruntime::type::OMNI_BYTE:
+                if (IsArrayTableEligible<int8_t>(buildHashCols[0], lengthOfArrayHT, partitionIndex)) {
+                    return false;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    const size_t tableCapacity = 1ULL << std::max(initDegree, MIN_DEGREE);
+    numThreads = std::min(numThreads, kMaxParallelBuildThreads);
+    while (numThreads > 1 && tableCapacity / numThreads < minRowsPerPartition) {
+        --numThreads;
+    }
+    if (numThreads <= 1) {
+        return false;
+    }
+
+    Prepare(partitionIndex);
+
+    auto hashTable = std::make_unique<JoinHashTableVariant<KeyType, RowRefListType>>(std::max(initDegree, MIN_DEGREE));
+    hashTable->hashmap.SetRehashDisabled(true);
+    const size_t bucketMask = hashTable->hashmap.GetCapacity() - 1;
+
+    std::vector<size_t> partitionBounds(numThreads + 1);
+    for (uint32_t i = 0; i < numThreads; ++i) {
+        partitionBounds[i] = RoundUpToGroupWidth((tableCapacity / numThreads) * i);
+    }
+    partitionBounds[numThreads] = tableCapacity;
+
+    struct RowWithHash {
+        ParallelBuildRowLoc loc;
+        KeyType key;
+        size_t hashValue;
+    };
+    std::vector<std::vector<RowWithHash>> rowsPerPartition(numThreads);
+
+    omniruntime::simdutil::HashCRC32<KeyType> hasher;
+    auto &vecBatches = inputVecBatches[partitionIndex];
+    const int32_t buildCol = buildHashCols[0];
+    for (int32_t vecBatchIdx = 0; vecBatchIdx < static_cast<int32_t>(vecBatches.size()); ++vecBatchIdx) {
+        auto *vecBatch = vecBatches[vecBatchIdx];
+        auto *buildVector = vecBatch->Get(buildCol);
+        const auto rowCount = static_cast<uint32_t>(vecBatch->GetRowCount());
+        for (uint32_t offset = 0; offset < rowCount; ++offset) {
+            const bool unNullKey = !buildVector->IsNull(offset);
+            if (!unNullKey) {
+                continue;
+            }
+            auto key = ExtractBuildKey<KeyType>(buildVector, offset);
+            auto hashValue = hasher(key);
+            const auto bucketOffset = H1(hashValue) & bucketMask;
+            const auto partition = FindBucketPartition(bucketOffset, partitionBounds);
+            rowsPerPartition[partition].push_back({{vecBatchIdx, offset}, key, hashValue});
+        }
+    }
+
+    std::atomic<size_t> parallelElementsSize{0};
+    hashTable->hashmap.EnableParallelBuildCounter(&parallelElementsSize);
+    std::vector<std::vector<RowWithHash>> overflowPerPartition(numThreads);
+    std::vector<std::exception_ptr> buildExceptions(numThreads);
+
+    auto buildPartition = [&](uint32_t partition) {
+        try {
+            TableInsertPartitionInfo partitionInfo{partitionBounds[partition], partitionBounds[partition + 1]};
+            auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
+            for (auto &row : rowsPerPartition[partition]) {
+                auto retOpt = hashTable->TryInsertJoinKeysToHashmapWithPartition(row.key, row.hashValue, &partitionInfo);
+                if (!retOpt.has_value()) {
+                    overflowPerPartition[partition].push_back(row);
+                    continue;
+                }
+                ApplyBuildRowRef<KeyType, RowRefListType>(
+                    *retOpt, arenaAllocator, row.loc.rowOffset, row.loc.vecBatchIdx, sizeOfRowRefList);
+            }
+        } catch (...) {
+            buildExceptions[partition] = std::current_exception();
+        }
+    };
+
+    std::vector<std::thread> buildThreads;
+    buildThreads.reserve(numThreads > 1 ? numThreads - 1 : 0);
+    for (uint32_t partition = 0; partition + 1 < numThreads; ++partition) {
+        buildThreads.emplace_back(buildPartition, partition);
+    }
+    buildPartition(numThreads - 1);
+    for (auto &thread : buildThreads) {
+        thread.join();
+    }
+    for (const auto &ex : buildExceptions) {
+        if (ex) {
+            std::rethrow_exception(ex);
+        }
+    }
+
+    hashTable->hashmap.DisableParallelBuildCounter();
+    hashTable->hashmap.SetElementsSize(parallelElementsSize.load(std::memory_order_relaxed));
+
+    for (uint32_t partition = 0; partition < numThreads; ++partition) {
+        auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
+        for (auto &row : overflowPerPartition[partition]) {
+            auto ret = hashTable->InsertJoinKeysToHashmap(row.key, row.hashValue);
+            ApplyBuildRowRef<KeyType, RowRefListType>(
+                ret, arenaAllocator, row.loc.rowOffset, row.loc.vecBatchIdx, sizeOfRowRefList);
+        }
+    }
+
+    if (isNeedNullKeyTable) {
+        auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
+        for (int32_t vecBatchIdx = 0; vecBatchIdx < static_cast<int32_t>(vecBatches.size()); ++vecBatchIdx) {
+            auto *vecBatch = vecBatches[vecBatchIdx];
+            auto *buildVector = vecBatch->Get(buildCol);
+            const auto rowCount = static_cast<uint32_t>(vecBatch->GetRowCount());
+            for (uint32_t offset = 0; offset < rowCount; ++offset) {
+                if (buildVector->IsNull(offset)) {
+                    KeyType key = ExtractBuildKey<KeyType>(buildVector, offset);
+                    auto ret = hashTable->InsertNullKeysToHashmap(key);
+                    ApplyBuildRowRef<KeyType, RowRefListType>(
+                        ret, arenaAllocator, offset, vecBatchIdx, sizeOfRowRefList);
+                }
+            }
+        }
+    }
+
+    hashTables[partitionIndex] = std::move(hashTable);
+    hashTableTypes[partitionIndex] = HashTableImplementationType::NORMAL_HASH_TABLE;
+    hashTableSize++;
+    return true;
+}
+
+template <typename KeyType, typename RowRefListType>
+template <typename T>
+bool JoinHashTableVariants<KeyType, RowRefListType>::IsArrayTableEligible(uint32_t colIndex, int64_t rangeUpperBound,
+    int32_t partitionIndex)
+{
+    auto &vecBatchesOnePartition = inputVecBatches[partitionIndex];
+    int32_t vecBatchCount = vecBatchesOnePartition.size();
+    T max = std::numeric_limits<T>::min();
+    T min = std::numeric_limits<T>::max();
+    int64_t uint32Max = UINT32_MAX;
+    for (int32_t vecBatchIdx = 0; vecBatchIdx < vecBatchCount; ++vecBatchIdx) {
+        VectorBatch *vecBatch = vecBatchesOnePartition[vecBatchIdx];
+        auto rowCount = static_cast<uint32_t>(vecBatch->GetRowCount());
+        auto vector = vecBatch->Get(colIndex);
+        if (vector->GetEncoding() == OMNI_ENCODING_CONST) {
+            if (!vector->IsNull(0)) {
+                auto value = static_cast<ConstVector<T> *>(vector)->GetConstValue();
+                max = std::max(max, value);
+                min = std::min(min, value);
+            }
+        } else if (vector->GetEncoding() != OMNI_DICTIONARY) {
+            auto valuePtr = unsafe::UnsafeVector::GetRawValues(static_cast<Vector<T> *>(vector));
+            if (vector->HasNull()) {
+                for (int32_t i = 0; i < rowCount; i++) {
+                    if (vector->IsNull(i)) {
+                        continue;
+                    }
+                    auto value = *(valuePtr + i);
+                    max = std::max(max, value);
+                    min = std::min(min, value);
+                }
+            } else {
+                const auto [minPtr, maxPtr] = std::minmax_element(valuePtr, valuePtr + rowCount);
+                max = std::max(max, *maxPtr);
+                min = std::min(min, *minPtr);
+            }
+            if (max > 0 && min < 0 && min + ARRAY_THRESHOLD * rangeUpperBound < max) {
+                return false;
+            }
+            if (max - min > uint32Max) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    if (max < min) {
+        return false;
+    }
+    if (min < 0 && std::numeric_limits<T>::max() + min < max) {
+        return false;
+    }
+    if (max - min > uint32Max || max - min > ARRAY_THRESHOLD * rangeUpperBound) {
+        return false;
+    }
+    return true;
+}
+
 template <typename KeyType, typename RowRefListType>
 void JoinHashTableVariants<KeyType, RowRefListType>::BuildHashTable(int32_t partitionIndex)
 {

@@ -269,6 +269,10 @@ void planDetail(
         }
         res.second->SetJoinSpillSubPartitionPolicy(joinSpillV1Enabled, queryConfig.maxSpillRunRows(), subPartCfg);
         res.second->SetJoinSpillState(joinSpillState);
+        if (isBHJ && !res.second->IsPrebuilt() && !HasExprBuildKeys(joinNode)) {
+            res.second->SetBroadcastParallelBuildPolicy(
+                op::BroadcastParallelBuildPolicy::FromQueryConfig(queryConfig));
+        }
         auto builderDriver = builderDrivers[1][0];
         builderDriver->operators()->emplace_back(createOperator(res.first, joinNode));
         factories->emplace_back(res.first);

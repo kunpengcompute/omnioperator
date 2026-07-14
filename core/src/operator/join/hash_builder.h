@@ -11,6 +11,7 @@
 #include "plannode/planNode.h"
 #include "operator/operator_factory.h"
 #include "operator/operator.h"
+#include "util/config/QueryConfig.h"
 #include "join_hash_table_variants.h"
 #include "common_join.h"
 #include "join_sub_partitioner.h"
@@ -18,6 +19,21 @@
 namespace omniruntime {
 namespace op {
 class JoinSpillState;
+
+struct BroadcastParallelBuildPolicy {
+    bool enabled = false;
+    uint32_t minTableRowsForParallelJoinBuild = 1'000;
+    uint64_t targetBytesPerThread = 16UL << 20;
+
+    static BroadcastParallelBuildPolicy FromQueryConfig(const config::QueryConfig &queryConfig)
+    {
+        BroadcastParallelBuildPolicy policy;
+        policy.enabled = queryConfig.broadcastParallelBuildEnabled();
+        policy.minTableRowsForParallelJoinBuild = queryConfig.minTableRowsForParallelJoinBuild();
+        policy.targetBytesPerThread = queryConfig.broadcastParallelBuildTargetBytesPerThread();
+        return policy;
+    }
+};
 
 class HashBuilderOperatorFactory : public OperatorFactory {
 public:
@@ -59,6 +75,15 @@ public:
     void SetJoinSpillSubPartitionPolicy(bool joinSpillEnabled, uint64_t maxSpillRunRows,
         JoinSubPartitionConfig joinSubPartCfg);
     void SetJoinSpillState(std::shared_ptr<JoinSpillState> joinSpillState);
+    void SetBroadcastParallelBuildPolicy(BroadcastParallelBuildPolicy policy)
+    {
+        broadcastParallelBuildPolicy_ = policy;
+    }
+
+    const BroadcastParallelBuildPolicy &GetBroadcastParallelBuildPolicy() const
+    {
+        return broadcastParallelBuildPolicy_;
+    }
 
     std::shared_ptr<JoinSpillState> GetJoinSpillState() const
     {
@@ -117,6 +142,7 @@ private:
     uint64_t joinMaxSpillRunRows_ = 0;
     JoinSubPartitionConfig joinSubPartCfg_;
     std::shared_ptr<JoinSpillState> joinSpillState_;
+    BroadcastParallelBuildPolicy broadcastParallelBuildPolicy_;
 
     // BHJ cache support
     std::string broadcastHashTableId_;
@@ -138,7 +164,8 @@ public:
         bool joinSpillEnabled, uint64_t joinMaxSpillRunRows, JoinSubPartitionConfig joinSubPartCfg,
         std::vector<int32_t> buildHashCols, JoinSpillState *joinSpillState,
         bool prebuilt = false, std::string broadcastHashTableId = "",
-        HashBuilderOperatorFactory* ownerFactory = nullptr);
+        HashBuilderOperatorFactory* ownerFactory = nullptr,
+        BroadcastParallelBuildPolicy broadcastParallelBuildPolicy = {});
 
     ~HashBuilderOperator() = default;
 
@@ -175,6 +202,7 @@ private:
     /// True when join spill sub-partition layout applies (computed once in ctor). Spill/replay still require
     /// \c joinSpillState_ and (for spill) row count >= \c joinMaxSpillRunRows_ at the call site.
     bool UseJoinSubPartitioning() const;
+    uint32_t ComputeParallelBuildThreads(uint32_t rowCount, uint64_t estimatedBuildBytes) const;
     bool AddSubPartitionedInput(omniruntime::vec::VectorBatch *vecBatch);
 
     DataTypes buildTypes;
@@ -188,6 +216,7 @@ private:
     JoinSubPartitionConfig joinSubPartCfg_;
     /// Cached at construction; matches the former \c UseJoinSubPartitioning() predicate (no spill-state / batch).
     const bool useJoinSubPartitioning_;
+    BroadcastParallelBuildPolicy broadcastParallelBuildPolicy_;
     std::vector<int32_t> buildHashCols_;
     JoinSpillState *joinSpillState_ = nullptr;
 

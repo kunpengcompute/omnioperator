@@ -60,6 +60,9 @@
 #include <sstream>
 #include <unordered_map>
 #include <functional>
+#include <atomic>
+#include <limits>
+#include <optional>
 #include <jemalloc/jemalloc.h>
 #include <folly/CppAttributes.h>
 #ifdef __aarch64__
@@ -414,6 +417,19 @@ struct Group {
     }; // the number of slots per group
 };
 
+/// Bucket-range bounds for Velox-style parallel join hash table build.
+struct TableInsertPartitionInfo {
+    size_t start = 0;
+    size_t end = 0;
+
+    bool InRange(size_t index) const
+    {
+        return index >= start && index < end;
+    }
+};
+
+static constexpr size_t kPartitionOverflow = std::numeric_limits<size_t>::max();
+
 template <size_t Width> class ProbeSeq {
 public:
     ProbeSeq(size_t hashVal, size_t mask)
@@ -506,6 +522,31 @@ public:
         return elementsSize;
     }
 
+    size_t GetCapacity() const
+    {
+        return capacity;
+    }
+
+    void SetElementsSize(size_t size)
+    {
+        elementsSize = size;
+    }
+
+    void SetRehashDisabled(bool disabled)
+    {
+        rehashDisabled_ = disabled;
+    }
+
+    void EnableParallelBuildCounter(std::atomic<size_t> *counter)
+    {
+        elementsSizeCounter_ = counter;
+    }
+
+    void DisableParallelBuildCounter()
+    {
+        elementsSizeCounter_ = nullptr;
+    }
+
     /**
      * Find Matched Join Position
      * Note: We use the second element of InsertResult to indicate whether to find the matched position or not.
@@ -575,7 +616,27 @@ public:
         if (LIKELY(inserted)) {
             new (&slots[pos]) Slot(std::forward<T>(key));
             identifiers[pos] = (h2_t)H2(hashValue);
-            ++elementsSize;
+            IncrementElementsSize();
+        }
+        slots[pos].SetHashVal(hashValue);
+        return InsertResult<ValueType>(slots[pos].GetValue(), inserted);
+    }
+
+    /// Partition-bounded insert for parallel join build. Returns nullopt when the row overflows the partition range.
+    template <typename T>
+    ALWAYS_INLINE std::optional<InsertResult<ValueType>> TryEmplaceNotNullKeyWithPartition(
+        T &&key, size_t hashValue, const TableInsertPartitionInfo *partitionInfo)
+    {
+        bool inserted = false;
+        auto pos = FindPositionWithPartition(key, hashValue, inserted, partitionInfo);
+        if (pos == kPartitionOverflow) {
+            return std::nullopt;
+        }
+
+        if (LIKELY(inserted)) {
+            new (&slots[pos]) Slot(std::forward<T>(key));
+            identifiers[pos] = (h2_t)H2(hashValue);
+            IncrementElementsSize();
         }
         slots[pos].SetHashVal(hashValue);
         return InsertResult<ValueType>(slots[pos].GetValue(), inserted);
@@ -845,6 +906,9 @@ private:
 
     bool NeedRehash()
     {
+        if (rehashDisabled_) {
+            return false;
+        }
         return elementsSize > grower.GetThreshHold();
     }
 
@@ -861,13 +925,29 @@ private:
 
     size_t FindPosition(const KeyType& key, size_t hashValue, bool& inserted)
     {
+        return FindPositionWithPartition(key, hashValue, inserted, nullptr);
+    }
+
+    size_t FindPositionWithPartition(const KeyType& key, size_t hashValue, bool& inserted,
+        const TableInsertPartitionInfo *partitionInfo)
+    {
         auto seq = Probe<Group::kWidth>(hashValue);
         auto hashValueH2 = static_cast<ctrl_t>(H2(hashValue));
+        const size_t startBucketOffset = partitionInfo != nullptr ? seq.GetOffset() : 0;
+        size_t numProbedBuckets = 0;
         __builtin_prefetch(identifiers + seq.GetOffset(), 0, 3);
         while (identifiers[seq.GetOffset()] != kEmpty) {
+            size_t curOffset = seq.GetOffset();
+            if (partitionInfo != nullptr) {
+                if (!partitionInfo->InRange(curOffset)) {
+                    return kPartitionOverflow;
+                }
+                if (numProbedBuckets > 0 && curOffset <= startBucketOffset) {
+                    return kPartitionOverflow;
+                }
+            }
             __builtin_prefetch(identifiers + seq.GetOffset() + Group::kWidth, 0, 3);
             auto maskIter = FindMatchNibbles<ctrl_t, Group::kWidth>(static_cast<ctrl_t>(hashValueH2), identifiers + seq.GetOffset());
-            // Traverse all the keys which match the low 7 bit hash
             while (maskIter.HasNext()) {
                 auto v = maskIter.Next();
                 if (slots[seq.GetOffset((size_t)v)].IsSameKey(hashValue, key)) {
@@ -881,12 +961,22 @@ private:
                 return seq.GetOffset(firstIndex);
             }
             seq.GetNext();
+            numProbedBuckets += Group::kWidth;
             if (seq.GetIndex() > capacity) {
                 break;
             }
         }
+        size_t curOffset = seq.GetOffset();
+        if (partitionInfo != nullptr) {
+            if (!partitionInfo->InRange(curOffset)) {
+                return kPartitionOverflow;
+            }
+            if (numProbedBuckets > 0 && curOffset <= startBucketOffset) {
+                return kPartitionOverflow;
+            }
+        }
         inserted = true;
-        return seq.GetOffset();
+        return curOffset;
     }
 
     // update newIsAssigned when rehash
@@ -894,6 +984,15 @@ private:
     {
         auto noFlag = false;
         return FindPosition(key, hashValue, noFlag);
+    }
+
+    void IncrementElementsSize()
+    {
+        if (elementsSizeCounter_ != nullptr) {
+            elementsSizeCounter_->fetch_add(1, std::memory_order_relaxed);
+        } else {
+            ++elementsSize;
+        }
     }
 
     // call deconstruct function of every cell
@@ -935,6 +1034,8 @@ private:
     uint8_t *ctrlAddress = nullptr;
     Slot *nullSlot = nullptr;
     size_t elementsSize = 0; // the number of hash keys
+    std::atomic<size_t> *elementsSizeCounter_ = nullptr;
+    bool rehashDisabled_ = false;
     HashType hasher;
     uint64_t capacity = 0; // the number of hashmap capacity
     static constexpr uint8_t defaultDegreeSize = 15;

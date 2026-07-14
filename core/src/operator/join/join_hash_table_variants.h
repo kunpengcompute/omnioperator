@@ -8,6 +8,9 @@
 
 #include <variant>
 #include <vector>
+#include <thread>
+#include <atomic>
+#include <exception>
 
 #include "operator/status.h"
 #include "operator/hashmap/crc_hasher.h"
@@ -184,6 +187,15 @@ public:
 
     void BuildHashTable(int32_t partitionIndex);
 
+    /// Velox-style parallel build: single hash table, bucket-range partitioning, no probe-side changes.
+    /// Returns true if parallel build was applied; false to fall back to serial BuildHashTable().
+    bool TryBuildHashTableParallel(int32_t partitionIndex, uint32_t numThreads, uint32_t minRowsPerPartition);
+
+    uint32_t GetPartitionRowCount(int32_t partitionIndex) const
+    {
+        return totalRowCount[partitionIndex];
+    }
+
     void Prepare(int32_t partitionIndex);
 
     void InitBuildFilterCols(std::vector<int32_t> &buildFilterCols, int32_t originalProbeColsCount,
@@ -193,6 +205,9 @@ public:
 private:
     template <typename T>
     bool TryToBuildArrayTable(uint32_t colIndex, T &min, T &max, int64_t rangeUpperBound, int32_t partitionIndex);
+
+    template <typename T>
+    bool IsArrayTableEligible(uint32_t colIndex, int64_t rangeUpperBound, int32_t partitionIndex);
 
     template <typename T>
     void EmplaceNotNullKeyToArrayTable(T &min, T &max, int64_t rangeUpperBound, int32_t partitionIndex);

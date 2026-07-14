@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include <utility>
+#include <thread>
 #include "broadcast_hash_table_cache.h"
 #include "join_spill_state.h"
 #include "vector/vector_helper.h"
@@ -212,13 +213,14 @@ Operator *HashBuilderOperatorFactory::CreateOperator()
         operatorIndex++ % std::visit([&](auto &&arg) { return arg.GetHashTableCount(); }, *hashTablesVariants);
     return new HashBuilderOperator(this->buildTypes, hashTablesVariants, partitionIndex, joinSpillEnabled_,
         joinMaxSpillRunRows_, joinSubPartCfg_, buildHashCols, joinSpillState_.get(),
-        prebuilt_, broadcastHashTableId_, this);
+        prebuilt_, broadcastHashTableId_, this, broadcastParallelBuildPolicy_);
 }
 
 HashBuilderOperator::HashBuilderOperator(const DataTypes &buildTypes, HashTableVariants *hashTables,
     int32_t partitionIndex, bool joinSpillEnabled, uint64_t joinMaxSpillRunRows,
     JoinSubPartitionConfig joinSubPartCfg, std::vector<int32_t> buildHashCols, JoinSpillState *joinSpillState,
-    bool prebuilt, std::string broadcastHashTableId, HashBuilderOperatorFactory* ownerFactory)
+    bool prebuilt, std::string broadcastHashTableId, HashBuilderOperatorFactory* ownerFactory,
+    BroadcastParallelBuildPolicy broadcastParallelBuildPolicy)
     : buildTypes(buildTypes),
       partitionIndex(partitionIndex),
       hashTablesVariants(hashTables),
@@ -228,6 +230,7 @@ HashBuilderOperator::HashBuilderOperator(const DataTypes &buildTypes, HashTableV
       useJoinSubPartitioning_(joinSpillEnabled && joinMaxSpillRunRows > 0 && joinSubPartCfg.IsEnabled() &&
           std::visit([&](auto &&arg) { return arg.GetHashTableCount(); }, *hashTables) ==
               joinSubPartCfg.numSubPartitions),
+      broadcastParallelBuildPolicy_(broadcastParallelBuildPolicy),
       buildHashCols_(std::move(buildHashCols)),
       joinSpillState_(joinSpillState),
       prebuilt_(prebuilt),
@@ -235,6 +238,21 @@ HashBuilderOperator::HashBuilderOperator(const DataTypes &buildTypes, HashTableV
       ownerFactory_(ownerFactory)
 {
     SetOperatorName(opNameForHashBuilder);
+}
+
+uint32_t HashBuilderOperator::ComputeParallelBuildThreads(uint32_t rowCount, uint64_t estimatedBuildBytes) const
+{
+    if (!broadcastParallelBuildPolicy_.enabled || rowCount == 0) {
+        return 1;
+    }
+    const uint32_t maxThreads = std::max(1u, static_cast<uint32_t>(std::thread::hardware_concurrency()));
+    uint32_t numThreads = maxThreads;
+    if (broadcastParallelBuildPolicy_.targetBytesPerThread > 0) {
+        numThreads = static_cast<uint32_t>(
+            std::max<uint64_t>(1, estimatedBuildBytes / broadcastParallelBuildPolicy_.targetBytesPerThread));
+        numThreads = std::min(numThreads, maxThreads);
+    }
+    return std::max(1u, numThreads);
 }
 
 bool HashBuilderOperator::UseJoinSubPartitioning() const
@@ -353,8 +371,24 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
                     std::cout.flush();
                 }
             } else {
-                arg.Prepare(partitionIndex);
-                arg.BuildHashTable(partitionIndex);
+                const uint32_t rowCount = std::visit(
+                    [&](auto &&arg) { return arg.GetPartitionRowCount(partitionIndex); }, *hashTablesVariants);
+                const uint64_t estimatedBuildBytes = static_cast<uint64_t>(rowCount) * 32;
+                const uint32_t numThreads =
+                    ComputeParallelBuildThreads(rowCount, estimatedBuildBytes);
+                bool builtParallel = false;
+                if (broadcastParallelBuildPolicy_.enabled && numThreads > 1) {
+                    builtParallel = std::visit(
+                        [&](auto &&arg) {
+                            return arg.TryBuildHashTableParallel(partitionIndex, numThreads,
+                                broadcastParallelBuildPolicy_.minTableRowsForParallelJoinBuild);
+                        },
+                        *hashTablesVariants);
+                }
+                if (!builtParallel) {
+                    arg.Prepare(partitionIndex);
+                    arg.BuildHashTable(partitionIndex);
+                }
             }
         },
         *hashTablesVariants);
