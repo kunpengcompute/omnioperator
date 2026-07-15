@@ -1582,4 +1582,69 @@ std::string_view VectorHelper::GetStringValueFromVector(BaseVector *vec, int32_t
         OMNI_THROW("OMNI RUNTIME ERROR", "Unsupported encoding type for string");
     }
 }
+
+// --- CreateFlatVector<typeId> ---
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_BOOLEAN>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_BYTE>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_SHORT>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_INT>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_DATE32>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_LONG>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_DATE64>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_TIMESTAMP>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_FLOAT>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_DOUBLE>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_DECIMAL64>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_DECIMAL128>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_CHAR>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_VARCHAR>(int32_t, int32_t);
+template BaseVector *VectorHelper::CreateFlatVector<OMNI_VARBINARY>(int32_t, int32_t);
+
+// --- GetFlatValue<typeId> ---
+template bool VectorHelper::GetFlatValue<OMNI_BOOLEAN>(vec::BaseVector *, int);
+template int8_t VectorHelper::GetFlatValue<OMNI_BYTE>(vec::BaseVector *, int);
+template int16_t VectorHelper::GetFlatValue<OMNI_SHORT>(vec::BaseVector *, int);
+template int32_t VectorHelper::GetFlatValue<OMNI_INT>(vec::BaseVector *, int);
+template int32_t VectorHelper::GetFlatValue<OMNI_DATE32>(vec::BaseVector *, int);
+template int64_t VectorHelper::GetFlatValue<OMNI_LONG>(vec::BaseVector *, int);
+template int64_t VectorHelper::GetFlatValue<OMNI_DATE64>(vec::BaseVector *, int);
+template int64_t VectorHelper::GetFlatValue<OMNI_TIMESTAMP>(vec::BaseVector *, int);
+template float VectorHelper::GetFlatValue<OMNI_FLOAT>(vec::BaseVector *, int);
+template double VectorHelper::GetFlatValue<OMNI_DOUBLE>(vec::BaseVector *, int);
+template int64_t VectorHelper::GetFlatValue<OMNI_DECIMAL64>(vec::BaseVector *, int);
+template Decimal128 VectorHelper::GetFlatValue<OMNI_DECIMAL128>(vec::BaseVector *, int);
+template std::string_view VectorHelper::GetFlatValue<OMNI_CHAR>(vec::BaseVector *, int);
+template std::string_view VectorHelper::GetFlatValue<OMNI_VARCHAR>(vec::BaseVector *, int);
+template std::string_view VectorHelper::GetFlatValue<OMNI_VARBINARY>(vec::BaseVector *, int);
+
+// --- GetFlatValuePtr<typeId> ---
+template void *VectorHelper::GetFlatValuePtr<OMNI_BOOLEAN>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_BYTE>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_SHORT>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_INT>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_DATE32>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_LONG>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_DATE64>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_TIMESTAMP>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_FLOAT>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_DOUBLE>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_DECIMAL64>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_DECIMAL128>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_CHAR>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_VARCHAR>(vec::BaseVector *);
+template void *VectorHelper::GetFlatValuePtr<OMNI_VARBINARY>(vec::BaseVector *);
+
+// --- GetValueFromVector<T> (返回 T) ---
+template bool VectorHelper::GetValueFromVector<bool>(BaseVector *, int32_t);
+template int8_t VectorHelper::GetValueFromVector<int8_t>(BaseVector *, int32_t);
+template int16_t VectorHelper::GetValueFromVector<int16_t>(BaseVector *, int32_t);
+template int32_t VectorHelper::GetValueFromVector<int32_t>(BaseVector *, int32_t);
+template int64_t VectorHelper::GetValueFromVector<int64_t>(BaseVector *, int32_t);
+template float VectorHelper::GetValueFromVector<float>(BaseVector *, int32_t);
+template double VectorHelper::GetValueFromVector<double>(BaseVector *, int32_t);
+template Decimal128 VectorHelper::GetValueFromVector<Decimal128>(BaseVector *, int32_t);
+
+// --- GetValueFromVector<T> (返回 bool, 3 参数) ---
+template bool VectorHelper::GetValueFromVector<bool>(BaseVector *, int32_t, bool &);
+template bool VectorHelper::GetValueFromVector<int64_t>(BaseVector *, int32_t, int64_t &);
 } // namespace omniruntime::vec

@@ -381,6 +381,71 @@ public:
         delete vecBatch;
     }
 };
+
+// --- CreateFlatVector<typeId> ---
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_BOOLEAN>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_BYTE>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_SHORT>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_INT>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_DATE32>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_LONG>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_DATE64>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_TIMESTAMP>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_FLOAT>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_DOUBLE>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_DECIMAL64>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_DECIMAL128>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_CHAR>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_VARCHAR>(int32_t, int32_t);
+extern template BaseVector *VectorHelper::CreateFlatVector<OMNI_VARBINARY>(int32_t, int32_t);
+
+// --- GetFlatValue<typeId> ---
+extern template bool VectorHelper::GetFlatValue<OMNI_BOOLEAN>(vec::BaseVector *, int);
+extern template int8_t VectorHelper::GetFlatValue<OMNI_BYTE>(vec::BaseVector *, int);
+extern template int16_t VectorHelper::GetFlatValue<OMNI_SHORT>(vec::BaseVector *, int);
+extern template int32_t VectorHelper::GetFlatValue<OMNI_INT>(vec::BaseVector *, int);
+extern template int32_t VectorHelper::GetFlatValue<OMNI_DATE32>(vec::BaseVector *, int);
+extern template int64_t VectorHelper::GetFlatValue<OMNI_LONG>(vec::BaseVector *, int);
+extern template int64_t VectorHelper::GetFlatValue<OMNI_DATE64>(vec::BaseVector *, int);
+extern template int64_t VectorHelper::GetFlatValue<OMNI_TIMESTAMP>(vec::BaseVector *, int);
+extern template float VectorHelper::GetFlatValue<OMNI_FLOAT>(vec::BaseVector *, int);
+extern template double VectorHelper::GetFlatValue<OMNI_DOUBLE>(vec::BaseVector *, int);
+extern template int64_t VectorHelper::GetFlatValue<OMNI_DECIMAL64>(vec::BaseVector *, int);
+extern template Decimal128 VectorHelper::GetFlatValue<OMNI_DECIMAL128>(vec::BaseVector *, int);
+extern template std::string_view VectorHelper::GetFlatValue<OMNI_CHAR>(vec::BaseVector *, int);
+extern template std::string_view VectorHelper::GetFlatValue<OMNI_VARCHAR>(vec::BaseVector *, int);
+extern template std::string_view VectorHelper::GetFlatValue<OMNI_VARBINARY>(vec::BaseVector *, int);
+
+// --- GetFlatValuePtr<typeId> ---
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_BOOLEAN>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_BYTE>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_SHORT>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_INT>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_DATE32>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_LONG>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_DATE64>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_TIMESTAMP>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_FLOAT>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_DOUBLE>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_DECIMAL64>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_DECIMAL128>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_CHAR>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_VARCHAR>(vec::BaseVector *);
+extern template void *VectorHelper::GetFlatValuePtr<OMNI_VARBINARY>(vec::BaseVector *);
+
+// --- GetValueFromVector<T> (返回 T) ---
+extern template bool VectorHelper::GetValueFromVector<bool>(BaseVector *, int32_t);
+extern template int8_t VectorHelper::GetValueFromVector<int8_t>(BaseVector *, int32_t);
+extern template int16_t VectorHelper::GetValueFromVector<int16_t>(BaseVector *, int32_t);
+extern template int32_t VectorHelper::GetValueFromVector<int32_t>(BaseVector *, int32_t);
+extern template int64_t VectorHelper::GetValueFromVector<int64_t>(BaseVector *, int32_t);
+extern template float VectorHelper::GetValueFromVector<float>(BaseVector *, int32_t);
+extern template double VectorHelper::GetValueFromVector<double>(BaseVector *, int32_t);
+extern template Decimal128 VectorHelper::GetValueFromVector<Decimal128>(BaseVector *, int32_t);
+
+// --- GetValueFromVector<T> (返回 bool, 3 参数) ---
+extern template bool VectorHelper::GetValueFromVector<bool>(BaseVector *, int32_t, bool &);
+extern template bool VectorHelper::GetValueFromVector<int64_t>(BaseVector *, int32_t, int64_t &);
 }
 
 #endif // OMNI_RUNTIME_VECTOR_HELPER_H
