@@ -114,8 +114,6 @@ foreach (file ${target_generated})
     endif ()
 endforeach (file)
 
-aux_source_directory(${CMAKE_CURRENT_LIST_DIR} ROOT_SRCS)
-# for header searching
 include_directories(SYSTEM core/src)
 include_directories(SYSTEM core)
 include_directories(${CMAKE_INSTALL_PREFIX}/lib/APL/include)
@@ -130,7 +128,7 @@ add_subdirectory(bindings/java/src/main/cpp EXCLUDE_FROM_ALL)
 option(DEBUG "Debug" OFF)
 message(STATUS "Option DEBUG: ${DEBUG}")
 
-option(DEBUG "Trace" OFF)
+option(TRACE "Trace" OFF)
 message(STATUS "Option TRACE: ${TRACE}")
 
 option(DEBUG_OPERATOR "Using for debug into native operator code" OFF)
@@ -148,7 +146,7 @@ message(STATUS "Option DISABLE_JIT: ${DISABLE_JIT}")
 option(COVERAGE "Enable coverage to optimize operator" OFF)
 message(STATUS "Option Enable COVERAGE: ${COVERAGE}")
 
-option(COVERAGE "Enable DT" OFF)
+option(ENABLE_DT "Enable DT" OFF)
 message(STATUS "Option Enable DT: ${ENABLE_DT}")
 
 option(ENABLE_BENCHMARK "Enable Benchmark" OFF)
