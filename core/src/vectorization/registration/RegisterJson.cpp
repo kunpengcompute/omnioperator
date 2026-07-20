@@ -10,6 +10,7 @@
  #include "../functions/FromJson.h"
  #include "../functions/GetJsonObject.h"
  #include "../functions/IsJson.h"
+ #include "../functions/JsonExists.h"
  #include "RegistrationHelpers.h"
  
  namespace omniruntime::vectorization {
@@ -59,6 +60,27 @@
          std::make_shared<IsJsonFunction>(JsonType::OBJECT));
      VectorFunction::RegisterVectorFunction(prefix + "is_json_object", {OMNI_CHAR}, OMNI_BOOLEAN,
          std::make_shared<IsJsonFunction>(JsonType::OBJECT));
+
+     // JSON_EXISTS(jsonValue, path [, onError]) -> boolean. ON ERROR behavior (TRUE/FALSE/
+     // UNKNOWN/ERROR, default FALSE) is passed as an optional 3rd VARCHAR literal argument
+     // — Flink models ON ERROR as an operand, not operator identity. NULL input -> NULL
+     // output (Flink argsNullable=false short-circuit). Path B VectorFunction. path may
+     // carry a strict/lax prefix (default STRICT); LAX suppresses errors, STRICT routes
+     // missing/invalid to ON ERROR.
+     // The path and onError operands are always VARCHAR (CHAR literals are normalized to
+     // VARCHAR on the OmniAdaptor side); the jsonValue operand may be a VARCHAR or CHAR
+     // column, so both are registered. GetStringValue handles CHAR/VARCHAR uniformly.
+     auto jsonExistsFunc = std::make_shared<JsonExistsFunction>();
+     // 2-arg form (ON ERROR omitted -> default FALSE)
+     VectorFunction::RegisterVectorFunction(prefix + "json_exists", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_BOOLEAN,
+         jsonExistsFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_exists", {OMNI_CHAR, OMNI_VARCHAR}, OMNI_BOOLEAN,
+         jsonExistsFunc);
+     // 3-arg form (explicit ON ERROR literal)
+     VectorFunction::RegisterVectorFunction(prefix + "json_exists",
+         {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_BOOLEAN, jsonExistsFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_exists",
+         {OMNI_CHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_BOOLEAN, jsonExistsFunc);
  }
  }
  
