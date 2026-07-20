@@ -109,30 +109,7 @@ public:
         values = std::shared_ptr<BaseVector>(addedValues);
     }
 
-    MapVector *Slice(int positionOffset, int length, bool isCopy = false) override
-    {
-        if (UNLIKELY(positionOffset + length > size)) {
-            std::string message("slice vector out of range(needed size:%d, real size:%d).", positionOffset + length,
-                                size);
-            throw OmniException("OPERATOR_RUNTIME_ERROR", message);
-        }
-        auto sliced = new MapVector(length);
-        sliced->isSliced = true;
-        int32_t startOffset = GetOffset(positionOffset);
-        for (int i = 0; i < length; ++i) {
-            sliced->SetOffset(i + 1, GetOffset(positionOffset + 1 + i) - startOffset);
-        }
-        for (int i = 0; i < length; ++i) {
-            if (IsNull(positionOffset + i)) {
-                sliced->SetNull(i);
-            }
-        }
-        sliced->SetKeyVector(
-            std::shared_ptr<BaseVector>(GetKeyVector()->Slice(startOffset, sliced->GetOffset(length), isCopy)));
-        sliced->SetValueVector(
-            std::shared_ptr<BaseVector>(GetValueVector()->Slice(startOffset, sliced->GetOffset(length), isCopy)));
-        return sliced;
-    }
+    MapVector *Slice(int positionOffset, int length, bool isCopy = false) override;
 
     /* *
      * Copies the values of the vector at the indicated positions
@@ -149,43 +126,7 @@ public:
         }
     }
 
-    void Expand(int32_t needCapacity) override
-    {
-        if (needCapacity <= size) {
-            return;
-        }
-
-        if (needCapacity <= capacity) {
-            size = needCapacity;
-            return;
-        }
-
-        int32_t newCapacity = std::max(capacity * 2, needCapacity);
-        int32_t oldSize = size;
-
-        auto oldOffsetsBuffer = offsetsBuffer;
-        offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(newCapacity + 1, true);
-        offsets = offsetsBuffer->GetBuffer();
-
-        if (oldOffsetsBuffer != nullptr) {
-            memcpy(
-                offsets,
-                oldOffsetsBuffer->GetBuffer(),
-                (oldSize + 1) * sizeof(int64_t)
-            );
-        }
-
-        auto oldNullsBuffer = nullsBuffer;
-        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
-        if (oldNullsBuffer != nullptr) {
-            nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
-        } else {
-            nullsBuffer->SetNulls(0, false, newCapacity);
-        }
-
-        capacity = newCapacity;
-        size = needCapacity;
-    }
+    void Expand(int32_t needCapacity) override;
 
     void Append(BaseVector *other, int positionOffset, int length);
 
