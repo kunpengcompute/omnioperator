@@ -9,6 +9,7 @@
  #include "../functions/JsonArrayLength.h"
  #include "../functions/FromJson.h"
  #include "../functions/GetJsonObject.h"
+ #include "../functions/IsJson.h"
  #include "RegistrationHelpers.h"
  
  namespace omniruntime::vectorization {
@@ -35,6 +36,29 @@
      // Also register CamelCase version for Gluten compatibility
      VectorFunction::RegisterVectorFunction("GetJsonObject", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR,
          std::make_shared<GetJsonObjectFunction>());
+
+     // IS JSON [ { VALUE | SCALAR | ARRAY | OBJECT } ] -> boolean
+     // Flink JSON Function: determine whether a string is valid JSON, optionally
+     // constraining the top-level value type. Calcite models these as 4 separate
+     // postfix operators (IS JSON VALUE/SCALAR/ARRAY/OBJECT), so 4 native function
+     // names are registered. NULL input -> FALSE (not NULL); implemented as Path B
+     // VectorFunction so NULL rows yield an explicit FALSE (BOOLEAN NOT NULL).
+     VectorFunction::RegisterVectorFunction(prefix + "is_json_value", {OMNI_VARCHAR}, OMNI_BOOLEAN,
+         std::make_shared<IsJsonFunction>(JsonType::VALUE));
+     VectorFunction::RegisterVectorFunction(prefix + "is_json_value", {OMNI_CHAR}, OMNI_BOOLEAN,
+         std::make_shared<IsJsonFunction>(JsonType::VALUE));
+     VectorFunction::RegisterVectorFunction(prefix + "is_json_scalar", {OMNI_VARCHAR}, OMNI_BOOLEAN,
+         std::make_shared<IsJsonFunction>(JsonType::SCALAR));
+     VectorFunction::RegisterVectorFunction(prefix + "is_json_scalar", {OMNI_CHAR}, OMNI_BOOLEAN,
+         std::make_shared<IsJsonFunction>(JsonType::SCALAR));
+     VectorFunction::RegisterVectorFunction(prefix + "is_json_array", {OMNI_VARCHAR}, OMNI_BOOLEAN,
+         std::make_shared<IsJsonFunction>(JsonType::ARRAY));
+     VectorFunction::RegisterVectorFunction(prefix + "is_json_array", {OMNI_CHAR}, OMNI_BOOLEAN,
+         std::make_shared<IsJsonFunction>(JsonType::ARRAY));
+     VectorFunction::RegisterVectorFunction(prefix + "is_json_object", {OMNI_VARCHAR}, OMNI_BOOLEAN,
+         std::make_shared<IsJsonFunction>(JsonType::OBJECT));
+     VectorFunction::RegisterVectorFunction(prefix + "is_json_object", {OMNI_CHAR}, OMNI_BOOLEAN,
+         std::make_shared<IsJsonFunction>(JsonType::OBJECT));
  }
  }
  
