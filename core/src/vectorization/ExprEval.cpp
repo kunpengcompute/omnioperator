@@ -559,6 +559,10 @@ void ExprEval::Visit(const FuncExpr &e)
     if (e.funcName == "to_json" && !e.arguments.empty()) {
         context->SetToJsonInputType(e.arguments[0]->dataType.get());
     }
+    // json_string (Flink JSON_STRING) needs the same input DataType for ROW field names.
+    if (e.funcName == "json_string" && !e.arguments.empty()) {
+        context->SetToJsonInputType(e.arguments[0]->dataType.get());
+    }
 
     resolved->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
