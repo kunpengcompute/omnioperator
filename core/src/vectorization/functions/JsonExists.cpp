@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstring>
 #include <memory>
 
@@ -357,7 +358,7 @@ JsonPathResult JsonExistsFunction::PathExists(const rapidjson::Value &doc, const
                    normalizedPath[endPos] != '[') {
                 endPos++;
             }
-            std::string_view fieldName = normalizedPath.substr(pos, endPos - pos);
+            std::string fieldName = normalizedPath.substr(pos, endPos - pos);
             if (!currentValue->IsObject()) {
                 return JsonPathResult::NOT_FOUND;
             }
@@ -398,7 +399,12 @@ JsonPathResult JsonExistsFunction::PathExists(const rapidjson::Value &doc, const
                 if (!currentValue->IsArray()) {
                     return JsonPathResult::NOT_FOUND;
                 }
-                int index = std::stoi(indexStr);
+
+                int index = 0;
+                auto fcRes = std::from_chars(indexStr.data(), indexStr.data() + indexStr.size(), index);
+                if (fcRes.ec != std::errc() || fcRes.ptr != indexStr.data() + indexStr.size()) {
+                    return JsonPathResult::NOT_FOUND;
+                }
                 if (index < 0 || static_cast<size_t>(index) >= currentValue->Size()) {
                     return JsonPathResult::NOT_FOUND;
                 }

@@ -171,6 +171,15 @@ TEST(JsonExistsTest, ArrayElementAccess) {
         {true, true, false});
 }
 
+// Oversized array index must NOT crash (std::stoi would throw std::out_of_range).
+// std::from_chars reports overflow -> NOT_FOUND -> default STRICT ON ERROR FALSE -> false.
+TEST(JsonExistsTest, OversizedArrayIndexDoesNotCrash) {
+    JsonExistsTestHelper::Run(
+        {R"({"a": [1, 2, 3]})", R"({"a": [1, 2, 3]})"},
+        {"$.a[99999999999999999999]", "lax $.a[99999999999999999999]"},
+        {false, false});
+}
+
 TEST(JsonExistsTest, RootPathExists) {
     JsonExistsTestHelper::Run(
         {R"({"a": 1})", "[]", "{}", "1"},
