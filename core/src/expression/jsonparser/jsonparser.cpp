@@ -782,6 +782,11 @@ Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
         return new FuncExpr(funcName, args, std::move(retType), function);
     }
 
+    if (funcName == "named_struct" || funcName == "map" || funcName == "concat_ws"
+        || funcName == "json_object") {
+        return new FuncExpr(funcName, args, std::move(retType), nullptr);
+    }
+
     auto &hiveUdfClass = omniruntime::codegen::FunctionRegistry::LookupHiveUdf(funcName);
     if (!hiveUdfClass.empty()) {
         return new FuncExpr(hiveUdfClass, args, std::move(retType), HIVE_UDF);

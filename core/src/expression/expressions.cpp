@@ -11,6 +11,7 @@
 #include "vectorization/functions/Cast.h"
 #include "vectorization/functions/NamedStruct.h"
 #include "vectorization/functions/MapFunction.h"
+#include "vectorization/functions/JsonObject.h"
 #include "type/data_type.h"
 #include "vector/vector.h"
 #include "codegen/func_registry.h"
@@ -1041,6 +1042,9 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     if (funcName == "concat_ws") {
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
     }
+    if (funcName == "json_object") {
+        vectorFunction = std::make_shared<JsonObjectFunction>(GetInputDataTypes());
+    }
     if (funcName == "CAST") {
         vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
     }
@@ -1069,6 +1073,9 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     if (funcName == "concat_ws") {
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
     }
+    if (funcName == "json_object") {
+        vectorFunction = std::make_shared<JsonObjectFunction>(GetInputDataTypes());
+    }
     if (funcName == "CAST") {
         vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
     }
@@ -1094,6 +1101,9 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     }
     if (funcName == "concat_ws") {
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
+    }
+    if (funcName == "json_object") {
+        vectorFunction = std::make_shared<JsonObjectFunction>(GetInputDataTypes());
     }
     if (funcName == "CAST") {
         vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
