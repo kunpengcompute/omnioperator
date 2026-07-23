@@ -38,6 +38,7 @@
 #include "../functions/DateDiff.h"
 #include "../functions/DateFormat.h"
 #include "../functions/FromUnixTime.h"
+#include "../functions/CurrentDateTimeFunctions.h"
 #include "../functions/DateTrunc.h"
 #include "../functions/Floor.h"
 #include "../functions/Ceil.h"
@@ -100,6 +101,14 @@ void RegisterDatetimeFunctions(const std::string &prefix)
     RegisterDateFormatFunction(prefix + "DateFormat");
 
     RegisterFromUnixTimeFunction(prefix + "from_unixtime");
+
+RegisterFunction<LocalTimeFunction, int64_t>(prefix + "localtime", {}, OMNI_LONG);
+
+    RegisterFunction<LocalTimestampFunction, int64_t>(prefix + "localtimestamp", {}, OMNI_LONG);
+
+    RegisterFunction<CurrentTimestampFunction, int64_t>(prefix + "current_timestamp", {}, OMNI_LONG);
+
+    RegisterFunction<CurrentRowTimestampFunction, int64_t>(prefix + "current_row_timestamp", {}, OMNI_LONG);
 
     RegisterFloorFunction(prefix + "floor_time");
 
