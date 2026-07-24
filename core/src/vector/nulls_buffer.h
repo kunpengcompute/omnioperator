@@ -107,6 +107,11 @@ public:
         return nulls;
     }
 
+    ALWAYS_INLINE const uint64_t *GetNulls() const
+    {
+        return nulls;
+    }
+
 private:
     int32_t size;
     bool hasNull = false;
@@ -142,9 +147,19 @@ public:
         offset += addOffset;
     }
 
+    int32_t ALWAYS_INLINE GetOffset() const
+    {
+        return offset;
+    }
+
     ALWAYS_INLINE uint8_t *GetNulls()
     {
         return reinterpret_cast<uint8_t *>(nullsBuffer->GetNulls());
+    }
+
+    ALWAYS_INLINE const uint8_t *GetNulls() const
+    {
+        return reinterpret_cast<const uint8_t *>(nullsBuffer->GetNulls());
     }
 
     std::vector<uint8_t> ALWAYS_INLINE convertToArray(int32_t length)
