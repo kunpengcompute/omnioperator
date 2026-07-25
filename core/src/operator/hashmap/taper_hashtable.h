@@ -196,6 +196,7 @@ class TaperHashTableBase : public TaperContainer {
     auto total = cap * elemNumInChunk_;
     if (numElements * 4 > total * 3) cap <<= 1;  // join threshold: 0.75
     if (cap <= GetChunksCapacity()) return;
+    FreeChunks();
     Init(static_cast<uint32_t>(cap - 1));
   }
 

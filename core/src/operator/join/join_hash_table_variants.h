@@ -153,7 +153,7 @@ public:
         return totalVisitedCounts;
     }
 
-    ALWAYS_INLINE void SetTotalVisitedCounts(int cnt)
+    ALWAYS_INLINE void AddTotalVisitedCounts(int cnt)
     {
         totalVisitedCounts += cnt;
     }

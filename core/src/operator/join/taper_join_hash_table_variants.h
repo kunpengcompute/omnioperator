@@ -207,7 +207,6 @@ public:
             std::vector<char> isNulls(numRows, 0);
             std::vector<DecodedVector> dv(probeHashColCount);
             for (int32_t k = 0; k < probeHashColCount; ++k) {
-                    
                     dv[k].Decode(probeHashColumns[k], probeHashColumns[k]->GetSize());
             }
             for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
@@ -378,7 +377,7 @@ public:
     ALWAYS_INLINE void IncrementVisited() { visitedCounts++; }
     uint32_t GetVisitedCounts() const { return visitedCounts; }
     uint32_t GetTotalVisitedCounts() const { return totalVisitedCounts; }
-    void SetTotalVisitedCounts(int cnt) { totalVisitedCounts += cnt; }
+    void AddTotalVisitedCounts(int cnt) { totalVisitedCounts += cnt; }
 
     // --- Iteration ------------------------------------------------------------
 

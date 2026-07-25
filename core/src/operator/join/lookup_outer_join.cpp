@@ -93,7 +93,7 @@ void LookupOuterJoinOperator::PrepareTotalVisitedCounts()
 #ifdef OMNI_USE_TAPER_JOIN
             auto* rc = arg.GetTaperRowContainer(0);
             if (rc) {
-                arg.SetTotalVisitedCounts(static_cast<uint32_t>(rc->NumRows()));
+                arg.AddTotalVisitedCounts(static_cast<uint32_t>(rc->NumRows()));
                 return;
             }
 #else
@@ -102,11 +102,11 @@ void LookupOuterJoinOperator::PrepareTotalVisitedCounts()
                 if (arg.GetHashTableTypes(partitionIndex) == HashTableImplementationType::ARRAY_HASH_TABLE) {
                     auto &hashTable = arg.GetArrayTable(partitionIndex);
                     hashTable->ForEachValue(
-                        [&](const auto &value, const auto &index) { arg.SetTotalVisitedCounts(value->GetRowCount()); });
+                        [&](const auto &value, const auto &index) { arg.AddTotalVisitedCounts(value->GetRowCount()); });
                 } else {
                     auto &hashTable = arg.GetHashTable(partitionIndex);
                     hashTable->hashmap.ForEachValue(
-                        [&](const auto &value, const auto &index) { arg.SetTotalVisitedCounts(value->GetRowCount()); });
+                        [&](const auto &value, const auto &index) { arg.AddTotalVisitedCounts(value->GetRowCount()); });
                 }
                 partitionIndex++;
             }
