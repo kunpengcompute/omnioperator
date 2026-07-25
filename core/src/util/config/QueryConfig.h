@@ -180,6 +180,7 @@ public:
     static constexpr const char *KAdaptivePartialAggregationMinRows = "adaptive_partial_aggregation_min_rows";
     static constexpr const char *KAdaptivePartialAggregationRatio = "adaptive_partial_aggregation_ratio";
     static constexpr const char *KPreferVectorizationExpression = "prefer_vectorization_expression";
+    static constexpr const char *KHashAggNormalizedKeyEnabled = "hashagg_normalized_key_enabled";
 
     /// Spark partition id for deterministic per-partition behavior (e.g. rand(seed)). Aligned with Velox "spark.partition_id".
     static constexpr const char *kSparkPartitionId = "spark.partition_id";
@@ -423,6 +424,11 @@ public:
     {
         constexpr bool kDefaultValue = false;
         return get<bool>(KPreferVectorizationExpression, kDefaultValue);
+    }
+
+    bool HashAggNormalizedKeyEnabled() const
+    {
+        return get<bool>(KHashAggNormalizedKeyEnabled, false);
     }
 
     /// Spark partition id (aligned with Velox). Default 0 when not set so rand(seed) etc. work without Spark context.

@@ -444,6 +444,7 @@ class TaperHashTableBase : public TaperContainer {
 
   template <
       bool InsertOnly,
+      bool StoreValue = true,
       typename FKCmp,
       typename Derived,
       typename FInit,
@@ -457,7 +458,7 @@ class TaperHashTableBase : public TaperContainer {
     auto hashVal = Hash(key);
     auto chunkPos = GetChunkPos(hashVal);
     size_t collisionBatch = 1;
-    while (!derived.template TryEmplaceAtPos<InsertOnly>(
+    while (!derived.template TryEmplaceAtPos<InsertOnly, StoreValue>(
         key,
         hashVal,
         chunkPos,
@@ -514,6 +515,7 @@ class TaperHashTableBase : public TaperContainer {
   }
 
   template <
+      bool StoreValue,
       typename Derived,
       typename Filter,
       typename FKCmp,
@@ -529,7 +531,7 @@ class TaperHashTableBase : public TaperContainer {
       FUpdate&& fUpdate) {
     if (Capacity() < numRows) {
       // 容量小于插入行数时，有可能在扩容过程中再次触发扩容，目前还没有处理该逻辑
-      EmplaceBatchDirectly(
+      EmplaceBatchDirectly<StoreValue>(
           derived,
           keys,
           numRows,
@@ -555,7 +557,7 @@ class TaperHashTableBase : public TaperContainer {
                              uint32_t rowIdx,
                              int32_t hashIdx,
                              ResizeProc&& resizeProc) {
-      auto succeed = derived.template TryEmplaceAtPos<false>(
+      auto succeed = derived.template TryEmplaceAtPos<false, StoreValue>(
           KeyAt(keys, rowIdx),
           emplaceContext_.hashVals[hashIdx],
           emplaceContext_.chunkPositions[hashIdx],
@@ -644,6 +646,7 @@ class TaperHashTableBase : public TaperContainer {
   }
 
   template <
+      bool StoreValue,
       typename Derived,
       typename Filter,
       typename FKCmp,
@@ -664,7 +667,7 @@ class TaperHashTableBase : public TaperContainer {
 #ifdef TAPER_HASH_STAT
       p1EmplaceCount_++;
 #endif
-      EmplaceImpl<false>(
+      EmplaceImpl<false, StoreValue>(
           derived,
           KeyAt(keys, i),
           [&](const Key& key, Chunk& chunk, uint8_t slot) {
@@ -991,7 +994,7 @@ class TaperFlatHashTable : public TaperHashTableBase<Key, KeyScattered> {
       Filter&& filter,
       FInit&& fInit,
       FUpdate&& fUpdate) {
-    Base::EmplaceBatchImpl(
+    Base::template EmplaceBatchImpl<true>(
         *this,
         keys,
         numRows,
@@ -1002,6 +1005,24 @@ class TaperFlatHashTable : public TaperHashTableBase<Key, KeyScattered> {
         std::forward<FInit>(fInit),
         std::forward<FUpdate>(fUpdate));
   }
+
+  template <typename Filter>
+  void EmplaceKeyBatch(
+      const Key* keys,
+      uint32_t numRows,
+      Filter&& filter) {
+    Base::template EmplaceBatchImpl<false>(
+        *this,
+        keys,
+        numRows,
+        std::forward<Filter>(filter),
+        [&](uint32_t, const Key& key, Chunk& chunk, uint8_t slot) {
+          return Base::KeyEquals(key, GetChunkKey(chunk, slot));
+        },
+        [](uint32_t, char*) {},
+        [](uint32_t, char*, bool) {});
+  }
+
   template <typename FKCmp, typename FInit, typename FUpdate>
   void
   Emplace(const Key& key, FKCmp&& fKeyCmp, FInit&& fInit, FUpdate&& fUpdate) {
@@ -1077,7 +1098,12 @@ class TaperFlatHashTable : public TaperHashTableBase<Key, KeyScattered> {
     memcpy(dst, &src, Base::ValueSize());
   }
 
-  template <bool IsExpansion, typename FKCmp, typename FInit, typename FUpdate>
+  template <
+      bool IsExpansion,
+      bool StoreValue = true,
+      typename FKCmp,
+      typename FInit,
+      typename FUpdate>
   bool TryEmplaceAtPos(
       const Key& key,
       size_t hashVal,
@@ -1092,7 +1118,9 @@ class TaperFlatHashTable : public TaperHashTableBase<Key, KeyScattered> {
     if constexpr (!IsExpansion) {
       for (auto i : PHBitMask::MatchTag(tags, tagHash)) {
         if (fKeyCmp(key, *curChunk, i)) {
-          fUpdate(GetChunkValue(*curChunk, i).buf, false);
+          if constexpr (StoreValue) {
+            fUpdate(GetChunkValue(*curChunk, i).buf, false);
+          }
           return true;
         }
       }
@@ -1101,9 +1129,11 @@ class TaperFlatHashTable : public TaperHashTableBase<Key, KeyScattered> {
       Base::IncSize();
       curChunk->TagsBuf()[i] = tagHash;
       SetChunkKey(*curChunk, i, key);
-      auto& val = GetChunkValue(*curChunk, i);
-      fInit(val.buf);
-      fUpdate(val.buf, true);
+      if constexpr (StoreValue) {
+        auto& val = GetChunkValue(*curChunk, i);
+        fInit(val.buf);
+        fUpdate(val.buf, true);
+      }
       return true;
     }
     return false;
@@ -1115,6 +1145,15 @@ class TaperFlatHashTable : public TaperHashTableBase<Key, KeyScattered> {
       size_t hashVal,
       ChunkPos chunkPos) {
     auto chunk = visitor.GetChunk(visitorPos.chunkPos.chunk);
+    if (Base::ValueSize() == 0) {
+      return TryEmplaceAtPos<true, false>(
+          GetChunkKey(*chunk, visitorPos.chunkPos.tag),
+          hashVal,
+          chunkPos,
+          DUMMY_CMP,
+          [](char*) {},
+          [](char*, bool) {});
+    }
     return TryEmplaceAtPos<true>(
         GetChunkKey(*chunk, visitorPos.chunkPos.tag),
         hashVal,
@@ -1127,6 +1166,15 @@ class TaperFlatHashTable : public TaperHashTableBase<Key, KeyScattered> {
   }
 
   void RehashEmplace(const Visitor& visitor) {
+    if (Base::ValueSize() == 0) {
+      Base::template EmplaceImpl<true, false>(
+          *this,
+          visitor.CurKey(),
+          DUMMY_CMP,
+          [](char*) {},
+          [](char*, bool) {});
+      return;
+    }
     Base::template EmplaceImpl<true>(
         *this,
         visitor.CurKey(),
