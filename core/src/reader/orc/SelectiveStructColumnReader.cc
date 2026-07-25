@@ -15,13 +15,48 @@
 
 #include "util/omni_exception.h"
 #include "SelectiveIntegerColumnReader.hh"
+#include "SelectiveStringDictionaryColumnReader.hh"
+#include "SelectiveStringDirectColumnReader.hh"
 
 namespace omniruntime::reader {
 
 using omniruntime::vec::BaseVector;
 
-SelectiveStructColumnReader::SelectiveStructColumnReader(const ::orc::Type &rootType,
-                                                         ::orc::StripeStreams &stripe,
+namespace {
+
+std::unique_ptr<SelectiveColumnReader> MakeSelectiveChild(codegen::ScanSpec *childSpec, const ::orc::Type *childOrcType,
+                                                          ::orc::StripeStreams &stripe,
+                                                          common::JulianGregorianRebase *julian)
+{
+    auto inner = omniBuildReader(*childOrcType, stripe, julian);
+    switch (static_cast<int64_t>(childOrcType->getKind())) {
+        case ::orc::DATE:
+        case ::orc::INT:
+        case ::orc::LONG:
+        case ::orc::SHORT:
+            return std::make_unique<SelectiveIntegerColumnReader>(childSpec, childOrcType, std::move(inner));
+        case ::orc::STRING:
+        case ::orc::VARCHAR:
+        case ::orc::CHAR: {
+            const auto enc = stripe.getEncoding(childOrcType->getColumnId()).kind();
+            if (enc == ::orc::proto::ColumnEncoding_Kind_DICTIONARY ||
+                enc == ::orc::proto::ColumnEncoding_Kind_DICTIONARY_V2) {
+                return std::make_unique<SelectiveStringDictionaryColumnReader>(childSpec, childOrcType,
+                                                                               std::move(inner));
+            }
+            return std::make_unique<SelectiveStringDirectColumnReader>(childSpec, childOrcType, std::move(inner));
+        }
+        default:
+            throw omniruntime::exception::OmniException(
+                "EXPRESSION_NOT_SUPPORT",
+                "SelectiveStructColumnReader unsupported ORC type kind: " +
+                    std::to_string(static_cast<int>(childOrcType->getKind())));
+    }
+}
+
+} // namespace
+
+SelectiveStructColumnReader::SelectiveStructColumnReader(const ::orc::Type &rootType, ::orc::StripeStreams &stripe,
                                                          codegen::ScanSpec *rootSpec,
                                                          common::JulianGregorianRebase *julian)
 {
@@ -37,9 +72,7 @@ SelectiveStructColumnReader::SelectiveStructColumnReader(const ::orc::Type &root
                 "SelectiveStructColumnReader: ScanSpec child missing at index " + std::to_string(i));
         }
 
-        auto inner = omniBuildReader(*childOrcType, stripe, julian);
-        auto reader = std::make_unique<SelectiveIntegerColumnReader>(childSpec, childOrcType, std::move(inner));
-
+        auto reader = MakeSelectiveChild(childSpec, childOrcType, stripe, julian);
         int idx = static_cast<int>(children_.size());
         if (reader->hasFilter()) {
             filterOrder_.push_back(idx);
@@ -47,16 +80,14 @@ SelectiveStructColumnReader::SelectiveStructColumnReader(const ::orc::Type &root
             projectOrder_.push_back(idx);
         }
         if (childSpec->projectOut()) {
-            numOutputChannels_ = std::max(numOutputChannels_,
-                                          static_cast<int>(childSpec->channel()) + 1);
+            numOutputChannels_ =
+                std::max(numOutputChannels_, static_cast<int>(childSpec->channel()) + 1);
         }
         children_.push_back(std::move(reader));
     }
 }
 
-uint64_t SelectiveStructColumnReader::read(uint64_t rowsToRead,
-                                           std::vector<BaseVector *> &outBatch,
-                                           int *omniTypeId)
+uint64_t SelectiveStructColumnReader::read(uint64_t rowsToRead, std::vector<BaseVector *> &outBatch, int *omniTypeId)
 {
     active_.resize(rowsToRead);
     std::iota(active_.begin(), active_.end(), 0);

@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 #include <limits>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -65,10 +66,34 @@ TEST(FilterTest, NullFilters)
     IsNull isNull;
     EXPECT_TRUE(isNull.testNull());
     EXPECT_FALSE(isNull.testInt64(1));
+    EXPECT_FALSE(isNull.testBytes("a", 1));
 
     IsNotNull isNotNull;
     EXPECT_FALSE(isNotNull.testNull());
     EXPECT_TRUE(isNotNull.testInt64(1));
+    EXPECT_TRUE(isNotNull.testBytes("a", 1));
+}
+
+TEST(FilterTest, BytesRangeAndValues)
+{
+    BytesRange eq("abc", false, false, "abc", false, false, false);
+    EXPECT_TRUE(eq.isSingleValue());
+    EXPECT_TRUE(eq.testBytes("abc", 3));
+    EXPECT_FALSE(eq.testBytes("abd", 3));
+    EXPECT_FALSE(eq.testLength(2));
+
+    BytesRange gt("b", false, true, "", true, false, false); // > "b"
+    EXPECT_TRUE(gt.testBytes("c", 1));
+    EXPECT_FALSE(gt.testBytes("b", 1));
+    EXPECT_FALSE(gt.testBytes("a", 1));
+
+    NegatedBytesRange ne("x", false, false, "x", false, false, false);
+    EXPECT_TRUE(ne.testBytes("y", 1));
+    EXPECT_FALSE(ne.testBytes("x", 1));
+
+    BytesValues in(std::unordered_set<std::string>{"a", "c"}, false);
+    EXPECT_TRUE(in.testBytes("a", 1));
+    EXPECT_FALSE(in.testBytes("b", 1));
 }
 
 TEST(FilterTest, MergeWithRangeIntersection)

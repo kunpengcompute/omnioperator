@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// Pushdown filter abstraction (aligned with Velox common::Filter); T0 covers the int64 path.
+// Pushdown filter abstraction (aligned with Velox common::Filter); T0 int64 + A1a Bytes*.
 
 #ifndef OMNI_READER_COMMON_FILTER_H
 #define OMNI_READER_COMMON_FILTER_H
@@ -17,13 +17,15 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace common {
 
-// Aligned with Velox FilterKind; T0 implements Always*/IsNull*/BigintRange/Values/Negated/Multi.
+// Aligned with Velox FilterKind; T0 bigint family + A1a Bytes*.
 enum class FilterKind : int8_t {
     kAlwaysFalse,
     kAlwaysTrue,
@@ -68,7 +70,7 @@ public:
 
     bool testNull() const { return nullAllowed_; }
 
-    // Value tests; T0 primarily uses testInt64; other signatures are placeholders.
+    // Value tests; T0 uses testInt64; A1a uses testBytes.
     virtual bool testInt64(int64_t /*value*/) const { return false; }
     virtual bool testInt32(int32_t value) const { return testInt64(value); }
     virtual bool testInt16(int16_t value) const { return testInt64(value); }
@@ -77,6 +79,7 @@ public:
     virtual bool testBool(bool /*value*/) const { return false; }
     virtual bool testBytes(const char * /*value*/, int32_t /*length*/) const { return false; }
     virtual bool testLength(int32_t /*length*/) const { return true; }
+    bool testBytes(std::string_view v) const { return testBytes(v.data(), static_cast<int32_t>(v.size())); }
 
     // Range tests (stats pruning); default keeps the range.
     virtual bool testInt64Range(int64_t /*min*/, int64_t /*max*/, bool /*hasNull*/) const { return true; }
@@ -100,6 +103,7 @@ public:
     AlwaysFalse() : Filter(FilterKind::kAlwaysFalse, false) {}
     static FilterPtr instance();
     bool testInt64(int64_t) const override { return false; }
+    bool testBytes(const char *, int32_t) const override { return false; }
     bool testInt64Range(int64_t, int64_t, bool) const override { return false; }
     FilterPtr mergeWith(const Filter *) const override;
     FilterPtr clone(bool) const override { return instance(); }
@@ -110,6 +114,7 @@ public:
     AlwaysTrue() : Filter(FilterKind::kAlwaysTrue, true) {}
     static FilterPtr instance();
     bool testInt64(int64_t) const override { return true; }
+    bool testBytes(const char *, int32_t) const override { return true; }
     bool testInt64Range(int64_t, int64_t, bool) const override { return true; }
     FilterPtr mergeWith(const Filter *other) const override;
     FilterPtr clone(bool) const override { return instance(); }
@@ -120,6 +125,7 @@ public:
     IsNotNull() : Filter(FilterKind::kIsNotNull, false) {}
     static FilterPtr instance();
     bool testInt64(int64_t) const override { return true; }
+    bool testBytes(const char *, int32_t) const override { return true; }
     FilterPtr mergeWith(const Filter *other) const override;
     FilterPtr clone(bool) const override { return instance(); }
 };
@@ -129,6 +135,7 @@ public:
     IsNull() : Filter(FilterKind::kIsNull, true) {}
     static FilterPtr instance();
     bool testInt64(int64_t) const override { return false; }
+    bool testBytes(const char *, int32_t) const override { return false; }
     FilterPtr mergeWith(const Filter *other) const override;
     FilterPtr clone(bool) const override { return instance(); }
 };
@@ -224,6 +231,124 @@ public:
 
 private:
     std::unordered_set<int64_t> values_;
+};
+
+// Bytes/string range (Velox BytesRange). Equality when lower==upper and both ends closed.
+class BytesRange final : public Filter {
+public:
+    BytesRange(std::string lower, bool lowerUnbounded, bool lowerExclusive, std::string upper, bool upperUnbounded,
+               bool upperExclusive, bool nullAllowed)
+        : Filter(FilterKind::kBytesRange, nullAllowed),
+          lower_(std::move(lower)),
+          upper_(std::move(upper)),
+          lowerUnbounded_(lowerUnbounded),
+          upperUnbounded_(upperUnbounded),
+          lowerExclusive_(lowerExclusive),
+          upperExclusive_(upperExclusive),
+          singleValue_(!lowerUnbounded && !upperUnbounded && !lowerExclusive && !upperExclusive && lower_ == upper_)
+    {}
+
+    bool testBytes(const char *value, int32_t length) const override;
+    bool testLength(int32_t length) const override
+    {
+        return !singleValue_ || static_cast<size_t>(length) == lower_.size();
+    }
+
+    bool isSingleValue() const { return singleValue_; }
+    const std::string &lower() const { return lower_; }
+    const std::string &upper() const { return upper_; }
+    bool lowerUnbounded() const { return lowerUnbounded_; }
+    bool upperUnbounded() const { return upperUnbounded_; }
+    bool lowerExclusive() const { return lowerExclusive_; }
+    bool upperExclusive() const { return upperExclusive_; }
+
+    FilterPtr mergeWith(const Filter *other) const override;
+    FilterPtr clone(bool nullAllowed) const override
+    {
+        return std::make_shared<BytesRange>(lower_, lowerUnbounded_, lowerExclusive_, upper_, upperUnbounded_,
+                                            upperExclusive_, nullAllowed);
+    }
+
+private:
+    std::string lower_;
+    std::string upper_;
+    bool lowerUnbounded_;
+    bool upperUnbounded_;
+    bool lowerExclusive_;
+    bool upperExclusive_;
+    bool singleValue_;
+};
+
+class NegatedBytesRange final : public Filter {
+public:
+    NegatedBytesRange(std::string lower, bool lowerUnbounded, bool lowerExclusive, std::string upper,
+                      bool upperUnbounded, bool upperExclusive, bool nullAllowed)
+        : Filter(FilterKind::kNegatedBytesRange, nullAllowed),
+          nonNegated_(std::make_shared<BytesRange>(std::move(lower), lowerUnbounded, lowerExclusive, std::move(upper),
+                                                   upperUnbounded, upperExclusive, nullAllowed))
+    {}
+
+    explicit NegatedBytesRange(std::shared_ptr<BytesRange> nonNegated, bool nullAllowed)
+        : Filter(FilterKind::kNegatedBytesRange, nullAllowed), nonNegated_(std::move(nonNegated))
+    {}
+
+    bool testBytes(const char *value, int32_t length) const override
+    {
+        return !nonNegated_->testBytes(value, length);
+    }
+    bool testLength(int32_t length) const override { return true; }
+
+    FilterPtr mergeWith(const Filter *other) const override;
+    FilterPtr clone(bool nullAllowed) const override
+    {
+        return std::make_shared<NegatedBytesRange>(
+            std::static_pointer_cast<BytesRange>(nonNegated_->clone(nullAllowed)), nullAllowed);
+    }
+
+private:
+    std::shared_ptr<BytesRange> nonNegated_;
+};
+
+class BytesValues final : public Filter {
+public:
+    BytesValues(std::unordered_set<std::string> values, bool nullAllowed)
+        : Filter(FilterKind::kBytesValues, nullAllowed), values_(std::move(values))
+    {}
+
+    bool testBytes(const char *value, int32_t length) const override
+    {
+        return values_.count(std::string(value, static_cast<size_t>(length))) != 0;
+    }
+
+    FilterPtr mergeWith(const Filter *other) const override;
+    FilterPtr clone(bool nullAllowed) const override
+    {
+        return std::make_shared<BytesValues>(values_, nullAllowed);
+    }
+
+private:
+    std::unordered_set<std::string> values_;
+};
+
+class NegatedBytesValues final : public Filter {
+public:
+    NegatedBytesValues(std::unordered_set<std::string> values, bool nullAllowed)
+        : Filter(FilterKind::kNegatedBytesValues, nullAllowed), values_(std::move(values))
+    {}
+
+    bool testBytes(const char *value, int32_t length) const override
+    {
+        return values_.count(std::string(value, static_cast<size_t>(length))) == 0;
+    }
+
+    FilterPtr mergeWith(const Filter *other) const override;
+    FilterPtr clone(bool nullAllowed) const override
+    {
+        return std::make_shared<NegatedBytesValues>(values_, nullAllowed);
+    }
+
+private:
+    std::unordered_set<std::string> values_;
 };
 
 } // namespace common

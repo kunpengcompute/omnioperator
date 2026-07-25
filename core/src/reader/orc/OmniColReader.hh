@@ -19,6 +19,8 @@
 #ifndef OMNI_COL_READER_HH
 #define OMNI_COL_READER_HH
 
+#include <string_view>
+
 #include "orc/ColumnReader.hh"
 #include "orc/RLE.hh"
 #include "orc/Type.hh"
@@ -401,6 +403,12 @@ namespace omniruntime::reader {
             uint64_t skip(uint64_t numValues) override;
 
             void seekToRowGroup(std::unordered_map<uint64_t, ::orc::PositionProvider>& positions) override;
+
+            int32_t GetOmniDictSize() const { return omniDictSize_; }
+            std::string_view GetOmniDictValue(int32_t id) const
+            {
+                return omniDict_->GetValue(id);
+            }
     };
 
     class OmniStringDirectColumnReader: public OmniColumnReader {
