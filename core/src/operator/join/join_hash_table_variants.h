@@ -126,12 +126,14 @@ public:
 
     KeyType GetKeyValue(BaseVector **probeHashColumns, int32_t probePosition);
 
+    ALWAYS_INLINE void IncrementVisited() { visitedCounts++; }
+
     void PositionVisited(ForwardIterator<RowRefListType> it)
     {
         if constexpr (std::is_same_v<RowRefListType, RowRefListWithFlags>) {
             if (!it->visited) {
                 it->visited = true;
-                visitedCounts++;
+                IncrementVisited();
             }
         }
     }

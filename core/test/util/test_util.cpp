@@ -838,9 +838,13 @@ bool CompareStructUnorderedRows(BaseVector *resVec, BaseVector *dstVec, const do
         throw omniruntime::exception::OmniException("RUNTIME_ERROR", "Children size does not match!");
     }
 
+    std::vector<int> nonNullRows;
     for (int row = 0; row < resultVec->vec::BaseVector::GetSize(); row++) {
         if (resultVec->IsNull(row) != expectedVec->IsNull(row)) {
             throw omniruntime::exception::OmniException("RUNTIME_ERROR", "Null status does not match!");
+        }
+        if (!resultVec->IsNull(row) && !expectedVec->IsNull(row)) {
+            nonNullRows.push_back(row);
         }
     }
 
@@ -858,9 +862,15 @@ bool CompareStructUnorderedRows(BaseVector *resVec, BaseVector *dstVec, const do
             }
         }
 
-        if (!ColumnMatchIgnoreOrder(resultChild, expectedChild, error)) {
-            return false;
-        }
+        if (nonNullRows.empty()) continue;
+
+        int nonNullCount = static_cast<int>(nonNullRows.size());
+        auto* slicedResult = resultChild->CopyPositions(nonNullRows.data(), 0, nonNullCount);
+        auto* slicedExpected = expectedChild->CopyPositions(nonNullRows.data(), 0, nonNullCount);
+        bool match = ColumnMatchIgnoreOrder(slicedResult, slicedExpected, error);
+        delete slicedResult;
+        delete slicedExpected;
+        if (!match) return false;
     }
     return true;
 }

@@ -11,6 +11,7 @@
 
 #include "operator/hashmap/taper_hashtable.h"
 #include "operator/hashmap/row_container.h"
+#include "operator/hashmap/vector_marshaller.h"
 #include "memory/simple_arena_allocator.h"
 #include "vector/decoded_vector.h"
 #include "type/data_types.h"
@@ -19,6 +20,22 @@
 namespace omniruntime {
 namespace op {
 
+namespace {
+static constexpr uint32_t ROW_PTR_SIZE = 6;
+
+static void SetRowPtr(char *buf, char *ptr) {
+    uint64_t val = reinterpret_cast<uint64_t>(ptr);
+    memcpy(buf, &val, ROW_PTR_SIZE);
+}
+
+static char *GetRowPtr(const char *buf) {
+    uint64_t val = 0;
+    memcpy(&val, buf, ROW_PTR_SIZE);
+    return reinterpret_cast<char *>(val);
+}
+
+} // namespace
+
 // Fixed-width-key TAPER join handler.
 // Maintains a TaperFlatHashTable + RowContainer pair for build data.
 template <typename KeyType, bool NeedVisited>
@@ -26,7 +43,6 @@ class TaperJoinFixedHandler {
 public:
     using Key = KeyType;
     using HashTable = TaperFlatHashTable<KeyType, false>;
-    static constexpr int32_t ROW_PTR_SIZE = 6;
 
     // Size in bytes of the per-row payload stored past key + null data.
     // Layout: [next: char*][visited: uint8_t]
@@ -37,17 +53,6 @@ public:
         : arena_(&pool),
           table_(std::make_unique<HashTable>(pool, sizeof(KeyType), ROW_PTR_SIZE)) {}
     ~TaperJoinFixedHandler() = default;
-
-    static void SetRowPtr(char* buf, char* ptr) {
-        uint64_t val = reinterpret_cast<uint64_t>(ptr);
-        memcpy(buf, &val, ROW_PTR_SIZE);
-    }
-    
-    static char* GetRowPtr(const char* buf) {
-        uint64_t val = 0;
-        memcpy(&val, buf, ROW_PTR_SIZE);
-        return reinterpret_cast<char*>(val);
-    }
 
     void InitRowContainer(const std::vector<int32_t>& keyTypeSizes,
                           const std::vector<bool>& /*isVariableLen*/,
@@ -101,6 +106,9 @@ public:
                 case type::OMNI_DATE64:
                     RowContainer::StoreValue<int64_t>(row, offset, decodedCols[c].GetValue<int64_t>(rowIdx));
                     break;
+                case type::OMNI_DECIMAL128:
+                    RowContainer::StoreValue<Decimal128>(row, offset, decodedCols[c].GetValue<Decimal128>(rowIdx));
+                    break;
                 case type::OMNI_VARCHAR:
                 case type::OMNI_CHAR:
                 case type::OMNI_VARBINARY: {
@@ -128,6 +136,16 @@ public:
                     RowContainer::StoreValue<char*>(row, offset, buf);
                     break;
                 }
+                case type::OMNI_ARRAY:
+                case type::OMNI_MAP:
+                case type::OMNI_ROW: {
+                    auto serializer = vectorSerializerCenter[static_cast<size_t>(typeId)];
+                    type::StringRef ref;
+                    serializer(decodedCols[c].Base(), rowIdx, *arena_, ref);
+                    RowContainer::StoreValue<char*>(row, offset, const_cast<char*>(ref.data));
+                    RowContainer::StoreValue<size_t>(row, offset + sizeof(char*), ref.size);
+                    break;
+                }
             }
         }
 
@@ -145,28 +163,29 @@ public:
     void ProbeBatch(
         const Key* keys,
         int32_t numKeys,
-        omniruntime::vec::BaseVector** probeHashColumns,
-        int32_t probeHashColCount,
-        const int32_t* probePositions,
-        char** chainHeads) {
+        omniruntime::vec::BaseVector** /*probeHashColumns*/,
+        int32_t /*probeHashColCount*/,
+        const int32_t* /*probePositions*/,
+        char** chainHeads,
+        const char* isNulls) {
         if (UNLIKELY(!table_)) return;
 
         table_->ProbeBatch(keys, static_cast<uint32_t>(numKeys),
-            [](uint32_t) { return false; },
-            [](uint32_t, char*) { /* empty slot → miss */ },
+            [isNulls](uint32_t ki) { return isNulls[ki] != 0; },
+            [](uint32_t, char*) {},
             [&](uint32_t ki, char* data, bool initFlag) {
-                if(!initFlag){
-                    chainHeads[ki] = GetRowPtr(data);
-                }
+                if (!initFlag) { chainHeads[ki] = GetRowPtr(data); }
             });
     }
 
-    void EmplaceBatch(const Key* keys, char** rows, int32_t numRows) {
+    void EmplaceBatch(const Key* keys, char** rows, int32_t numRows, const bool* isNulls) {
         auto payloadOff = rows_->PayloadOffset();
         table_->EmplaceBatch(
             keys,
             static_cast<uint32_t>(numRows),
-            [](uint32_t) { return false; },
+            [isNulls](uint32_t rowIdx) {
+                return isNulls[rowIdx];
+            },
             [rows](uint32_t rowIdx, char* buf) { SetRowPtr(buf, rows[rowIdx]); },
             [rows, payloadOff](uint32_t rowIdx, char* buf, bool initFlag) {
                 if (!initFlag) {
@@ -189,6 +208,7 @@ private:
     std::vector<int32_t> typeIds_;
     std::unique_ptr<HashTable> table_;
     std::unique_ptr<RowContainer> rows_;
+
 };
 
 // Serialized-key TAPER join handler for multi-column or non-integer keys.
@@ -197,25 +217,12 @@ private:
 class TaperJoinSerializedHandler {
 public:
     using HashTable = TaperFlatHashTable<int64_t, true>;
-    static constexpr uint32_t ROW_PTR_SIZE = 6;
 
     TaperJoinSerializedHandler() = default;
     TaperJoinSerializedHandler(mem::SimpleArenaAllocator& pool)
         : arena_(&pool),
           table_(std::make_unique<HashTable>(pool, sizeof(int64_t), ROW_PTR_SIZE)) {}
     ~TaperJoinSerializedHandler() = default;
-
-    // --- Row pointer packing (lower 48 bits) -------------------------------
-
-    static void SetRowPtr(char* buf, char* ptr) {
-        uint64_t val = reinterpret_cast<uint64_t>(ptr);
-        memcpy(buf, &val, ROW_PTR_SIZE);
-    }
-    static char* GetRowPtr(const char* buf) {
-        uint64_t val = 0;
-        memcpy(&val, buf, ROW_PTR_SIZE);
-        return reinterpret_cast<char*>(val);
-    }
 
     // --- RowContainer ------------------------------------------------------
 
@@ -256,6 +263,8 @@ public:
                 case type::OMNI_LONG:   case type::OMNI_TIMESTAMP: case type::OMNI_DECIMAL64:
                 case type::OMNI_DOUBLE: case type::OMNI_TIME64: case type::OMNI_DATE64:
                     RowContainer::StoreValue<int64_t>(row, offset, decodedCols[c].GetValue<int64_t>(rowIdx)); break;
+                case type::OMNI_DECIMAL128: 
+                    RowContainer::StoreValue<Decimal128>(row, offset, decodedCols[c].GetValue<Decimal128>(rowIdx)); break;
                 case type::OMNI_VARCHAR:
                 case type::OMNI_CHAR:
                 case type::OMNI_VARBINARY: {
@@ -282,6 +291,16 @@ public:
                     RowContainer::StoreValue<char*>(row, offset, buf);
                     break;
                 }
+                case type::OMNI_ARRAY:
+                case type::OMNI_MAP:
+                case type::OMNI_ROW: {
+                    auto serializer = vectorSerializerCenter[static_cast<size_t>(typeId)];
+                    type::StringRef ref;
+                    serializer(decodedCols[c].Base(), rowIdx, *arena_, ref);
+                    RowContainer::StoreValue<char*>(row, offset, const_cast<char*>(ref.data));
+                    RowContainer::StoreValue<size_t>(row, offset + sizeof(char*), ref.size);
+                    break;
+                }
             }
         }
 
@@ -303,6 +322,7 @@ public:
             case type::OMNI_LONG:   case type::OMNI_TIMESTAMP: case type::OMNI_DECIMAL64:
             case type::OMNI_DOUBLE: case type::OMNI_DATE64: case type::OMNI_TIME64:
                 return 64;
+            case type::OMNI_DECIMAL128: return 128;
             default: return 0;
         }
     }
@@ -349,6 +369,19 @@ public:
                     if (memcmp(p1 + 1 + ls1, p2 + 1 + ls2, len1) != 0) return false;
                     break;
                 }
+                case type::OMNI_ARRAY:
+                case type::OMNI_MAP:
+                case type::OMNI_ROW: {
+                    auto* p1 = RowContainer::ReadValue<char*>(const_cast<char*>(row1), off);
+                    auto* p2 = RowContainer::ReadValue<char*>(const_cast<char*>(row2), off);
+                    if (p1 == p2) break;
+                    if (p1 == nullptr || p2 == nullptr) return false;
+                    size_t len1 = RowContainer::ReadValue<size_t>(const_cast<char*>(row1), off + sizeof(char*));
+                    size_t len2 = RowContainer::ReadValue<size_t>(const_cast<char*>(row2), off + sizeof(char*));
+                    if (len1 != len2) return false;
+                    if (memcmp(p1, p2, len1) != 0) return false;
+                    break;
+                }
                 default:
                     return false;
             }
@@ -386,26 +419,42 @@ public:
                 case 64:
                     if (RowContainer::ReadValue<int64_t>(const_cast<char*>(row), colOff) != dv.GetValue<int64_t>(probePosition)) return false;
                     break;
+                case 128:
+                    if (RowContainer::ReadValue<Decimal128>(const_cast<char*>(row), colOff)
+                        != dv.GetValue<Decimal128>(probePosition)) return false;
+                    break;
                 default:
                     if (w == 0) {
-                        auto* rowDataPtr = RowContainer::ReadValue<char*>(const_cast<char*>(row), colOff);
-                        if (rowDataPtr == nullptr) return false;
-                        auto* baseVec = dv.Base();
-                        auto enc = baseVec->GetEncoding();
-                        std::string_view sv;
-                        if (enc == OMNI_ENCODING_CONST) {
-                            sv = static_cast<ConstVector<std::string_view>*>(baseVec)->GetConstValue();
-                        } else if (enc == OMNI_DICTIONARY) {
-                            sv = dv.GetValue<std::string_view>(probePosition);
+                        if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR ||
+                            typeId == type::OMNI_VARBINARY) {
+                            auto* rowDataPtr = RowContainer::ReadValue<char*>(const_cast<char*>(row), colOff);
+                            if (rowDataPtr == nullptr) return false;
+                            auto* baseVec = dv.Base();
+                            auto enc = baseVec->GetEncoding();
+                            std::string_view sv;
+                            if (enc == OMNI_ENCODING_CONST) {
+                                sv = static_cast<ConstVector<std::string_view>*>(baseVec)->GetConstValue();
+                            } else if (enc == OMNI_DICTIONARY) {
+                                sv = dv.GetValue<std::string_view>(probePosition);
+                            } else {
+                                sv = static_cast<Vector<LargeStringContainer<std::string_view>>*>(baseVec)
+                                         ->GetValue(probePosition);
+                            }
+                            uint8_t lenSize = static_cast<uint8_t>(rowDataPtr[0]);
+                            uint32_t strLen = 0;
+                            memcpy(&strLen, rowDataPtr + 1, lenSize);
+                            if (strLen != sv.size()) return false;
+                            if (memcmp(rowDataPtr + 1 + lenSize, sv.data(), strLen) != 0) return false;
+                        } else if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                            auto* storedPtr = RowContainer::ReadValue<char*>(const_cast<char*>(row), colOff);
+                            if (storedPtr == nullptr) return false;
+                            uint8_t* bytePtr = reinterpret_cast<uint8_t*>(const_cast<char*>(storedPtr));
+                            auto comparator = vectorComparatorCenter[static_cast<size_t>(typeId)];
+                            auto* probeVec = dv.Base();
+                            if (!comparator(*probeVec, probePosition, bytePtr)) return false;
                         } else {
-                            sv = static_cast<Vector<LargeStringContainer<std::string_view>>*>(baseVec)
-                                     ->GetValue(probePosition);
+                            return false;
                         }
-                        uint8_t lenSize = static_cast<uint8_t>(rowDataPtr[0]);
-                        uint32_t strLen = 0;
-                        memcpy(&strLen, rowDataPtr + 1, lenSize);
-                        if (strLen != sv.size()) return false;
-                        if (memcmp(rowDataPtr + 1 + lenSize, sv.data(), strLen) != 0) return false;
                     } else {
                         return false;
                     }
@@ -425,7 +474,8 @@ public:
         omniruntime::vec::BaseVector** probeHashColumns,
         int32_t probeHashColCount,
         const int32_t* probePositions,
-        char** chainHeads) {
+        char** chainHeads,
+        const char* isNulls) {
         if (UNLIKELY(!table_)) return;
 
         workingUpdateIndices_.resize(numKeys);
@@ -436,7 +486,7 @@ public:
         // fInit:  空 slot → key 不在表中 → chainHeads 已为 nullptr，无操作
         // fUpdate: 命中 → 记录 index + buf 等待第 2 轮比较
         table_->ProbeBatch(keys, static_cast<uint32_t>(numKeys),
-            [](uint32_t, const int64_t&, TaperHashTableChunk&, uint8_t) { return true; },
+            [isNulls](uint32_t ki) { return isNulls[ki] != 0; },
             [](uint32_t, char*) { /* empty slot → miss */ },
             [this](uint32_t ki, char* data, bool initFlag) {
                 if(!initFlag){
@@ -480,7 +530,7 @@ public:
         workingUpdateCount_ = 0;
     }
 
-    void EmplaceBatch(const int64_t* keys, char** rows, int32_t numRows) {
+    void EmplaceBatch(const int64_t* keys, char** rows, int32_t numRows, const bool* isNulls = nullptr) {
         auto payloadOff = rows_->PayloadOffset();
 
         workingUpdateIndices_.resize(numRows);
@@ -490,7 +540,9 @@ public:
         table_->EmplaceBatch(
             keys,
             static_cast<uint32_t>(numRows),
-            [](uint32_t) { return false; },
+            [isNulls](uint32_t rowIdx) {
+                return isNulls != nullptr && isNulls[rowIdx];
+            },
             [rows](uint32_t rowIdx, char* buf) { SetRowPtr(buf, rows[rowIdx]); },
             [this](uint32_t rowIdx, char* buf, bool initFlag) {
                 if (!initFlag) {

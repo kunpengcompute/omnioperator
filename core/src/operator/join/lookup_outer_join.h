@@ -92,6 +92,9 @@ private:
     bool isPrepareTotalVisitedCounts = false;
     std::vector<uint32_t> hashTableIndexes;
     std::vector<std::pair<uint32_t, uint32_t>> addresses;
+#ifdef OMNI_USE_TAPER_JOIN
+    std::vector<char*> taperUnvisitedRowPtrs_;
+#endif
     BuildSide buildSide = OMNI_BUILD_RIGHT;
 
     bool HasNext()

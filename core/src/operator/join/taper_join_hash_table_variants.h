@@ -20,7 +20,10 @@
 #include "operator/hash_util.h"
 #include "operator/join/taper_join_handler.h"
 #include "vector/decoded_vector.h"
-#include "operator/hashmap/vector_analyzer.h"
+#include "vector/array_vector.h"
+#include "vector/row_vector.h"
+#include "vector/map_vector.h"
+#include "vector/vector_helper.h"
 
 namespace omniruntime {
 namespace vec {
@@ -29,6 +32,34 @@ class BaseVector;
 }  // namespace vec
 
 namespace op {
+
+// Minimal stub to satisfy template instantiation of the variant.
+// Maps a key slot to a chain of build rows inside a TaperFlatHashTable.
+struct TaperMapped {
+    TaperMapped() = default;
+    ~TaperMapped() = default;
+
+    struct Iterator {
+        int32_t rowIdx = 0;
+        uint32_t vecBatchIdx = 0;
+        bool IsOk() const { return false; }
+        void operator++() {}
+    };
+
+    Iterator _it;
+    Iterator* Begin() { return &_it; }
+    static Iterator* End() { return nullptr; }
+    uint32_t GetRowCount() const { return 0; }
+    bool visited = false;
+};
+
+// Insert result returned by the 6-param Find overload.
+template <typename MappedType>
+struct TaperInsertResult {
+    bool IsInsert() const { return false; }
+    MappedType* GetValue() { return nullptr; }
+    const MappedType* GetValue() const { return nullptr; }
+};
 
 enum class HashTableImplementationType {
     NORMAL_HASH_TABLE,
@@ -39,6 +70,7 @@ template <typename KeyType, bool NeedVisited>
 class TaperJoinHashTableVariants {
 public:
     using Key = KeyType;
+    using Mapped = TaperMapped;
     static constexpr bool IS_SIMPLE_KEY = false;
 
     TaperJoinHashTableVariants(int32_t operatorCount, DataTypes* buildTypes,
@@ -81,11 +113,14 @@ public:
     /// Bit-width for packable types; returns 0 for unsupported (varchar etc.).
     static uint8_t PackedBitWidth(int32_t typeId) {
         switch (typeId) {
-            case OMNI_BYTE:   case OMNI_BOOLEAN: return 8;
-            case OMNI_SHORT:  return 16;
-            case OMNI_INT:    case OMNI_DATE32: case OMNI_TIME32:  case OMNI_FLOAT: return 32;
-            case OMNI_LONG:   case OMNI_TIMESTAMP: case OMNI_DECIMAL64:  case OMNI_DOUBLE:
-            case OMNI_DATE64: case OMNI_TIME64: return 64;
+            case type::OMNI_BYTE:   case type::OMNI_BOOLEAN: return 8;
+            case type::OMNI_SHORT:  return 16;
+            case type::OMNI_INT:    case type::OMNI_DATE32: case type::OMNI_TIME32:
+            case type::OMNI_FLOAT:  return 32;
+            case type::OMNI_LONG:   case type::OMNI_TIMESTAMP: case type::OMNI_DECIMAL64:
+            case type::OMNI_DOUBLE: case type::OMNI_DATE64: case type::OMNI_TIME64:
+                return 64;
+            case type::OMNI_DECIMAL128: return 128;
             default: return 0;
         }
     }
@@ -133,13 +168,22 @@ public:
         for (size_t i = 0; i < vecBatches.size(); ++i) {
             CollectTaperRows(partitionIndex, vecBatches[i], static_cast<uint32_t>(i));
         }
+        // Free build-side VectorBatches -- data now stored in RowContainer
+        for (auto* vb : vecBatches) {
+            vec::VectorHelper::FreeVecBatch(vb);
+        }
+        vecBatches.clear();
     }
     void BuildHashTable(int partitionIndex) {
+        if ((isSer_ && !serHandlers_[partitionIndex]) ||
+            (!isSer_ && !handlers_[partitionIndex])) {
+            return;
+        }
         if(isSer_){
             BuildTaperHashTableSerialized(partitionIndex);
         } else {
             BuildTaperHashTableFixed(partitionIndex);
-        }   
+        }
     }
 
     void CollectTaperRows(int32_t partitionIndex, vec::VectorBatch* vecBatch, uint32_t batchIdx);
@@ -155,50 +199,81 @@ public:
         bool singleHT,
         uint32_t partitionMask,
         const std::vector<int64_t>& probeHashes,
-        std::vector<char*>& chainHeads) const {
+        std::vector<char*>& chainHeads) {
         int32_t numRows = probeEnd - probeStart;
         if (isSer_) {
             std::vector<int64_t> rowHashes(numRows);
             std::vector<int32_t> positions(numRows);
+            std::vector<char> isNulls(numRows, 0);
+            std::vector<DecodedVector> dv(probeHashColCount);
+            for (int32_t k = 0; k < probeHashColCount; ++k) {
+                    
+                    dv[k].Decode(probeHashColumns[k], probeHashColumns[k]->GetSize());
+            }
             for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
                 int32_t idx = pos - probeStart;
                 chainHeads[idx] = nullptr;
-                if (probeNulls[pos]) continue;
+                if (probeNulls[pos]) {
+                    isNulls[idx] = 1;
+                    continue;
+                }
                 int64_t hash = 0;
                 for (int32_t k = 0; k < probeHashColCount; ++k) {
-                    vec::DecodedVector dv;
-                    dv.Decode(probeHashColumns[k], probeHashColumns[k]->GetSize());
-                    bool isNull = dv.IsNull(pos);
+                    bool isNull = dv[k].IsNull(pos);
                     int64_t colHash;
-                    if (isNull) {
+                    if (UNLIKELY(isNull)) {
                         colHash = kNullHash;
                     } else {
                         auto typeId = probeHashColumns[k]->GetTypeId();
                         auto w = PackedBitWidth(static_cast<int32_t>(typeId));
                         if (w == 0) {
-                            auto* vec = dv.Base();
-                            auto enc = vec->GetEncoding();
-                            std::string_view sv;
-                            if (enc == OMNI_ENCODING_CONST) {
-                                sv = static_cast<ConstVector<std::string_view>*>(vec)->GetConstValue();
-                            } else if (enc == OMNI_DICTIONARY) {
-                                sv = dv.GetValue<std::string_view>(pos);
+                            auto typeId = probeHashColumns[k]->GetTypeId();
+                            if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR ||
+                                typeId == type::OMNI_VARBINARY) {
+                                auto* vec = dv[k].Base();
+                                auto enc = vec->GetEncoding();
+                                std::string_view sv;
+                                if (enc == OMNI_ENCODING_CONST) {
+                                    sv = static_cast<ConstVector<std::string_view>*>(vec)->GetConstValue();
+                                } else if (enc == OMNI_DICTIONARY) {
+                                    sv = dv[k].GetValue<std::string_view>(pos);
+                                } else {
+                                    sv = static_cast<Vector<LargeStringContainer<std::string_view>>*>(vec)->GetValue(pos);
+                                }
+                                colHash = HashUtil::HashValue(
+                                    reinterpret_cast<int8_t*>(const_cast<char*>(sv.data())),
+                                    static_cast<int32_t>(sv.size()));
+                            } else if (typeId == type::OMNI_ARRAY) {
+                                auto* arrayVec = dynamic_cast<ArrayVector*>(dv[k].Base());
+                                int64_t sz = arrayVec ? arrayVec->GetSize(pos) : 0;
+                                colHash = HashUtil::HashValue(sz);
+                            } else if (typeId == type::OMNI_MAP) {
+                                auto* mapVec = dynamic_cast<MapVector*>(dv[k].Base());
+                                int64_t sz = mapVec ? mapVec->GetSize(pos) : 0;
+                                colHash = HashUtil::HashValue(sz);
+                            } else if (typeId == type::OMNI_ROW) {
+                                auto* rowVec = dynamic_cast<RowVector*>(dv[k].Base());
+                                int64_t childCount = rowVec ? static_cast<int64_t>(rowVec->ChildSize()) : 0;
+                                colHash = HashUtil::HashValue(childCount);
                             } else {
-                                sv = static_cast<Vector<LargeStringContainer<std::string_view>>*>(vec)->GetValue(pos);
+                                continue;
                             }
-                            colHash = HashUtil::HashValue(
-                                reinterpret_cast<int8_t*>(const_cast<char*>(sv.data())),
-                                static_cast<int32_t>(sv.size()));
                         } else {
                             switch (w) {
                                 case 8:
-                                    colHash = HashUtil::HashValue(dv.GetValue<int8_t>(pos)); break;
+                                    colHash = HashUtil::HashValue(dv[k].GetValue<int8_t>(pos)); break;
                                 case 16:
-                                    colHash = HashUtil::HashValue(dv.GetValue<int16_t>(pos)); break;
+                                    colHash = HashUtil::HashValue(dv[k].GetValue<int16_t>(pos)); break;
                                 case 32:
-                                    colHash = HashUtil::HashValue(dv.GetValue<int32_t>(pos)); break;
+                                    colHash = HashUtil::HashValue(dv[k].GetValue<int32_t>(pos)); break;
                                 case 64:
-                                    colHash = HashUtil::HashValue(dv.GetValue<int64_t>(pos)); break;
+                                    colHash = HashUtil::HashValue(dv[k].GetValue<int64_t>(pos)); break;
+                                case 128: {
+                                    auto d128 = dv[k].GetValue<Decimal128>(pos);
+                                    colHash = HashUtil::HashValue(
+                                        d128.LowBits(), d128.HighBits());
+                                    break;
+                                }
                                 default: continue;
                             }
                         }
@@ -212,11 +287,12 @@ public:
                 serHandlers_[partitionMask]->ProbeBatch(
                     rowHashes.data(), numRows,
                     probeHashColumns, probeHashColCount,
-                    positions.data(), chainHeads.data());
+                    positions.data(), chainHeads.data(), isNulls.data());
             }
         } else {
             std::vector<Key> rowHashes(numRows);
             std::vector<int32_t> positions(numRows);
+            std::vector<char> isNulls(numRows, 0);
             if (isMultiColumn_) {
                 std::vector<vec::DecodedVector> dv(probeHashColCount);
                 for (int32_t k = 0; k < probeHashColCount; ++k) {
@@ -225,7 +301,11 @@ public:
                 for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
                     int32_t idx = pos - probeStart;
                     chainHeads[idx] = nullptr;
-                    if (probeNulls[pos]) continue;
+                    if (probeNulls[pos]) {
+                        isNulls[idx] = 1;
+                        continue;
+                    }
+                    // Multi-column: decode each probe key column and bit-pack
                     KeyType packed = 0;
                     for (int32_t k = 0; k < probeHashColCount; ++k) {
                         bool isNull = dv[k].IsNull(pos);
@@ -253,7 +333,10 @@ public:
                 for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
                     int32_t idx = pos - probeStart;
                     chainHeads[idx] = nullptr;
-                    if (probeNulls[pos] || dv.IsNull(pos)) continue;
+                    if (probeNulls[pos]) {
+                        isNulls[idx] = 1;
+                        continue;
+                    }
                     Key key = dv.GetValue<Key>(pos);
                     rowHashes[idx] = key;
                     positions[idx] = pos;
@@ -263,7 +346,7 @@ public:
                 handlers_[partitionMask]->ProbeBatch(
                     rowHashes.data(), numRows,
                     probeHashColumns, probeHashColCount,
-                    positions.data(), chainHeads.data());
+                    positions.data(), chainHeads.data(), isNulls.data());
             }
         }
     }
@@ -292,9 +375,10 @@ public:
 
     // --- Visited tracking -----------------------------------------------------
 
-    uint32_t GetVisitedCounts() const { return 0; } //TODO
-    uint32_t GetTotalVisitedCounts() const { return 0; } //TODO
-    void SetTotalVisitedCounts(int /*cnt*/) {} //TODO
+    ALWAYS_INLINE void IncrementVisited() { visitedCounts++; }
+    uint32_t GetVisitedCounts() const { return visitedCounts; }
+    uint32_t GetTotalVisitedCounts() const { return totalVisitedCounts; }
+    void SetTotalVisitedCounts(int cnt) { totalVisitedCounts += cnt; }
 
     // --- Iteration ------------------------------------------------------------
 
@@ -315,6 +399,80 @@ public:
     void SetSerMode() { isSer_ = true; serHandlers_.resize(tableCount_); }
     bool IsSerMode() const { return isSer_; }
 
+    bool CompareSerKey(const RowContainer* rc, char* row,
+                       omniruntime::vec::BaseVector** probeHashColumns,
+                       int32_t probeHashColCount, int32_t probePosition) {
+        for (int32_t k = 0; k < probeHashColCount; ++k) {
+            int32_t colIdx = buildHashCols_[k];
+            auto col = rc->ColumnAt(colIdx);
+            bool rowNull = RowContainer::IsNullAt(row, col.NullByte(), col.NullMask());
+            auto* vec = probeHashColumns[k];
+            vec::DecodedVector dv;
+            dv.Decode(vec, vec->GetSize());
+            bool probeNull = dv.IsNull(probePosition);
+            if (rowNull != probeNull) return false;
+            if (rowNull) continue;
+            auto typeId = vec->GetTypeId();
+            auto w = PackedBitWidth(static_cast<int32_t>(typeId));
+            int32_t colOff = col.Offset();
+            switch (w) {
+                case 8:
+                    if (RowContainer::ReadValue<int8_t>(row, colOff) != dv.GetValue<int8_t>(probePosition)) return false;
+                    break;
+                case 16:
+                    if (RowContainer::ReadValue<int16_t>(row, colOff) != dv.GetValue<int16_t>(probePosition)) return false;
+                    break;
+                case 32:
+                    if (RowContainer::ReadValue<int32_t>(row, colOff) != dv.GetValue<int32_t>(probePosition)) return false;
+                    break;
+                case 64:
+                    if (RowContainer::ReadValue<int64_t>(row, colOff) != dv.GetValue<int64_t>(probePosition)) return false;
+                    break;
+                case 128:
+                    if (RowContainer::ReadValue<Decimal128>(row, colOff) != dv.GetValue<Decimal128>(probePosition)) return false;
+                    break;
+                default:
+                    if (w == 0) {
+                        if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR ||
+                            typeId == type::OMNI_VARBINARY) {
+                            auto* rowDataPtr = RowContainer::ReadValue<char*>(row, colOff);
+                            if (rowDataPtr == nullptr) return false;
+                            auto* vec = dv.Base();
+                            auto enc = vec->GetEncoding();
+                            std::string_view sv;
+                            if (enc == OMNI_ENCODING_CONST) {
+                                sv = static_cast<ConstVector<std::string_view>*>(vec)->GetConstValue();
+                            } else if (enc == OMNI_DICTIONARY) {
+                                sv = dv.GetValue<std::string_view>(probePosition);
+                            } else {
+                                sv = static_cast<Vector<LargeStringContainer<std::string_view>>*>(vec)
+                                         ->GetValue(probePosition);
+                            }
+                            uint8_t lenSize = static_cast<uint8_t>(rowDataPtr[0]);
+                            uint32_t strLen = 0;
+                            memcpy(&strLen, rowDataPtr + 1, lenSize);
+                            if (strLen != sv.size()) return false;
+                            if (memcmp(rowDataPtr + 1 + lenSize, sv.data(), strLen) != 0) return false;
+                        } else if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                            auto* storedPtr = RowContainer::ReadValue<char*>(row, colOff);
+                            if (storedPtr == nullptr) return false;
+                            uint8_t* bytePtr = reinterpret_cast<uint8_t*>(const_cast<char*>(storedPtr));
+                            auto comparator = vectorComparatorCenter[static_cast<size_t>(typeId)];
+                            auto* probeVec = dv.Base();
+                            if (!comparator(*probeVec, probePosition, bytePtr)) return false;
+                        } else {
+                            throw omniruntime::exception::OmniException("TAPER_NOT_SUPPORTED",
+                                "Join key column type not supported");
+                        }
+                    } else {
+                        return false;
+                    }
+                    break;
+            }
+        }
+        return true;
+    }
+
     // --- Key type for template dispatch ---------------------------------------
     KeyType keyType{};
 
@@ -331,6 +489,9 @@ private:
     OmniStatus status_ = OmniStatus::OMNI_STATUS_NORMAL;
     std::vector<std::unique_ptr<TaperJoinFixedHandler<KeyType, NeedVisited>>> handlers_;
     std::vector<std::unique_ptr<TaperJoinSerializedHandler>> serHandlers_;
+    uint32_t visitedCounts = 0;
+    uint32_t totalVisitedCounts = 0;
+
     std::vector<std::unique_ptr<ExecutionContext>> executionContexts_;
     std::vector<std::vector<omniruntime::vec::VectorBatch*>> inputVecBatches_;
     std::vector<size_t> totalRowCount_;
@@ -340,6 +501,8 @@ private:
     bool isSer_ = false;
     std::vector<uint8_t> bitWidths_;
     std::vector<KeyType> masks_;
+
+    void InitHandlerRowContainer(int partitionIndex);
 };
 
 // --- Out-of-line implementations ----------------------------------------------
@@ -378,7 +541,11 @@ void TaperJoinHashTableVariants<KeyType, NeedVisited>::CollectTaperRows(
                     keySizes[c] = 8; break;
                 case type::OMNI_VARCHAR: case type::OMNI_CHAR: case type::OMNI_VARBINARY:
                     keySizes[c] = sizeof(char*); break;
-                default: keySizes[c] = sizeof(KeyType); break;
+                case type::OMNI_ARRAY: case type::OMNI_MAP: case type::OMNI_ROW:
+                    keySizes[c] = sizeof(char*) + sizeof(size_t); isVar[c] = true; break;
+                case type::OMNI_DECIMAL128: keySizes[c] = sizeof(Decimal128); break;
+                default: throw omniruntime::exception::OmniException("TAPER_NOT_SUPPORTED",
+                    "Join key column type not supported");
             }
         }
         std::vector<int32_t> keyColIndices;
@@ -421,21 +588,21 @@ void TaperJoinHashTableVariants<KeyType, NeedVisited>::CollectTaperRows(
 template <typename KeyType, bool NeedVisited>
 void TaperJoinHashTableVariants<KeyType, NeedVisited>::BuildTaperHashTableSerialized(int32_t partitionIndex) {
     auto* serHandler = isSer_ ? serHandlers_[partitionIndex].get() : nullptr;
-    if (!serHandler) {
-            throw omniruntime::exception::OmniException("RUNTIME_ERROR", "TaperJoinSerializedHandler is null!");
-        }
+    if (!serHandler) return;
     auto* rc = serHandler->Rows();
     if (!rc) {
-            throw omniruntime::exception::OmniException("RUNTIME_ERROR", "TaperJoinSerializedHandler RowContainer is null!");
+            return;
     }   
 
     serHandler->ReserveTable(static_cast<size_t>(rc->NumRows()));
     constexpr uint32_t BLOCK_SIZE = 1024;
-    KeyType keys[BLOCK_SIZE];
+    int64_t keys[BLOCK_SIZE];
     char* rows[BLOCK_SIZE];
+    bool isNulls[BLOCK_SIZE];
     RowContainerIterator it;
     int32_t n;
     while ((n = rc->ListRows(&it, BLOCK_SIZE, rows)) > 0) {
+        memset(isNulls, false, sizeof(isNulls));
         for (int32_t i = 0; i < n; ++i) {
             int64_t hash = 0;
             for (size_t k = 0; k < buildHashCols_.size(); ++k) {
@@ -444,22 +611,41 @@ void TaperJoinHashTableVariants<KeyType, NeedVisited>::BuildTaperHashTableSerial
                 bool isNull = RowContainer::IsNullAt(rows[i], col.NullByte(), col.NullMask());
                 int64_t colHash;
                 if (isNull) {
+                    isNulls[i] = true;
                     colHash = kNullHash;
                 } else {
                     auto typeId = buildTypes_->GetIds()[colIdx];
                     int32_t colOff = col.Offset();
                     auto w = PackedBitWidth(typeId);
                     if (w == 0) {
+                        if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR ||
+                            typeId == type::OMNI_VARBINARY) {
                             auto* dataPtr = RowContainer::ReadValue<char*>(rows[i], colOff);
-                        if (dataPtr != nullptr) {
-                            uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
-                            uint32_t strLen = 0;
-                            memcpy(&strLen, dataPtr + 1, lenSize);
-                            colHash = HashUtil::HashValue(
-                                reinterpret_cast<int8_t*>(const_cast<char*>(dataPtr + 1 + lenSize)),
-                                static_cast<int32_t>(strLen));
+                            if (dataPtr != nullptr) {
+                                uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
+                                uint32_t strLen = 0;
+                                memcpy(&strLen, dataPtr + 1, lenSize);
+                                colHash = HashUtil::HashValue(
+                                    reinterpret_cast<int8_t*>(const_cast<char*>(dataPtr + 1 + lenSize)),
+                                    static_cast<int32_t>(strLen));
+                            } else {
+                                isNulls[i] = true;
+                                colHash = kNullHash;
+                            }
+                        } else if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                            auto* dataPtr = RowContainer::ReadValue<char*>(rows[i], colOff);
+                            auto dataLen = RowContainer::ReadValue<size_t>(rows[i], colOff + sizeof(char*));
+                            if (dataPtr != nullptr && dataLen > 0) {
+                                colHash = HashUtil::HashValue(
+                                    reinterpret_cast<int8_t*>(dataPtr),
+                                    static_cast<int32_t>(dataLen));
+                            } else {
+                                isNulls[i] = true;
+                                colHash = kNullHash;
+                            }
                         } else {
-                            colHash = kNullHash;
+                            throw omniruntime::exception::OmniException("TAPER_NOT_SUPPORTED",
+                                "Join key column type not supported");
                         }
                     } else {
                         switch (w) {
@@ -475,32 +661,37 @@ void TaperJoinHashTableVariants<KeyType, NeedVisited>::BuildTaperHashTableSerial
                             case 64:
                                 colHash = HashUtil::HashValue(
                                     RowContainer::ReadValue<int64_t>(rows[i], colOff)); break;
+                            case 128: {
+                                auto d128 = RowContainer::ReadValue<Decimal128>(rows[i], colOff);
+                                colHash = HashUtil::HashValue(
+                                    d128.LowBits(), d128.HighBits());
+                                break;
+                            }
                         }
                     }
                 }
                 hash = SerFastHashMix(hash, colHash);
             }
-            keys[i] = static_cast<KeyType>(hash);
+            keys[i] = hash;
         }
-        serHandler->EmplaceBatch(reinterpret_cast<const int64_t*>(keys), rows, n);
+        serHandler->EmplaceBatch(reinterpret_cast<const int64_t*>(keys), rows, n, isNulls);
     }
 }
 
 template <typename KeyType, bool NeedVisited>
 void TaperJoinHashTableVariants<KeyType, NeedVisited>::BuildTaperHashTableFixed(int32_t partitionIndex) {
     auto* handler = handlers_[partitionIndex].get();
-    if (!handler) {
-            throw omniruntime::exception::OmniException("RUNTIME_ERROR", "TaperJoinFixedHandler is null!");
-        }
+    if (!handler) return;
     auto* rc = handler->Rows();
     if (!rc) {
-            throw omniruntime::exception::OmniException("RUNTIME_ERROR", "TaperJoinFixedHandler RowContainer is null!");
+            return;
     }
 
     handler->ReserveTable(static_cast<size_t>(rc->NumRows()));
     constexpr uint32_t BLOCK_SIZE = 1024;
     KeyType keys[BLOCK_SIZE];
     char* rows[BLOCK_SIZE];
+    bool isNulls[BLOCK_SIZE];
     RowContainerIterator it;
     int32_t n;
     while ((n = rc->ListRows(&it, BLOCK_SIZE, rows)) > 0) {
@@ -510,10 +701,10 @@ void TaperJoinHashTableVariants<KeyType, NeedVisited>::BuildTaperHashTableFixed(
                 for (size_t k = 0; k < buildHashCols_.size(); ++k) {
                     int32_t colIdx = buildHashCols_[k];
                     auto col = rc->ColumnAt(colIdx);
-                    bool isNull = RowContainer::IsNullAt(rows[i], col.NullByte(), col.NullMask());
-                    packed = (packed << 1) | isNull;
+                    isNulls[i] = RowContainer::IsNullAt(rows[i], col.NullByte(), col.NullMask());
+                    packed = (packed << 1) | isNulls[i];
                     KeyType val = 0;
-                    if (!isNull) {
+                    if (!isNulls[i]) {
                         switch (bitWidths_[k]) {
                             case 8:
                                 val = static_cast<KeyType>(
@@ -535,11 +726,18 @@ void TaperJoinHashTableVariants<KeyType, NeedVisited>::BuildTaperHashTableFixed(
                 keys[i] = packed;
             }
         } else {
+            // 单列 key：从 RowContainer 取 key 列数据（key 不一定是第一列）
+            auto& storedCols = taperStoredColIndices_.empty() ? buildHashCols_ : taperStoredColIndices_;
+            auto it = std::find(storedCols.begin(), storedCols.end(), buildHashCols_[0]);
+            int32_t keyColIdx = (it != storedCols.end())
+                ? static_cast<int32_t>(std::distance(storedCols.begin(), it)) : 0;
+            auto keyCol= rc->ColumnAt(keyColIdx);
             for (int32_t i = 0; i < n; ++i) {
-                keys[i] = RowContainer::ReadValue<KeyType>(rows[i], rc->ColumnAt(0).Offset());
+                isNulls[i] = RowContainer::IsNullAt(rows[i], keyCol.NullByte(), keyCol.NullMask());
+                keys[i] = RowContainer::ReadValue<KeyType>(rows[i], keyCol.Offset());
             }
         }
-        handler->EmplaceBatch(keys, rows, n);
+        handler->EmplaceBatch(keys, rows, n, isNulls);
     }
 }
 

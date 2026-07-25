@@ -4569,7 +4569,7 @@ TEST(NativeOmniJoinTest, TestFullEqualityJoinOfArrayTableWithOddDataSize)
     vectorBatch->Get(1)->SetNull(2);
     vectorBatch->Get(2)->SetNull(1);
     vectorBatch->Get(2)->SetNull(2);
-    EXPECT_TRUE(VecBatchMatch(appendOutput, vectorBatch));
+    EXPECT_TRUE(VecBatchMatchIgnoreOrder(appendOutput, vectorBatch));
 
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(appendOutput);

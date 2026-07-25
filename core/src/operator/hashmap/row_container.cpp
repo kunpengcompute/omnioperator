@@ -10,7 +10,9 @@
 #include "type/data_type.h"
 #include "type/decimal128.h"
 #include "util/bit_util.h"
+#include "util/compiler_util.h"
 #include "util/debug.h"
+#include "operator/hashmap/vector_marshaller.h"
 
 #ifdef __ARM_FEATURE_SVE
 #include <arm_sve.h>
@@ -126,6 +128,25 @@ static void SveExtractColumnImpl(char** rows, int32_t totalRows, int32_t offset,
     uint64_t* outNulls = reinterpret_cast<uint64_t*>(vec::unsafe::UnsafeBaseVector::GetNulls(vec));
     bool hasNull = false;
 
+    // nullptr row check: LEFT/ANTI unmatch probe rows have null build pointers
+    bool hasNullPtr = false;
+    for (int32_t ri = 0; ri < totalRows; ++ri) {
+        if (rows[ri] == nullptr) { hasNullPtr = true; break; }
+    }
+    if (hasNullPtr) {
+        for (int32_t i = 0; i < totalRows; ++i) {
+            if (rows[i] == nullptr || RowContainer::IsNullAt(rows[i], nullByte, nullMask)) {
+                outValues[i] = T{};
+                BitUtil::SetBit(outNulls, i);
+                hasNull = true;
+            } else {
+                outValues[i] = RowContainer::ReadValue<T>(rows[i], offset);
+            }
+        }
+        if (hasNull) vec->SetNullFlag(true);
+        return;
+    }
+
     svbool_t pgAll = svptrue_b64();
     int64_t tmpBuf[32];
 
@@ -166,14 +187,14 @@ static void SveExtractColumnImpl(char** rows, int32_t totalRows, int32_t offset,
             //     vRowValues = svld1sb_gather_s64(pg, vValueAddr);
             // } else {
                 for (int32_t j = 0; j < activeCount; j++) {
-                    if (RowContainer::IsNullAt(rows[i + j], nullByte, nullMask)) {
+                    if (rows[i + j] == nullptr || RowContainer::IsNullAt(rows[i + j], nullByte, nullMask)) {
                         outValues[i + j] = T{};
                     } else {
                         outValues[i + j] = RowContainer::ReadValue<T>(rows[i + j], offset);
                     }
                 }
-                i += activeCount;
-                continue;
+                // i += activeCount;
+                // continue;
             // }
 
             // svint64_t vSelected = svsel_s64(vRowIsNull, vZero, vRowValues);
@@ -185,7 +206,7 @@ static void SveExtractColumnImpl(char** rows, int32_t totalRows, int32_t offset,
 
         if (hasNull) {
             for (int32_t j = 0; j < activeCount; j++) {
-                if (RowContainer::IsNullAt(rows[i + j], nullByte, nullMask)) {
+                if (rows[i + j] == nullptr || RowContainer::IsNullAt(rows[i + j], nullByte, nullMask)) {
                     BitUtil::SetBit(outNulls, i + j);
                 }
             }
@@ -199,6 +220,19 @@ static void SveExtractColumnImpl(char** rows, int32_t totalRows, int32_t offset,
     }
 }
 #endif
+
+// Prefetch helpers for ExtractColumn — 预取行数据和可选字符串内容
+static inline void prefetchRow(const char* row, int32_t offset, int32_t nullByte) {
+    __builtin_prefetch(row + offset, 0, 2);
+    __builtin_prefetch(row + nullByte, 0, 2);
+}
+static inline void prefetchRowString(const char* row, int32_t offset, int32_t nullByte) {
+    prefetchRow(row, offset, nullByte);
+    auto* dataPtr = RowContainer::ReadValue<char*>(row, offset);
+    if (dataPtr != nullptr) {
+        __builtin_prefetch(dataPtr, 0, 2);
+    }
+}
 
 void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
                                   vec::BaseVector* outputVector)
@@ -224,7 +258,8 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
             SveExtractColumnImpl<int32_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (IsNullAt(rows[i], nullByte, nullMask)) {
+                if (LIKELY(i + 32 < totalRows)) { prefetchRow(rows[i + 32], offset, nullByte); }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
                     vec->SetValue(i, ReadValue<int32_t>(rows[i], offset));
@@ -243,7 +278,8 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
             SveExtractColumnImpl<int64_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (IsNullAt(rows[i], nullByte, nullMask)) {
+                if (LIKELY(i + 32 < totalRows)) { prefetchRow(rows[i + 32], offset, nullByte); }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
                     vec->SetValue(i, ReadValue<int64_t>(rows[i], offset));
@@ -258,7 +294,8 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
             SveExtractColumnImpl<int16_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (IsNullAt(rows[i], nullByte, nullMask)) {
+                if (LIKELY(i + 32 < totalRows)) { prefetchRow(rows[i + 32], offset, nullByte); }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
                     vec->SetValue(i, ReadValue<int16_t>(rows[i], offset));
@@ -273,7 +310,8 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
             SveExtractColumnImpl<int8_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (IsNullAt(rows[i], nullByte, nullMask)) {
+                if (LIKELY(i + 32 < totalRows)) { prefetchRow(rows[i + 32], offset, nullByte); }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
                     vec->SetValue(i, ReadValue<int8_t>(rows[i], offset));
@@ -288,7 +326,8 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
             SveExtractColumnImpl<double>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (IsNullAt(rows[i], nullByte, nullMask)) {
+                if (LIKELY(i + 32 < totalRows)) { prefetchRow(rows[i + 32], offset, nullByte); }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
                     vec->SetValue(i, ReadValue<double>(rows[i], offset));
@@ -303,7 +342,8 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
             SveExtractColumnImpl<float>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (IsNullAt(rows[i], nullByte, nullMask)) {
+                if (LIKELY(i + 32 < totalRows)) { prefetchRow(rows[i + 32], offset, nullByte); }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
                     vec->SetValue(i, ReadValue<float>(rows[i], offset));
@@ -315,7 +355,8 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
         case type::OMNI_BOOLEAN: {
             auto* vec = static_cast<Vector<bool>*>(outputVector);
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (IsNullAt(rows[i], nullByte, nullMask)) {
+                if (LIKELY(i + 32 < totalRows)) { prefetchRow(rows[i + 32], offset, nullByte); }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
                     vec->SetValue(i, ReadValue<int8_t>(rows[i], offset) != 0);
@@ -326,7 +367,8 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
         case type::OMNI_DECIMAL128: {
             auto* vec = static_cast<Vector<Decimal128>*>(outputVector);
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (IsNullAt(rows[i], nullByte, nullMask)) {
+                if (LIKELY(i + 32 < totalRows)) { prefetchRow(rows[i + 32], offset, nullByte); }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
                     vec->SetValue(i, ReadValue<Decimal128>(rows[i], offset));
@@ -339,7 +381,10 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
         case type::OMNI_VARBINARY: {
             auto* vec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(outputVector);
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (IsNullAt(rows[i], nullByte, nullMask)) {
+                if (LIKELY(i + 32 < totalRows && rows[i + 32])) {
+                    prefetchRowString(rows[i + 32], offset, nullByte);
+                }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
                     auto* dataPtr = ReadValue<char*>(rows[i], offset);
@@ -347,6 +392,35 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
                     uint32_t strLen = 0;
                     memcpy(&strLen, dataPtr + 1, lenSize);
                     vec->SetValue(i, std::string_view(dataPtr + 1 + lenSize, strLen));
+                }
+            }
+            break;
+        }
+        case type::OMNI_ARRAY:
+        case type::OMNI_MAP:
+        case type::OMNI_ROW: {
+            auto* rowVec = (typeId == type::OMNI_ROW) ? static_cast<vec::RowVector*>(outputVector) : nullptr;
+            auto* arrVec = (typeId == type::OMNI_ARRAY) ? static_cast<vec::ArrayVector*>(outputVector) : nullptr;
+            auto* mapVec = (typeId == type::OMNI_MAP) ? static_cast<vec::MapVector*>(outputVector) : nullptr;
+            auto deser = complexVectorDeSerializerCenter[static_cast<DataTypeId>(typeId)];
+            for (int32_t i = 0; i < totalRows; ++i) {
+                if (LIKELY(i + 32 < totalRows)) {
+                    prefetchRow(rows[i + 32], offset, nullByte);
+                }
+                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
+                    if (rowVec) rowVec->SetNull(static_cast<int64_t>(i));
+                    else if (arrVec) arrVec->SetNull(static_cast<int64_t>(i));
+                    else if (mapVec) mapVec->SetNull(static_cast<int64_t>(i));
+                } else {
+                    auto* dataPtr = ReadValue<char*>(rows[i], offset);
+                    if (UNLIKELY(dataPtr == nullptr)) {
+                        if (rowVec) rowVec->SetNull(static_cast<int64_t>(i));
+                        else if (arrVec) arrVec->SetNull(static_cast<int64_t>(i));
+                        else if (mapVec) mapVec->SetNull(static_cast<int64_t>(i));
+                        continue;
+                    }
+                    const char* pos = dataPtr;
+                    deser(outputVector, i, pos);
                 }
             }
             break;
