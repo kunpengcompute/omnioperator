@@ -168,7 +168,7 @@ Operator *HashAggregationOperatorFactory::CreateOperator()
 
     auto groupByOperator = new HashAggregationOperator(groupByIndex, aggsInputCols, aggInputColsSize, aggInputTypes,
         aggOutputTypes, std::move(aggs), inputRaws, outputPartials, hasAggFilters, operatorConfig, aggFuncTypesVector,
-        step);
+        step, queryConfig_);
     groupByOperator->SetGroupByColumnsHandleType(handleType);
     groupByOperator->Init();
     return groupByOperator;
@@ -340,7 +340,7 @@ OmniStatus HashAggregationOperator::Init()
 
     // 5 init max row when getoutput
     int32_t rowByteSize = InitMaxRowCountAndOutputTypes();
-    rowsPerBatch = OperatorUtil::GetMaxRowCount(rowByteSize);
+    rowsPerBatch = OperatorUtil::GetConfiguredMaxRowCount(rowByteSize, &executionContext->queryConfigRef());
 
     // 7 vector analyzer
     vectorAnalyzer = new VectorAnalyzer(groupByCols);

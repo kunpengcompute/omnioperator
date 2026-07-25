@@ -45,13 +45,15 @@ void LookupJoinOperatorFactory::CommonInitActions(const type::DataTypes &probeTy
 LookupJoinOperatorFactory::LookupJoinOperatorFactory(const type::DataTypes &probeTypes, int32_t *probeOutputCols,
     int32_t probeOutputColsCount, int32_t *probeHashCols, int32_t probeHashColsCount, int32_t *buildOutputCols,
     int32_t buildOutputColsCount, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
-    omniruntime::expressions::Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig)
+    omniruntime::expressions::Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig,
+    const config::QueryConfig &queryConfig)
     : probeTypes(probeTypes),
       buildOutputTypes(buildOutputTypes),
       hashTables(hashTables),
       isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan),
       originalProbeColsCount(probeTypes.GetSize())
 {
+    this->queryConfig_ = queryConfig;
     CommonInitActions(probeTypes, probeOutputCols, probeOutputColsCount, probeHashCols, probeHashColsCount,
         buildOutputCols, buildOutputColsCount, buildOutputTypes);
     std::visit([&](auto &&arg) { arg.SetProbeTypes(&(this->probeTypes)); }, *hashTables);
@@ -62,13 +64,15 @@ LookupJoinOperatorFactory::LookupJoinOperatorFactory(const type::DataTypes &prob
     int32_t probeOutputColsCount, int32_t *probeHashCols, int32_t probeHashColsCount, int32_t *buildOutputCols,
     int32_t buildOutputColsCount, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
     omniruntime::expressions::Expr *filterExpr, int32_t originalProbeColsCount,
-    bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig, int32_t *outputList)
+    bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig, int32_t *outputList,
+    const config::QueryConfig &queryConfig)
     : probeTypes(probeTypes),
       buildOutputTypes(buildOutputTypes),
       hashTables(hashTables),
       isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan),
       originalProbeColsCount(originalProbeColsCount)
 {
+    this->queryConfig_ = queryConfig;
     CommonInitActions(probeTypes, probeOutputCols, probeOutputColsCount, probeHashCols, probeHashColsCount,
         buildOutputCols, buildOutputColsCount, buildOutputTypes, outputList);
     std::visit([&](auto &&arg) { arg.SetProbeTypes(&(this->probeTypes)); }, *hashTables);
@@ -157,7 +161,7 @@ LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFa
         probeHashCols.data(), probeHashColsCount, buildOutputCols.data(),
         buildOutputColsCount, *buildOutputTypes,
         hashBuilderOperatorFactory->GetHashTablesVariants(),
-        filter, isShuffle, overflowConfig);
+        filter, isShuffle, overflowConfig, queryConfig);
 
     delete overflowConfig;
     overflowConfig = nullptr;
@@ -168,7 +172,7 @@ Operator *LookupJoinOperatorFactory::CreateOperator()
 {
     auto pLookupJoinOperator = new LookupJoinOperator(probeTypes, probeOutputCols, probeHashCols, probeHashColTypes,
         buildOutputCols, buildOutputTypes, hashTables, simpleFilter,
-        originalProbeColsCount, rowSize, isShuffleExchangeBuildPlan, outputList);
+        originalProbeColsCount, rowSize, isShuffleExchangeBuildPlan, outputList, queryConfig_);
     return pLookupJoinOperator;
 }
 
@@ -189,7 +193,8 @@ void LookupJoinOperatorFactory::JoinFilterCodeGen(Expr *filterExpr, OverflowConf
 LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
     std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
     const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
-    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan)
+    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan,
+    const config::QueryConfig &queryConfig)
     : probeTypes(probeTypes),
       probeOutputCols(probeOutputCols),
       probeHashCols(probeHashCols),
@@ -201,6 +206,7 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
       originalProbeColsCount(originalProbeColsCount),
       isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan)
 {
+    executionContext->SetConfig(queryConfig);
     std::vector<DataTypePtr> tmpProbeOutputTypesVec;
     for (size_t i = 0; i < probeOutputCols.size(); i++) {
         tmpProbeOutputTypesVec.emplace_back(probeTypes.GetType(probeOutputCols[i]));
@@ -208,7 +214,7 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
     this->probeOutputTypes = DataTypes(tmpProbeOutputTypesVec);
 
     this->outputBuilder = std::make_unique<LookupJoinOutputBuilder>(probeOutputCols, probeOutputTypes.GetIds(),
-        buildOutputCols, buildOutputTypes, outputRowSize);
+        buildOutputCols, buildOutputTypes, outputRowSize, executionContext.get());
     this->probeHashColumns = new BaseVector *[probeHashCols.size()]();     // 2D array
     this->probeOutputColumns = new BaseVector *[probeOutputCols.size()](); // 2D array
     SetOperatorName(opNameForLookUpJoin);
@@ -246,13 +252,14 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
 LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
     std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
     const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
-    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan, std::vector<int32_t> &outputList)
+    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan,
+    std::vector<int32_t> &outputList, const config::QueryConfig &queryConfig)
     : LookupJoinOperator(probeTypes, probeOutputCols, probeHashCols, probeHashColTypes, buildOutputCols, buildOutputTypes,
-    hashTables, simpleFilter, originalProbeColsCount, outputRowSize, isShuffleExchangeBuildPlan)
+    hashTables, simpleFilter, originalProbeColsCount, outputRowSize, isShuffleExchangeBuildPlan, queryConfig)
 {
 	this->outputBuilder = std::make_unique<LookupJoinOutputBuilder>(probeOutputCols, probeOutputTypes.GetIds(),
 																	buildOutputCols, buildOutputTypes,
-																    outputRowSize, outputList);
+																    outputRowSize, outputList, executionContext.get());
 }
 
 LookupJoinOperator::~LookupJoinOperator()
@@ -1767,21 +1774,24 @@ void ALWAYS_INLINE LookupJoinOperator::PopulateProbeNulls()
 }
 
 LookupJoinOutputBuilder::LookupJoinOutputBuilder(std::vector<int32_t> &probeOutputCols, const int32_t *probeOutputTypes,
-    std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, int32_t outputRowSize)
+    std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, int32_t outputRowSize,
+    const ExecutionContext *executionContext)
     : probeOutputCols(probeOutputCols),
       probeOutputTypes(probeOutputTypes),
       buildOutputCols(buildOutputCols),
       buildOutputTypes(buildOutputTypes)
 {
     // if the probe and build do not have output columns, the row size is setted to DEFAULT_ROW_SIZE
-    this->maxRowCount = OperatorUtil::GetMaxRowCount((outputRowSize != 0) ? outputRowSize : DEFAULT_ROW_SIZE);
+    this->maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        (outputRowSize != 0) ? outputRowSize : DEFAULT_ROW_SIZE, &executionContext->queryConfigRef());
     if (!probeOutputCols.empty() || !buildOutputCols.empty()) {
         probeBuildIndex.reserve(maxRowCount);
     }
 }
 
 LookupJoinOutputBuilder::LookupJoinOutputBuilder(std::vector<int32_t> &probeOutputCols, const int32_t *probeOutputTypes,
-    std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, int32_t outputRowSize, std::vector<int32_t> &outputList)
+    std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, int32_t outputRowSize,
+    std::vector<int32_t> &outputList, const ExecutionContext *executionContext)
     : probeOutputCols(probeOutputCols),
       probeOutputTypes(probeOutputTypes),
       buildOutputCols(buildOutputCols),
@@ -1789,7 +1799,8 @@ LookupJoinOutputBuilder::LookupJoinOutputBuilder(std::vector<int32_t> &probeOutp
       outputList(outputList)
 {
     // if the probe and build do not have output columns, the row size is setted to DEFAULT_ROW_SIZE
-    this->maxRowCount = OperatorUtil::GetMaxRowCount((outputRowSize != 0) ? outputRowSize : DEFAULT_ROW_SIZE);
+    this->maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        (outputRowSize != 0) ? outputRowSize : DEFAULT_ROW_SIZE, &executionContext->queryConfigRef());
     if (!probeOutputCols.empty() || !buildOutputCols.empty()) {
         probeBuildIndex.reserve(maxRowCount);
     }

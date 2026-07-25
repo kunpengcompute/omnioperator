@@ -108,7 +108,7 @@ HashAggregationWithExprOperatorFactory::HashAggregationWithExprOperatorFactory(
     this->sourceTypes = std::make_unique<DataTypes>(newSourceTypes);
     this->hashAggOperatorFactory =
         new HashAggregationOperatorFactory(groupByCol, *groupByTypes, aggColIdx, aggInputDataTypes, aggOutputTypes,
-        aggFuncTypes, maskColumns, inputRaws, outputPartial, hasAggFilters, operatorConfig, step);
+        aggFuncTypes, maskColumns, inputRaws, outputPartial, hasAggFilters, operatorConfig, step, queryConfig);
     this->hashAggOperatorFactory->Init();
 }
 

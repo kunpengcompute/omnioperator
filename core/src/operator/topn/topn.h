@@ -71,7 +71,8 @@ public:
         int32_t *sortCols, int32_t *sortAscendings, int32_t *sortNullFirsts, int32_t sortColCount);
 
     TopNOperatorFactory(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset,
-                        std::vector<int32_t> sortCols, std::vector<int32_t> sortAscendings, std::vector<int32_t> sortNullFirsts, int32_t sortColCount);
+        std::vector<int32_t> sortCols, std::vector<int32_t> sortAscendings, std::vector<int32_t> sortNullFirsts,
+        int32_t sortColCount, const config::QueryConfig &queryConfig = config::QueryConfig{});
 
     ~TopNOperatorFactory() override;
 
@@ -90,7 +91,8 @@ private:
 class TopNOperator : public Operator {
 public:
     TopNOperator(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset, std::vector<int32_t> &sortCols,
-        std::vector<int32_t> &sortAscendings, std::vector<int32_t> &sortNullFirsts, int32_t sortColCount);
+        std::vector<int32_t> &sortAscendings, std::vector<int32_t> &sortNullFirsts, int32_t sortColCount,
+        const config::QueryConfig &queryConfig);
 
     ~TopNOperator() override;
 

@@ -20,10 +20,11 @@ namespace op {
 class LookupJoinOutputBuilder {
 public:
     LookupJoinOutputBuilder(std::vector<int32_t> &probeOutputCols, const int32_t *probeOutputTypes,
-        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, int32_t outputRowSize);
+        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, int32_t outputRowSize,
+        const ExecutionContext *executionContext);
     LookupJoinOutputBuilder(std::vector<int32_t> &probeOutputCols, const int32_t *probeOutputTypes,
-                            std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, int32_t outputRowSize,
-                            std::vector<int32_t> &outputList);
+        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, int32_t outputRowSize,
+        std::vector<int32_t> &outputList, const ExecutionContext *executionContext);
     ~LookupJoinOutputBuilder() = default;
     void AppendRow(int32_t probePosition, BaseVector ***array, uint64_t address);
     void BuildOutput(BaseVector **probeOutputColumns, JoinType joinType,
@@ -144,12 +145,14 @@ public:
     LookupJoinOperatorFactory(const type::DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount,
         int32_t *probeHashCols, int32_t probeHashColsCount, int32_t *buildOutputCols, int32_t buildOutputColsCount,
         const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
-        omniruntime::expressions::Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig);
+        omniruntime::expressions::Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
     LookupJoinOperatorFactory(const type::DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount,
         int32_t *probeHashCols, int32_t probeHashColsCount, int32_t *buildOutputCols, int32_t buildOutputColsCount,
         const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
         omniruntime::expressions::Expr *filterExpr, int32_t originalProbeColsCount,
-        bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig, int32_t *outputList = nullptr);
+        bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig, int32_t *outputList = nullptr,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
     ~LookupJoinOperatorFactory() override;
     static LookupJoinOperatorFactory *CreateLookupJoinOperatorFactory(const DataTypes &probeTypes,
         int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *probeHashCols, int32_t probeHashColsCount,
@@ -193,13 +196,14 @@ public:
         std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes,
         std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
         SimpleFilter *simpleFilter, int32_t originalProbeColsCount,
-        int32_t outputRowSize, bool isShuffleExchangeBuildPlan);
+        int32_t outputRowSize, bool isShuffleExchangeBuildPlan, const config::QueryConfig &queryConfig);
 
     LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
                        std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes,
                        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
                        SimpleFilter *simpleFilter, int32_t originalProbeColsCount,
-                       int32_t outputRowSize, bool isShuffleExchangeBuildPlan, std::vector<int32_t> &outputList);
+                       int32_t outputRowSize, bool isShuffleExchangeBuildPlan, std::vector<int32_t> &outputList,
+                       const config::QueryConfig &queryConfig);
     ~LookupJoinOperator() override;
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override;
     int32_t GetOutput(omniruntime::vec::VectorBatch **outputVecBatch) override;

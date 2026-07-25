@@ -11,11 +11,13 @@ namespace omniruntime {
 namespace op {
 using namespace omniruntime::vec;
 
-SortMergeJoinOperator::SortMergeJoinOperator(JoinType joinType, std::string &filter)
-    : joinType(joinType), filter(filter)
+SortMergeJoinOperator::SortMergeJoinOperator(JoinType joinType, std::string &filter,
+    const config::QueryConfig &queryConfig)
+    : joinType(joinType), filter(filter), queryConfig_(queryConfig)
 {}
 
-SortMergeJoinOperator::SortMergeJoinOperator(JoinType joinType, Expr* filter) : joinType(joinType), filterExpr(filter)
+SortMergeJoinOperator::SortMergeJoinOperator(JoinType joinType, Expr* filter, const config::QueryConfig &queryConfig)
+    : joinType(joinType), filterExpr(filter), queryConfig_(queryConfig)
 {}
 
 SortMergeJoinOperator::~SortMergeJoinOperator()
@@ -70,7 +72,8 @@ void SortMergeJoinOperator::InitScannerAndResultBuilder(OverflowConfig *overflow
     }
     joinResultBuilder = new JoinResultBuilder(streamedOutputTypes, streamedOutputCols.data(), streamedOutputCols.size(),
         originalStreamedColsCount, streamedTblPagesIndex, bufferedOutputTypes, bufferedOutputCols.data(),
-        bufferedOutputCols.size(), originalBufferedColsCount, bufferedTblPagesIndex, filter, joinType, overflowConfig);
+        bufferedOutputCols.size(), originalBufferedColsCount, bufferedTblPagesIndex, filter, joinType, overflowConfig,
+        queryConfig_);
 }
 
 void SortMergeJoinOperator::InitScannerAndResultBuilderWithFilterExpr(OverflowConfig* overflowConfig)
@@ -95,7 +98,8 @@ void SortMergeJoinOperator::InitScannerAndResultBuilderWithFilterExpr(OverflowCo
     }
     joinResultBuilder = new JoinResultBuilder(streamedOutputTypes, streamedOutputCols.data(), streamedOutputCols.size(),
         originalStreamedColsCount, streamedTblPagesIndex, bufferedOutputTypes, bufferedOutputCols.data(),
-        bufferedOutputCols.size(), originalBufferedColsCount, bufferedTblPagesIndex, filterExpr, joinType, overflowConfig);
+        bufferedOutputCols.size(), originalBufferedColsCount, bufferedTblPagesIndex, filterExpr, joinType,
+        overflowConfig, queryConfig_);
 }
 
 int32_t HandleSortMergeJoinNoResultSituation(DynamicPagesIndex *streamedTblPagesIndex,

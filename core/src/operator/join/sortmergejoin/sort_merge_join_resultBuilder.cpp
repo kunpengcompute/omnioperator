@@ -22,7 +22,7 @@ JoinResultBuilder::JoinResultBuilder(const std::vector<DataTypePtr> &leftTableOu
     int32_t leftTableOutputColsCount, int32_t originalLeftTableColsCount, DynamicPagesIndex *leftTablePagesIndex,
     const std::vector<DataTypePtr> &rightTableOutputTypes, int32_t *rightTableOutputCols,
     int32_t rightTableOutputColsCount, int32_t originalRightTableColsCount, DynamicPagesIndex *rightTablePagesIndex,
-    std::string &filter, JoinType joinType, OverflowConfig *overflowConfig)
+    std::string &filter, JoinType joinType, OverflowConfig *overflowConfig, const config::QueryConfig &queryConfig)
     : leftTableOutputTypes(leftTableOutputTypes),
       leftTableOutputCols(leftTableOutputCols),
       leftTableOutputColsCount(leftTableOutputColsCount),
@@ -36,10 +36,13 @@ JoinResultBuilder::JoinResultBuilder(const std::vector<DataTypePtr> &leftTableOu
       filterExpStr(filter),
       joinType(joinType)
 {
+    executionContext = new ExecutionContext();
+    executionContext->SetConfig(queryConfig);
     int32_t leftRowSize = OperatorUtil::GetRowSize(leftTableOutputTypes);
     int32_t rightRowSize = OperatorUtil::GetRowSize(rightTableOutputTypes);
     int32_t outputRowSize = leftRowSize + rightRowSize;
-    this->maxRowCount = OperatorUtil::GetMaxRowCount(outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE);
+    this->maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE, executionContext != nullptr ? &executionContext->queryConfigRef() : nullptr);
     this->JoinFilterCodeGen(overflowConfig);
     allTypes.insert(allTypes.cend(), leftTableOutputTypes.cbegin(), leftTableOutputTypes.cend());
     allTypes.insert(allTypes.cend(), rightTableOutputTypes.cbegin(), rightTableOutputTypes.cend());
@@ -49,7 +52,7 @@ JoinResultBuilder::JoinResultBuilder(const std::vector<DataTypePtr>& leftTableOu
     int32_t leftTableOutputColsCount, int32_t originalLeftTableColsCount, DynamicPagesIndex* leftTablePagesIndex,
     const std::vector<DataTypePtr>& rightTableOutputTypes, int32_t* rightTableOutputCols,
     int32_t rightTableOutputColsCount, int32_t originalRightTableColsCount, DynamicPagesIndex* rightTablePagesIndex,
-    Expr* filter, JoinType joinType, OverflowConfig* overflowConfig)
+    Expr* filter, JoinType joinType, OverflowConfig* overflowConfig, const config::QueryConfig &queryConfig)
     : leftTableOutputTypes(leftTableOutputTypes),
       leftTableOutputCols(leftTableOutputCols),
       leftTableOutputColsCount(leftTableOutputColsCount),
@@ -63,10 +66,13 @@ JoinResultBuilder::JoinResultBuilder(const std::vector<DataTypePtr>& leftTableOu
       filterExpr(filter),
       joinType(joinType)
 {
+    executionContext = new ExecutionContext();
+    executionContext->SetConfig(queryConfig);
     int32_t leftRowSize = OperatorUtil::GetRowSize(leftTableOutputTypes);
     int32_t rightRowSize = OperatorUtil::GetRowSize(rightTableOutputTypes);
     int32_t outputRowSize = leftRowSize + rightRowSize;
-    this->maxRowCount = OperatorUtil::GetMaxRowCount(outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE);
+    this->maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE, executionContext != nullptr ? &executionContext->queryConfigRef() : nullptr);
     this->JoinFilterExprCodeGen(overflowConfig);
     allTypes.insert(allTypes.cend(), leftTableOutputTypes.cbegin(), leftTableOutputTypes.cend());
     allTypes.insert(allTypes.cend(), rightTableOutputTypes.cbegin(), rightTableOutputTypes.cend());
@@ -78,7 +84,6 @@ void JoinResultBuilder::JoinFilterCodeGen(OverflowConfig* overflowConfig)
         return;
     }
 
-    executionContext = new ExecutionContext();
     omniruntime::expressions::Expr* filterExpression = JSONParser::ParseJSON(filterExpStr);
     simpleFilter = new SimpleFilter(*filterExpression);
     auto result = simpleFilter->Initialize(overflowConfig);
@@ -116,7 +121,6 @@ void JoinResultBuilder::JoinFilterExprCodeGen(OverflowConfig *overflowConfig)
         return;
     }
 
-    executionContext = new ExecutionContext();
     simpleFilter = new SimpleFilter(*filterExpr);
     auto result = simpleFilter->Initialize(overflowConfig);
     if (!result) {

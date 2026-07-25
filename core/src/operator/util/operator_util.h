@@ -116,17 +116,34 @@ public:
         return rowSize;
     }
 
-    static int32_t GetMaxRowCount(int32_t rowSize)
+    static int32_t GetConfiguredMaxRowCount(int32_t rowSize, const config::QueryConfig *queryConfig = nullptr)
     {
         ASSERT(rowSize != 0);
+        if (queryConfig != nullptr) {
+            auto configured = queryConfig->maxBatchRowCount();
+            if (configured > 0 && configured <= static_cast<uint64_t>(INT32_MAX)) {
+                return static_cast<int32_t>(configured);
+            }
+        }
         return (MAX_VEC_BATCH_SIZE_IN_BYTES + rowSize - 1) / rowSize;
     }
 
-    static int32_t GetMaxRowCount(const std::vector<DataTypePtr> &dataTypes, const int32_t *outputCols,
-        int32_t outputColsCount)
+    static int32_t GetConfiguredMaxRowCount(const std::vector<DataTypePtr> &dataTypes, const int32_t *outputCols,
+        int32_t outputColsCount, const config::QueryConfig *queryConfig = nullptr)
     {
         int32_t rowSize = GetOutputRowSize(dataTypes, outputCols, outputColsCount);
-        return GetMaxRowCount(rowSize);
+        return GetConfiguredMaxRowCount(rowSize, queryConfig);
+    }
+
+    static int32_t GetMaxRowCount(int32_t rowSize, const config::QueryConfig *queryConfig = nullptr)
+    {
+        return GetConfiguredMaxRowCount(rowSize, queryConfig);
+    }
+
+    static int32_t GetMaxRowCount(const std::vector<DataTypePtr> &dataTypes, const int32_t *outputCols,
+        int32_t outputColsCount, const config::QueryConfig *queryConfig = nullptr)
+    {
+        return GetConfiguredMaxRowCount(dataTypes, outputCols, outputColsCount, queryConfig);
     }
 
     static int32_t GetVecBatchCount(int64_t positionCount, int64_t maxRowCount)

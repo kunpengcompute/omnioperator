@@ -412,7 +412,8 @@ static std::vector<SetValueFunc> setValueFromDictionaryFuncs = {
 
 TopNSortOperator::TopNSortOperator(const type::DataTypes &sourceTypes, int32_t n, bool isStrictTopN,
     const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
-    const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts)
+    const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts,
+    const config::QueryConfig &queryConfig)
     : sourceTypes(sourceTypes),
       n(n),
       isStrictTopN(isStrictTopN),
@@ -423,6 +424,7 @@ TopNSortOperator::TopNSortOperator(const type::DataTypes &sourceTypes, int32_t n
       sortNullFirsts(sortNullFirsts),
       sortColNum(static_cast<int32_t>(sortCols.size()))
 {
+    executionContext->SetConfig(queryConfig);
     auto sourceTypeIds = sourceTypes.GetIds();
     for (int32_t i = 0; i < sortColNum; i++) {
         auto type = sourceTypeIds[sortCols[i]];
@@ -445,7 +447,7 @@ TopNSortOperator::TopNSortOperator(const type::DataTypes &sourceTypes, int32_t n
     }
 
     int32_t eachRowSize = OperatorUtil::GetRowSize(sourceTypes.Get());
-    maxRowCount = OperatorUtil::GetMaxRowCount(eachRowSize);
+    maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(eachRowSize, &executionContext->queryConfigRef());
 }
 
 type::StringRef TopNSortOperator::GeneratePartitionKey(BaseVector **partitionVectors, int32_t partitionColNum,

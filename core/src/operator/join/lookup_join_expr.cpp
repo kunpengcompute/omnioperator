@@ -185,6 +185,7 @@ LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(const DataT
     overflowConfig, outputList)
 {
     this->queryConfig_ = queryConfig;
+    operatorFactory->SetQueryConfig(queryConfig);
 }
 
 LookupJoinWithExprOperatorFactory::~LookupJoinWithExprOperatorFactory()

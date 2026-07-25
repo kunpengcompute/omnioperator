@@ -56,7 +56,8 @@ class TopNSortOperator : public Operator {
 public:
     TopNSortOperator(const type::DataTypes &sourceTypes, int32_t n, bool isStrictTopN,
         const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
-        const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts);
+        const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts,
+        const config::QueryConfig &queryConfig);
 
     ~TopNSortOperator() override = default;
 
@@ -194,7 +195,8 @@ class TopNSortOperatorFactory : public OperatorFactory {
 public:
     TopNSortOperatorFactory(const type::DataTypes &sourceTypes, int32_t n, bool isStrictTopN,
         const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
-        const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts)
+        const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts,
+        const config::QueryConfig &queryConfig = config::QueryConfig{})
         : sourceTypes(sourceTypes),
           n(n),
           isStrictTopN(isStrictTopN),
@@ -202,14 +204,16 @@ public:
           sortCols(sortCols),
           sortAscendings(sortAscendings),
           sortNullFirsts(sortNullFirsts)
-    {}
+    {
+        this->queryConfig_ = queryConfig;
+    }
 
     ~TopNSortOperatorFactory() override = default;
 
     Operator *CreateOperator() override
     {
         return new TopNSortOperator(sourceTypes, n, isStrictTopN, partitionCols, sortCols, sortAscendings,
-            sortNullFirsts);
+            sortNullFirsts, queryConfig_);
     }
 
 private:

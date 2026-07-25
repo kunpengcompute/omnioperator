@@ -127,7 +127,8 @@ NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(JoinType joinType, std::v
     int32_t rightRowSize =
         OperatorUtil::GetOutputRowSize(buildTypes.Get(), buildOutputCols.data(), buildOutputCols.size());
     int32_t outputRowSize = leftRowSize + rightRowSize;
-    maxRowCount = OperatorUtil::GetMaxRowCount(outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE);
+    maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE, &executionContext->queryConfigRef());
     int32_t buildRowCount = buildVectorBatch->GetRowCount();
     joinedVectorBatch = std::make_unique<VectorBatch>(buildRowCount);
     selectedRows = new int32_t[buildRowCount];
@@ -160,7 +161,8 @@ NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(JoinType joinType, std::v
     int32_t rightRowSize =
         OperatorUtil::GetOutputRowSize(buildTypes.Get(), buildOutputCols.data(), buildOutputCols.size());
     int32_t outputRowSize = leftRowSize + rightRowSize;
-    maxRowCount = OperatorUtil::GetMaxRowCount(outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE);
+    maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE, &executionContext->queryConfigRef());
     int32_t buildRowCount = buildVectorBatch->GetRowCount();
     joinedVectorBatch = std::make_unique<VectorBatch>(buildRowCount);
     selectedRows = new int32_t[buildRowCount];
