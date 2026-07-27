@@ -67,6 +67,11 @@ void RegisterStringFunctions(const std::string &prefix)
         prefix + "encode", {OMNI_VARCHAR, OMNI_CHAR}, OMNI_VARBINARY);
     RegisterFunction<EncodeFunction, std::string, std::string_view, std::string_view>(
         prefix + "encode", {OMNI_CHAR, OMNI_CHAR}, OMNI_VARBINARY);
+    // decode(binary, charset) -> varchar: decodes binary using specified charset (US-ASCII, ISO-8859-1, UTF-8, UTF-16BE, UTF-16LE, UTF-16)
+    RegisterFunction<DecodeFunction, std::string, std::string_view, std::string_view>(
+        prefix + "decode", {OMNI_VARBINARY, OMNI_VARCHAR}, OMNI_VARCHAR);
+    RegisterFunction<DecodeFunction, std::string, std::string_view, std::string_view>(
+        prefix + "decode", {OMNI_VARBINARY, OMNI_CHAR}, OMNI_VARCHAR);
 
     VectorFunction::RegisterVectorFunction("split", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_INT}, OMNI_ARRAY,
         std::make_shared<SplitFunction>());
