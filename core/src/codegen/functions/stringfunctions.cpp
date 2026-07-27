@@ -18,7 +18,6 @@
 #include <unordered_map>
 
 namespace omniruntime::codegen::function {
-using JsonDocument = nlohmann::ordered_json;
 
 const char *INT64_MIN_STR = "-9223372036854775808";
 
@@ -196,7 +195,7 @@ namespace {
 
     struct JsonCache {
         uint64_t hash = 0;
-        JsonDocument parsedJson;
+        nlohmann::json parsedJson;
         std::string lastJsonContent;
         
         bool IsCacheValid(const std::string& jsonContent) const
@@ -204,7 +203,7 @@ namespace {
             return hash == HashJsonContent(jsonContent) && lastJsonContent == jsonContent;
         }
         
-        void SetCache(const std::string& jsonContent, const JsonDocument& json)
+        void SetCache(const std::string& jsonContent, const nlohmann::json& json)
         {
             hash = HashJsonContent(jsonContent);
             lastJsonContent = jsonContent;
@@ -322,60 +321,6 @@ static std::vector<std::string> ParseJsonPath(const std::string& path)
     return keys;
 }
 
-static bool TryFormatJsonValueScalar(const JsonDocument &value, std::string *result)
-{
-    if (result == nullptr) {
-        return false;
-    }
-
-    if (value.is_string()) {
-        *result = value.get<std::string>();
-        return true;
-    }
-
-    if (value.is_boolean()) {
-        *result = value.get<bool>() ? "true" : "false";
-        return true;
-    }
-
-    if (value.is_number_integer()) {
-        *result = std::to_string(value.get<JsonDocument::number_integer_t>());
-        return true;
-    }
-
-    if (value.is_number_unsigned()) {
-        *result = std::to_string(value.get<JsonDocument::number_unsigned_t>());
-        return true;
-    }
-
-    if (value.is_number_float()) {
-        *result = DoubleToString::DoubleToStringConverter(value.get<double>());
-        return true;
-    }
-
-    return false;
-}
-
-static const char *HandleJsonValueEmptyBehavior(int64_t contextPtr, int32_t emptyBehavior, const char *defaultOnEmpty,
-                                                int32_t defaultOnEmptyLen, bool defaultOnEmptyIsNull, bool *outIsNull,
-                                                int32_t *outLen)
-{
-    if (emptyBehavior == 2 && !defaultOnEmptyIsNull) {
-        *outIsNull = false;
-        *outLen = defaultOnEmptyLen;
-        auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
-        memcpy_s(ret, *outLen + 1, defaultOnEmpty, *outLen + 1);
-        return ret;
-    }
-
-    if (emptyBehavior == 1) {
-        SetError(contextPtr, "JSON_VALUE error: Empty result");
-    }
-    *outIsNull = true;
-    *outLen = 0;
-    return nullptr;
-}
-
 extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
                                                    const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
                                                    bool *outIsNull, int32_t *outLen)
@@ -395,14 +340,14 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
     
     try {
         // Use cached JSON if available, otherwise parse and cache
-        JsonDocument* jsonData;
+        nlohmann::json* jsonData;
         if (THREAD_LOCAL_JSON_CACHE.IsCacheValid(jsonContent)) {
             jsonData = &THREAD_LOCAL_JSON_CACHE.parsedJson;
         } else {
-            JsonDocument newJson;
+            nlohmann::json newJson;
             // Try parsing the original JSON first
             try {
-                newJson = JsonDocument::parse(jsonContent);
+                newJson = nlohmann::json::parse(jsonContent);
             } catch (...) {
                 // If parsing fails, try to fix escaped quotes
                 // This handles cases where input has \ instead of " for JSON string delimiters
@@ -424,7 +369,7 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
                         fixedJsonContent += jsonContent[j];
                     }
                 }
-                newJson = JsonDocument::parse(fixedJsonContent);
+                newJson = nlohmann::json::parse(fixedJsonContent);
                 jsonContent = fixedJsonContent; // Update for cache validation
             }
             THREAD_LOCAL_JSON_CACHE.SetCache(jsonContent, newJson);
@@ -440,7 +385,7 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
             return nullptr;
         }
         
-        JsonDocument* current = jsonData;
+        nlohmann::json* current = jsonData;
         for (const auto& key : keys) {
             if (current->is_object()) {
                 if (current->contains(key)) {
@@ -479,10 +424,16 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
         }
         
         std::string result;
-        if (!TryFormatJsonValueScalar(*current, &result)) {
-            *outIsNull = true;
-            *outLen = 0;
-            return nullptr;
+        if (current->is_string()) {
+            result = current->get<std::string>();
+        } else if (current->is_number_integer()) {
+            result = std::to_string(current->get<int64_t>());
+        } else if (current->is_number_float()) {
+            result = std::to_string(current->get<double>());
+        } else if (current->is_boolean()) {
+            result = current->get<bool>() ? "true" : "false";
+        } else {
+            result = current->dump();
         }
         
         *outIsNull = false;
@@ -538,13 +489,13 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
     
     try {
         // Use cached JSON if available, otherwise parse and cache
-        JsonDocument* jsonData;
+        nlohmann::json* jsonData;
         if (THREAD_LOCAL_JSON_CACHE.IsCacheValid(jsonContent)) {
             jsonData = &THREAD_LOCAL_JSON_CACHE.parsedJson;
         } else {
-            JsonDocument newJson;
+            nlohmann::json newJson;
             try {
-                newJson = JsonDocument::parse(jsonContent);
+                newJson = nlohmann::json::parse(jsonContent);
             } catch (...) {
                 std::string fixedJsonContent;
                 fixedJsonContent.reserve(jsonContent.size());
@@ -564,7 +515,7 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
                         fixedJsonContent += jsonContent[j];
                     }
                 }
-                newJson = JsonDocument::parse(fixedJsonContent);
+                newJson = nlohmann::json::parse(fixedJsonContent);
                 jsonContent = fixedJsonContent;
             }
             THREAD_LOCAL_JSON_CACHE.SetCache(jsonContent, newJson);
@@ -593,7 +544,7 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
             }
         }
         
-        JsonDocument* current = jsonData;
+        nlohmann::json* current = jsonData;
         bool found = true;
         
         for (const auto& key : keys) {
@@ -624,14 +575,36 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
         }
         
         if (!found || current->is_null()) {
-            return HandleJsonValueEmptyBehavior(contextPtr, emptyBehavior, defaultOnEmpty, defaultOnEmptyLen,
-                defaultOnEmptyIsNull, outIsNull, outLen);
+            // Empty result - apply empty behavior
+            if (emptyBehavior == 2 && !defaultOnEmptyIsNull) { // DEFAULT
+                *outIsNull = false;
+                *outLen = defaultOnEmptyLen;
+                auto ret = ArenaAllocatorMalloc(contextPtr, *outLen + 1);
+                memcpy_s(ret, *outLen + 1, defaultOnEmpty, *outLen + 1);
+                return ret;
+            } else if (emptyBehavior == 1) { // ERROR
+                SetError(contextPtr, "JSON_VALUE error: Empty result");
+                *outIsNull = true;
+                *outLen = 0;
+                return nullptr;
+            } else { // NULL
+                *outIsNull = true;
+                *outLen = 0;
+                return nullptr;
+            }
         }
-
+        
         std::string result;
-        if (!TryFormatJsonValueScalar(*current, &result)) {
-            return HandleJsonValueEmptyBehavior(contextPtr, emptyBehavior, defaultOnEmpty, defaultOnEmptyLen,
-                defaultOnEmptyIsNull, outIsNull, outLen);
+        if (current->is_string()) {
+            result = current->get<std::string>();
+        } else if (current->is_number_integer()) {
+            result = std::to_string(current->get<int64_t>());
+        } else if (current->is_number_float()) {
+            result = std::to_string(current->get<double>());
+        } else if (current->is_boolean()) {
+            result = current->get<bool>() ? "true" : "false";
+        } else {
+            result = current->dump();
         }
         
         *outIsNull = false;

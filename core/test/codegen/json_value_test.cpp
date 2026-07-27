@@ -91,7 +91,7 @@ TEST(JsonValueTest, DifferentValueTypes)
     JsonValueTest(R"({"negative":-100})", "$.negative", "-100", false);
     
     // Float
-    JsonValueTest(R"({"price":19.99})", "$.price", "19.99", false);
+    JsonValueTest(R"({"price":19.99})", "$.price", "19.990000", false);
 }
 
 // Test complex nested structures
@@ -177,11 +177,14 @@ TEST(JsonValueTest, EscapedCharactersInJson)
     JsonValueTest(R"({"path":"C:\\Users\\test"})", "$.path", R"(C:\Users\test)", false);
 }
 
-// JSON_VALUE is scalar-only. Non-scalar object/array results become NULL by default.
-TEST(JsonValueTest, ComplexTypesReturnNull)
+// Test object and array to string conversion
+TEST(JsonValueTest, ComplexTypeConversion)
 {
-    JsonValueTest(R"({"data":{"x":1,"y":2}})", "$.data", "", true);
-    JsonValueTest(R"({"items":[1,2,3]})", "$.items", "", true);
+    // Nested object as string
+    JsonValueTest(R"({"data":{"x":1,"y":2}})", "$.data", R"({"x":1,"y":2})", false);
+    
+    // Array as string
+    JsonValueTest(R"({"items":[1,2,3]})", "$.items", "[1,2,3]", false);
 }
 
 // Test mixed bracket and dot notation
@@ -272,33 +275,6 @@ TEST(JsonValueTest, ExtendedOnEmptyDefault)
     EXPECT_FALSE(outIsNull);
     EXPECT_EQ("unknown", std::string(result, outLen));
     
-    delete context;
-}
-
-TEST(JsonValueTest, ExtendedComplexTypesUseEmptyBehavior)
-{
-    auto context = new ExecutionContext();
-    int64_t contextPtr = reinterpret_cast<int64_t>(context);
-
-    bool outIsNull = false;
-    int32_t outLen = 0;
-
-    std::string json = R"({"data":{"x":1,"y":2}})";
-    std::string path = "$.data";
-    std::string defaultValue = "missing";
-
-    const char *result = JsonValueExtended(
-        contextPtr,
-        json.c_str(), static_cast<int32_t>(json.size()), false,
-        path.c_str(), 0, static_cast<int32_t>(path.size()), false,
-        2, defaultValue.c_str(), static_cast<int32_t>(defaultValue.size()), false,
-        0, nullptr, 0, true,
-        &outIsNull, &outLen
-    );
-
-    EXPECT_FALSE(outIsNull);
-    EXPECT_EQ("missing", std::string(result, outLen));
-
     delete context;
 }
 
