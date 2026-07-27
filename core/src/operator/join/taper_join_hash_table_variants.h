@@ -612,6 +612,7 @@ void TaperJoinHashTableVariants<KeyType, NeedVisited>::BuildTaperHashTableSerial
                 if (isNull) {
                     isNulls[i] = true;
                     colHash = kNullHash;
+                    break;
                 } else {
                     auto typeId = buildTypes_->GetIds()[colIdx];
                     int32_t colOff = col.Offset();
@@ -694,6 +695,7 @@ void TaperJoinHashTableVariants<KeyType, NeedVisited>::BuildTaperHashTableFixed(
     RowContainerIterator it;
     int32_t n;
     while ((n = rc->ListRows(&it, BLOCK_SIZE, rows)) > 0) {
+        memset(isNulls, false, sizeof(isNulls));
         if (isMultiColumn_) {
             for (int32_t i = 0; i < n; ++i) {
                 KeyType packed = 0;
@@ -701,25 +703,24 @@ void TaperJoinHashTableVariants<KeyType, NeedVisited>::BuildTaperHashTableFixed(
                     int32_t colIdx = buildHashCols_[k];
                     auto col = rc->ColumnAt(colIdx);
                     isNulls[i] = RowContainer::IsNullAt(rows[i], col.NullByte(), col.NullMask());
+                    if (isNulls[i]) break; // 只要有一个 null 就跳出。
                     packed = (packed << 1) | isNulls[i];
                     KeyType val = 0;
-                    if (!isNulls[i]) {
-                        switch (bitWidths_[k]) {
-                            case 8:
-                                val = static_cast<KeyType>(
-                                    RowContainer::ReadValue<int8_t>(rows[i], col.Offset())); break;
-                            case 16:
-                                val = static_cast<KeyType>(
-                                    RowContainer::ReadValue<int16_t>(rows[i], col.Offset())); break;
-                            case 32:
-                                val = static_cast<KeyType>(
-                                    RowContainer::ReadValue<int32_t>(rows[i], col.Offset())); break;
-                            case 64:
-                                val = static_cast<KeyType>(
-                                    RowContainer::ReadValue<int64_t>(rows[i], col.Offset())); break;
-                        }
-                        val &= masks_[k];
+                    switch (bitWidths_[k]) {
+                        case 8:
+                            val = static_cast<KeyType>(
+                                RowContainer::ReadValue<int8_t>(rows[i], col.Offset())); break;
+                        case 16:
+                            val = static_cast<KeyType>(
+                                RowContainer::ReadValue<int16_t>(rows[i], col.Offset())); break;
+                        case 32:
+                            val = static_cast<KeyType>(
+                                RowContainer::ReadValue<int32_t>(rows[i], col.Offset())); break;
+                        case 64:
+                            val = static_cast<KeyType>(
+                                RowContainer::ReadValue<int64_t>(rows[i], col.Offset())); break;
                     }
+                    val &= masks_[k];
                     packed = (packed << bitWidths_[k]) | val;
                 }
                 keys[i] = packed;
