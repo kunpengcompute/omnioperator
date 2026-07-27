@@ -42,6 +42,7 @@
 #include "../functions/Floor.h"
 #include "../functions/Ceil.h"
 #include "../functions/Time.h"
+#include "../functions/TimestampDiff.h"
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -107,5 +108,7 @@ void RegisterDatetimeFunctions(const std::string &prefix)
     RegisterCeilFunction(prefix + "ceil_time");
 
     RegisterTimeFunction(prefix + "time");
+
+    RegisterTimestampDiffFunction(prefix + "timestampdiff");
 }
 }
