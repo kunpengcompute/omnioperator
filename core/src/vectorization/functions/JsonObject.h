@@ -21,6 +21,14 @@
  * Empty key set : "{}"
  * Return is always non-NULL (Flink declares STRING().notNull()).
  *
+ * Nested JSON constructors: when a value argument is itself a JSON_OBJECT / JSON_ARRAY call
+ * (Flink's JsonGenerateUtils.isJsonFunctionOperand), its already-serialized JSON text must be
+ * inserted as a raw node (verbatim), not re-quoted as a string. e.g.
+ * JSON_OBJECT(KEY 'k' VALUE JSON_OBJECT(KEY 'a' VALUE 'b')) -> {"k":{"a":"b"}} rather than
+ * {"k":"{\"a\":\"b\"}"}. The per-value "raw" flags are computed in FuncExpr's constructor
+ * (expressions.cpp) by inspecting whether each value child Expr is a json_object / json_array
+ * FuncExpr, mirroring Flink's RexNode-level operand check.
+ *
  * See docs/expression-design/json_object_design.md for the full design.
  */
 
@@ -47,6 +55,11 @@ public:
     explicit JsonObjectFunction(const std::vector<DataTypePtr> &inputDataTypes)
         : inputDataTypes_(inputDataTypes) {}
 
+    // valueIsRaw[p] marks whether the p-th pair's value (allArgs[2 + 2*p]) is a nested JSON
+    // constructor result that must be inserted verbatim (raw node) instead of quoted as a string.
+    JsonObjectFunction(const std::vector<DataTypePtr> &inputDataTypes, const std::vector<bool> &valueIsRaw)
+        : inputDataTypes_(inputDataTypes), valueIsRaw_(valueIsRaw) {}
+
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType,
         BaseVector *&result, ExecutionContext *context) const override;
 
@@ -66,6 +79,9 @@ private:
         serializer_.appendToJson(valueVec, row, type, out);
     }
 
+    // Whether each pair's value should be inserted as a raw (already-serialized) JSON node. Empty
+    // means "no value is raw" (backward compatible with the inputDataTypes-only constructor).
+    std::vector<bool> valueIsRaw_;
     std::vector<DataTypePtr> inputDataTypes_;
     JsonStringFunction serializer_;
 };

@@ -783,7 +783,7 @@ Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
     }
 
     if (funcName == "named_struct" || funcName == "map" || funcName == "concat_ws"
-        || funcName == "json_object") {
+        || funcName == "json_object" || funcName == "json_array") {
         return new FuncExpr(funcName, args, std::move(retType), nullptr);
     }
 

@@ -474,6 +474,56 @@ TEST(JsonObjectTest, MultiRowMixedNullAbsentOnNull) {
 // Multiple pairs with mixed value types
 // =============================================================================
 
+// =============================================================================
+// Nested JSON constructors (raw node insertion)
+// =============================================================================
+
+TEST(JsonObjectTest, NestedJsonObjectRawNode) {
+    RegisterOnce();
+    // JSON_OBJECT(KEY 'k' VALUE JSON_OBJECT(KEY 'a' VALUE 'b')) -> {"k":{"a":"b"}}
+    auto* batch = JsonObjectTestHelper::MakeStringBatch({"b", "b"});
+    auto* inner = new FuncExpr("json_object",
+        {JsonObjectTestHelper::StrLiteral("NULL"), JsonObjectTestHelper::StrLiteral("a"),
+         new FieldExpr(0, JsonObjectTestHelper::VarcharType())},
+        JsonObjectTestHelper::VarcharType());
+    std::vector<Expr*> args = {
+        JsonObjectTestHelper::StrLiteral("NULL"), JsonObjectTestHelper::StrLiteral("k"), inner};
+    BaseVector* result = JsonObjectTestHelper::RunJsonObject(args, batch, 2);
+    JsonObjectTestHelper::ValidateString(result, 0, R"({"k":{"a":"b"}})");
+    delete result;
+    delete batch;
+}
+
+TEST(JsonObjectTest, NestedJsonArrayValueRawNode) {
+    RegisterOnce();
+    // JSON_OBJECT(KEY 'k' VALUE JSON_ARRAY(1)) -> {"k":[1]}
+    auto* batch = JsonObjectTestHelper::MakeScalarBatch<int32_t>({1, 1}, OMNI_INT);
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    auto* inner = new FuncExpr("json_array",
+        {JsonObjectTestHelper::StrLiteral("NULL"), new FieldExpr(0, intType)},
+        JsonObjectTestHelper::VarcharType());
+    std::vector<Expr*> args = {
+        JsonObjectTestHelper::StrLiteral("NULL"), JsonObjectTestHelper::StrLiteral("k"), inner};
+    BaseVector* result = JsonObjectTestHelper::RunJsonObject(args, batch, 2);
+    JsonObjectTestHelper::ValidateString(result, 0, R"({"k":[1]})");
+    delete result;
+    delete batch;
+}
+
+TEST(JsonObjectTest, PlainStringLooksLikeJsonStaysQuoted) {
+    RegisterOnce();
+    // A plain string value {"a":"b"} is NOT a nested constructor -> quoted+escaped.
+    auto* batch = JsonObjectTestHelper::MakeStringBatch({R"({"a":"b"})", R"({"a":"b"})"});
+    std::vector<Expr*> args = {
+        JsonObjectTestHelper::StrLiteral("NULL"),
+        JsonObjectTestHelper::StrLiteral("k"),
+        new FieldExpr(0, JsonObjectTestHelper::VarcharType())};
+    BaseVector* result = JsonObjectTestHelper::RunJsonObject(args, batch, 2);
+    JsonObjectTestHelper::ValidateString(result, 0, R"({"k":"{\"a\":\"b\"}"})");
+    delete result;
+    delete batch;
+}
+
 TEST(JsonObjectTest, MultiplePairsMixedTypes) {
     RegisterOnce();
     // (K1, 1, K2, "s", K3, TRUE) -> {"K1":1,"K2":"s","K3":true}
