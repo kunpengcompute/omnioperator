@@ -239,6 +239,24 @@ namespace
     }
 }
 
+// 提取固定宽度列到输出向量（非SVE路径）
+template <typename T>
+static inline void ExtractFixedWidthColumnImpl(char** rows, int32_t totalRows, int32_t offset,
+    int32_t nullByte, int32_t nullMask, Vector<T>* vec)
+{
+    for (int32_t i = 0; i < totalRows; ++i) {
+        if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
+            PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
+        }
+        if (rows[i] == nullptr || RowContainer::IsNullAt(rows[i], nullByte, nullMask)) {
+            vec->SetNull(i);
+        } else {
+            vec->SetValue(i, RowContainer::ReadValue<T>(rows[i], offset));
+        }
+    }
+}
+
+
 void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
                                   vec::BaseVector* outputVector)
 {
@@ -262,16 +280,7 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
 #ifdef __ARM_FEATURE_SVE
             SveExtractColumnImpl<int32_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
-            for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) { 
-                    PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte); 
-                }
-                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
-                    vec->SetNull(i);
-                } else {
-                    vec->SetValue(i, ReadValue<int32_t>(rows[i], offset));
-                }
-            }
+            ExtractFixedWidthColumnImpl<int32_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #endif
             break;
         }
@@ -284,16 +293,7 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
 #ifdef __ARM_FEATURE_SVE
             SveExtractColumnImpl<int64_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
-            for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-                    PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
-                }
-                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
-                    vec->SetNull(i);
-                } else {
-                    vec->SetValue(i, ReadValue<int64_t>(rows[i], offset));
-                }
-            }
+            ExtractFixedWidthColumnImpl<int64_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #endif
             break;
         }
@@ -302,16 +302,7 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
 #ifdef __ARM_FEATURE_SVE
             SveExtractColumnImpl<int16_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
-            for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-                    PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
-                }
-                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
-                    vec->SetNull(i);
-                } else {
-                    vec->SetValue(i, ReadValue<int16_t>(rows[i], offset));
-                }
-            }
+            ExtractFixedWidthColumnImpl<int16_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #endif
             break;
         }
@@ -320,16 +311,7 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
 #ifdef __ARM_FEATURE_SVE
             SveExtractColumnImpl<int8_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
-            for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-                    PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
-                }
-                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
-                    vec->SetNull(i);
-                } else {
-                    vec->SetValue(i, ReadValue<int8_t>(rows[i], offset));
-                }
-            }
+            ExtractFixedWidthColumnImpl<int8_t>(rows, totalRows, offset, nullByte, nullMask, vec);
 #endif
             break;
         }
@@ -338,16 +320,7 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
 #ifdef __ARM_FEATURE_SVE
             SveExtractColumnImpl<double>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
-            for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-                    PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
-                }
-                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
-                    vec->SetNull(i);
-                } else {
-                    vec->SetValue(i, ReadValue<double>(rows[i], offset));
-                }
-            }
+            ExtractFixedWidthColumnImpl<double>(rows, totalRows, offset, nullByte, nullMask, vec);
 #endif
             break;
         }
@@ -356,45 +329,22 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
 #ifdef __ARM_FEATURE_SVE
             SveExtractColumnImpl<float>(rows, totalRows, offset, nullByte, nullMask, vec);
 #else
-            for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-                    PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
-                }
-                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
-                    vec->SetNull(i);
-                } else {
-                    vec->SetValue(i, ReadValue<float>(rows[i], offset));
-                }
-            }
+            ExtractFixedWidthColumnImpl<float>(rows, totalRows, offset, nullByte, nullMask, vec);
 #endif
             break;
         }
         case type::OMNI_BOOLEAN: {
             auto* vec = static_cast<Vector<bool>*>(outputVector);
-            for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-                    PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
-                }
-                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
-                    vec->SetNull(i);
-                } else {
-                    vec->SetValue(i, ReadValue<int8_t>(rows[i], offset) != 0);
-                }
-            }
+#ifdef __ARM_FEATURE_SVE
+            SveExtractColumnImpl<bool>(rows, totalRows, offset, nullByte, nullMask, vec);
+#else
+            ExtractFixedWidthColumnImpl<bool>(rows, totalRows, offset, nullByte, nullMask, vec);
+#endif
             break;
         }
         case type::OMNI_DECIMAL128: {
             auto* vec = static_cast<Vector<Decimal128>*>(outputVector);
-            for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-                    PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
-                }
-                if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
-                    vec->SetNull(i);
-                } else {
-                    vec->SetValue(i, ReadValue<Decimal128>(rows[i], offset));
-                }
-            }
+            ExtractFixedWidthColumnImpl<Decimal128>(rows, totalRows, offset, nullByte, nullMask, vec);
             break;
         }
         case type::OMNI_VARCHAR:
