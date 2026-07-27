@@ -19,7 +19,7 @@ HashAggregationWithExprOperatorFactory::HashAggregationWithExprOperatorFactory(
     std::vector<omniruntime::expressions::Expr *> &aggFilters, DataTypes &sourceDataTypes,
     std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes, std::vector<uint32_t> &maskColumns,
     std::vector<bool> &inputRaws, std::vector<bool> &outputPartial, const OperatorConfig &operatorConfig,
-    config::QueryConfig queryConfig, AggregationNode::Step step)
+    config::QueryConfig queryConfig, AggregationNode::Step step, const std::vector<std::string> &aggUdafNames)
 {
     this->queryConfig_ = queryConfig;
     uint32_t aggColNum = 0;
@@ -108,7 +108,7 @@ HashAggregationWithExprOperatorFactory::HashAggregationWithExprOperatorFactory(
     this->sourceTypes = std::make_unique<DataTypes>(newSourceTypes);
     this->hashAggOperatorFactory =
         new HashAggregationOperatorFactory(groupByCol, *groupByTypes, aggColIdx, aggInputDataTypes, aggOutputTypes,
-        aggFuncTypes, maskColumns, inputRaws, outputPartial, hasAggFilters, operatorConfig, step);
+        aggFuncTypes, maskColumns, inputRaws, outputPartial, hasAggFilters, operatorConfig, step, aggUdafNames);
     this->hashAggOperatorFactory->Init();
 }
 
@@ -145,7 +145,8 @@ HashAggregationWithExprOperatorFactory *HashAggregationWithExprOperatorFactory::
     return new HashAggregationWithExprOperatorFactory(groupByKeys, groupByNum, aggsKeys, aggFilters, *sourceDataTypes,
                                                       aggsOutputTypes,
                                                       aggFuncTypes, maskColsVector, inputRaws, outputPartial,
-                                                      *operatorConfig, queryConfig, planNode->GetStep());
+                                                      *operatorConfig, queryConfig, planNode->GetStep(),
+                                                      planNode->GetAggUdafNames());
 }
 
 Operator *HashAggregationWithExprOperatorFactory::CreateOperator()

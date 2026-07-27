@@ -18,7 +18,7 @@ AggregationWithExprOperatorFactory::AggregationWithExprOperatorFactory(
     std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes,
     std::vector<omniruntime::expressions::Expr *> &aggFilters, std::vector<uint32_t> &maskColumns,
     std::vector<bool> &inputRaws, std::vector<bool> &outputPartial, OverflowConfig *overflowConfig,
-    bool isStatisticalAggregate)
+    bool isStatisticalAggregate, const std::vector<std::string> &aggUdafNames)
 {
     uint32_t aggColNum = 0;
     for (auto &aggKeys : aggsKeys) {
@@ -88,7 +88,7 @@ AggregationWithExprOperatorFactory::AggregationWithExprOperatorFactory(
     sourceTypes = std::make_unique<DataTypes>(newSourceTypes);
     aggOperatorFactory = new AggregationOperatorFactory(*sourceTypes, aggFuncTypes, aggColIdx, maskColumns,
         aggOutputTypes, inputRaws, outputPartial, hasAggFilters, overflowConfig->IsOverflowAsNull(),
-        isStatisticalAggregate);
+        isStatisticalAggregate, aggUdafNames);
     aggOperatorFactory->Init();
 }
 
@@ -98,9 +98,10 @@ AggregationWithExprOperatorFactory::AggregationWithExprOperatorFactory(
     std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes,
     std::vector<omniruntime::expressions::Expr *> &aggFilters, std::vector<uint32_t> &maskColumns,
     std::vector<bool> &inputRaws, std::vector<bool> &outputPartial, OverflowConfig *overflowConfig,
-    const config::QueryConfig &queryConfig, bool isStatisticalAggregate)
+    const config::QueryConfig &queryConfig, bool isStatisticalAggregate,
+    const std::vector<std::string> &aggUdafNames)
     : AggregationWithExprOperatorFactory(groupByKeys, groupByNum, aggsKeys, sourceDataTypes, aggOutputTypes, aggFuncTypes,
-    aggFilters, maskColumns, inputRaws, outputPartial, overflowConfig, isStatisticalAggregate)
+    aggFilters, maskColumns, inputRaws, outputPartial, overflowConfig, isStatisticalAggregate, aggUdafNames)
 {
     this->queryConfig_ = queryConfig;
 }
@@ -219,7 +220,7 @@ AggregationWithExprOperatorFactory *AggregationWithExprOperatorFactory::CreateAg
                                                              : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
     auto pOperatorFactory = new AggregationWithExprOperatorFactory(groupByKeys, groupByNum, aggsKeys, *sourceDataTypes, aggsOutputTypes,
         aggFuncTypes, aggFilters, maskColsVector, inputRaws, outputPartial, overflowConfig,
-        queryConfig, isStatisticalAggregate);
+        queryConfig, isStatisticalAggregate, planNode->GetAggUdafNames());
 
     delete overflowConfig;
     overflowConfig = nullptr;

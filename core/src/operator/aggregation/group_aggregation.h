@@ -286,7 +286,8 @@ public:
         std::vector<std::vector<uint32_t>> &aggsCols, std::vector<DataTypes> &aggInputTypes,
         std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes,
         std::vector<uint32_t> &maskColsVector, std::vector<bool> inputRaws, std::vector<bool> outputPartials,
-        const std::vector<int8_t> &hasAggFilters, const OperatorConfig &operatorConfig, AggregationNode::Step step)
+        const std::vector<int8_t> &hasAggFilters, const OperatorConfig &operatorConfig, AggregationNode::Step step,
+        const std::vector<std::string> &aggUdafNames = {})
         : AggregationCommonOperatorFactory(inputRaws, outputPartials, maskColsVector,
         operatorConfig.GetOverflowConfig()->IsOverflowAsNull(), operatorConfig.IsStatisticalAggregate()),
           groupByColsVector(groupByCol),
@@ -295,6 +296,7 @@ public:
           aggInputTypes(aggInputTypes),
           aggOutputTypes(aggOutputTypes),
           aggFuncTypesVector(aggFuncTypes),
+          aggUdafNamesVector(aggUdafNames),
           hasAggFilters(hasAggFilters),
           operatorConfig(operatorConfig),
           step(step)
@@ -318,6 +320,7 @@ private:
     std::vector<DataTypes> aggInputTypes;
     std::vector<DataTypes> aggOutputTypes;
     std::vector<uint32_t> aggFuncTypesVector;
+    std::vector<std::string> aggUdafNamesVector;
     std::vector<std::unique_ptr<AggregatorFactory>> aggregatorFactories;
     HandleType handleType;
     std::vector<int8_t> hasAggFilters;

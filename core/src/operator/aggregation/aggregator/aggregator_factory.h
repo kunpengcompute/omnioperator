@@ -713,6 +713,18 @@ private:
     std::unique_ptr<AggregatorFactory> realFactory;
 };
 
+class DynamicUdafAggregatorFactory : public AggregatorFactory {
+public:
+    explicit DynamicUdafAggregatorFactory(std::string udafName) : udafName_(std::move(udafName)) {}
+    ~DynamicUdafAggregatorFactory() override = default;
+
+    std::unique_ptr<Aggregator> CreateAggregator(const DataTypes &inputTypes, const DataTypes &outputTypes,
+        std::vector<int32_t> &channels, bool inputRaw, bool outputPartial, bool isOverflowAsNull) override;
+
+private:
+    std::string udafName_;
+};
+
 // for window aggregation call
 std::unique_ptr<AggregatorFactory> CreateAggregatorFactory(FunctionType aggType);
 }
