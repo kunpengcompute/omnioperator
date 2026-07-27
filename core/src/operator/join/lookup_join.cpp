@@ -1179,6 +1179,10 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                     for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
                         if (curProbeNulls[pos]) {
                             outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+                            if (outputBuilder->IsFull()) {
+                                curProbePosition = pos + 1;
+                                return;
+                            }
                             continue;
                         }
                         int32_t idx = pos - probeStart;
@@ -1534,6 +1538,10 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                     for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
                         if (curProbeNulls[pos]) {
                             outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+                            if (outputBuilder->IsFull()) {
+                                curProbePosition = pos + 1;
+                                return;
+                            }
                             continue;
                         }
                         int32_t idx = pos - probeStart;
@@ -1890,6 +1898,10 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                     for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
                         if (curProbeNulls[pos]) {
                             outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+                            if (outputBuilder->IsFull()) {
+                                curProbePosition = pos + 1;
+                                return;
+                            }
                             continue;
                         }
                         int32_t idx = pos - probeStart;
