@@ -7,10 +7,13 @@
 #include <vector>
 #include <string>
 #include <ctime>
+#include <limits>
 
 #include "test/util/test_util.h"
 #include "vectorization/registration/Register.h"
 #include "vectorization/functions/FromUnixTime.h"
+#include "vectorization/functions/DateTimeZoneConversion.h"
+#include "vectorization/functions/SparkDateTimeFormat.h"
 #include "vectorization/VectorFunction.h"
 #include "codegen/func_signature.h"
 #include "vector/vector_helper.h"
@@ -275,6 +278,22 @@ TEST(FromUnixTimeTest, NullFormat) {
     delete resultVec;
 }
 
+// Test: An empty format produces an empty formatted string, which the current
+// from_unixtime contract converts to NULL.
+TEST(FromUnixTimeTest, EmptyFormatReturnsNull) {
+    std::vector<int64_t> unixSeconds = {0};
+
+    BaseVector* inputVec = FromUnixTimeTestHelper::CreateLongVector(unixSeconds);
+    BaseVector* formatVec = FromUnixTimeTestHelper::CreateConstStringVector("", unixSeconds.size());
+    BaseVector* resultVec = nullptr;
+    FromUnixTimeTestHelper::ExecuteFromUnixTime(inputVec, formatVec, OMNI_LONG, resultVec);
+
+    ASSERT_NE(resultVec, nullptr);
+    EXPECT_TRUE(resultVec->IsNull(0));
+
+    delete resultVec;
+}
+
 // Test: All NULL input
 TEST(FromUnixTimeTest, AllNullInput) {
     std::vector<int64_t> unixSeconds = {0, 0, 0};
@@ -384,6 +403,87 @@ TEST(FromUnixTimeTest, HugeUnixSecondsMatchesSparkOverflow) {
     FromUnixTimeTestHelper::ExecuteFromUnixTimeWithTz(inputVec, formatVec, tzVec, OMNI_LONG, resultVec);
     FromUnixTimeTestHelper::ValidateResult(resultVec, expected, expectNull, unixSeconds.size());
 
+    delete resultVec;
+}
+
+TEST(FromUnixTimeTest, SafeUnixSecondsBoundariesAndOverflowFallback) {
+    constexpr int64_t microsPerSecond = 1'000'000;
+    constexpr int64_t minSafe = std::numeric_limits<int64_t>::min() / microsPerSecond;
+    constexpr int64_t maxSafe = std::numeric_limits<int64_t>::max() / microsPerSecond;
+    const std::vector<int64_t> unixSeconds = {
+        minSafe - 1, minSafe, maxSafe, maxSafe + 1
+    };
+
+    const auto utc = datetime::ResolveTimeZone("");
+    const auto format = datetime::CompileFormatPattern(
+        "yyyy-MM-dd", datetime::FormatterKind::FROM_UNIXTIME, false);
+    std::vector<std::string> expected;
+    for (const int64_t value : unixSeconds) {
+        constexpr __int128 modulus = static_cast<__int128>(1) << 64;
+        __int128 wrapped = static_cast<__int128>(value) * microsPerSecond % modulus;
+        if (wrapped < 0) {
+            wrapped += modulus;
+        }
+        if (wrapped >= (static_cast<__int128>(1) << 63)) {
+            wrapped -= modulus;
+        }
+        const int64_t micros = static_cast<int64_t>(wrapped);
+        int64_t seconds = micros / microsPerSecond;
+        if (micros % microsPerSecond < 0) {
+            --seconds;
+        }
+        datetime::CalendarTime calendarTime;
+        ASSERT_TRUE(datetime::ToCalendar(seconds, 0, utc, calendarTime));
+        expected.push_back(datetime::FormatDateTime(calendarTime, utc, format));
+    }
+
+    BaseVector* inputVec = FromUnixTimeTestHelper::CreateLongVector(unixSeconds);
+    BaseVector* formatVec = FromUnixTimeTestHelper::CreateConstStringVector(
+        "yyyy-MM-dd", unixSeconds.size());
+    BaseVector* resultVec = nullptr;
+    FromUnixTimeTestHelper::ExecuteFromUnixTime(inputVec, formatVec, OMNI_LONG, resultVec);
+    FromUnixTimeTestHelper::ValidateResult(
+        resultVec, expected, std::vector<bool>(unixSeconds.size(), false), unixSeconds.size());
+    delete resultVec;
+}
+
+TEST(FromUnixTimeTest, DictionaryInputAndFormatEncodings) {
+    auto* flatInput = static_cast<Vector<int64_t>*>(
+        FromUnixTimeTestHelper::CreateLongVector({0, 86'400}));
+    int32_t inputIndices[] = {1, 0, 1};
+    BaseVector* inputVec = VectorHelper::CreateDictionary(inputIndices, 3, flatInput);
+
+    auto* flatFormat = static_cast<Vector<LargeStringContainer<std::string_view>>*>(
+        FromUnixTimeTestHelper::CreateStringVector({"yyyy-MM-dd", "yyyy"}));
+    const int32_t formatIndices[] = {0, 1, 0};
+    BaseVector* formatVec =
+        VectorHelper::CreateStringDictionary(formatIndices, 3, flatFormat);
+
+    BaseVector* resultVec = nullptr;
+    FromUnixTimeTestHelper::ExecuteFromUnixTime(inputVec, formatVec, OMNI_LONG, resultVec);
+    FromUnixTimeTestHelper::ValidateResult(
+        resultVec,
+        {"1970-01-02", "1970", "1970-01-02"},
+        {false, false, false},
+        3);
+
+    delete flatInput;
+    delete flatFormat;
+    delete resultVec;
+}
+
+TEST(FromUnixTimeTest, ConstInputEncoding) {
+    BaseVector* inputVec = new ConstVector<int64_t>(0, OMNI_LONG, 2);
+    BaseVector* formatVec = FromUnixTimeTestHelper::CreateConstStringVector(
+        "yyyy-MM-dd HH:mm:ss", 2);
+    BaseVector* resultVec = nullptr;
+
+    FromUnixTimeTestHelper::ExecuteFromUnixTime(inputVec, formatVec, OMNI_LONG, resultVec);
+    FromUnixTimeTestHelper::ValidateResult(
+        resultVec,
+        {"1970-01-01 00:00:00", "1970-01-01 00:00:00"},
+        {false, false},
+        2);
     delete resultVec;
 }
 
@@ -584,6 +684,27 @@ TEST(FromUnixTimeTest, FourArgLegacyPolicy) {
         inputVec, formatVec, tzVec, policyVec, OMNI_LONG, resultVec);
     FromUnixTimeTestHelper::ValidateResult(resultVec, expected, expectNull, unixSeconds.size());
 
+    delete resultVec;
+}
+
+TEST(FromUnixTimeTest, DynamicPolicyAndTimezone) {
+    const std::vector<int64_t> unixSeconds = {604'800, 604'800};
+    BaseVector* inputVec = FromUnixTimeTestHelper::CreateLongVector(unixSeconds);
+    BaseVector* formatVec = FromUnixTimeTestHelper::CreateConstStringVector(
+        "yyyy-MM-dd HH F", unixSeconds.size());
+    BaseVector* tzVec = FromUnixTimeTestHelper::CreateStringVector(
+        {"UTC", "Asia/Shanghai"});
+    BaseVector* policyVec = FromUnixTimeTestHelper::CreateStringVector(
+        {"CORRECTED", "LEGACY"});
+    BaseVector* resultVec = nullptr;
+
+    FromUnixTimeTestHelper::ExecuteFromUnixTimeWithPolicy(
+        inputVec, formatVec, tzVec, policyVec, OMNI_LONG, resultVec);
+    FromUnixTimeTestHelper::ValidateResult(
+        resultVec,
+        {"1970-01-08 00 1", "1970-01-08 08 2"},
+        {false, false},
+        unixSeconds.size());
     delete resultVec;
 }
 
