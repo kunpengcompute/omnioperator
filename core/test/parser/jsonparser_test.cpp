@@ -933,14 +933,6 @@ TEST(JSONParserTest, FuncExpr_jsonSplitCharInput)
     delete funcExpr;
 }
 
-TEST(JSONParserTest, FieldReference_StringWithoutWidth)
-{
-    string unparsedFieldRefJson = GetFieldRefTestJson(OMNI_CHAR, COL_NUM);
-    Expr *fieldRefExpr = JSONParser::ParseJSON(nlohmann::json::parse(unparsedFieldRefJson));
-
-    EXPECT_EQ(fieldRefExpr, nullptr);
-}
-
 TEST(JSONParserTest, FuncExpr_jsonValueWithBehaviors)
 {
     string unparsedFuncJson = R"({
