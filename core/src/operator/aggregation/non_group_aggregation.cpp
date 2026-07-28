@@ -28,7 +28,7 @@ OmniStatus AggregationOperatorFactory::Init()
         aggsInputTypes.push_back(std::make_unique<DataTypes>(aggInputTypeVec));
     }
 
-    return CreateAggregatorFactories(aggregatorFactories, aggFuncTypesVector, GetMaskColumns());
+    return CreateAggregatorFactories(aggregatorFactories, aggFuncTypesVector, GetMaskColumns(), aggUdafNamesVector);
 }
 
 OmniStatus AggregationOperatorFactory::Close()

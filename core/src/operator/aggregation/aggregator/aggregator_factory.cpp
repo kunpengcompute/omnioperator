@@ -3,6 +3,7 @@
  */
 
 #include "aggregator_factory.h"
+#include "operator/aggregation/udaf/udaf_registry.h"
 #include "type/data_type.h"
 
 namespace omniruntime {
@@ -1277,6 +1278,14 @@ std::unique_ptr<Aggregator> ApproxCountDistinctAggregatorFactory::CreateAggregat
     std::string omniExceptionInfo =
         "ApproxCountDistinctAggregatorFactory: invalid inputRaw/outputPartial combination";
     throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
+}
+
+std::unique_ptr<Aggregator> DynamicUdafAggregatorFactory::CreateAggregator(const DataTypes &inputTypes,
+    const DataTypes &outputTypes, std::vector<int32_t> &channels, bool inputRaw, bool outputPartial,
+    bool isOverflowAsNull)
+{
+    return UdafRegistry::getInstance().create(
+        udafName_, inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull);
 }
 }
 }

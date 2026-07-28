@@ -20,7 +20,7 @@ void AggregationCommonOperatorFactory::CreateAggregatorFactory(
 
 OmniStatus AggregationCommonOperatorFactory::CreateAggregatorFactories(
     std::vector<std::unique_ptr<AggregatorFactory>> &aggregatorFactories, const std::vector<uint32_t> &funcTypesContext,
-    const std::vector<int32_t> &maskCols)
+    const std::vector<int32_t> &maskCols, const std::vector<std::string> &udafNames)
 {
     OmniStatus ret = OMNI_STATUS_NORMAL;
 
@@ -236,6 +236,13 @@ OmniStatus AggregationCommonOperatorFactory::CreateAggregatorFactories(
                 } else {
                     throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", "RegrReplacement aggregate does not support mask column");
                 }
+                break;
+            }
+            case OMNI_AGGREGATION_TYPE_UDAF: {
+                if (i >= udafNames.size() || udafNames[i].empty()) {
+                    throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", "Missing UDAF name for dynamic aggregate");
+                }
+                aggregatorFactories.push_back(std::make_unique<DynamicUdafAggregatorFactory>(udafNames[i]));
                 break;
             }
             default: {

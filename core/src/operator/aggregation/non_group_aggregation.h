@@ -61,13 +61,15 @@ public:
     AggregationOperatorFactory(omniruntime::type::DataTypes &sourceTypes, std::vector<uint32_t> &aggFuncTypesVector,
         std::vector<std::vector<uint32_t>> &aggsInputColsVector, std::vector<uint32_t> &maskColsVector,
         std::vector<omniruntime::type::DataTypes> &aggsOutputTypes, std::vector<bool> inputRaws,
-        std::vector<bool> outputPartials, bool overflowAsNull = false, bool isStatisticalAggregate = false)
+        std::vector<bool> outputPartials, bool overflowAsNull = false, bool isStatisticalAggregate = false,
+        const std::vector<std::string> &aggUdafNames = {})
         : AggregationCommonOperatorFactory(inputRaws, outputPartials, maskColsVector, overflowAsNull,
         isStatisticalAggregate),
           sourceTypes(sourceTypes),
           aggFuncTypesVector(aggFuncTypesVector),
           aggsInputColsVector(aggsInputColsVector),
-          aggsOutputTypes(aggsOutputTypes)
+          aggsOutputTypes(aggsOutputTypes),
+          aggUdafNamesVector(aggUdafNames)
     {}
 
     // this is for AggregationWithExprOperatorFactory
@@ -75,14 +77,15 @@ public:
         std::vector<std::vector<uint32_t>> &aggsInputColsVector, std::vector<uint32_t> &maskColsVector,
         std::vector<omniruntime::type::DataTypes> &aggsOutputTypes, std::vector<bool> inputRaws,
         std::vector<bool> outputPartials, const std::vector<int8_t> &hasAggFilters, bool overflowAsNull = false,
-        bool isStatisticalAggregate = false)
+        bool isStatisticalAggregate = false, const std::vector<std::string> &aggUdafNames = {})
         : AggregationCommonOperatorFactory(inputRaws, outputPartials, maskColsVector, overflowAsNull,
         isStatisticalAggregate),
           sourceTypes(sourceTypes),
           aggFuncTypesVector(aggFuncTypesVector),
           aggsInputColsVector(aggsInputColsVector),
           aggsOutputTypes(aggsOutputTypes),
-          hasAggFilters(hasAggFilters)
+          hasAggFilters(hasAggFilters),
+          aggUdafNamesVector(aggUdafNames)
     {}
 
     ~AggregationOperatorFactory() override = default;
@@ -102,6 +105,7 @@ private:
     std::vector<std::vector<int32_t>> aggsInputCols;
     std::vector<std::unique_ptr<AggregatorFactory>> aggregatorFactories;
     std::vector<int8_t> hasAggFilters;
+    std::vector<std::string> aggUdafNamesVector;
 };
 } // end op
 } // edn omniruntime

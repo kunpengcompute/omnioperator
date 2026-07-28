@@ -21,14 +21,15 @@ public:
         std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes,
         std::vector<omniruntime::expressions::Expr *> &aggFilterExprs, std::vector<uint32_t> &maskColumns,
         std::vector<bool> &inputRaws, std::vector<bool> &outputPartial, OverflowConfig *overflowConfig,
-        bool isStatisticalAggregate = false);
+        bool isStatisticalAggregate = false, const std::vector<std::string> &aggUdafNames = {});
 
     AggregationWithExprOperatorFactory(std::vector<omniruntime::expressions::Expr *> &groupByKeys, uint32_t groupByNum,
         std::vector<std::vector<omniruntime::expressions::Expr *>> &aggsKeys, DataTypes &sourceDataTypes,
         std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes,
         std::vector<omniruntime::expressions::Expr *> &aggFilterExprs, std::vector<uint32_t> &maskColumns,
         std::vector<bool> &inputRaws, std::vector<bool> &outputPartial, OverflowConfig *overflowConfig,
-        const config::QueryConfig &queryConfig, bool isStatisticalAggregate = false);
+        const config::QueryConfig &queryConfig, bool isStatisticalAggregate = false,
+        const std::vector<std::string> &aggUdafNames = {});
 
     ~AggregationWithExprOperatorFactory() override;
 

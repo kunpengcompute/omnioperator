@@ -63,7 +63,8 @@ public:
     void CreateAggregatorFactory(std::vector<std::unique_ptr<AggregatorFactory>> &aggregatorFactories, int32_t maskCol);
 
     OmniStatus CreateAggregatorFactories(std::vector<std::unique_ptr<AggregatorFactory>> &aggregatorFactories,
-        const std::vector<uint32_t> &funcTypesContext, const std::vector<int32_t> &maskCols);
+        const std::vector<uint32_t> &funcTypesContext, const std::vector<int32_t> &maskCols,
+        const std::vector<std::string> &udafNames = {});
 
 protected:
     std::vector<bool> inputRaws;
