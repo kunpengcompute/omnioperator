@@ -58,11 +58,11 @@ public:
     static void ExecuteTime(BaseVector* inputVec, BaseVector*& result)
     {
         auto signature = std::make_shared<FunctionSignature>("time",
-            std::vector<DataTypeId>{OMNI_VARCHAR}, OMNI_TIME64);
+            std::vector<DataTypeId>{OMNI_VARCHAR}, OMNI_LONG);
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "Time function not found for signature";
 
-        auto outputType = std::make_shared<DataType>(OMNI_TIME64);
+        auto outputType = std::make_shared<DataType>(OMNI_LONG);
         ExecutionContext context;
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;

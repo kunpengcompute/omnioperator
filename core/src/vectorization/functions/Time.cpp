@@ -206,9 +206,9 @@ public:
 
 void RegisterTimeFunction(const std::string &name)
 {
-    // time(string VARCHAR) -> TIME64
+    // time(string VARCHAR) -> BIGINT (microseconds since midnight)
     VectorFunction::RegisterVectorFunction(name,
-        {OMNI_VARCHAR}, OMNI_TIME64,
+        {OMNI_VARCHAR}, OMNI_LONG,
         std::make_shared<TimeFunction>());
 }
 
