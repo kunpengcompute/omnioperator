@@ -133,7 +133,7 @@ public:
     // Combined stub that satisfies both array-table and hash-table interfaces.
     struct TaperArrayHashStub {
         //TODO
-        uint32_t GetElementsSize() const { return 0; }
+        size_t GetElementsSize() const { return 0; }
         template <typename F> void ForEachValue(F&&) {}
         struct HashmapStub { template <typename F> void ForEachValue(F&&) {} };
         HashmapStub hashmap;
