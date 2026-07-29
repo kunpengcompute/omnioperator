@@ -200,8 +200,8 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
       buildOutputTypes(buildOutputTypes),
       hashTables(hashTables),
       simpleFilter(simpleFilter),
-      originalProbeColsCount(originalProbeColsCount),
-      isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan)
+      isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan),
+      originalProbeColsCount(originalProbeColsCount)
 {
     std::vector<DataTypePtr> tmpProbeOutputTypesVec;
     for (size_t i = 0; i < probeOutputCols.size(); i++) {
@@ -342,16 +342,6 @@ void LookupJoinOperator::PrepareSerializers()
 
 void LookupJoinOperator::ProcessProbe()
 {
-#ifdef OMNI_USE_TAPER_JOIN
-    // 目前只实现了INNER连接，完全实现后不需要开关
-    bool hasFilter = simpleFilter != nullptr;
-    if (hasFilter) {
-        ProbeBatchForInnerJoin<true, true>(); // hasFilter : true isSingleHT : true
-    } else {
-        ProbeBatchForInnerJoin<false, true>(); // hasFilter : false isSingleHT : true
-    }
-#else
-
     bool hasFilter = simpleFilter != nullptr;
     switch (joinType) {
         case OMNI_JOIN_TYPE_INNER:
@@ -438,7 +428,6 @@ void LookupJoinOperator::ProcessProbe()
             throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
         }
     }
-#endif
 }
 
 int32_t LookupJoinOperator::AddInput(VectorBatch *vecBatch)
@@ -949,7 +938,6 @@ void LookupJoinOperator::ArrayJoinProbeSIMDNeon(BaseVector ***buildColumns, size
 template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatchForInnerJoin()
 {
 #ifdef OMNI_USE_TAPER_JOIN
-    // 这里需要修改原来的实现
     {
         auto inputRowCount = curInputBatch->GetRowCount();
         bool isTaper = std::visit([&](auto&& varg) -> bool {
@@ -972,12 +960,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                     singleHT, partitionMask, curProbeHashes,
                     chainHeads);
 
-                for (int32_t i = 0; i < numProbeRows; ++i) {
-                    if (chainHeads[i]) {
-                        ProbeJoinPosition<hasJoinFilter>(curProbePosition + i);
-                    }
-                }
-
+                // 第 2 轮：批量展开冲突链 + filter 评估 + 输出（lambda，捕获局部变量避免传参）
                 auto listResult = [&](int32_t probeStart, int32_t probeEnd, std::vector<char*>& heads) {
                     auto payloadOff = rc->PayloadOffset();
                     for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
@@ -985,7 +968,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                         int32_t idx = pos - probeStart;
                         char* chainHead = heads[idx];
                         if (!chainHead) continue;
-
+                        ProbeJoinPosition<hasJoinFilter>(pos);
                         uint32_t part = singleHT ? partitionMask :
                             HashUtil::GetRawHashPartition(curProbeHashes[pos], partitionMask);
                         auto buildColumns = varg.GetColumns(part);
@@ -1004,15 +987,24 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                                         RowContainer::IsNullAt(cur, col.NullByte(), col.NullMask());
                                     auto typeId = buildFilterTypeIds[j];
                                     if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_VARBINARY ||
-                                        typeId == type::OMNI_CHAR) {
+                                        typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
+                                        typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                         auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
-                                        if (dataPtr) {
-                                            uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
-                                            uint32_t strLen = 0;
-                                            memcpy(&strLen, dataPtr + 1, lenSize);
-                                            values[colIdx] =
-                                                reinterpret_cast<int64_t>(dataPtr + 1 + lenSize);
-                                            lengths[colIdx] = static_cast<int32_t>(strLen);
+                                        if (LIKELY(dataPtr)) {
+                                            if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                                values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
+                                                lengths[colIdx] = 0;
+                                            } else {
+                                                uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
+                                                uint32_t strLen = 0;
+                                                memcpy(&strLen, dataPtr + 1, lenSize);
+                                                values[colIdx] =
+                                                    reinterpret_cast<int64_t>(dataPtr + 1 + lenSize);
+                                                lengths[colIdx] = static_cast<int32_t>(strLen);
+                                            }
+                                        } else {
+                                            // dataPtr is null — force null flag
+                                            nulls[colIdx] = true;
                                         }
                                     } else {
                                         values[colIdx] = reinterpret_cast<int64_t>(cur + col.Offset());
@@ -1027,13 +1019,21 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                             }
                             cur = *RowContainer::NextPtr(cur, payloadOff);
                         }
+                        if (outputBuilder->IsFull()) {
+                            curProbePosition = pos + 1;
+                            return;
+                        }
                     }
                 };
                 listResult(curProbePosition, inputRowCount, chainHeads);
+                if (!outputBuilder->IsFull()) {
+                    curProbePosition = inputRowCount;
+                }
             }, *hashTables);
-            curProbePosition = inputRowCount;
             return;
         }
+        curProbePosition = inputRowCount;
+        return;
     }
 #else
     std::visit(
@@ -1150,6 +1150,124 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
 
 template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatchForOppositeSideOuterJoin()
 {
+#ifdef OMNI_USE_TAPER_JOIN
+    {
+        auto inputRowCount = curInputBatch->GetRowCount();
+        bool isTaper = std::visit([&](auto&& varg) -> bool {
+            return varg.GetTaperRowContainer(partitionMask) != nullptr;
+        }, *hashTables);
+        if (isTaper) {
+            std::visit([&](auto&& varg) {
+                auto contextPtr = executionContext.get();
+                auto rc = varg.GetTaperRowContainer(partitionMask);
+                if (rc) outputBuilder->SetTaperOutput(rc, varg.GetTaperStoredColIndices());
+                auto probeHashColsCount = probeHashCols.size();
+                uint32_t partition = partitionMask;
+                InitForProbe<hasJoinFilter>(partition);
+
+                int32_t numProbeRows = inputRowCount - curProbePosition;
+                std::vector<char*> chainHeads(numProbeRows, nullptr);
+                varg.FindBatch(
+                    curProbePosition, inputRowCount,
+                    curProbeNulls,
+                    probeHashColumns, probeHashColsCount,
+                    singleHT, partitionMask, curProbeHashes,
+                    chainHeads);
+
+                auto listResult = [&](int32_t probeStart, int32_t probeEnd, std::vector<char*>& heads) {
+                    auto payloadOff = rc->PayloadOffset();
+                    for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
+                        if (curProbeNulls[pos]) {
+                            outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+                            if (outputBuilder->IsFull()) {
+                                curProbePosition = pos + 1;
+                                return;
+                            }
+                            continue;
+                        }
+                        int32_t idx = pos - probeStart;
+                        char* chainHead = heads[idx];
+                        ProbeJoinPosition<hasJoinFilter>(pos);
+                        uint32_t part = singleHT ? partitionMask :
+                            HashUtil::GetRawHashPartition(curProbeHashes[pos], partitionMask);
+                        auto buildColumns = varg.GetColumns(part);
+
+                        bool hasProduceRow = false;
+                        char* cur = chainHead;
+                        while (cur) {
+                            if constexpr (!hasJoinFilter) {
+                                outputBuilder->AppendRowTaper(pos, buildColumns, 0, cur);
+                                hasProduceRow = true;
+                            } else {
+                                bool filterOk = true;
+                                for (size_t j = 0; j < buildFilterColsSize; ++j) {
+                                    uint32_t colIdx = buildFilterCols[j];
+                                    int32_t buildColIdx = colIdx - originalProbeColsCount;
+                                    auto col = rc->ColumnAt(buildColIdx);
+                                    nulls[colIdx] =
+                                        RowContainer::IsNullAt(cur, col.NullByte(), col.NullMask());
+                                    auto typeId = buildFilterTypeIds[j];
+                                    if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_VARBINARY ||
+                                        typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
+                                        typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                        auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
+                                        if (LIKELY(dataPtr)) {
+                                            if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                                values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
+                                                lengths[colIdx] = 0;
+                                            } else {
+                                                uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
+                                                uint32_t strLen = 0;
+                                                memcpy(&strLen, dataPtr + 1, lenSize);
+                                                values[colIdx] =
+                                                    reinterpret_cast<int64_t>(dataPtr + 1 + lenSize);
+                                                lengths[colIdx] = static_cast<int32_t>(strLen);
+                                            }
+                                        } else {
+                                            // dataPtr is null — force null flag
+                                            nulls[colIdx] = true;
+                                        }
+                                    } else {
+                                        values[colIdx] = reinterpret_cast<int64_t>(cur + col.Offset());
+                                    }
+                                }
+                                filterOk = simpleFilter->Evaluate(
+                                    values, nulls, lengths,
+                                    reinterpret_cast<int64_t>(contextPtr));
+                                if (filterOk) {
+                                    outputBuilder->AppendRowTaper(pos, buildColumns, 0, cur);
+                                    hasProduceRow = true;
+                                }
+                            }
+                            cur = *RowContainer::NextPtr(cur, payloadOff);
+                        }
+                        if (!hasProduceRow) {
+                            outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+                        }
+                        if (outputBuilder->IsFull()) {
+                            curProbePosition = pos + 1;
+                            return;
+                        }
+                    }
+                };
+                listResult(curProbePosition, inputRowCount, chainHeads);
+                if (!outputBuilder->IsFull()) {
+                    curProbePosition = inputRowCount;
+                }
+            }, *hashTables);
+            return;
+        }
+        for (int32_t pos = curProbePosition; pos < inputRowCount; ++pos) {
+            outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+            if (outputBuilder->IsFull()) {
+                curProbePosition = pos + 1;
+                return;
+            }
+        }
+        curProbePosition = inputRowCount;
+        return;
+    }
+#else
     std::visit(
         [&](auto &&arg) {
             auto inputRowCount = curInputBatch->GetRowCount();
@@ -1216,10 +1334,111 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
             curProbePosition = inputRowCount;
         },
         *hashTables);
+#endif
 }
 
 template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatchForSameSideOuterJoin()
 {
+#ifdef OMNI_USE_TAPER_JOIN
+    {
+        auto inputRowCount = curInputBatch->GetRowCount();
+        bool isTaper = std::visit([&](auto&& varg) -> bool {
+            return varg.GetTaperRowContainer(partitionMask) != nullptr;
+        }, *hashTables);
+        if (isTaper) {
+            std::visit([&](auto&& varg) {
+                auto contextPtr = executionContext.get();
+                auto rc = varg.GetTaperRowContainer(partitionMask);
+                if (rc) { outputBuilder->SetTaperOutput(rc, varg.GetTaperStoredColIndices()); outputBuilder->SetTaperNeedsUnvisited(); }
+                auto probeHashColsCount = probeHashCols.size();
+                uint32_t partition = partitionMask;
+                InitForProbe<hasJoinFilter>(partition);
+
+                int32_t numProbeRows = inputRowCount - curProbePosition;
+                std::vector<char*> chainHeads(numProbeRows, nullptr);
+                varg.FindBatch(
+                    curProbePosition, inputRowCount,
+                    curProbeNulls,
+                    probeHashColumns, probeHashColsCount,
+                    singleHT, partitionMask, curProbeHashes,
+                    chainHeads);
+
+                auto listResult = [&](int32_t probeStart, int32_t probeEnd, std::vector<char*>& heads) {
+                    auto payloadOff = rc->PayloadOffset();
+                    for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
+                        if (curProbeNulls[pos]) continue;
+                        int32_t idx = pos - probeStart;
+                        char* chainHead = heads[idx];
+                        if (!chainHead) continue;
+                        ProbeJoinPosition<hasJoinFilter>(pos);
+                        uint32_t part = singleHT ? partitionMask :
+                            HashUtil::GetRawHashPartition(curProbeHashes[pos], partitionMask);
+                        auto buildColumns = varg.GetColumns(part);
+
+                        char* cur = chainHead;
+                        while (cur) {
+                            auto& vf = *RowContainer::VisitedPtr(cur, payloadOff); if (!vf) { vf = 1; varg.IncrementVisited(); }
+                            if constexpr (!hasJoinFilter) {
+                                outputBuilder->AppendRowTaper(pos, buildColumns, 0, cur);
+                            } else {
+                                bool filterOk = true;
+                                for (size_t j = 0; j < buildFilterColsSize; ++j) {
+                                    uint32_t colIdx = buildFilterCols[j];
+                                    int32_t buildColIdx = colIdx - originalProbeColsCount;
+                                    auto col = rc->ColumnAt(buildColIdx);
+                                    nulls[colIdx] =
+                                        RowContainer::IsNullAt(cur, col.NullByte(), col.NullMask());
+                                    auto typeId = buildFilterTypeIds[j];
+                                    if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_VARBINARY ||
+                                        typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
+                                        typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                        auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
+                                        if (LIKELY(dataPtr)) {
+                                            if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                                values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
+                                                lengths[colIdx] = 0;
+                                            } else {
+                                                uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
+                                                uint32_t strLen = 0;
+                                                memcpy(&strLen, dataPtr + 1, lenSize);
+                                                values[colIdx] =
+                                                    reinterpret_cast<int64_t>(dataPtr + 1 + lenSize);
+                                                lengths[colIdx] = static_cast<int32_t>(strLen);
+                                            }
+                                        } else {
+                                            // dataPtr is null — force null flag
+                                            nulls[colIdx] = true;
+                                        }
+                                    } else {
+                                        values[colIdx] = reinterpret_cast<int64_t>(cur + col.Offset());
+                                    }
+                                }
+                                filterOk = simpleFilter->Evaluate(
+                                    values, nulls, lengths,
+                                    reinterpret_cast<int64_t>(contextPtr));
+                                if (filterOk) {
+                                    outputBuilder->AppendRowTaper(pos, buildColumns, 0, cur);
+                                }
+                            }
+                            cur = *RowContainer::NextPtr(cur, payloadOff);
+                        }
+                        if (outputBuilder->IsFull()) {
+                            curProbePosition = pos + 1;
+                            return;
+                        }
+                    }
+                };
+                listResult(curProbePosition, inputRowCount, chainHeads);
+                if (!outputBuilder->IsFull()) {
+                    curProbePosition = inputRowCount;
+                }
+            }, *hashTables);
+            return;
+        }
+        curProbePosition = inputRowCount;
+        return;
+    }
+#else
     std::visit(
         [&](auto &&arg) {
             using Mapped = typename std::decay_t<decltype(arg)>::Mapped;
@@ -1285,10 +1504,131 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
             }
         },
         *hashTables);
+#endif
 }
 
 template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatchForFullJoin()
 {
+#ifdef OMNI_USE_TAPER_JOIN
+    {
+        auto inputRowCount = curInputBatch->GetRowCount();
+        bool isTaper = std::visit([&](auto&& varg) -> bool {
+            return varg.GetTaperRowContainer(partitionMask) != nullptr;
+        }, *hashTables);
+        if (isTaper) {
+            std::visit([&](auto&& varg) {
+                auto contextPtr = executionContext.get();
+                auto rc = varg.GetTaperRowContainer(partitionMask);
+                if (rc) { outputBuilder->SetTaperOutput(rc, varg.GetTaperStoredColIndices()); outputBuilder->SetTaperNeedsUnvisited(); }
+                auto probeHashColsCount = probeHashCols.size();
+                uint32_t partition = partitionMask;
+                InitForProbe<hasJoinFilter>(partition);
+
+                int32_t numProbeRows = inputRowCount - curProbePosition;
+                std::vector<char*> chainHeads(numProbeRows, nullptr);
+                varg.FindBatch(
+                    curProbePosition, inputRowCount,
+                    curProbeNulls,
+                    probeHashColumns, probeHashColsCount,
+                    singleHT, partitionMask, curProbeHashes,
+                    chainHeads);
+
+                auto listResult = [&](int32_t probeStart, int32_t probeEnd, std::vector<char*>& heads) {
+                    auto payloadOff = rc->PayloadOffset();
+                    for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
+                        if (curProbeNulls[pos]) {
+                            outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+                            if (outputBuilder->IsFull()) {
+                                curProbePosition = pos + 1;
+                                return;
+                            }
+                            continue;
+                        }
+                        int32_t idx = pos - probeStart;
+                        char* chainHead = heads[idx];
+                        ProbeJoinPosition<hasJoinFilter>(pos);
+
+                        uint32_t part = singleHT ? partitionMask :
+                            HashUtil::GetRawHashPartition(curProbeHashes[pos], partitionMask);
+                        auto buildColumns = varg.GetColumns(part);
+
+                        bool hasProduceRow = false;
+                        char* cur = chainHead;
+                        while (cur) {
+                            auto& vf = *RowContainer::VisitedPtr(cur, payloadOff); if (!vf) { vf = 1; varg.IncrementVisited(); }
+                            if constexpr (!hasJoinFilter) {
+                                outputBuilder->AppendRowTaper(pos, buildColumns, 0, cur);
+                                hasProduceRow = true;
+                            } else {
+                                bool filterOk = true;
+                                for (size_t j = 0; j < buildFilterColsSize; ++j) {
+                                    uint32_t colIdx = buildFilterCols[j];
+                                    int32_t buildColIdx = colIdx - originalProbeColsCount;
+                                    auto col = rc->ColumnAt(buildColIdx);
+                                    nulls[colIdx] =
+                                        RowContainer::IsNullAt(cur, col.NullByte(), col.NullMask());
+                                    auto typeId = buildFilterTypeIds[j];
+                                    if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_VARBINARY ||
+                                        typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
+                                        typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                        auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
+                                        if (LIKELY(dataPtr)) {
+                                            if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                                values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
+                                                lengths[colIdx] = 0;
+                                            } else {
+                                                uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
+                                                uint32_t strLen = 0;
+                                                memcpy(&strLen, dataPtr + 1, lenSize);
+                                                values[colIdx] =
+                                                    reinterpret_cast<int64_t>(dataPtr + 1 + lenSize);
+                                                lengths[colIdx] = static_cast<int32_t>(strLen);
+                                            }
+                                        } else {
+                                            // dataPtr is null — force null flag
+                                            nulls[colIdx] = true;
+                                        }
+                                    } else {
+                                        values[colIdx] = reinterpret_cast<int64_t>(cur + col.Offset());
+                                    }
+                                }
+                                filterOk = simpleFilter->Evaluate(
+                                    values, nulls, lengths,
+                                    reinterpret_cast<int64_t>(contextPtr));
+                                if (filterOk) {
+                                    outputBuilder->AppendRowTaper(pos, buildColumns, 0, cur);
+                                    hasProduceRow = true;
+                                }
+                            }
+                            cur = *RowContainer::NextPtr(cur, payloadOff);
+                        }
+                        if (!hasProduceRow) {
+                            outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+                        }
+                        if (outputBuilder->IsFull()) {
+                            curProbePosition = pos + 1;
+                            return;
+                        }
+                    }
+                };
+                listResult(curProbePosition, inputRowCount, chainHeads);
+                if (!outputBuilder->IsFull()) {
+                    curProbePosition = inputRowCount;
+                }
+            }, *hashTables);
+            return;
+        }
+        for (int32_t pos = curProbePosition; pos < inputRowCount; ++pos) {
+            outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+            if (outputBuilder->IsFull()) {
+                curProbePosition = pos + 1;
+                return;
+            }
+        }
+        curProbePosition = inputRowCount;
+        return;
+    }
+#else
     std::visit(
         [&](auto &&arg) {
             using Mapped = typename std::decay_t<decltype(arg)>::Mapped;
@@ -1356,10 +1696,112 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
             }
         },
         *hashTables);
+#endif
 }
 
 template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatchForLeftSemiJoin()
 {
+#ifdef OMNI_USE_TAPER_JOIN
+    {
+        auto inputRowCount = curInputBatch->GetRowCount();
+        bool isTaper = std::visit([&](auto&& varg) -> bool {
+            return varg.GetTaperRowContainer(partitionMask) != nullptr;
+        }, *hashTables);
+        if (isTaper) {
+            std::visit([&](auto&& varg) {
+                auto contextPtr = executionContext.get();
+                auto rc = varg.GetTaperRowContainer(partitionMask);
+                if (rc) outputBuilder->SetTaperOutput(rc, varg.GetTaperStoredColIndices());
+                auto probeHashColsCount = probeHashCols.size();
+                uint32_t partition = partitionMask;
+                InitForProbe<hasJoinFilter>(partition);
+
+                int32_t numProbeRows = inputRowCount - curProbePosition;
+                std::vector<char*> chainHeads(numProbeRows, nullptr);
+                varg.FindBatch(
+                    curProbePosition, inputRowCount,
+                    curProbeNulls,
+                    probeHashColumns, probeHashColsCount,
+                    singleHT, partitionMask, curProbeHashes,
+                    chainHeads);
+
+                auto listResult = [&](int32_t probeStart, int32_t probeEnd, std::vector<char*>& heads) {
+                    auto payloadOff = rc->PayloadOffset();
+                    for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
+                        if (curProbeNulls[pos]) continue;
+                        int32_t idx = pos - probeStart;
+                        char* chainHead = heads[idx];
+                        if (!chainHead) continue;
+                        ProbeJoinPosition<hasJoinFilter>(pos);
+                        uint32_t part = singleHT ? partitionMask :
+                            HashUtil::GetRawHashPartition(curProbeHashes[pos], partitionMask);
+                        auto buildColumns = varg.GetColumns(part);
+
+                        char* cur = chainHead;
+                        while (cur) {
+                            if constexpr (!hasJoinFilter) {
+                                outputBuilder->AppendRowTaper(pos, buildColumns, 0, cur);
+                                break;
+                            } else {
+                                bool filterOk = true;
+                                for (size_t j = 0; j < buildFilterColsSize; ++j) {
+                                    uint32_t colIdx = buildFilterCols[j];
+                                    int32_t buildColIdx = colIdx - originalProbeColsCount;
+                                    auto col = rc->ColumnAt(buildColIdx);
+                                    nulls[colIdx] =
+                                        RowContainer::IsNullAt(cur, col.NullByte(), col.NullMask());
+                                    auto typeId = buildFilterTypeIds[j];
+                                    if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_VARBINARY ||
+                                        typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
+                                        typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                        auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
+                                        if (LIKELY(dataPtr)) {
+                                            if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                                values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
+                                                lengths[colIdx] = 0;
+                                            } else {
+                                                uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
+                                                uint32_t strLen = 0;
+                                                memcpy(&strLen, dataPtr + 1, lenSize);
+                                                values[colIdx] =
+                                                    reinterpret_cast<int64_t>(dataPtr + 1 + lenSize);
+                                                lengths[colIdx] = static_cast<int32_t>(strLen);
+                                            }
+                                        } else {
+                                            // dataPtr is null — force null flag
+                                            nulls[colIdx] = true;
+                                        }
+                                    } else {
+                                        values[colIdx] = reinterpret_cast<int64_t>(cur + col.Offset());
+                                    }
+                                }
+                                filterOk = simpleFilter->Evaluate(
+                                    values, nulls, lengths,
+                                    reinterpret_cast<int64_t>(contextPtr));
+                                if (filterOk) {
+                                    outputBuilder->AppendRowTaper(pos, buildColumns, 0, cur);
+                                    break;
+                                }
+                            }
+                            cur = *RowContainer::NextPtr(cur, payloadOff);
+                        }
+                        if (outputBuilder->IsFull()) {
+                            curProbePosition = pos + 1;
+                            return;
+                        }
+                    }
+                };
+                listResult(curProbePosition, inputRowCount, chainHeads);
+                if (!outputBuilder->IsFull()) {
+                    curProbePosition = inputRowCount;
+                }
+            }, *hashTables);
+            return;
+        }
+        curProbePosition = inputRowCount;
+        return;
+    }
+#else
     std::visit(
         [&](auto &&arg) {
             auto inputRowCount = curInputBatch->GetRowCount();
@@ -1422,10 +1864,126 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
             curProbePosition = inputRowCount;
         },
         *hashTables);
+#endif
 }
 
 template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatchForLeftAntiJoin()
 {
+#ifdef OMNI_USE_TAPER_JOIN
+    {
+        auto inputRowCount = curInputBatch->GetRowCount();
+        bool isTaper = std::visit([&](auto&& varg) -> bool {
+            return varg.GetTaperRowContainer(partitionMask) != nullptr;
+        }, *hashTables);
+        if (isTaper) {
+            std::visit([&](auto&& varg) {
+                auto contextPtr = executionContext.get();
+                auto rc = varg.GetTaperRowContainer(partitionMask);
+                if (rc) outputBuilder->SetTaperOutput(rc, varg.GetTaperStoredColIndices());
+                auto probeHashColsCount = probeHashCols.size();
+                uint32_t partition = partitionMask;
+                InitForProbe<hasJoinFilter>(partition);
+
+                int32_t numProbeRows = inputRowCount - curProbePosition;
+                std::vector<char*> chainHeads(numProbeRows, nullptr);
+                varg.FindBatch(
+                    curProbePosition, inputRowCount,
+                    curProbeNulls,
+                    probeHashColumns, probeHashColsCount,
+                    singleHT, partitionMask, curProbeHashes,
+                    chainHeads);
+
+                auto listResult = [&](int32_t probeStart, int32_t probeEnd, std::vector<char*>& heads) {
+                    auto payloadOff = rc->PayloadOffset();
+                    for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
+                        if (curProbeNulls[pos]) {
+                            outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+                            if (outputBuilder->IsFull()) {
+                                curProbePosition = pos + 1;
+                                return;
+                            }
+                            continue;
+                        }
+                        int32_t idx = pos - probeStart;
+                        char* chainHead = heads[idx];
+
+                        ProbeJoinPosition<hasJoinFilter>(pos);
+                        bool hasProduceRow = false;
+                        char* cur = chainHead;
+                        while (cur) {
+                            if constexpr (!hasJoinFilter) {
+                                hasProduceRow = true;
+                                break;
+                            } else {
+                                bool filterOk = true;
+                                for (size_t j = 0; j < buildFilterColsSize; ++j) {
+                                    uint32_t colIdx = buildFilterCols[j];
+                                    int32_t buildColIdx = colIdx - originalProbeColsCount;
+                                    auto col = rc->ColumnAt(buildColIdx);
+                                    nulls[colIdx] =
+                                        RowContainer::IsNullAt(cur, col.NullByte(), col.NullMask());
+                                    auto typeId = buildFilterTypeIds[j];
+                                    if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_VARBINARY ||
+                                        typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
+                                        typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                        auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
+                                        if (LIKELY(dataPtr)) {
+                                            if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                                values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
+                                                lengths[colIdx] = 0;
+                                            } else {
+                                                uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
+                                                uint32_t strLen = 0;
+                                                memcpy(&strLen, dataPtr + 1, lenSize);
+                                                values[colIdx] =
+                                                    reinterpret_cast<int64_t>(dataPtr + 1 + lenSize);
+                                                lengths[colIdx] = static_cast<int32_t>(strLen);
+                                            }
+                                        } else {
+                                            // dataPtr is null — force null flag
+                                            nulls[colIdx] = true;
+                                        }
+                                    } else {
+                                        values[colIdx] = reinterpret_cast<int64_t>(cur + col.Offset());
+                                    }
+                                }
+                                filterOk = simpleFilter->Evaluate(
+                                    values, nulls, lengths,
+                                    reinterpret_cast<int64_t>(contextPtr));
+                                if (filterOk) {
+                                    hasProduceRow = true;
+                                    break;
+                                }
+                            }
+                            cur = *RowContainer::NextPtr(cur, payloadOff);
+                        }
+                        if (!hasProduceRow) {
+                            outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+                        }
+                        if (outputBuilder->IsFull()) {
+                            curProbePosition = pos + 1;
+                            return;
+                        }
+                    }
+                };
+                listResult(curProbePosition, inputRowCount, chainHeads);
+                if (!outputBuilder->IsFull()) {
+                    curProbePosition = inputRowCount;
+                }
+            }, *hashTables);
+            return;
+        }
+        for (int32_t pos = curProbePosition; pos < inputRowCount; ++pos) {
+            outputBuilder->AppendRowTaper(pos, nullptr, 0, nullptr);
+            if (outputBuilder->IsFull()) {
+                curProbePosition = pos + 1;
+                return;
+            }
+        }
+        curProbePosition = inputRowCount;
+        return;
+    }
+#else
     std::visit(
         [&](auto &&arg) {
             auto inputRowCount = curInputBatch->GetRowCount();
@@ -1490,10 +2048,123 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
             curProbePosition = inputRowCount;
         },
         *hashTables);
+#endif
 }
 
 template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatchForExistenceJoin()
 {
+#ifdef OMNI_USE_TAPER_JOIN
+    {
+        auto inputRowCount = curInputBatch->GetRowCount();
+        bool isTaper = std::visit([&](auto&& varg) -> bool {
+            return varg.GetTaperRowContainer(partitionMask) != nullptr;
+        }, *hashTables);
+        if (isTaper) {
+            std::visit([&](auto&& varg) {
+                auto contextPtr = executionContext.get();
+                auto rc = varg.GetTaperRowContainer(partitionMask);
+                if (rc) outputBuilder->SetTaperOutput(rc, varg.GetTaperStoredColIndices());
+                auto probeHashColsCount = probeHashCols.size();
+                uint32_t partition = partitionMask;
+                InitForProbe<hasJoinFilter>(partition);
+
+                int32_t numProbeRows = inputRowCount - curProbePosition;
+                std::vector<char*> chainHeads(numProbeRows, nullptr);
+                varg.FindBatch(
+                    curProbePosition, inputRowCount,
+                    curProbeNulls,
+                    probeHashColumns, probeHashColsCount,
+                    singleHT, partitionMask, curProbeHashes,
+                    chainHeads);
+
+                auto listResult = [&](int32_t probeStart, int32_t probeEnd, std::vector<char*>& heads) {
+                    auto payloadOff = rc->PayloadOffset();
+                    for (int32_t pos = probeStart; pos < probeEnd; ++pos) {
+                        if (curProbeNulls[pos]) {
+                            outputBuilder->AppendExistenceRow<false>(pos);
+                            continue;
+                        }
+                        int32_t idx = pos - probeStart;
+                        char* chainHead = heads[idx];
+                        ProbeJoinPosition<hasJoinFilter>(pos);
+                        bool hasProduceRow = false;
+                        char* cur = chainHead;
+                        while (cur) {
+                            if constexpr (!hasJoinFilter) {
+                                outputBuilder->AppendExistenceRow<true>(pos);
+                                hasProduceRow = true;
+                                break;
+                            } else {
+                                bool filterOk = true;
+                                for (size_t j = 0; j < buildFilterColsSize; ++j) {
+                                    uint32_t colIdx = buildFilterCols[j];
+                                    int32_t buildColIdx = colIdx - originalProbeColsCount;
+                                    auto col = rc->ColumnAt(buildColIdx);
+                                    nulls[colIdx] =
+                                        RowContainer::IsNullAt(cur, col.NullByte(), col.NullMask());
+                                    auto typeId = buildFilterTypeIds[j];
+                                    if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_VARBINARY ||
+                                        typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
+                                        typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                        auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
+                                        if (LIKELY(dataPtr)) {
+                                            if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+                                                values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
+                                                lengths[colIdx] = 0;
+                                            } else {
+                                                uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
+                                                uint32_t strLen = 0;
+                                                memcpy(&strLen, dataPtr + 1, lenSize);
+                                                values[colIdx] =
+                                                    reinterpret_cast<int64_t>(dataPtr + 1 + lenSize);
+                                                lengths[colIdx] = static_cast<int32_t>(strLen);
+                                            }
+                                        } else {
+                                            // dataPtr is null — force null flag
+                                            nulls[colIdx] = true;
+                                        }
+                                    } else {
+                                        values[colIdx] = reinterpret_cast<int64_t>(cur + col.Offset());
+                                    }
+                                }
+                                filterOk = simpleFilter->Evaluate(
+                                    values, nulls, lengths,
+                                    reinterpret_cast<int64_t>(contextPtr));
+                                if (filterOk) {
+                                    outputBuilder->AppendExistenceRow<true>(pos);
+                                    hasProduceRow = true;
+                                    break;
+                                }
+                            }
+                            cur = *RowContainer::NextPtr(cur, payloadOff);
+                        }
+                        if (!hasProduceRow) {
+                            outputBuilder->AppendExistenceRow<false>(pos);
+                        }
+                        if (outputBuilder->IsFull()) {
+                            curProbePosition = pos + 1;
+                            return;
+                        }
+                    }
+                };
+                listResult(curProbePosition, inputRowCount, chainHeads);
+                if (!outputBuilder->IsFull()) {
+                    curProbePosition = inputRowCount;
+                }
+            }, *hashTables);
+            return;
+        }
+        for (int32_t pos = curProbePosition; pos < inputRowCount; ++pos) {
+            outputBuilder->AppendExistenceRow<false>(pos);
+            if (outputBuilder->IsFull()) {
+                curProbePosition = pos + 1;
+                return;
+            }
+        }
+        curProbePosition = inputRowCount;
+        return;
+    }
+#else
     std::visit(
         [&](auto &&arg) {
             auto inputRowCount = curInputBatch->GetRowCount();
@@ -1549,6 +2220,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
             curProbePosition = inputRowCount;
         },
         *hashTables);
+#endif
 }
 
 template <bool hasJoinFilter>
@@ -1887,8 +2559,8 @@ LookupJoinOutputBuilder::LookupJoinOutputBuilder(std::vector<int32_t> &probeOutp
     : probeOutputCols(probeOutputCols),
       probeOutputTypes(probeOutputTypes),
       buildOutputCols(buildOutputCols),
-      buildOutputTypes(buildOutputTypes),
-      outputList(outputList)
+      outputList(outputList),
+      buildOutputTypes(buildOutputTypes)
 {
     // if the probe and build do not have output columns, the row size is setted to DEFAULT_ROW_SIZE
     this->maxRowCount = OperatorUtil::GetMaxRowCount((outputRowSize != 0) ? outputRowSize : DEFAULT_ROW_SIZE);
@@ -2248,6 +2920,23 @@ static NO_INLINE BaseVector *ConstructBuildMapColumn(
     return ret;
 }
 
+void LookupJoinOutputBuilder::PadNullProbeRows(VectorBatch* vectorBatch, int32_t nullRowCount)
+{
+    if (nullRowCount <= 0) return;
+    for (size_t j = 0; j < probeOutputCols.size(); ++j) {
+        auto typeId = probeOutputTypes[j];
+        auto* vec = vectorBatch->GetVectors()[j];
+        int32_t curSize = vec->GetSize();
+        for (int32_t r = 0; r < nullRowCount; ++r) {
+            if (typeId == OMNI_VARCHAR || typeId == OMNI_CHAR || typeId == OMNI_VARBINARY) {
+                static_cast<vec::Vector<vec::LargeStringContainer<std::string_view>>*>(vec)->SetNull(curSize + r);
+            } else {
+                vec->SetNull(curSize + r);
+            }
+        }
+    }
+}
+
 void NO_INLINE LookupJoinOutputBuilder::ConstructProbeColumns(VectorBatch *vectorBatch, BaseVector **probeOutputColumns,
     int32_t rowCount)
 {
@@ -2275,30 +2964,36 @@ void NO_INLINE LookupJoinOutputBuilder::ConstructProbeColumns(VectorBatch *vecto
 }
 
 template <bool isInnerJoin, bool isShuffleExchangeBuildPlan>
+bool LookupJoinOutputBuilder::ConstructBuildColumnWithTaper(VectorBatch *vectorBatch, int32_t rowCount)
+{
+    if (taperRC_ == nullptr || taperRowPtrs.empty() || taperStoredColIndices_.empty()) {
+        return false;
+    }
+    for (size_t j = 0; j < buildOutputCols.size(); j++) {
+        uint32_t outputCol = buildOutputCols[j];
+        int32_t rcColIdx = 0;
+        for (size_t k = 0; k < taperStoredColIndices_.size(); ++k) {
+            if (taperStoredColIndices_[k] == static_cast<int32_t>(outputCol))
+                { rcColIdx = static_cast<int32_t>(k); break; }
+        }
+        auto typeId = buildOutputTypes.GetIds()[j];
+        auto* outVec = (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW)
+            ? vec::VectorHelper::CreateComplexVector(buildOutputTypes.GetType(j).get(), rowCount)
+            : vec::VectorHelper::CreateFlatVector(typeId, rowCount);
+        const_cast<RowContainer*>(taperRC_)->ExtractColumn(
+            const_cast<char**>(taperRowPtrs.data()), rowCount, rcColIdx, outVec);
+
+        vectorBatch->Append(outVec);
+    }
+    return true;
+}
+
+template <bool isInnerJoin, bool isShuffleExchangeBuildPlan>
 void NO_INLINE LookupJoinOutputBuilder::ConstructBuildColumns(VectorBatch *vectorBatch, int32_t rowCount)
 {
 #ifdef OMNI_USE_TAPER_JOIN
-    // 从RowContainer中导出build侧的列
-    if (taperRC_ != nullptr && !taperRowPtrs.empty() && !taperStoredColIndices_.empty()) {
-        // Check all output columns are stored
-        bool allColsStored = true;
-        if (allColsStored) {
-            for (size_t j = 0; j < buildOutputCols.size(); j++) {
-                uint32_t outputCol = buildOutputCols[j];
-                // Map logical output column to RowContainer column index
-                int32_t rcColIdx = 0;
-                for (size_t k = 0; k < taperStoredColIndices_.size(); ++k) {
-                    if (taperStoredColIndices_[k] == static_cast<int32_t>(outputCol))
-                        { rcColIdx = static_cast<int32_t>(k); break; }
-                }
-                auto* outVec = vec::VectorHelper::CreateFlatVector(
-                    buildOutputTypes.GetIds()[j], rowCount);
-                const_cast<RowContainer*>(taperRC_)->ExtractColumn(
-                    const_cast<char**>(taperRowPtrs.data()), rowCount, rcColIdx, outVec);
-                vectorBatch->Append(outVec);
-            }
-            return;
-        }
+    if (ConstructBuildColumnWithTaper<isInnerJoin, isShuffleExchangeBuildPlan>(vectorBatch, rowCount)) {
+        return;
     }
 #endif
     // preprocess the pointer to build table vectors -- doing a few levels of
@@ -2380,26 +3075,13 @@ void LookupJoinOutputBuilder::BuildOutput(
     auto output = std::make_unique<VectorBatch>(rowCount);
     auto outputPtr = output.get();
 
-#ifdef OMNI_USE_TAPER_JOIN
-    // 其他连接类型的逻辑没有实现，暂时只保留inner的逻辑，实现完成后不需要开关
-    if (!probeOutputCols.empty()) {
-        // only probe side will produce dic vector
-        ConstructProbeColumns(outputPtr, probeOutputColumns, rowCount);
-    }
-    if (!buildOutputCols.empty()) {
-        ConstructBuildColumns<true, false>(outputPtr, rowCount);
-    }
-
-#else
     if (joinType == OMNI_JOIN_TYPE_EXISTENCE) {
         if (!probeOutputCols.empty()) {
-            // only probe side will produce dic vector
             ConstructProbeColumns(outputPtr, probeOutputColumns, rowCount);
         }
         ConstructExistenceColumn(outputPtr);
     } else {
         if (!probeOutputCols.empty()) {
-            // only probe side will produce dic vector
             ConstructProbeColumns(outputPtr, probeOutputColumns, rowCount);
         }
         if (!buildOutputCols.empty()) {
@@ -2415,7 +3097,6 @@ void LookupJoinOutputBuilder::BuildOutput(
             }
         }
     }
-#endif
 
     if (buildSide == OMNI_BUILD_LEFT) {
     	BaseVector **pVector = output->GetVectors();
@@ -2424,7 +3105,7 @@ void LookupJoinOutputBuilder::BuildOutput(
     std::vector<int32_t> tmpVec(outputList);
     if (!tmpVec.empty()) {
     	BaseVector **pVector = output->GetVectors();
-    	for (int i =0; i < tmpVec.size(); i++) {
+    	for (size_t i = 0; i < tmpVec.size(); i++) {
     		if (tmpVec[i] != i) {
     			auto temp = pVector[i];
     			int src = tmpVec[i];
@@ -2442,6 +3123,12 @@ void LookupJoinOutputBuilder::BuildOutput(
     }
     probeRowOffset += rowCount;
     probeRowCount -= rowCount;
+#ifdef OMNI_USE_TAPER_JOIN
+// TODO: 这里应该不需要，直接通过偏移量来获取taperRowPtrs当前位置即可，后续实现
+    if (!taperRowPtrs.empty() && rowCount > 0 && static_cast<size_t>(rowCount) <= taperRowPtrs.size()) {
+        taperRowPtrs.erase(taperRowPtrs.begin(), taperRowPtrs.begin() + rowCount);
+    }
+#endif
     *outputVecBatch = output.release();
 }
 
@@ -2460,7 +3147,7 @@ void NO_INLINE LookupJoinOutputBuilder::ConstructExistenceColumn(VectorBatch *ve
     auto numRows = probeRowCount;
     
     // Safety check: ensure the slice range is within bounds
-    if (probeRowOffset + numRows > existJoinBuildIndex.size()) {
+    if (static_cast<size_t>(probeRowOffset + numRows) > existJoinBuildIndex.size()) {
         throw OmniException("OPERATOR_RUNTIME_ERROR", 
             "ExistenceJoin: probeRowOffset (" + std::to_string(probeRowOffset) + 
             ") + numRows (" + std::to_string(numRows) + ") exceeds existJoinBuildIndex size (" + 

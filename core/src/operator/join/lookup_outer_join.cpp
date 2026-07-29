@@ -90,19 +90,27 @@ void LookupOuterJoinOperator::PrepareTotalVisitedCounts()
 {
     std::visit(
         [&](auto &&arg) {
+#ifdef OMNI_USE_TAPER_JOIN
+            auto* rc = arg.GetTaperRowContainer(0);
+            if (rc) {
+                arg.AddTotalVisitedCounts(static_cast<uint32_t>(rc->NumRows()));
+                return;
+            }
+#else
             size_t partitionIndex = 0;
             while (partitionIndex < arg.GetHashTableSize()) {
                 if (arg.GetHashTableTypes(partitionIndex) == HashTableImplementationType::ARRAY_HASH_TABLE) {
                     auto &hashTable = arg.GetArrayTable(partitionIndex);
                     hashTable->ForEachValue(
-                        [&](const auto &value, const auto &index) { arg.SetTotalVisitedCounts(value->GetRowCount()); });
+                        [&](const auto &value, const auto &index) { arg.AddTotalVisitedCounts(value->GetRowCount()); });
                 } else {
                     auto &hashTable = arg.GetHashTable(partitionIndex);
                     hashTable->hashmap.ForEachValue(
-                        [&](const auto &value, const auto &index) { arg.SetTotalVisitedCounts(value->GetRowCount()); });
+                        [&](const auto &value, const auto &index) { arg.AddTotalVisitedCounts(value->GetRowCount()); });
                 }
                 partitionIndex++;
             }
+#endif
         },
         *hashTables);
 }
@@ -241,6 +249,25 @@ void AppendTo(VectorBatch *vectorBatch, int32_t destCol, int32_t destRowIndex, u
 void LookupOuterJoinOperator::AppendAllUnvisitedRows(VectorBatch *vectorBatch, const int32_t *buildOutputIds,
     int32_t buildOutputColsCount, int32_t probeOutputColsCount, int rowCount)
 {
+#ifdef OMNI_USE_TAPER_JOIN
+    if (!taperUnvisitedRowPtrs_.empty()) {
+        auto* rc = std::visit([&](auto&& arg) { return arg.GetTaperRowContainer(0); }, *hashTables);
+        const auto& storedCols = std::visit([&](auto&& arg) { return arg.GetTaperStoredColIndices(); }, *hashTables);
+        auto* rcc = const_cast<RowContainer*>(rc);
+        for (int32_t col = 0; col < buildOutputColsCount; col++) {
+            uint32_t outputCol = buildOutputCols[col];
+            int32_t rcColIdx = 0;
+            for (size_t k = 0; k < storedCols.size(); ++k) {
+                if (storedCols[k] == static_cast<int32_t>(outputCol))
+                    { rcColIdx = static_cast<int32_t>(k); break; }
+            }
+            auto* outVec = vectorBatch->GetVectors()[col + probeOutputColsCount];
+            rcc->ExtractColumn(taperUnvisitedRowPtrs_.data() + outputtedRowCount,
+                               rowCount, rcColIdx, outVec);
+        }
+        return;
+    }
+#else
     std::visit(
         [&](auto &&arg) {
             if (arg.GetHashTableSize() == 1) {
@@ -270,10 +297,30 @@ void LookupOuterJoinOperator::AppendAllUnvisitedRows(VectorBatch *vectorBatch, c
             }
         },
         *hashTables);
+#endif
 }
 
 void LookupOuterJoinOperator::PrepareAllUnvisitedRows()
 {
+#ifdef OMNI_USE_TAPER_JOIN
+    auto* rc = std::visit([&](auto&& arg) { return arg.GetTaperRowContainer(0); }, *hashTables);
+    if (rc) {
+        auto payloadOff = rc->PayloadOffset();
+        taperUnvisitedRowPtrs_.clear();
+        RowContainerIterator rit;
+        char* rows[1024];
+        int32_t n;
+        auto* rcc = const_cast<RowContainer*>(rc);
+        while ((n = rcc->ListRows(&rit, 1024, rows)) > 0) {
+            for (int32_t i = 0; i < n; ++i) {
+                if (*RowContainer::VisitedPtr(rows[i], payloadOff) == 0) {
+                    taperUnvisitedRowPtrs_.push_back(rows[i]);
+                }
+            }
+        }
+        return;
+    }
+#else
     std::visit(
         [&](auto &&arg) {
             if (arg.GetHashTableSize() == 1) {
@@ -283,6 +330,7 @@ void LookupOuterJoinOperator::PrepareAllUnvisitedRows()
             }
         },
         *hashTables);
+#endif
 }
 
 LookupOuterPositionIterator::LookupOuterPositionIterator(HashTableVariants *hashTables)
@@ -297,6 +345,7 @@ void LookupOuterPositionIterator::GetAllUnVisitedAddressFromSingleTable(std::vec
             using VariantType = std::decay_t<decltype(arg)>;
             using Mapped = typename VariantType::Mapped;
             if constexpr (std::is_same_v<Mapped, RowRefListWithFlags>) {
+#ifndef OMNI_USE_TAPER_JOIN
                 if (arg.GetHashTableTypes(currentHashTable) == HashTableImplementationType::ARRAY_HASH_TABLE) {
                     auto &hashTable = arg.GetArrayTable(currentHashTable);
                     hashTable->ForEachValue([&](const auto &value, const auto &index) {
@@ -320,6 +369,7 @@ void LookupOuterPositionIterator::GetAllUnVisitedAddressFromSingleTable(std::vec
                         }
                     });
                 }
+#endif
                 currentHashTable++;
             }
         },
@@ -335,6 +385,7 @@ void LookupOuterPositionIterator::GetAllUnVisitedAddressFromMultipleTables(std::
             using Mapped = typename VariantType::Mapped;
             if constexpr (std::is_same_v<Mapped, RowRefListWithFlags>) {
                 while (currentHashTable < arg.GetHashTableSize()) {
+#ifndef OMNI_USE_TAPER_JOIN
                     if (arg.GetHashTableTypes(currentHashTable) == HashTableImplementationType::ARRAY_HASH_TABLE) {
                         auto &hashTable = arg.GetArrayTable(currentHashTable);
                         hashTable->ForEachValue([&](const auto &value, const auto &index) {
@@ -360,6 +411,7 @@ void LookupOuterPositionIterator::GetAllUnVisitedAddressFromMultipleTables(std::
                             }
                         });
                     }
+#endif
                     currentHashTable++;
                 }
             }

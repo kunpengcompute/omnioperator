@@ -32,9 +32,12 @@ public:
                      bool isShuffleExchangeBuildPlan, VectorBatch **outputVecBatch, BuildSide buildSide);
     void ConstructProbeColumns(VectorBatch *vectorBatch, BaseVector **probeAllColumns, int32_t rowCount);
     template <bool isInnerJoin, bool isShuffleExchangeBuildPlan>
+    bool ConstructBuildColumnWithTaper(VectorBatch *vectorBatch, int32_t rowCount);
+    template <bool isInnerJoin, bool isShuffleExchangeBuildPlan>
     void ConstructBuildColumns(VectorBatch *vectorBatch, int32_t rowCount);
     template<bool isMatched> void AppendExistenceRow(int32_t probePosition);
     void ConstructExistenceColumn(VectorBatch *vectorBatch);
+    void PadNullProbeRows(VectorBatch* vectorBatch, int32_t nullRowCount);
 
     ALWAYS_INLINE bool IsFull()
     {
@@ -57,10 +60,19 @@ public:
         probeRowCount = 0;
         probeBuildIndex.clear();
         existJoinBuildIndex.clear();
+#ifdef OMNI_USE_TAPER_JOIN
+        taperRowPtrs.clear();
+        taperRC_ = nullptr;
+        taperStoredColIndices_.clear();
+        taperNeedsUnvisited_ = false;
+#endif
     }
 
+#ifdef OMNI_USE_TAPER_JOIN
     void AppendRowTaper(int32_t probePosition, omniruntime::vec::BaseVector*** array, uint64_t address, char* rowPtr);
     void SetTaperOutput(const omniruntime::op::RowContainer* rc, const std::vector<int32_t>& storedCols);
+    ALWAYS_INLINE void SetTaperNeedsUnvisited() { taperNeedsUnvisited_ = true; }
+#endif
 
     static const uint32_t SHIFT_SIZE_32 = 32;
     static ALWAYS_INLINE uint64_t EncodeAddress(uint32_t rowId, uint32_t vectorBatchId)
@@ -142,9 +154,12 @@ private:
     int32_t probeRowOffset = 0;
     std::vector<std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t>> probeBuildIndex;
     std::vector<bool> existJoinBuildIndex;
+#ifdef OMNI_USE_TAPER_JOIN
     std::vector<char*> taperRowPtrs;
     const RowContainer* taperRC_ = nullptr;
     std::vector<int32_t> taperStoredColIndices_;
+    bool taperNeedsUnvisited_ = false;
+#endif
 };
 
 class LookupJoinOperatorFactory : public OperatorFactory {
@@ -313,9 +328,12 @@ private:
     std::vector<BaseVector **> *buildFilterColPtrs = nullptr;
     size_t probeFilterColsSize = 0;
     size_t buildFilterColsSize = 0;
+#ifdef OMNI_USE_TAPER_JOIN
     std::vector<omniruntime::vec::BaseVector**> taperRowPtrs;
     omniruntime::op::RowContainer* taperRC_ = nullptr;
     std::vector<int32_t> taperStoredColIndices_;
+    bool taperNeedsUnvisited_ = false;
+#endif
 };
 } // end of op
 } // end of omniruntime

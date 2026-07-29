@@ -4,7 +4,7 @@
  */
 #ifndef __HASH_BUILDER_H__
 #define __HASH_BUILDER_H__
-// #define OMNI_USE_TAPER_JOIN
+#define OMNI_USE_TAPER_JOIN
 
 #include <memory>
 
@@ -133,7 +133,12 @@ HashTableVariants* HashBuilderOperatorFactory::InitTaperVariant(int32_t buildHas
                 std::visit([&](auto&& v) { v.SetSerMode(); }, *var);
                 return var;
             }
-            case OMNI_DECIMAL128:
+            case OMNI_DECIMAL128: {
+                auto* var = new HashTableVariants{std::in_place_type<TaperJoinHashTableVariants<int64_t, NeedVisited>>,
+                    operatorCount, &buildTypes, buildHashCols, joinType, buildSide};
+                std::visit([&](auto&& v) { v.SetSerMode(); }, *var);
+                return var;
+            }
             case OMNI_ARRAY:
             case OMNI_MAP:
             case OMNI_ROW:

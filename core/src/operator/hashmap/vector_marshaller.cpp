@@ -7,6 +7,7 @@
 #include "vector/unsafe_vector.h"
 #include "vector/array_vector.h"
 #include "vector/row_vector.h"
+#include "vector/map_vector.h"
 #include "vector/vector.h"
 #include "util/omni_exception.h"
 #include <unordered_map>
@@ -143,6 +144,15 @@ void NullRowVectorSerializer(mem::SimpleArenaAllocator &arenaAllocator, StringRe
     result.size += resSize;
 }
 
+void NullMapVectorSerializer(mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
+{
+    auto resSize = sizeof(uint8_t);
+    auto *&data = result.data;
+    auto *pos = arenaAllocator.AllocateContinue(resSize, reinterpret_cast<const uint8_t *&>(data));
+    (*pos) = 0;
+    result.size += resSize;
+}
+
 uint8_t GetCompactLengthSize(uint64_t value)
 {
     if (value == 0) {
@@ -244,6 +254,37 @@ void ALWAYS_INLINE RowVectorSerializer(RowVector &rowVector, int32_t rowIdx, mem
     }
 }
 
+void ALWAYS_INLINE MapVectorSerializer(MapVector &mapVector, int32_t rowIdx, mem::SimpleArenaAllocator
+    &arenaAllocator, StringRef &result) {
+    int64_t offset = mapVector.GetOffset(rowIdx);
+    int64_t size = mapVector.GetSize(rowIdx);
+
+    uint8_t sizeLenSize = GetCompactLengthSize(size);
+    auto *&dataRef = result.data;
+    auto pos = arenaAllocator.AllocateContinue(sizeof(uint8_t) + sizeLenSize, reinterpret_cast<const uint8_t *&>(dataRef));
+    *pos = sizeLenSize;
+    memcpy(pos + 1, &size, sizeLenSize);
+    result.size += sizeof(uint8_t) + sizeLenSize;
+
+    auto* keyVec = mapVector.GetKeyVector().get();
+    auto* valueVec = mapVector.GetValueVector().get();
+    int64_t start = offset;
+    int64_t end = offset + size;
+    auto keyTypeId = keyVec->GetTypeId();
+    auto valueTypeId = valueVec->GetTypeId();
+
+    auto keySerializer = SelectSerializerByEncodingAndType(keyVec, static_cast<type::DataTypeId>(keyTypeId));
+    auto valueSerializer = SelectSerializerByEncodingAndType(valueVec, static_cast<type::DataTypeId>(valueTypeId));
+    if (keySerializer == nullptr || valueSerializer == nullptr) {
+        throw OmniException("HashAgg SERIALIZED FAILED : MapVector key/value serializer not found");
+    }
+
+    for (int64_t i = start; i < end; i++) {
+        keySerializer(keyVec, static_cast<int32_t>(i), arenaAllocator, result);
+        valueSerializer(valueVec, static_cast<int32_t>(i), arenaAllocator, result);
+    }
+}
+
 inline const char *DeserializeElementByType(type::DataTypeId elementTypeId, BaseVector *elementVector, int32_t rowIdx, const char *begin) {
     if (elementTypeId < 0 || elementTypeId >= vectorDeSerializerCenter.size()) {
         throw OmniException("ArrayVector's ElementVec Deserializer failed : Invalid elementTypeId", std::to_string(elementTypeId));
@@ -306,6 +347,54 @@ const char *ArrayVectorDeserializer(BaseVector *baseVector, int32_t rowIdx, cons
 
     for (int64_t i = start; i < end; i++) {
         begin = DeserializeElementByType(elementTypeId, elementVec, static_cast<int32_t>(i), begin);
+    }
+
+    return begin;
+}
+
+const char *MapVectorDeserializer(BaseVector *baseVector, int32_t rowIdx, const char *&begin) {
+    auto mapVector = dynamic_cast<MapVector *>(baseVector);
+    mapVector->Expand(rowIdx + 1);
+
+    uint8_t sizeLenSize = *reinterpret_cast<const uint8_t *>(begin);
+    begin += sizeof(uint8_t);
+
+    if (sizeLenSize == 0) {
+        mapVector->SetNull(rowIdx);
+        int64_t lastOffset = (rowIdx == 0) ? 0 : mapVector->GetOffset(rowIdx);
+        mapVector->SetOffset(rowIdx + 1, lastOffset);
+        return begin;
+    }
+
+    uint64_t size = 0;
+    switch (sizeLenSize) {
+        case BYTE_1: size = *reinterpret_cast<const uint8_t *>(begin); break;
+        case BYTE_2: size = *reinterpret_cast<const uint16_t *>(begin); break;
+        case BYTE_4: size = *reinterpret_cast<const uint32_t *>(begin); break;
+        default:
+            throw OmniException("MapVector Deserializer failed: ", "Invalid Map Size");
+    }
+    begin += sizeLenSize;
+
+    mapVector->SetNotNull(rowIdx);
+    auto* keyVec = mapVector->GetKeyVector().get();
+    auto* valueVec = mapVector->GetValueVector().get();
+    int64_t start = mapVector->GetOffset(rowIdx);
+    int64_t end = start + size;
+
+    keyVec->Expand(end);
+    valueVec->Expand(end);
+
+    if (rowIdx == 0) {
+        mapVector->SetOffset(0, 0);
+    }
+    mapVector->SetOffset(rowIdx + 1, end);
+
+    type::DataTypeId keyTypeId = keyVec->GetTypeId();
+    type::DataTypeId valueTypeId = valueVec->GetTypeId();
+    for (int64_t i = start; i < end; i++) {
+        begin = DeserializeElementByType(keyTypeId, keyVec, static_cast<int32_t>(i), begin);
+        begin = DeserializeElementByType(valueTypeId, valueVec, static_cast<int32_t>(i), begin);
     }
 
     return begin;
@@ -476,6 +565,62 @@ bool RowVectorComparator(BaseVector &baseVector, int32_t rowIdx, uint8_t *&begin
     }
 
     return true;
+}
+
+const bool MapVectorComparator(BaseVector &baseVector, int32_t rowIdx, uint8_t *&begin) {
+    auto mapVector = dynamic_cast<MapVector *>(&baseVector);
+    uint8_t sizeLenSize = *reinterpret_cast<const uint8_t *>(begin);
+    begin += sizeof(uint8_t);
+    int64_t leftOffset = mapVector->GetOffset(rowIdx);
+    int64_t leftSize = mapVector->GetSize(rowIdx);
+
+    if (sizeLenSize == 0) {
+        return leftSize == 0;
+    }
+
+    int64_t size = 0;
+    switch (sizeLenSize) {
+        case BYTE_1: size = *reinterpret_cast<const uint8_t *>(begin); break;
+        case BYTE_2: size = *reinterpret_cast<const uint16_t *>(begin); break;
+        case BYTE_4: size = *reinterpret_cast<const uint32_t *>(begin); break;
+        default:
+            throw OmniException("MapVector Comparator failed: ", "Invalid Map Size");
+    }
+    begin += sizeLenSize;
+    if (size != leftSize) {
+        return false;
+    }
+
+    auto* keyVec = mapVector->GetKeyVector().get();
+    auto* valueVec = mapVector->GetValueVector().get();
+    int64_t start = leftOffset;
+    int64_t end = start + size;
+
+    auto keyTypeId = keyVec->GetTypeId();
+    auto valueTypeId = valueVec->GetTypeId();
+
+    for (int64_t i = start; i < end; i++) {
+        auto keyComparator = vectorComparatorCenter[keyTypeId];
+        if (keyComparator == nullptr || !keyComparator(*keyVec, static_cast<int32_t>(i), begin)) {
+            return false;
+        }
+        auto valueComparator = vectorComparatorCenter[valueTypeId];
+        if (valueComparator == nullptr || !valueComparator(*valueVec, static_cast<int32_t>(i), begin)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void MapVectorSerializerFunc(BaseVector *baseVector, int32_t rowIdx,
+                              mem::SimpleArenaAllocator &arenaAllocator, StringRef &result) {
+    if (baseVector->IsNull(rowIdx)) {
+        NullMapVectorSerializer(arenaAllocator, result);
+        return;
+    }
+    auto *mapVector = dynamic_cast<MapVector *>(baseVector);
+    MapVectorSerializer(*mapVector, rowIdx, arenaAllocator, result);
 }
 
 const char *Decimal128Deserializer(BaseVector *baseVector, size_t rowIdx, const char *pos)
@@ -815,12 +960,14 @@ const bool ComparatorFromPointer(BaseVector &baseVector, int32_t rowIdx, uint8_t
 
 std::unordered_map<DataTypeId, SerializerFunc> complexVectorSerializerCenter = {
         {type::OMNI_ARRAY, &SerializeValueIntoArena<type::OMNI_ARRAY>},
-        {type::OMNI_ROW, &SerializeValueIntoArena<type::OMNI_ROW>}
+        {type::OMNI_ROW, &SerializeValueIntoArena<type::OMNI_ROW>},
+        {type::OMNI_MAP, &MapVectorSerializerFunc}
 };
 
 std::unordered_map<DataTypeId, DeSerializerFunc> complexVectorDeSerializerCenter = {
         {type::OMNI_ARRAY, &DeserializeFromPointer<type::OMNI_ARRAY>},
-        {type::OMNI_ROW, &DeserializeFromPointer<type::OMNI_ROW>}
+        {type::OMNI_ROW, &DeserializeFromPointer<type::OMNI_ROW>},
+        {type::OMNI_MAP, &MapVectorDeserializer}
 };
 
 std::vector<VectorSerializer> vectorSerializerCenter = {
@@ -855,7 +1002,7 @@ std::vector<VectorSerializer> vectorSerializerCenter = {
     nullptr,                                        // 28
     nullptr,                                        // 29
     SerializeValueIntoArena<type::OMNI_ARRAY>,      // OMNI_ARRAY, 30
-    nullptr,                                        // OMNI_MAP, 31
+    MapVectorSerializerFunc,                        // OMNI_MAP, 31
     SerializeValueIntoArena<type::OMNI_ROW>,        // OMNI_ROW, 32
     nullptr,                                        // OMNI_UNKNOWN, 33
     nullptr,                                        // OMNI_FUNCTION, 34
@@ -1055,7 +1202,7 @@ std::vector<VectorDeSerializer> vectorDeSerializerCenter = {
     nullptr,                                       // 28
     nullptr,                                       // 29
     nullptr,                                       // OMNI_ARRAY, 30
-    nullptr,                                       // OMNI_MAP, 31
+    MapVectorDeserializer,                          // OMNI_MAP, 31
     nullptr,                                       // OMNI_ROW, 32
     nullptr,                                       // OMNI_UNKNOWN, 33
     nullptr,                                       // OMNI_FUNCTION, 34
@@ -1095,7 +1242,7 @@ std::vector<VectorComparator> vectorComparatorCenter = {
     nullptr,                                       // 28
     nullptr,                                       // 29
     ComparatorFromPointer<type::OMNI_ARRAY>,       // OMNI_ARRAY, 30
-    nullptr,                                       // OMNI_MAP, 31
+    MapVectorComparator,                            // OMNI_MAP, 31
     ComparatorFromPointer<type::OMNI_ROW>,         // OMNI_ROW, 32
     nullptr,                                       // OMNI_UNKNOWN, 33
     nullptr,                                       // OMNI_FUNCTION, 34
