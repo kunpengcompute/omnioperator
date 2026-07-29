@@ -206,6 +206,13 @@ namespace common {
         return predicate;
     }
 
+    std::unique_ptr<PredicateCondition> BuildResidualPredicateCondition(nlohmann::json &jsonCondition,
+                                                                        int32_t columnCount) {
+        auto predicate = buildPredicateCondition(jsonCondition, columnCount);
+        predicate->buildNullColumns(columnCount);
+        return predicate;
+    }
+
     std::unique_ptr<PredicateCondition> BuildVecPredicateConditionWithRebase(
             nlohmann::json &json,
             int32_t columnCount,

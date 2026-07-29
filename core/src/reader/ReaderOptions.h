@@ -91,8 +91,20 @@ private:
     std::list<std::string> allColumnsList_;
     Expression parquetPushedFilterArray_;
     std::vector<std::string> parquetIncludedColumns_;
+    // filterWhileDecode global switch (injected via enhancementJson, default false).
+    bool enableFilterWhileDecode_ = false;
 
 public:
+    bool EnableFilterWhileDecode() const
+    {
+        return enableFilterWhileDecode_;
+    }
+
+    void SetEnableFilterWhileDecode(bool enable)
+    {
+        enableFilterWhileDecode_ = enable;
+    }
+
     const std::shared_ptr<UriInfo>& GetUri() const
     {
         return uri_;

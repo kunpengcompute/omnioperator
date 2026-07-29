@@ -27,6 +27,10 @@
 namespace common {
     std::unique_ptr<PredicateCondition> BuildVecPredicateCondition(nlohmann::json &json, int32_t columnCount);
 
+    // Build evaluator from residual JSON subtree (no outer wrap, no rebase).
+    std::unique_ptr<PredicateCondition> BuildResidualPredicateCondition(nlohmann::json &jsonCondition,
+                                                                        int32_t columnCount);
+
     std::unique_ptr<PredicateCondition> BuildVecPredicateConditionWithRebase(
             nlohmann::json &json,
             int32_t columnCount,
