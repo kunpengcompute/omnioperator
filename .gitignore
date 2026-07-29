@@ -8,6 +8,9 @@
 .checkstyle
 .mvn/timing.properties
 .omnitools
+.claude
+.git
+
 
 *.pyc
 *.class
@@ -61,3 +64,6 @@ dtframe_
 log
 test_report.json
 coverage_lcov*
+conf/
+include/
+OmniStream/

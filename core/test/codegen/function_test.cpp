@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <thread>
 #include "gtest/gtest.h"
 #include "expression/expressions.h"
 #include "codegen/functions/stringfunctions.h"
@@ -43,6 +44,135 @@ void Date32TruncTest(const std::string &input, const std::string &level, const s
 }
 #endif
 
+TEST(FunctionTest, ToTimestampLtz) {
+  bool retIsNull = false;
+
+  // Normal cases: precision=3 (milliseconds)
+  EXPECT_EQ(1625097600000L,
+            ToTimestampLtz(1625097600000L, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Normal cases: precision=0 (seconds)
+  EXPECT_EQ(1625097600000L,
+            ToTimestampLtz(1625097600L, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Null input cases
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, true, 3, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 3, true, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Boundary values for precision=3 (milliseconds)
+  // MIN_EPOCH_MILLS = -62167219200000LL ('0000-01-01 00:00:00.000 UTC+0')
+  EXPECT_EQ(-62167219200000LL,
+            ToTimestampLtz(-62167219200000LL, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // MAX_EPOCH_MILLS = 253402300799999LL ('9999-12-31 23:59:59.999 UTC+0')
+  EXPECT_EQ(253402300799999LL,
+            ToTimestampLtz(253402300799999LL, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Boundary values for precision=0 (seconds)
+  // MIN_EPOCH_SECONDS = -62167219200LL ('0000-01-01 00:00:00 UTC+0')
+  EXPECT_EQ(-62167219200000LL,
+            ToTimestampLtz(-62167219200LL, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // MAX_EPOCH_SECONDS = 253402300799LL ('9999-12-31 23:59:59 UTC+0')
+  EXPECT_EQ(253402300799000LL,
+            ToTimestampLtz(253402300799LL, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Out of range values should return null
+  // Below MIN_EPOCH_MILLS for precision=3
+  EXPECT_EQ(0L, ToTimestampLtz(-62167219200001LL, false, 3, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Above MAX_EPOCH_MILLS for precision=3
+  EXPECT_EQ(0L, ToTimestampLtz(253402300800000LL, false, 3, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Below MIN_EPOCH_SECONDS for precision=0
+  EXPECT_EQ(0L, ToTimestampLtz(-62167219201LL, false, 0, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Above MAX_EPOCH_SECONDS for precision=0
+  EXPECT_EQ(0L, ToTimestampLtz(253402300800LL, false, 0, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Unsupported precision values should return null
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 1, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 6, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, -1, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Zero value test
+  EXPECT_EQ(0L, ToTimestampLtz(0L, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtz(0L, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+}
+
+TEST(FunctionTest, ToTimestampLtzInt) {
+  bool retIsNull = false;
+
+  // Normal cases: precision=0 (seconds) - INT can represent epoch seconds
+  EXPECT_EQ(1625097600000L,
+            ToTimestampLtzInt(1625097600, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Null input cases
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, true, 0, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 0, true, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  // Boundary values for precision=0 (seconds) within INT range
+  // INT_MAX = 2147483647 seconds (approximately 2038-01-19)
+  // Note: INT_MAX seconds * 1000 = 2147483647000 milliseconds, which is within valid range
+  EXPECT_EQ(2147483647000LL,
+            ToTimestampLtzInt(2147483647, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // INT_MIN = -2147483648 seconds (approximately 1930-03-19)
+  // Note: INT_MIN seconds * 1000 = -2147483648000 milliseconds, which is within valid range
+  EXPECT_EQ(-2147483648000LL,
+            ToTimestampLtzInt(-2147483648, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Zero value test for precision=0
+  EXPECT_EQ(0L, ToTimestampLtzInt(0, false, 0, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // For precision=3 (milliseconds), INT range is very limited
+  // INT can only represent timestamps from approximately 1969-12-31 to 1970-01-26
+  // Valid INT milliseconds values within the broader timestamp range
+  // precision=3 means input is already milliseconds, so it returns directly
+  EXPECT_EQ(1LL, ToTimestampLtzInt(1, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  EXPECT_EQ(0LL, ToTimestampLtzInt(0, false, 3, false, &retIsNull));
+  EXPECT_FALSE(retIsNull);
+
+  // Unsupported precision values should return null
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 1, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 6, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+
+  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, -1, false, &retIsNull));
+  EXPECT_TRUE(retIsNull);
+}
 /*
  * context helper tests
  */
@@ -2792,6 +2922,31 @@ TEST(FunctionTest, LengthStrZh)
     EXPECT_EQ(len, 37);
 }
 
+TEST(FunctionTest, CharLengthStr)
+{
+    std::string test = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
+    auto len = CharLengthStr(test.c_str(), test.length(), false);
+    EXPECT_EQ(len, 37);
+
+    std::string str = "m";
+    len = CharLengthStr(str.c_str(), str.length(), false);
+    EXPECT_EQ(len, 1);
+
+    len = CharLengthStr(nullptr, 0, true);
+    EXPECT_EQ(len, 0);
+}
+
+TEST(FunctionTest, CharLengthChar)
+{
+    std::string test = "abc       ";
+    int32_t width = 10;
+    auto len = CharLengthChar(test.c_str(), width, test.length(), false);
+    EXPECT_EQ(len, 10);
+
+    len = CharLengthChar(nullptr, width, 0, true);
+    EXPECT_EQ(len, 0);
+}
+
 TEST(FunctionTest, ReplaceStrStrStrWithRep)
 {
     auto context = new ExecutionContext();
@@ -4133,4 +4288,95 @@ TEST(FunctionTest, GetJsonObject)
     delete context;
 }
 #endif
+
+TEST(FunctionTest, CurrentTimestamp)
+{
+    int64_t timestamp1 = CurrentTimestamp();
+    EXPECT_GT(timestamp1, 0);
+    
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    int64_t timestamp2 = CurrentTimestamp();
+    EXPECT_GT(timestamp2, timestamp1);
+    
+    auto now = std::chrono::system_clock::now();
+    auto duration = now.time_since_epoch();
+    int64_t expectedMillis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    int64_t diff = std::abs(timestamp1 - expectedMillis);
+    EXPECT_LT(diff, 100);
+}
+
+TEST(FunctionTest, DateAddDays)
+{
+    bool retIsNull = false;
+    
+    constexpr int64_t MILLIS_PER_DAY = 86400000LL;
+    constexpr int64_t MIN_EPOCH_MILLS = -62167219200000LL;
+    constexpr int64_t MAX_EPOCH_MILLS = 253402300799999LL;
+    
+    int64_t timestamp = 1625097600000L;
+    
+    int64_t result = DateAddDays(timestamp, false, 1, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp + MILLIS_PER_DAY);
+    
+    result = DateAddDays(timestamp, false, 7, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp + 7 * MILLIS_PER_DAY);
+    
+    result = DateAddDays(timestamp, false, -1, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp - MILLIS_PER_DAY);
+    
+    result = DateAddDays(timestamp, false, -30, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp - 30 * MILLIS_PER_DAY);
+    
+    result = DateAddDays(timestamp, false, 0, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, timestamp);
+    
+    result = DateAddDays(timestamp, true, 1, false, &retIsNull);
+    EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(result, 0);
+    
+    result = DateAddDays(timestamp, false, 1, true, &retIsNull);
+    EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(result, 0);
+    
+    int64_t nearMax = MAX_EPOCH_MILLS - MILLIS_PER_DAY;
+    result = DateAddDays(nearMax, false, 1, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, MAX_EPOCH_MILLS);
+    
+    result = DateAddDays(MAX_EPOCH_MILLS, false, 1, false, &retIsNull);
+    EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(result, 0);
+    
+    int64_t nearMin = MIN_EPOCH_MILLS + MILLIS_PER_DAY;
+    result = DateAddDays(nearMin, false, -1, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, MIN_EPOCH_MILLS);
+    
+    result = DateAddDays(MIN_EPOCH_MILLS, false, -1, false, &retIsNull);
+    EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(result, 0);
+    
+    result = DateAddDays(0L, false, 365, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, 365 * MILLIS_PER_DAY);
+    
+    result = DateAddDays(365 * MILLIS_PER_DAY, false, -365, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, 0L);
+    
+    int64_t epochTimestamp = 0L;
+    result = DateAddDays(epochTimestamp, false, 1000, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, 1000 * MILLIS_PER_DAY);
+    
+    result = DateAddDays(epochTimestamp, false, -1000, false, &retIsNull);
+    EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(result, -1000 * MILLIS_PER_DAY);
+}
+
 }

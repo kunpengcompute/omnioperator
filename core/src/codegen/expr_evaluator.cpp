@@ -55,6 +55,7 @@ int64_t GetRawAddr(const DataTypes &types, int32_t i, BaseVector *colVec)
             return reinterpret_cast<int64_t>(unsafe::UnsafeStringVector::GetValues(
                 reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(colVec)));
         case OMNI_TIMESTAMP_WITHOUT_TIME_ZONE:
+        case OMNI_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
             return reinterpret_cast<int64_t>(
                     unsafe::UnsafeVector::GetRawValues(reinterpret_cast<Vector<int64_t> *>(colVec)));
         case OMNI_ARRAY:
@@ -617,6 +618,7 @@ BaseVector *Projection::ColumnProjectionProxy(VectorBatch *vecBatch, int32_t sel
         case OMNI_ROW:
             return ColumnProjectionStructVectorSliceHelper(vecBatch, selectedRows, numSelectedRows);
         case OMNI_TIMESTAMP_WITHOUT_TIME_ZONE:
+        case OMNI_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
             return ColumnProjectionHelper<int64_t>(vecBatch, selectedRows, numSelectedRows);
         case OMNI_ARRAY:
             return ColumnProjectionArrayVectorSliceHelper(vecBatch, selectedRows, numSelectedRows);

@@ -33,6 +33,18 @@ const std::string JsonValueFnStr()
     return jsonValueFnStr;
 }
 
+const std::string JsonQueryFnStr()
+{
+    const std::string jsonQueryFnStr = "json_query";
+    return jsonQueryFnStr;
+}
+
+const std::string JsonSplitScalarFnStr()
+{
+    const std::string jsonSplitScalarFnStr = "json_split";
+    return jsonSplitScalarFnStr;
+}
+
 const std::string StrEqualFnStr()
 {
     const std::string compareFnStr = "strequal";
@@ -85,6 +97,12 @@ const std::string LengthFnStr()
 {
     const std::string lengthFnStr = "length";
     return lengthFnStr;
+}
+
+const std::string CharLengthFnStr()
+{
+    const std::string charLengthFnStr = "char_length";
+    return charLengthFnStr;
 }
 
 const std::string CastNullFnStr()
@@ -237,7 +255,7 @@ std::vector<Function> StringFunctionRegistry::GetFunctions()
 
         Function(reinterpret_cast<void *>(StrEquals), StrEqualFnStr(), {}, { OMNI_VARCHAR, OMNI_VARCHAR },
             OMNI_BOOLEAN),
-
+        // cast functions
         Function(reinterpret_cast<void *>(CastIntToString), CastFnStr(), {}, { OMNI_INT }, OMNI_VARCHAR, INPUT_DATA,
             true),
         Function(reinterpret_cast<void *>(CastInt16ToString), CastFnStr(), {}, { OMNI_SHORT }, OMNI_VARCHAR, INPUT_DATA,
@@ -287,6 +305,9 @@ std::vector<Function> StringFunctionRegistry::GetFunctions()
         Function(reinterpret_cast<void *>(LengthChar), LengthFnStr(), {}, { OMNI_CHAR }, OMNI_LONG, INPUT_DATA),
         Function(reinterpret_cast<void *>(LengthStr), LengthFnStr(), {}, { OMNI_VARCHAR }, OMNI_LONG, INPUT_DATA),
 
+        Function(reinterpret_cast<void *>(CharLengthStr), CharLengthFnStr(), {}, { OMNI_VARCHAR }, OMNI_INT, INPUT_DATA),
+        Function(reinterpret_cast<void *>(CharLengthChar), CharLengthFnStr(), {}, { OMNI_CHAR }, OMNI_INT, INPUT_DATA),
+
         // replace functions
         Function(reinterpret_cast<void *>(LengthCharReturnInt32), LengthFnStr(), {}, { OMNI_CHAR }, OMNI_INT,
             INPUT_DATA),
@@ -298,6 +319,18 @@ std::vector<Function> StringFunctionRegistry::GetFunctions()
         Function(reinterpret_cast<void *>(RegexpExtractRetNull), RegexpExtractFnStr(), {}, { OMNI_VARCHAR, OMNI_CHAR, OMNI_INT },
             OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
         Function(reinterpret_cast<void *>(JsonValueRetNull), JsonValueFnStr(), {}, { OMNI_VARCHAR, OMNI_CHAR },
+            OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
+        Function(reinterpret_cast<void *>(JsonValueWithBehaviors), JsonValueFnStr(), {},
+            { OMNI_VARCHAR, OMNI_CHAR, OMNI_INT, OMNI_VARCHAR, OMNI_INT, OMNI_VARCHAR },
+            OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
+        Function(reinterpret_cast<void *>(JsonQueryRetNull), JsonQueryFnStr(), {}, { OMNI_VARCHAR, OMNI_CHAR },
+            OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
+        Function(reinterpret_cast<void *>(JsonQueryWithWrapperAndBehavior), JsonQueryFnStr(), {},
+            { OMNI_VARCHAR, OMNI_CHAR, OMNI_INT, OMNI_INT, OMNI_INT },
+            OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
+        Function(reinterpret_cast<void *>(JsonSplitScalarChar), JsonSplitScalarFnStr(), {}, { OMNI_CHAR },
+            OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
+        Function(reinterpret_cast<void *>(JsonSplitScalar), JsonSplitScalarFnStr(), {}, { OMNI_VARCHAR },
             OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
         Function(reinterpret_cast<void *>(ConcatCharCharRetNull), ConcatNullFnStr(), {}, { OMNI_CHAR, OMNI_CHAR },
             OMNI_CHAR, INPUT_DATA_AND_OVERFLOW_NULL, true),
