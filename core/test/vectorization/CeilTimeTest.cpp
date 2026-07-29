@@ -69,7 +69,7 @@ public:
     }
     
     static BaseVector* CreateDate32Vector(const std::vector<int32_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_INT, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_DATE32, values.size());
         auto* typedVec = static_cast<Vector<int32_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -97,7 +97,7 @@ public:
     }
     
     static void ExecuteCeilTime(BaseVector* valueVec, BaseVector* formatVec, BaseVector*& result, DataTypeId valueTypeId) {
-        DataTypeId outputTypeId = (valueTypeId == OMNI_INT) ? OMNI_INT : OMNI_LONG;
+        DataTypeId outputTypeId = valueTypeId;
         auto signature = std::make_shared<FunctionSignature>("ceil_time", 
             std::vector<DataTypeId>{valueTypeId, OMNI_VARCHAR}, outputTypeId);
         auto function = VectorFunction::Find(signature);
@@ -151,7 +151,7 @@ TEST(CeilTimeTest, CeilDate32ToYear) {
     BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     CeilTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -178,7 +178,7 @@ TEST(CeilTimeTest, CeilDate32ToMonth) {
     BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     CeilTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -205,7 +205,7 @@ TEST(CeilTimeTest, CeilDate32ToQuarter) {
     BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     CeilTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -232,7 +232,7 @@ TEST(CeilTimeTest, CeilDate32ToWeek) {
     BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     CeilTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -259,7 +259,7 @@ TEST(CeilTimeTest, CeilDate32ToDay) {
     BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     CeilTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -373,12 +373,39 @@ TEST(CeilTimeTest, CeilTimestampToDay) {
     delete resultVec;
 }
 
+TEST(CeilTimeTest, CeilTimestampToWeek) {
+    std::cout << "=== Test: Ceil TIMESTAMP to WEEK ===" << std::endl;
+
+    std::vector<int64_t> tsValues = {
+        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 16, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 16, 10, 20, 30, 456)
+    };
+
+    std::vector<int64_t> expected = {
+        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 16, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 16, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 16, 0, 0, 0, 0)
+    };
+
+    std::vector<std::string> formatValues = {"WEEK", "WEEK", "WEEK"};
+
+    BaseVector* tsVec = CeilTimeFunctionTestHelper::CreateLongVector(tsValues);
+    BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
+    BaseVector* resultVec = nullptr;
+
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(tsVec, formatVec, resultVec, OMNI_LONG);
+    CeilTimeFunctionTestHelper::ValidateLongResult(resultVec, expected, tsValues.size());
+
+    delete resultVec;
+}
+
 TEST(CeilTimeTest, CeilTimestampToMonth) {
     std::cout << "=== Test: Ceil TIMESTAMP to MONTH ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
         CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 1, 1, 1, 1, 1),
         CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
     };
     
@@ -405,7 +432,7 @@ TEST(CeilTimeTest, CeilTimestampToQuarter) {
     
     std::vector<int64_t> tsValues = {
         CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 1, 1, 1, 1),
         CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
     };
     
@@ -432,7 +459,7 @@ TEST(CeilTimeTest, CeilTimestampToYear) {
     
     std::vector<int64_t> tsValues = {
         CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 1, 1, 1, 1),
         CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
     };
     
@@ -471,7 +498,7 @@ TEST(CeilTimeTest, CeilWithNullDate) {
     dateVec->SetNull(1);
     
     BaseVector* resultVec = nullptr;
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     
     EXPECT_FALSE(resultVec->IsNull(0)) << "Row 0 should not be NULL";
     EXPECT_TRUE(resultVec->IsNull(1)) << "Row 1 should be NULL";
@@ -497,7 +524,7 @@ TEST(CeilTimeTest, CeilWithNullFormat) {
     formatVec->SetNull(1);
     
     BaseVector* resultVec = nullptr;
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     
     EXPECT_FALSE(resultVec->IsNull(0)) << "Row 0 should not be NULL";
     EXPECT_TRUE(resultVec->IsNull(1)) << "Row 1 should be NULL (format is NULL)";
@@ -573,7 +600,7 @@ TEST(CeilTimeTest, CeilWithInvalidFormat) {
     BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     
     EXPECT_TRUE(resultVec->IsNull(0)) << "Row 0 should be NULL (invalid format)";
     EXPECT_TRUE(resultVec->IsNull(1)) << "Row 1 should be NULL (invalid format)";
@@ -602,7 +629,7 @@ TEST(CeilTimeTest, CeilDate32BoundaryEpoch) {
     BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     CeilTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -629,7 +656,7 @@ TEST(CeilTimeTest, CeilDate32BoundaryLeapYear) {
     BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     CeilTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -656,7 +683,7 @@ TEST(CeilTimeTest, CeilDate32AlreadyOnBoundary) {
     BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_INT);
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     CeilTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;

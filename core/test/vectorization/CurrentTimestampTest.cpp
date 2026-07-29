@@ -39,6 +39,11 @@ int64_t GetCurrentEpochMicros()
 }
 
 constexpr int64_t MAX_TIMING_SLACK_MICROS = 5LL * 1000000LL; // 5 seconds
+
+// Epoch micros for year 2000-01-01 and 2100-01-01; guards against unit bugs
+// (seconds ~1e9, millis ~1.7e12, micros ~1.7e15).
+constexpr int64_t kMinEpochMicros = 946684800000000LL;  // 2000-01-01T00:00:00Z
+constexpr int64_t kMaxEpochMicros = 4102444800000000LL; // 2100-01-01T00:00:00Z
 } // namespace
 
 class CurrentTimestampTest : public ::testing::Test {
@@ -48,44 +53,48 @@ protected:
         RegisterFunctions::Register();
     }
 
-    // Execute current_timestamp() with given row size and return result vector.
-    static void ExecuteCurrentTimestamp(int32_t rowSize, BaseVector *&result)
+    // Create a vector function instance for current_timestamp().
+    // The returned instance has already called initialize() which caches the current timestamp.
+    static std::unique_ptr<VectorFunction> CreateVectorFunction()
     {
-        // Create function signature: current_timestamp() -> OMNI_LONG
         std::vector<DataTypeId> argTypes = {};
         auto signature = std::make_shared<FunctionSignature>("current_timestamp", argTypes, OMNI_LONG);
 
-        // Find simple function factory
         auto factoryIt = VectorFunction::simpleFunctionFactoryMap_.find(signature);
-        ASSERT_NE(factoryIt, VectorFunction::simpleFunctionFactoryMap_.end())
-            << "Function factory current_timestamp not found";
+        if (factoryIt == VectorFunction::simpleFunctionFactoryMap_.end()) {
+            return nullptr;
+        }
 
-        // Create QueryConfig (empty - CurrentTimestampFunction does not read any config)
         std::unordered_map<std::string, std::string> configValues;
         config::QueryConfig queryConfig(configValues);
-
-        // Create vector function with config (this calls initialize() which caches current timestamp)
         std::vector<BaseVector *> constantInputs;
         auto factory = factoryIt->second();
-        auto vectorFunction = factory->createVectorFunction({}, queryConfig, constantInputs);
-        ASSERT_NE(vectorFunction, nullptr) << "Function current_timestamp creation failed";
+        return factory->createVectorFunction({}, queryConfig, constantInputs);
+    }
 
-        // Create execution context
+    // Apply an existing vector function instance with the given row size.
+    static void ApplyCurrentTimestamp(VectorFunction *vectorFunction, int32_t rowSize, BaseVector *&result)
+    {
         ExecutionContext context;
         context.SetResultRowSize(rowSize);
-
-        // Prepare empty arguments stack (no input arguments)
         std::stack<BaseVector *> args;
-
-        // Execute function
         auto resultType = std::make_shared<DataType>(OMNI_LONG);
         vectorFunction->Apply(args, resultType, result, &context);
     }
+
+    // Convenience: create a fresh function instance and execute once.
+    static void ExecuteCurrentTimestamp(int32_t rowSize, BaseVector *&result)
+    {
+        auto vectorFunction = CreateVectorFunction();
+        ASSERT_NE(vectorFunction, nullptr) << "Function current_timestamp creation failed";
+        ApplyCurrentTimestamp(vectorFunction.get(), rowSize, result);
+    }
 };
 
-TEST_F(CurrentTimestampTest, BasicCurrentTimestamp)
+// Merged: BasicCurrentTimestamp + SingleRow + MatchesSystemEpochMicros
+TEST_F(CurrentTimestampTest, MatchesSystemEpochMicros)
 {
-    std::cout << "=== Test: current_timestamp basic cases ===" << std::endl;
+    std::cout << "=== Test: current_timestamp matches system epoch micros ===" << std::endl;
 
     int64_t beforeMicros = GetCurrentEpochMicros();
 
@@ -100,8 +109,7 @@ TEST_F(CurrentTimestampTest, BasicCurrentTimestamp)
     ASSERT_NE(resultVector, nullptr) << "Result vector is null";
 
     for (int32_t i = 0; i < rowSize; ++i) {
-        EXPECT_FALSE(resultVector->IsNull(i))
-            << "Unexpected NULL at index " << i << " for current_timestamp";
+        EXPECT_FALSE(resultVector->IsNull(i)) << "Unexpected NULL at index " << i;
         if (!resultVector->IsNull(i)) {
             int64_t actual = resultVector->GetValue(i);
             std::cout << "Row " << i << ": current_timestamp=" << actual << " micros since epoch" << std::endl;
@@ -120,71 +128,10 @@ TEST_F(CurrentTimestampTest, BasicCurrentTimestamp)
     delete result;
 }
 
-// Test current_timestamp with a single row
-TEST_F(CurrentTimestampTest, SingleRow)
+// Merged: ConstantResultAcrossRows + LargeBatch + NonNullableResult
+TEST_F(CurrentTimestampTest, ConstantAndNonNullResult)
 {
-    std::cout << "=== Test: current_timestamp single row ===" << std::endl;
-
-    int64_t beforeMicros = GetCurrentEpochMicros();
-
-    int32_t rowSize = 1;
-    BaseVector *result = nullptr;
-    ExecuteCurrentTimestamp(rowSize, result);
-
-    int64_t afterMicros = GetCurrentEpochMicros();
-
-    ASSERT_NE(result, nullptr) << "Result is null";
-    auto *resultVector = static_cast<Vector<int64_t> *>(result);
-    ASSERT_NE(resultVector, nullptr) << "Result vector is null";
-
-    EXPECT_FALSE(resultVector->IsNull(0));
-    int64_t actual = resultVector->GetValue(0);
-    std::cout << "Single row: current_timestamp=" << actual << " micros since epoch" << std::endl;
-    EXPECT_GT(actual, 0);
-    int64_t minDist = std::min(std::abs(actual - beforeMicros), std::abs(actual - afterMicros));
-    EXPECT_LE(minDist, MAX_TIMING_SLACK_MICROS)
-        << "current_timestamp drift exceeds tight timing slack";
-
-    delete result;
-}
-
-// Test current_timestamp returns constant value across all rows in the same batch (batch-mode semantic).
-TEST_F(CurrentTimestampTest, ConstantResultAcrossRows)
-{
-    std::cout << "=== Test: current_timestamp constant result across all rows ===" << std::endl;
-
-    int32_t rowSize = 100;
-    BaseVector *result = nullptr;
-    ExecuteCurrentTimestamp(rowSize, result);
-
-    ASSERT_NE(result, nullptr) << "Result is null";
-    auto *resultVector = static_cast<Vector<int64_t> *>(result);
-    ASSERT_NE(resultVector, nullptr) << "Result vector is null";
-
-    // Get the value from the first row
-    EXPECT_FALSE(resultVector->IsNull(0));
-    int64_t firstValue = resultVector->GetValue(0);
-
-    // Verify ALL rows have the same value (batch-mode: initialize once, call returns cached value)
-    for (int32_t i = 0; i < rowSize; ++i) {
-        EXPECT_FALSE(resultVector->IsNull(i)) << "Unexpected NULL at index " << i;
-        if (!resultVector->IsNull(i)) {
-            int64_t actual = resultVector->GetValue(i);
-            EXPECT_EQ(actual, firstValue)
-                << "All rows should have the same current_timestamp value, but row " << i << " has " << actual
-                << " instead of " << firstValue;
-        }
-    }
-
-    std::cout << "All " << rowSize << " rows have value: " << firstValue << " micros since epoch" << std::endl;
-
-    delete result;
-}
-
-// Test current_timestamp with a large batch
-TEST_F(CurrentTimestampTest, LargeBatch)
-{
-    std::cout << "=== Test: current_timestamp with large batch ===" << std::endl;
+    std::cout << "=== Test: current_timestamp constant and non-null result across large batch ===" << std::endl;
 
     int32_t rowSize = 1000;
     BaseVector *result = nullptr;
@@ -198,9 +145,10 @@ TEST_F(CurrentTimestampTest, LargeBatch)
     int64_t firstValue = resultVector->GetValue(0);
 
     for (int32_t i = 0; i < rowSize; ++i) {
-        EXPECT_FALSE(resultVector->IsNull(i)) << "Unexpected NULL at index " << i;
+        EXPECT_FALSE(resultVector->IsNull(i)) << "current_timestamp should never return NULL - row " << i;
         if (!resultVector->IsNull(i)) {
-            EXPECT_EQ(resultVector->GetValue(i), firstValue) << "Row " << i << " value mismatch";
+            EXPECT_EQ(resultVector->GetValue(i), firstValue)
+                << "All rows should have the same current_timestamp value, but row " << i << " differs";
         }
     }
 
@@ -210,69 +158,7 @@ TEST_F(CurrentTimestampTest, LargeBatch)
     delete result;
 }
 
-// Test current_timestamp matches the system epoch micros (within tight timing slack).
-TEST_F(CurrentTimestampTest, MatchesSystemEpochMicros)
-{
-    std::cout << "=== Test: current_timestamp matches system epoch micros ===" << std::endl;
-
-    // Capture system time before function creation (initialize() runs during createVectorFunction)
-    int64_t beforeMicros = GetCurrentEpochMicros();
-
-    int32_t rowSize = 1;
-    BaseVector *result = nullptr;
-    ExecuteCurrentTimestamp(rowSize, result);
-
-    // Capture system time after function creation
-    int64_t afterMicros = GetCurrentEpochMicros();
-
-    ASSERT_NE(result, nullptr) << "Result is null";
-    auto *resultVector = static_cast<Vector<int64_t> *>(result);
-    ASSERT_NE(resultVector, nullptr) << "Result vector is null";
-
-    EXPECT_FALSE(resultVector->IsNull(0));
-    int64_t actual = resultVector->GetValue(0);
-
-    std::cout << "current_timestamp result: " << actual << " micros" << std::endl;
-    std::cout << "Before initialize: " << beforeMicros << " micros" << std::endl;
-    std::cout << "After initialize: " << afterMicros << " micros" << std::endl;
-    std::cout << "Drift from before: " << (actual - beforeMicros) << " us" << std::endl;
-    std::cout << "Drift from after: " << (actual - afterMicros) << " us" << std::endl;
-
-    int64_t distBefore = std::abs(actual - beforeMicros);
-    int64_t distAfter = std::abs(actual - afterMicros);
-    int64_t minDist = std::min(distBefore, distAfter);
-
-    EXPECT_LE(minDist, MAX_TIMING_SLACK_MICROS)
-        << "current_timestamp (" << actual << ") should be within " << MAX_TIMING_SLACK_MICROS
-        << " us of system epoch micros. Before=" << beforeMicros << ", After=" << afterMicros
-        << ". A drift matching the local timezone offset indicates a LocalTimestamp-style bug; "
-        << "a drift of ~56552 years indicates a microsecond/millisecond unit mismatch.";
-
-    delete result;
-}
-
-// Test current_timestamp always returns non-NULL values (current timestamp is always available)
-TEST_F(CurrentTimestampTest, NonNullableResult)
-{
-    std::cout << "=== Test: current_timestamp non-nullable result ===" << std::endl;
-
-    int32_t rowSize = 50;
-    BaseVector *result = nullptr;
-    ExecuteCurrentTimestamp(rowSize, result);
-
-    ASSERT_NE(result, nullptr) << "Result is null";
-    auto *resultVector = static_cast<Vector<int64_t> *>(result);
-    ASSERT_NE(resultVector, nullptr) << "Result vector is null";
-
-    for (int32_t i = 0; i < rowSize; ++i) {
-        EXPECT_FALSE(resultVector->IsNull(i))
-            << "current_timestamp should never return NULL - row " << i << " is NULL";
-    }
-
-    delete result;
-}
-
-// Test CurrentTimestampFunction struct directly (pure unit test without VectorFunction infrastructure).
+// Merged: DirectStructTest + MicrosPrecisionGuard
 TEST_F(CurrentTimestampTest, DirectStructTest)
 {
     std::cout << "=== Test: CurrentTimestampFunction struct direct test ===" << std::endl;
@@ -306,6 +192,15 @@ TEST_F(CurrentTimestampTest, DirectStructTest)
         << ", after=" << afterMicros << ") exceeds " << MAX_TIMING_SLACK_MICROS
         << " us; likely a timezone-offset drift (LocalTimestamp-style bug) or a unit mismatch";
 
+    // Micros precision guard: the value should be in microsecond units (~1.7e15 for current era),
+    // not seconds (~1.7e9) or milliseconds (~1.7e12).
+    EXPECT_GE(result1, kMinEpochMicros) << "current_timestamp (" << result1
+        << ") is below the micros-range lower bound; a value near 1.7e9 suggests "
+        << "seconds, near 1.7e12 suggests millis.";
+    EXPECT_LE(result1, kMaxEpochMicros) << "current_timestamp (" << result1
+        << ") is above the micros-range upper bound; this indicates the value is "
+        << "not in microsecond units.";
+
     // Second call - should return the same cached value (batch-mode semantic)
     int64_t result2 = 0;
     vectorization::Status status2 = fn.call(result2);
@@ -313,6 +208,7 @@ TEST_F(CurrentTimestampTest, DirectStructTest)
     EXPECT_EQ(result2, result1) << "call() should return the same cached value on repeated calls";
 }
 
+// current_timestamp must differ from localtimestamp in non-UTC zones 
 TEST_F(CurrentTimestampTest, DiffersFromLocalTimestampInNonUtcZone)
 {
     std::cout << "=== Test: current_timestamp differs from localtimestamp in non-UTC zone ===" << std::endl;
@@ -360,4 +256,95 @@ TEST_F(CurrentTimestampTest, DiffersFromLocalTimestampInNonUtcZone)
         << ") should match the timezone offset (" << tzOffsetMicros
         << "). A mismatch suggests CurrentTimestampFunction was regressed into the "
         << "LocalTimestamp-style implementation.";
+}
+
+// current_timestamp returns UTC micros regardless of session timezone (TIMESTAMP_LTZ semantics).
+TEST_F(CurrentTimestampTest, ReturnsUtcRegardlessOfSessionTimezone)
+{
+    std::cout << "=== Test: current_timestamp returns UTC regardless of session timezone ===" << std::endl;
+
+    const std::string tzName = "America/Los_Angeles";
+
+    int64_t utcBefore = GetCurrentEpochMicros();
+
+    CurrentTimestampFunction<int64_t> fn;
+    std::vector<DataTypeId> inputTypes;
+    std::unordered_map<std::string, std::string> configValues;
+    configValues[config::QueryConfig::kSessionTimezone] = tzName;
+    config::QueryConfig queryConfig(configValues);
+    fn.initialize(inputTypes, queryConfig);
+
+    int64_t utcAfter = GetCurrentEpochMicros();
+
+    int64_t actual = 0;
+    ASSERT_TRUE(fn.call(actual).ok());
+
+    EXPECT_GE(actual, utcBefore - MAX_TIMING_SLACK_MICROS)
+        << "current_timestamp (" << actual << ") should be >= UTC micros at start (" << utcBefore
+        << ") even with session timezone " << tzName;
+    EXPECT_LE(actual, utcAfter + MAX_TIMING_SLACK_MICROS)
+        << "current_timestamp (" << actual << ") should be <= UTC micros at end (" << utcAfter
+        << ") even with session timezone " << tzName;
+}
+
+// New: empty batch boundary case (rowSize=0). Verifies no crash and an empty result vector.
+TEST_F(CurrentTimestampTest, EmptyBatch)
+{
+    std::cout << "=== Test: current_timestamp with empty batch (rowSize=0) ===" << std::endl;
+
+    int32_t rowSize = 0;
+    BaseVector *result = nullptr;
+    ExecuteCurrentTimestamp(rowSize, result);
+
+    ASSERT_NE(result, nullptr) << "Result is null even for empty batch";
+    EXPECT_EQ(result->GetSize(), 0) << "Empty batch should produce a 0-size result vector";
+
+    std::cout << "Empty batch produced a result vector of size " << result->GetSize() << std::endl;
+
+    delete result;
+}
+
+// New: multi-batch reuse. The same vector function instance is applied to two batches;
+TEST_F(CurrentTimestampTest, MultiBatchReuse)
+{
+    std::cout << "=== Test: current_timestamp multi-batch reuse returns same cached value ===" << std::endl;
+
+    auto vectorFunction = CreateVectorFunction();
+    ASSERT_NE(vectorFunction, nullptr) << "Function current_timestamp creation failed";
+
+    // First batch
+    int32_t rowSize1 = 3;
+    BaseVector *result1 = nullptr;
+    ApplyCurrentTimestamp(vectorFunction.get(), rowSize1, result1);
+    ASSERT_NE(result1, nullptr) << "First batch result is null";
+    auto *resultVector1 = static_cast<Vector<int64_t> *>(result1);
+    ASSERT_NE(resultVector1, nullptr) << "First batch result vector is null";
+
+    EXPECT_FALSE(resultVector1->IsNull(0));
+    int64_t firstBatchValue = resultVector1->GetValue(0);
+    EXPECT_GT(firstBatchValue, 0) << "First batch current_timestamp should be > 0";
+
+    // Second batch (reusing the same function instance)
+    int32_t rowSize2 = 4;
+    BaseVector *result2 = nullptr;
+    ApplyCurrentTimestamp(vectorFunction.get(), rowSize2, result2);
+    ASSERT_NE(result2, nullptr) << "Second batch result is null";
+    auto *resultVector2 = static_cast<Vector<int64_t> *>(result2);
+    ASSERT_NE(resultVector2, nullptr) << "Second batch result vector is null";
+
+    // All rows in both batches must share the same cached value
+    for (int32_t i = 0; i < rowSize1; ++i) {
+        EXPECT_EQ(resultVector1->GetValue(i), firstBatchValue)
+            << "First batch row " << i << " should match cached value";
+    }
+    for (int32_t i = 0; i < rowSize2; ++i) {
+        EXPECT_EQ(resultVector2->GetValue(i), firstBatchValue)
+            << "Second batch row " << i << " should return the same cached value as the first batch";
+    }
+
+    std::cout << "Both batches returned identical cached value: " << firstBatchValue << " micros since epoch"
+              << std::endl;
+
+    delete result1;
+    delete result2;
 }

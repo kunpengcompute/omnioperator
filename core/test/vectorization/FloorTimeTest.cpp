@@ -69,7 +69,7 @@ public:
     }
     
     static BaseVector* CreateDate32Vector(const std::vector<int32_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_INT, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_DATE32, values.size());
         auto* typedVec = static_cast<Vector<int32_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -97,7 +97,7 @@ public:
     }
     
     static void ExecuteFloorTime(BaseVector* valueVec, BaseVector* formatVec, BaseVector*& result, DataTypeId valueTypeId) {
-        DataTypeId outputTypeId = (valueTypeId == OMNI_INT) ? OMNI_INT : OMNI_LONG;
+        DataTypeId outputTypeId = valueTypeId;
         auto signature = std::make_shared<FunctionSignature>("floor_time", 
             std::vector<DataTypeId>{valueTypeId, OMNI_VARCHAR}, outputTypeId);
         auto function = VectorFunction::Find(signature);
@@ -151,7 +151,7 @@ TEST(FloorTimeTest, FloorDate32ToYear) {
     BaseVector* formatVec = FloorTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     FloorTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -178,7 +178,7 @@ TEST(FloorTimeTest, FloorDate32ToMonth) {
     BaseVector* formatVec = FloorTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     FloorTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -205,7 +205,7 @@ TEST(FloorTimeTest, FloorDate32ToQuarter) {
     BaseVector* formatVec = FloorTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     FloorTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -232,7 +232,7 @@ TEST(FloorTimeTest, FloorDate32ToWeek) {
     BaseVector* formatVec = FloorTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     FloorTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -259,7 +259,7 @@ TEST(FloorTimeTest, FloorDate32ToDay) {
     BaseVector* formatVec = FloorTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     FloorTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -471,7 +471,7 @@ TEST(FloorTimeTest, FloorWithNullDate) {
     dateVec->SetNull(1);
     
     BaseVector* resultVec = nullptr;
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     
     EXPECT_FALSE(resultVec->IsNull(0)) << "Row 0 should not be NULL";
     EXPECT_TRUE(resultVec->IsNull(1)) << "Row 1 should be NULL";
@@ -497,7 +497,7 @@ TEST(FloorTimeTest, FloorWithNullFormat) {
     formatVec->SetNull(1);
     
     BaseVector* resultVec = nullptr;
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     
     EXPECT_FALSE(resultVec->IsNull(0)) << "Row 0 should not be NULL";
     EXPECT_TRUE(resultVec->IsNull(1)) << "Row 1 should be NULL (format is NULL)";
@@ -547,7 +547,7 @@ TEST(FloorTimeTest, FloorWithInvalidFormat) {
     BaseVector* formatVec = FloorTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     
     EXPECT_TRUE(resultVec->IsNull(0)) << "Row 0 should be NULL (invalid format)";
     EXPECT_TRUE(resultVec->IsNull(1)) << "Row 1 should be NULL (invalid format)";
@@ -576,7 +576,7 @@ TEST(FloorTimeTest, FloorDate32BoundaryEpoch) {
     BaseVector* formatVec = FloorTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     FloorTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -603,7 +603,7 @@ TEST(FloorTimeTest, FloorDate32BoundaryLeapYear) {
     BaseVector* formatVec = FloorTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     FloorTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;
@@ -630,7 +630,7 @@ TEST(FloorTimeTest, FloorDate32AlreadyOnBoundary) {
     BaseVector* formatVec = FloorTimeFunctionTestHelper::CreateStringVector(formatValues);
     BaseVector* resultVec = nullptr;
     
-    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_INT);
+    FloorTimeFunctionTestHelper::ExecuteFloorTime(dateVec, formatVec, resultVec, OMNI_DATE32);
     FloorTimeFunctionTestHelper::ValidateDate32Result(resultVec, expected, dateValues.size());
 
     delete resultVec;

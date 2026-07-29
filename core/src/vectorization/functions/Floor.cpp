@@ -70,7 +70,7 @@ public:
             formatVector = dynamic_cast<Vector<LargeStringContainer<std::string_view>> *>(formatArg);
         }
 
-        if (valueTypeId == OMNI_INT) {
+        if (valueTypeId == OMNI_INT || valueTypeId == OMNI_DATE32) {
             auto *valueVector = reinterpret_cast<Vector<int32_t> *>(valueArg);
             const auto *valueRaw = unsafe::UnsafeVector::GetRawValues(valueVector);
             auto *resultVector = reinterpret_cast<Vector<int32_t> *>(result);
@@ -166,5 +166,6 @@ void RegisterFloorFunction(const std::string &name)
     auto floorFunction = std::make_shared<FloorFunction>();
     VectorFunction::RegisterVectorFunction(name, {OMNI_LONG, OMNI_VARCHAR}, OMNI_LONG, floorFunction);
     VectorFunction::RegisterVectorFunction(name, {OMNI_INT, OMNI_VARCHAR}, OMNI_INT, floorFunction);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_DATE32, OMNI_VARCHAR}, OMNI_DATE32, floorFunction);
 }
 }

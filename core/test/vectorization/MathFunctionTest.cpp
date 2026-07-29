@@ -583,6 +583,16 @@ TEST(MathFunctionsTest, CeilLong) {
     TestUnaryMathOperation<int64_t, OMNI_LONG, OMNI_LONG>("ceil", inputData, expectedResults);
 }
 
+// Test ceil double function with DOUBLE return type (Flink semantics)
+TEST(MathFunctionsTest, CeilDoubleReturnDouble) {
+    std::vector<double> inputData = {1.0, 0.5, 0.0, -0.5, -1.0, 2.878, -2.878};
+    std::vector<double> expectedResults;
+    for (double x : inputData) {
+        expectedResults.push_back(std::ceil(x));
+    }
+    TestUnaryMathOperation<double, OMNI_DOUBLE, OMNI_DOUBLE>("ceil", inputData, expectedResults);
+}
+
 // Test sign function
 TEST(MathFunctionsTest, SignDouble) {
     std::vector<double> inputData = {0.0, -0.0, 10.1, -10.1, 0.5, -0.5};

@@ -534,7 +534,8 @@ void ExprEval::Visit(const FuncExpr &e)
     }
     BaseVector *result = nullptr;
     auto resolved = e.vectorFunction;
-    bool needQueryConfig = (e.funcName == "spark_partition_id" || e.funcName == "uuid" || e.funcName == "rand");
+    bool needQueryConfig = (e.funcName == "spark_partition_id" || e.funcName == "uuid" || e.funcName == "rand"
+        || e.funcName == "localtime" || e.funcName == "localtimestamp" || e.funcName == "current_date");
     if (resolved == nullptr || needQueryConfig) {
         std::vector<DataTypeId> argTypes(e.arguments.size());
         std::transform(e.arguments.begin(), e.arguments.end(), argTypes.begin(),

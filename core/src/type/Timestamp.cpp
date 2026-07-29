@@ -462,7 +462,7 @@ type::Status Timestamp::CeilTime(const Timestamp &ts, type::DateTruncMode level,
             constexpr int64_t kSunday = 3; // 目前定位在周天，等查看flink原生是否一致
             int64_t offset = ((days - kSunday) % 7 + 7) % 7;
             days -= offset;
-            if (offset != 0 || secsOfDay != 0 || nanos != 0) {
+            if (offset != 0) {
                 days += 7;
             }
             secsOfDay = 0;
@@ -473,7 +473,7 @@ type::Status Timestamp::CeilTime(const Timestamp &ts, type::DateTruncMode level,
             LocalDate ld(static_cast<int32_t>(days));
             int16_t day = ld.GetDay();
             int64_t floorDays = days - day + 1;
-            if (day == 1 && secsOfDay == 0 && nanos == 0) {
+            if (day == 1) {
                 days = floorDays;
             } else {
                 int32_t base = static_cast<int32_t>(floorDays);
@@ -491,7 +491,7 @@ type::Status Timestamp::CeilTime(const Timestamp &ts, type::DateTruncMode level,
             LocalDate ld(static_cast<int32_t>(days));
             ld.SetQuarter();
             int32_t floorDays = ld.ToDays();
-            if (static_cast<int32_t>(days) == floorDays && secsOfDay == 0 && nanos == 0) {
+            if (static_cast<int32_t>(days) == floorDays) {
                 days = floorDays;
             } else {
                 int32_t base = floorDays;
@@ -512,7 +512,7 @@ type::Status Timestamp::CeilTime(const Timestamp &ts, type::DateTruncMode level,
             LocalDate ld(static_cast<int32_t>(days));
             int32_t dayOfYear = ld.getDayOfYear();
             int32_t floorDays = static_cast<int32_t>(days) - dayOfYear + 1;
-            if (dayOfYear == 1 && secsOfDay == 0 && nanos == 0) {
+            if (dayOfYear == 1) {
                 days = floorDays;
             } else {
                 bool leap = LocalDate(floorDays).IsLeapYear();

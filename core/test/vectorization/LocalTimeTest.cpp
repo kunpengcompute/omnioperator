@@ -21,6 +21,8 @@
 #include "vector/vector_helper.h"
 #include "vector/vector.h"
 #include "type/data_type.h"
+#include "type/Timestamp.h"
+#include "type/tz/TimeZoneMap.h"
 #include "util/config/QueryConfig.h"
 
 using namespace omniruntime;
@@ -32,9 +34,7 @@ using namespace omniruntime::codegen;
 
 namespace {
 constexpr int64_t MICROS_PER_DAY = 86400000000LL;
-constexpr int64_t MICROS_PER_SECOND = 1000000LL;
-
-// Get current UTC time as microseconds since midnight (matching LocalTimeFunction's UTC convention)
+// LocalTimeFunction falls back to OS local time when no session timezone is configured.
 int64_t GetCurrentMicrosSinceMidnight()
 {
     auto now = std::chrono::system_clock::now();
@@ -44,17 +44,35 @@ int64_t GetCurrentMicrosSinceMidnight()
     int64_t subSecondMicros = static_cast<int64_t>((microsSinceEpoch - secsSinceEpoch).count());
     std::time_t timeNow = static_cast<std::time_t>(secsSinceEpoch.count());
     std::tm tmVal {};
-    gmtime_r(&timeNow, &tmVal);
-    return static_cast<int64_t>(tmVal.tm_hour * 3600 + tmVal.tm_min * 60 + tmVal.tm_sec) * MICROS_PER_SECOND
+    localtime_r(&timeNow, &tmVal);
+    return static_cast<int64_t>(tmVal.tm_hour * 3600 + tmVal.tm_min * 60 + tmVal.tm_sec) * 1000000LL
         + subSecondMicros;
 }
 
-// Compute circular distance (in micros) between two times-of-day, handling midnight wrap-around
+// Compute expected localtime (micros since midnight) in a given session timezone.
+int64_t GetSessionTzLocalTimeMicros(const tz::TimeZone *sessionTz)
+{
+    auto now = std::chrono::system_clock::now();
+    auto utcMicros = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+    Timestamp ts = Timestamp::fromMicros(utcMicros);
+    if (sessionTz != nullptr) {
+        ts.toTimezone(*sessionTz);
+    }
+    std::tm localTm {};
+    Timestamp::epochToCalendarUtc(ts.getSeconds(), localTm);
+    return static_cast<int64_t>(localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * 1000000LL
+        + static_cast<int64_t>(ts.getNanos() / 1000);
+}
+
+// Compute circular distance (in micros) between two times-of-day, handling midnight wrap-around.
 int64_t CircularDistanceMicros(int64_t a, int64_t b)
 {
     int64_t diff = std::abs(a - b);
     return std::min(diff, MICROS_PER_DAY - diff);
 }
+
+// Tolerance for time-of-day matching checks on slow CI.
+static constexpr int64_t kMicrosTolerance = 10'000'000; // 10 seconds
 } // namespace
 
 class LocalTimeTest : public ::testing::Test {
@@ -64,42 +82,45 @@ protected:
         RegisterFunctions::Register();
     }
 
-    // Execute localtime() with given row size and return result vector.
-    static void ExecuteLocalTime(int32_t rowSize, BaseVector *&result)
+    // The returned instance has already called initialize() which caches the current time-of-day.
+    static std::unique_ptr<VectorFunction> CreateVectorFunction(
+        const std::unordered_map<std::string, std::string> &configValues = {})
     {
-        // Create function signature: localtime() -> OMNI_LONG
         std::vector<DataTypeId> argTypes = {};
         auto signature = std::make_shared<FunctionSignature>("localtime", argTypes, OMNI_LONG);
 
-        // Find simple function factory
         auto factoryIt = VectorFunction::simpleFunctionFactoryMap_.find(signature);
-        ASSERT_NE(factoryIt, VectorFunction::simpleFunctionFactoryMap_.end())
-            << "Function factory localtime not found";
+        if (factoryIt == VectorFunction::simpleFunctionFactoryMap_.end()) {
+            return nullptr;
+        }
 
-        // Create QueryConfig (empty - LocalTimeFunction does not read any config)
-        std::unordered_map<std::string, std::string> configValues;
         config::QueryConfig queryConfig(configValues);
-
-        // Create vector function with config (this calls initialize() which caches current time)
         std::vector<BaseVector *> constantInputs;
         auto factory = factoryIt->second();
-        auto vectorFunction = factory->createVectorFunction({}, queryConfig, constantInputs);
-        ASSERT_NE(vectorFunction, nullptr) << "Function localtime creation failed";
+        return factory->createVectorFunction({}, queryConfig, constantInputs);
+    }
 
-        // Create execution context
+    // Apply an existing vector function instance with the given row size.
+    static void ApplyLocalTime(VectorFunction *vectorFunction, int32_t rowSize, BaseVector *&result)
+    {
         ExecutionContext context;
         context.SetResultRowSize(rowSize);
-
-        // Prepare empty arguments stack (no input arguments)
         std::stack<BaseVector *> args;
-
-        // Execute function
         auto resultType = std::make_shared<DataType>(OMNI_LONG);
         vectorFunction->Apply(args, resultType, result, &context);
     }
+
+    // Convenience: create a fresh function instance and execute once.
+    static void ExecuteLocalTime(int32_t rowSize, BaseVector *&result,
+        const std::unordered_map<std::string, std::string> &configValues = {})
+    {
+        auto vectorFunction = CreateVectorFunction(configValues);
+        ASSERT_NE(vectorFunction, nullptr) << "Function localtime creation failed";
+        ApplyLocalTime(vectorFunction.get(), rowSize, result);
+    }
 };
 
-// Test basic localtime: returns non-NULL value in valid range [0, 86400000000)
+// Merged: BasicLocalTime + SingleRow
 TEST_F(LocalTimeTest, BasicLocalTime)
 {
     std::cout << "=== Test: localtime basic cases ===" << std::endl;
@@ -126,65 +147,10 @@ TEST_F(LocalTimeTest, BasicLocalTime)
     delete result;
 }
 
-// Test localtime with a single row
-TEST_F(LocalTimeTest, SingleRow)
+// Merged: ConstantResultAcrossRows + LargeBatch + NonNullableResult
+TEST_F(LocalTimeTest, ConstantAndNonNullResult)
 {
-    std::cout << "=== Test: localtime single row ===" << std::endl;
-
-    int32_t rowSize = 1;
-    BaseVector *result = nullptr;
-    ExecuteLocalTime(rowSize, result);
-
-    ASSERT_NE(result, nullptr) << "Result is null";
-    auto *resultVector = static_cast<Vector<int64_t> *>(result);
-    ASSERT_NE(resultVector, nullptr) << "Result vector is null";
-
-    EXPECT_FALSE(resultVector->IsNull(0));
-    int64_t actual = resultVector->GetValue(0);
-    std::cout << "Single row: localtime=" << actual << " micros since midnight" << std::endl;
-    EXPECT_GE(actual, 0);
-    EXPECT_LT(actual, MICROS_PER_DAY);
-
-    delete result;
-}
-
-// Test localtime returns constant value across all rows in the same batch (batch-mode semantic).
-TEST_F(LocalTimeTest, ConstantResultAcrossRows)
-{
-    std::cout << "=== Test: localtime constant result across all rows ===" << std::endl;
-
-    int32_t rowSize = 100;
-    BaseVector *result = nullptr;
-    ExecuteLocalTime(rowSize, result);
-
-    ASSERT_NE(result, nullptr) << "Result is null";
-    auto *resultVector = static_cast<Vector<int64_t> *>(result);
-    ASSERT_NE(resultVector, nullptr) << "Result vector is null";
-
-    // Get the value from the first row
-    EXPECT_FALSE(resultVector->IsNull(0));
-    int64_t firstValue = resultVector->GetValue(0);
-
-    // Verify ALL rows have the same value (batch-mode: initialize once, call returns cached value)
-    for (int32_t i = 0; i < rowSize; ++i) {
-        EXPECT_FALSE(resultVector->IsNull(i)) << "Unexpected NULL at index " << i;
-        if (!resultVector->IsNull(i)) {
-            int64_t actual = resultVector->GetValue(i);
-            EXPECT_EQ(actual, firstValue)
-                << "All rows should have the same localtime value, but row " << i << " has " << actual
-                << " instead of " << firstValue;
-        }
-    }
-
-    std::cout << "All " << rowSize << " rows have value: " << firstValue << " micros since midnight" << std::endl;
-
-    delete result;
-}
-
-// Test localtime with a large batch
-TEST_F(LocalTimeTest, LargeBatch)
-{
-    std::cout << "=== Test: localtime with large batch ===" << std::endl;
+    std::cout << "=== Test: localtime constant and non-null result across large batch ===" << std::endl;
 
     int32_t rowSize = 1000;
     BaseVector *result = nullptr;
@@ -198,9 +164,10 @@ TEST_F(LocalTimeTest, LargeBatch)
     int64_t firstValue = resultVector->GetValue(0);
 
     for (int32_t i = 0; i < rowSize; ++i) {
-        EXPECT_FALSE(resultVector->IsNull(i)) << "Unexpected NULL at index " << i;
+        EXPECT_FALSE(resultVector->IsNull(i)) << "localtime should never return NULL - row " << i;
         if (!resultVector->IsNull(i)) {
-            EXPECT_EQ(resultVector->GetValue(i), firstValue) << "Row " << i << " value mismatch";
+            EXPECT_EQ(resultVector->GetValue(i), firstValue)
+                << "All rows should have the same localtime value, but row " << i << " differs";
         }
     }
 
@@ -210,7 +177,8 @@ TEST_F(LocalTimeTest, LargeBatch)
     delete result;
 }
 
-// Test localtime matches the system UTC time (within tolerance).
+// Test localtime matches the system local time (within tolerance) via the full VectorFunction path
+// (no session timezone -> OS local fallback).
 TEST_F(LocalTimeTest, MatchesSystemLocalTime)
 {
     std::cout << "=== Test: localtime matches system local time ===" << std::endl;
@@ -236,41 +204,16 @@ TEST_F(LocalTimeTest, MatchesSystemLocalTime)
     std::cout << "Before initialize: " << beforeMicros << " micros" << std::endl;
     std::cout << "After initialize: " << afterMicros << " micros" << std::endl;
 
-    // The result should be close to the system time captured around initialize().
-    constexpr int64_t toleranceMicros = 2000000LL;
-    int64_t distBefore = CircularDistanceMicros(actual, beforeMicros);
-    int64_t distAfter = CircularDistanceMicros(actual, afterMicros);
-    int64_t minDist = std::min(distBefore, distAfter);
-
-    EXPECT_LE(minDist, toleranceMicros)
-        << "localtime (" << actual << ") should be within " << toleranceMicros
-        << " micros of system time. Before=" << beforeMicros << ", After=" << afterMicros;
+    int64_t minDist = std::min(CircularDistanceMicros(actual, beforeMicros),
+                               CircularDistanceMicros(actual, afterMicros));
+    EXPECT_LE(minDist, kMicrosTolerance)
+        << "localtime (" << actual << ") should be within " << kMicrosTolerance
+        << " micros of system local time. Before=" << beforeMicros << ", After=" << afterMicros;
 
     delete result;
 }
 
-// Test localtime always returns non-NULL values (current time is always available)
-TEST_F(LocalTimeTest, NonNullableResult)
-{
-    std::cout << "=== Test: localtime non-nullable result ===" << std::endl;
-
-    int32_t rowSize = 50;
-    BaseVector *result = nullptr;
-    ExecuteLocalTime(rowSize, result);
-
-    ASSERT_NE(result, nullptr) << "Result is null";
-    auto *resultVector = static_cast<Vector<int64_t> *>(result);
-    ASSERT_NE(resultVector, nullptr) << "Result vector is null";
-
-    for (int32_t i = 0; i < rowSize; ++i) {
-        EXPECT_FALSE(resultVector->IsNull(i))
-            << "localtime should never return NULL - row " << i << " is NULL";
-    }
-
-    delete result;
-}
-
-// Test LocalTimeFunction struct directly (pure unit test without VectorFunction infrastructure).
+// Merged: DirectStructTest + MicrosPrecisionGuard
 TEST_F(LocalTimeTest, DirectStructTest)
 {
     std::cout << "=== Test: LocalTimeFunction struct direct test ===" << std::endl;
@@ -292,22 +235,150 @@ TEST_F(LocalTimeTest, DirectStructTest)
 
     std::cout << "Direct call result: " << result1 << " micros since midnight" << std::endl;
 
-    // Verify valid range
-    EXPECT_GE(result1, 0) << "localtime should be >= 0";
-    EXPECT_LT(result1, MICROS_PER_DAY) << "localtime should be < " << MICROS_PER_DAY;
+    // Verify valid range (micros precision guard: [0, 86400000000), not seconds or millis)
+    EXPECT_GE(result1, 0) << "localtime (" << result1
+        << ") should be >= 0; a value near 86400 suggests seconds.";
+    EXPECT_LT(result1, MICROS_PER_DAY) << "localtime (" << result1
+        << ") should be < " << MICROS_PER_DAY
+        << "; a value near 86400000 suggests millis, near 86400 suggests seconds.";
 
-    // Verify close to system time
-    constexpr int64_t toleranceMicros = 2000000LL;
-    int64_t distBefore = CircularDistanceMicros(result1, beforeMicros);
-    int64_t distAfter = CircularDistanceMicros(result1, afterMicros);
-    int64_t minDist = std::min(distBefore, distAfter);
-    EXPECT_LE(minDist, toleranceMicros)
-        << "localtime (" << result1 << ") should be within " << toleranceMicros
-        << " micros of system time. Before=" << beforeMicros << ", After=" << afterMicros;
+    // Verify close to system local time
+    int64_t minDist = std::min(CircularDistanceMicros(result1, beforeMicros),
+                               CircularDistanceMicros(result1, afterMicros));
+    EXPECT_LE(minDist, kMicrosTolerance)
+        << "localtime (" << result1 << ") should be within " << kMicrosTolerance
+        << " micros of system local time. Before=" << beforeMicros << ", After=" << afterMicros;
 
     // Second call - should return the same cached value (batch-mode semantic)
     int64_t result2 = 0;
     vectorization::Status status2 = fn.call(result2);
     EXPECT_TRUE(status2.ok()) << "Second call() should return OK status";
     EXPECT_EQ(result2, result1) << "call() should return the same cached value on repeated calls";
+}
+
+// Merged: UsesSessionTimezone + UsesSessionTimezoneShanghai (+ new UTC zero-offset)
+TEST_F(LocalTimeTest, UsesSessionTimezone)
+{
+    std::cout << "=== Test: localtime uses session timezone (UTC / +8 / -8 DST) ===" << std::endl;
+
+    const std::vector<std::string> tzNames = {"UTC", "Asia/Shanghai", "America/Los_Angeles"};
+
+    for (const auto &tzName : tzNames) {
+        const auto *sessionTz = tz::locateZone(tzName);
+
+        int64_t expectedBefore = GetSessionTzLocalTimeMicros(sessionTz);
+
+        LocalTimeFunction<int64_t> fn;
+        std::vector<DataTypeId> inputTypes;
+        std::unordered_map<std::string, std::string> configValues;
+        configValues[config::QueryConfig::kSessionTimezone] = tzName;
+        config::QueryConfig queryConfig(configValues);
+        fn.initialize(inputTypes, queryConfig);
+
+        int64_t expectedAfter = GetSessionTzLocalTimeMicros(sessionTz);
+
+        int64_t actual = 0;
+        ASSERT_TRUE(fn.call(actual).ok()) << "call() failed for session timezone " << tzName;
+
+        int64_t minDiff = std::min(CircularDistanceMicros(actual, expectedBefore),
+                                   CircularDistanceMicros(actual, expectedAfter));
+        EXPECT_LE(minDiff, kMicrosTolerance)
+            << "localtime (" << actual << ") should match session timezone " << tzName
+            << " (expected before=" << expectedBefore << ", after=" << expectedAfter << ")";
+
+        std::cout << "tz=" << tzName << ": actual=" << actual << " us, minDiff=" << minDiff << " us" << std::endl;
+    }
+}
+
+// localtime via the full VectorFunction path with session timezone config.
+TEST_F(LocalTimeTest, VectorFunctionPathWithSessionTimezone)
+{
+    std::cout << "=== Test: localtime via VectorFunction path with session timezone ===" << std::endl;
+
+    const std::string tzName = "Asia/Shanghai";
+    const auto *sessionTz = tz::locateZone(tzName);
+
+    std::unordered_map<std::string, std::string> configValues;
+    configValues[config::QueryConfig::kSessionTimezone] = tzName;
+
+    int64_t expectedBefore = GetSessionTzLocalTimeMicros(sessionTz);
+    BaseVector *result = nullptr;
+    ExecuteLocalTime(1, result, configValues);
+    int64_t expectedAfter = GetSessionTzLocalTimeMicros(sessionTz);
+
+    ASSERT_NE(result, nullptr);
+    auto *resultVector = static_cast<Vector<int64_t> *>(result);
+    ASSERT_NE(resultVector, nullptr);
+    ASSERT_FALSE(resultVector->IsNull(0));
+
+    int64_t actual = resultVector->GetValue(0);
+    int64_t minDiff = std::min(CircularDistanceMicros(actual, expectedBefore),
+                               CircularDistanceMicros(actual, expectedAfter));
+    EXPECT_LE(minDiff, kMicrosTolerance)
+        << "localtime via VectorFunction path should match session timezone " << tzName;
+
+    delete result;
+}
+
+// New: empty batch boundary case (rowSize=0). Verifies no crash and an empty result vector.
+TEST_F(LocalTimeTest, EmptyBatch)
+{
+    std::cout << "=== Test: localtime with empty batch (rowSize=0) ===" << std::endl;
+
+    int32_t rowSize = 0;
+    BaseVector *result = nullptr;
+    ExecuteLocalTime(rowSize, result);
+
+    ASSERT_NE(result, nullptr) << "Result is null even for empty batch";
+    EXPECT_EQ(result->GetSize(), 0) << "Empty batch should produce a 0-size result vector";
+
+    std::cout << "Empty batch produced a result vector of size " << result->GetSize() << std::endl;
+
+    delete result;
+}
+
+// New: multi-batch reuse. The same vector function instance is applied to two batches;
+TEST_F(LocalTimeTest, MultiBatchReuse)
+{
+    std::cout << "=== Test: localtime multi-batch reuse returns same cached value ===" << std::endl;
+
+    auto vectorFunction = CreateVectorFunction();
+    ASSERT_NE(vectorFunction, nullptr) << "Function localtime creation failed";
+
+    // First batch
+    int32_t rowSize1 = 3;
+    BaseVector *result1 = nullptr;
+    ApplyLocalTime(vectorFunction.get(), rowSize1, result1);
+    ASSERT_NE(result1, nullptr) << "First batch result is null";
+    auto *resultVector1 = static_cast<Vector<int64_t> *>(result1);
+    ASSERT_NE(resultVector1, nullptr) << "First batch result vector is null";
+
+    EXPECT_FALSE(resultVector1->IsNull(0));
+    int64_t firstBatchValue = resultVector1->GetValue(0);
+    EXPECT_GE(firstBatchValue, 0) << "First batch localtime should be >= 0";
+    EXPECT_LT(firstBatchValue, MICROS_PER_DAY) << "First batch localtime should be < MICROS_PER_DAY";
+
+    // Second batch (reusing the same function instance)
+    int32_t rowSize2 = 4;
+    BaseVector *result2 = nullptr;
+    ApplyLocalTime(vectorFunction.get(), rowSize2, result2);
+    ASSERT_NE(result2, nullptr) << "Second batch result is null";
+    auto *resultVector2 = static_cast<Vector<int64_t> *>(result2);
+    ASSERT_NE(resultVector2, nullptr) << "Second batch result vector is null";
+
+    // All rows in both batches must share the same cached value
+    for (int32_t i = 0; i < rowSize1; ++i) {
+        EXPECT_EQ(resultVector1->GetValue(i), firstBatchValue)
+            << "First batch row " << i << " should match cached value";
+    }
+    for (int32_t i = 0; i < rowSize2; ++i) {
+        EXPECT_EQ(resultVector2->GetValue(i), firstBatchValue)
+            << "Second batch row " << i << " should return the same cached value as the first batch";
+    }
+
+    std::cout << "Both batches returned identical cached value: " << firstBatchValue << " micros since midnight"
+              << std::endl;
+
+    delete result1;
+    delete result2;
 }

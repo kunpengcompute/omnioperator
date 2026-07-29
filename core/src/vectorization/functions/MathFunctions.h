@@ -177,32 +177,41 @@ namespace omniruntime::vectorization {
   	template <typename T>
 	struct CeilFunction {
 		template <typename TInput>
-        ALWAYS_INLINE Status call(int64_t &result, const TInput &a){
-			if constexpr (std::is_integral_v<TInput>) {
-				result = a;
+        ALWAYS_INLINE Status call(T &result, const TInput &a){
+			if constexpr (std::is_integral_v<T>) {
+				if constexpr (std::is_integral_v<TInput>) {
+					result = a;
+				} else {
+					result = safeDoubleToInt64(std::ceil(a));
+				}
 			} else {
-            	result = safeDoubleToInt64(std::ceil(a));
+				result = std::ceil(a);
 			}
             return Status::OK();
 		}
 	};
 
          /// Floor function
- 	     /// floor(x) -> bigint
+ 	     /// floor(x) -> bigint (Spark) or double (Flink)
  	     /// Returns the largest integer less than or equal to x.
  	     /// In Spark, both ceil and floor must return Long type.
+ 	     /// In Flink, ceil/floor on DOUBLE returns DOUBLE.
  	     /// Supports: long, double
  	     template <typename T>
  	     struct FloorFunction {
  	         template <typename TInput>
- 	         ALWAYS_INLINE Status call(int64_t &result, const TInput &a) {
+ 	         ALWAYS_INLINE Status call(T &result, const TInput &a) {
 
- 	             if constexpr (std::is_integral_v<TInput>) {
- 	                 // For integral types, floor is identity
- 	                 result = a;
+ 	             if constexpr (std::is_integral_v<T>) {
+ 	                 if constexpr (std::is_integral_v<TInput>) {
+ 	                     // For integral types, floor is identity
+ 	                     result = a;
+ 	                 } else {
+ 	                     // For floating-point types, use std::floor and safe conversion
+ 	                     result = safeDoubleToInt64(std::floor(a));
+ 	                 }
  	             } else {
- 	                 // For floating-point types, use std::floor and safe conversion
- 	                 result = safeDoubleToInt64(std::floor(a));
+ 	                 result = std::floor(a);
  	             }
  	             return Status::OK();
  	    }
@@ -325,9 +334,6 @@ namespace omniruntime::vectorization {
     template <typename T>
     struct LnFunction {
         ALWAYS_INLINE bool call(double &result, double a) {
-            if (a <= 0.0) {
-                return false;
-            }
             result = std::log(a);
             return true;
         }

@@ -102,13 +102,15 @@ void RegisterDatetimeFunctions(const std::string &prefix)
 
     RegisterFromUnixTimeFunction(prefix + "from_unixtime");
 
-RegisterFunction<LocalTimeFunction, int64_t>(prefix + "localtime", {}, OMNI_LONG);
+    RegisterFunction<LocalTimeFunction, int64_t>(prefix + "localtime", {}, OMNI_LONG);
 
     RegisterFunction<LocalTimestampFunction, int64_t>(prefix + "localtimestamp", {}, OMNI_LONG);
 
     RegisterFunction<CurrentTimestampFunction, int64_t>(prefix + "current_timestamp", {}, OMNI_LONG);
 
     RegisterFunction<CurrentRowTimestampFunction, int64_t>(prefix + "current_row_timestamp", {}, OMNI_LONG);
+
+    RegisterFunction<CurrentDateFunction, int32_t>(prefix + "current_date", {}, OMNI_DATE32);
 
     RegisterFloorFunction(prefix + "floor_time");
 
