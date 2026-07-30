@@ -12,7 +12,9 @@ using namespace std;
 
 const std::string INVALID_HIVE_UDF = "";
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
 vector<Function> FunctionRegistry::registeredBatchFunctions = InitializeBatchFunc();
+#endif
 vector<Function> FunctionRegistry::registeredRowFunctions = InitializeRowFunc();
 FunctionMapPtr FunctionRegistry::functionRegistry;
 FunctionMapPtr FunctionRegistry::functionNullRegistry;
@@ -31,8 +33,10 @@ vector<unique_ptr<BaseFunctionRegistry>> FunctionRegistry::GetRowFunctionRegistr
     functionRegistries.push_back(make_unique<VarcharVectorFunctionRegistry>());
     functionRegistries.push_back(make_unique<HiveUdfRegistry>());
     functionRegistries.push_back(make_unique<StringFunctionRegistry>());
+#ifndef EXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS
     functionRegistries.push_back(make_unique<DateTimeFunctionRegistry>());
     functionRegistries.push_back(make_unique<JsonFunctionRegistry>());
+#endif
 
     auto policy = GetProperties().GetPolicy();
     if (policy->GetRoundingRule() == RoundingRule::HALF_UP) {
@@ -85,6 +89,7 @@ vector<unique_ptr<BaseFunctionRegistry>> FunctionRegistry::GetRowFunctionRegistr
     return functionRegistries;
 }
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
 vector<unique_ptr<BaseFunctionRegistry>> FunctionRegistry::GetBatchFunctionRegistries()
 {
     vector<unique_ptr<BaseFunctionRegistry>> functionRegistries;
@@ -147,6 +152,7 @@ vector<unique_ptr<BaseFunctionRegistry>> FunctionRegistry::GetBatchFunctionRegis
 
     return functionRegistries;
 }
+#endif // EXCLUDE_BATCH_FUNCTIONS
 
 std::vector<Function> FunctionRegistry::InitializeRowFunc()
 {
@@ -180,6 +186,7 @@ std::vector<Function> FunctionRegistry::InitializeRowFunc()
     return allFunctions;
 }
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
 std::vector<Function> FunctionRegistry::InitializeBatchFunc()
 {
     hiveUdfMap = std::make_unique<std::unordered_map<std::string, std::string>>();
@@ -211,6 +218,7 @@ std::vector<Function> FunctionRegistry::InitializeBatchFunc()
 
     return allFunctions;
 }
+#endif // EXCLUDE_BATCH_FUNCTIONS
 
 FunctionRegistry::~FunctionRegistry() = default;
 
@@ -263,8 +271,10 @@ std::vector<Function> &FunctionRegistry::GetRowFunctions()
     return registeredRowFunctions;
 }
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
 std::vector<Function> &FunctionRegistry::GetBatchFunctions()
 {
     return registeredBatchFunctions;
 }
+#endif
 }

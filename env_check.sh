@@ -116,9 +116,12 @@ setup_dependencies() {
     -DFMT_TEST=OFF \
     -DFMT_DOC=OFF \
     -DFMT_INSTALL=ON \
-    -DBUILD_SHARED_LIBS=ON
-    make -j$(nproc)
-    sudo make install
+    -DBUILD_SHARED_LIBS=ON \
+    -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" \
+    -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
+    -G Ninja
+    cmake --build . --parallel $(nproc)
+    sudo cmake --install .
     export FMT_HOME=${fmt_default_home}
     echo "Set FMT_HOME=$FMT_HOME automatically after fmt install."
     cd ${workspace}
@@ -138,9 +141,13 @@ setup_dependencies() {
     git clone --branch ${folly_tag} --depth=1 ${folly_repo} ${folly_source_dir}
     cd ${folly_source_dir}
     mkdir -p build && cd build
-    cmake .. -DFOLLY_HAVE_INT128_T=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-    make -j$(nproc)
-    sudo make install
+    cmake .. -DBUILD_TESTS=OFF -DFOLLY_HAVE_INT128_T=ON \
+      -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" \
+      -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
+      -G Ninja
+ 	  cmake --build . --parallel $(nproc)
+ 	  sudo cmake --install .
     export FOLLY_HOME=${folly_default_home}
     echo "Set FOLLY_HOME=$FOLLY_HOME automatically after folly install."
     cd ${workspace}
@@ -156,20 +163,41 @@ setup_dependencies() {
   sudo cp -r libboundscheck/include/ $OMNI_HOME/lib
 
   mkdir ${workspace}/${open_source_dir}/json/build
-  cd ${workspace}/${open_source_dir}/json/build && sudo cmake ../ && sudo make -j16 && sudo make install
+  cd ${workspace}/${open_source_dir}/json/build && sudo cmake ../ -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" -G Ninja && sudo cmake --build . --parallel $(nproc) && sudo cmake --install .
 
   if [ "$1" != "package" ] && [ "$1" != "release" ]; then
     cd ${workspace}/${open_source_dir}/benchmark
     cmake -E make_directory "build"
-    cmake -E chdir "build" cmake -DCMAKE_BUILD_TYPE=Release ../
+    cmake -E chdir "build" cmake -DCMAKE_BUILD_TYPE=Release ../ -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" -G Ninja
     sudo cmake --build "build" --config Release --target install
+  fi
+}
+
+check_ninja() {
+  if ! command -v ninja &> /dev/null; then
+    echo "ERROR: Ninja is not installed!"
+    echo "Ninja is required for optimized build performance."
+    echo "Please install Ninja and try again."
+    exit 1
+  else
+    echo "Ninja version: $(ninja --version)"
+  fi
+  # 检查LLD（兼容ld.lld/lld两种命令）
+  if ! command -v ld.lld &> /dev/null && ! command -v lld &> /dev/null; then
+    echo "WARN: LLD linker is not installed!"
+  fi
+
+  # 检查ccache
+  if ! command -v ccache &> /dev/null; then
+    echo "WARN: ccache is not installed!"
   fi
 }
 
 # package build_script/build.sh functionality here
 build() {
   local workspace=$(pwd)
-  export OMNI_COMPILER_THREAD_COUNT=8
+  export OMNI_COMPILER_THREAD_COUNT=${OMNI_COMPILER_THREAD_COUNT:-16}
+  echo "OMNI_COMPILER_THREAD_COUNT=${OMNI_COMPILER_THREAD_COUNT}"
   sh $workspace/build_scripts/build.sh "$@"
   cd $workspace
 }

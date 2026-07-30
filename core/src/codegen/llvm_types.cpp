@@ -218,6 +218,7 @@ llvm::Type *LLVMTypes::ToPointerType(DataTypeId typeId)
     }
 }
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
 llvm::Type *LLVMTypes::ToBatchDataPointerType(DataTypeId typeId)
 {
     switch (typeId) {
@@ -249,6 +250,7 @@ llvm::Type *LLVMTypes::ToBatchDataPointerType(DataTypeId typeId)
             return I64PtrType();
     }
 }
+#endif
 
 llvm::Type *LLVMTypes::GetFunctionReturnType(DataTypeId typeId)
 {

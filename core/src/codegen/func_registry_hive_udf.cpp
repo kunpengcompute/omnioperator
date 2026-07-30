@@ -17,8 +17,11 @@ std::vector<Function> HiveUdfRegistry::GetFunctions()
 {
     std::vector<Function> hiveUdfFunctions = { Function(reinterpret_cast<void *>(EvaluateHiveUdfSingle),
         "EvaluateHiveUdfSingle", {}, std::vector<DataTypeId> {}, OMNI_INT),
+#ifndef EXCLUDE_BATCH_FUNCTIONS
         Function(reinterpret_cast<void *>(EvaluateHiveUdfBatch), "EvaluateHiveUdfBatch", {}, std::vector<DataTypeId> {},
-        OMNI_INT) };
+        OMNI_INT)
+#endif
+        };
     return hiveUdfFunctions;
 }
 

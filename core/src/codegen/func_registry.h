@@ -22,6 +22,7 @@
 #include "func_registry_datetime.h"
 #include "func_registry_json.h"
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
 #include "batch_func_registry_decimal.h"
 #include "batch_func_registry_dictionary.h"
 #include "batch_func_registry_math.h"
@@ -30,6 +31,7 @@
 #include "batch_func_registry_varchar_vector.h"
 #include "batch_func_registry_util.h"
 #include "batch_func_registry_datetime.h"
+#endif
 
 namespace omniruntime::codegen {
 struct Hash {
@@ -62,24 +64,32 @@ public:
 
     static std::vector<std::unique_ptr<BaseFunctionRegistry>> GetRowFunctionRegistries();
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
     static std::vector<std::unique_ptr<BaseFunctionRegistry>> GetBatchFunctionRegistries();
+#endif
 
     static std::vector<Function> &GetRowFunctions();
 
+#ifndef EXCLUDE_BATCH_FUNCTIONS
     static std::vector<Function> &GetBatchFunctions();
+#endif
 
     static void InitHiveUdfMap();
 
 private:
     static std::vector<Function> registeredRowFunctions;
+#ifndef EXCLUDE_BATCH_FUNCTIONS
     static std::vector<Function> registeredBatchFunctions;
+#endif
     static FunctionMapPtr functionRegistry;
     static FunctionMapPtr functionNullRegistry;
     static HiveUdfMapPtr hiveUdfMap;
     static std::once_flag initHiveUdfMap;
 
     static std::vector<Function> InitializeRowFunc();
+#ifndef EXCLUDE_BATCH_FUNCTIONS
     static std::vector<Function> InitializeBatchFunc();
+#endif
 };
 }
 #endif // OMNI_RUNTIME_FUNC_REGISTRY_H

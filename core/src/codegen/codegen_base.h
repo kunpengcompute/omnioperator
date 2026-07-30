@@ -15,7 +15,9 @@
 
 #include "codegen/llvm_engine.h"
 #include "codegen_context.h"
+#ifndef EXCLUDE_BATCH_FUNCTIONS
 #include "batch_codegen_context.h"
+#endif
 #include "type/decimal128_utils.h"
 #include "util/type_util.h"
 
@@ -48,7 +50,9 @@ protected:
 
     int numGlobalValues = 0;
     std::unique_ptr<CodegenContext> codegenContext;
+#ifndef EXCLUDE_BATCH_FUNCTIONS
     std::unique_ptr<BatchCodegenContext> batchCodegenContext;
+#endif
     CodeGenValuePtr value = nullptr;
     omniruntime::op::OverflowConfig *overflowConfig;
 };

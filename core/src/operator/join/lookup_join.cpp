@@ -990,7 +990,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                                         typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
                                         typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                         auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
-                                        if (LIKELY(dataPtr)) {
+                                        if (LIKELY(dataPtr != nullptr)) {
                                             if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                                 values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
                                                 lengths[colIdx] = 0;
@@ -1211,7 +1211,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                                         typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
                                         typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                         auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
-                                        if (LIKELY(dataPtr)) {
+                                        if (LIKELY(dataPtr != nullptr)) {
                                             if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                                 values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
                                                 lengths[colIdx] = 0;
@@ -1393,7 +1393,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                                         typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
                                         typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                         auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
-                                        if (LIKELY(dataPtr)) {
+                                        if (LIKELY(dataPtr != nullptr)) {
                                             if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                                 values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
                                                 lengths[colIdx] = 0;
@@ -1572,7 +1572,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                                         typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
                                         typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                         auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
-                                        if (LIKELY(dataPtr)) {
+                                        if (LIKELY(dataPtr != nullptr)) {
                                             if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                                 values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
                                                 lengths[colIdx] = 0;
@@ -1755,7 +1755,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                                         typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
                                         typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                         auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
-                                        if (LIKELY(dataPtr)) {
+                                        if (LIKELY(dataPtr != nullptr)) {
                                             if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                                 values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
                                                 lengths[colIdx] = 0;
@@ -1927,7 +1927,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                                         typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
                                         typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                         auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
-                                        if (LIKELY(dataPtr)) {
+                                        if (LIKELY(dataPtr != nullptr)) {
                                             if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                                 values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
                                                 lengths[colIdx] = 0;
@@ -2107,7 +2107,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                                         typeId == type::OMNI_CHAR || typeId == type::OMNI_ARRAY ||
                                         typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                         auto* dataPtr = RowContainer::ReadValue<char*>(cur, col.Offset());
-                                        if (LIKELY(dataPtr)) {
+                                        if (LIKELY(dataPtr != nullptr)) {
                                             if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                                                 values[colIdx] = reinterpret_cast<int64_t>(dataPtr);
                                                 lengths[colIdx] = 0;
