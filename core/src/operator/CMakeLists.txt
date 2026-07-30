@@ -1,10 +1,24 @@
 file(GLOB_RECURSE OPERATOR_LIST ${CMAKE_CURRENT_LIST_DIR}/*.cpp ../simd/*.cpp util/*.cpp ../compute/*.cpp ../plannode/*.cpp ../connectors/*.cpp)
 
+# SVE TU must not use the default march; exclude from glob and add conditionally below.
+list(FILTER OPERATOR_LIST EXCLUDE REGEX "sum_int64_sve_hash_agg_sve\\.cpp$")
+
 set(OP_TARGET ${OMNI_OPERATOR_SO})
 find_package(nlohmann_json 3.7.3 REQUIRED)
 # compile .a file
 
 add_library(${OP_TARGET} SHARED ${OPERATOR_LIST})
+
+# Spark sum(bigint) HashAgg SVE kernel: Linux aarch64 only, compile with +sve.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*|arm64.*)")
+  set(SUM_INT64_SVE_SRC
+      ${CMAKE_CURRENT_LIST_DIR}/aggregation/aggregator/sum_int64_sve_hash_agg_sve.cpp)
+  target_sources(${OP_TARGET} PRIVATE ${SUM_INT64_SVE_SRC})
+  set_source_files_properties(
+    ${SUM_INT64_SVE_SRC}
+    PROPERTIES COMPILE_OPTIONS "-march=armv8-a+sve")
+endif()
 
 #dependent library
 target_link_libraries(${OP_TARGET} PUBLIC expression vectorization io_core ${OMNI_CODEGEN_SO} ${OMNI_VECTOR_SO} ${OMNI_READER_SO})
