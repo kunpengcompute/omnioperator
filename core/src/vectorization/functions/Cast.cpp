@@ -9,10 +9,22 @@
 #include <cstring>
 #include <type/Conversions.h>
 #include "codegen/functions/dtoa.h"
+#include "type/tz/TimeZoneMap.h"
 
 namespace omniruntime::vectorization {
     using namespace omniruntime::type;
     using namespace omniruntime::vec;
+
+namespace {
+const tz::TimeZone *GetTimeZoneFromConfig(const config::QueryConfig &config)
+{
+    if (!config.AdjustTimestampToTimezone()) {
+        return nullptr;
+    }
+    const auto sessionTzName = config.SessionTimezone();
+    return sessionTzName.empty() ? nullptr : tz::locateZone(sessionTzName);
+}
+} // namespace
 
 void CastFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, 
     BaseVector *&result, ExecutionContext *context) const {
@@ -1112,6 +1124,9 @@ void CastFunction::CastDecimal128ToString(BaseVector* input, BaseVector*& result
 void CastFunction::CastToDate(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     const auto size = context->GetResultRowSize();
     result = VectorHelper::CreateFlatVector(OMNI_DATE32, size);
+    const tz::TimeZone *timeZone = fromType_->GetId() == OMNI_TIMESTAMP
+        ? GetTimeZoneFromConfig(context->queryConfig())
+        : nullptr;
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         int32_t dateValue;
         switch (fromType_->GetId()) {
@@ -1130,14 +1145,6 @@ void CastFunction::CastToDate(BaseVector* input, BaseVector*& result, ExecutionC
             case OMNI_TIMESTAMP:
             {
                 auto temp = static_cast<ConstVector<int64_t> *>(input)->GetConstValue();
-                auto config = context->queryConfig();
-                const tz::TimeZone *timeZone = nullptr;
-                if (config.AdjustTimestampToTimezone()) {
-                    const auto sessionTzName = config.SessionTimezone();
-                    if (!sessionTzName.empty()) {
-                        timeZone = tz::locateZone(sessionTzName);
-                    }
-                }
                 dateValue = type::util::toDate(Timestamp::fromMicros(temp), timeZone);
                 break;
             }
@@ -1170,14 +1177,6 @@ void CastFunction::CastToDate(BaseVector* input, BaseVector*& result, ExecutionC
                 case OMNI_TIMESTAMP:
                 {
                     auto temp = VectorHelper::GetValueFromVector<int64_t>(input, row);
-                    auto config = context->queryConfig();
-                    const tz::TimeZone *timeZone = nullptr;
-                    if (config.AdjustTimestampToTimezone()) {
-                        const auto sessionTzName = config.SessionTimezone();
-                        if (!sessionTzName.empty()) {
-                            timeZone = tz::locateZone(sessionTzName);
-                        }
-                    }
                     dateValue = type::util::toDate(Timestamp::fromMicros(temp), timeZone);
                     break;
                 }
@@ -1192,6 +1191,9 @@ void CastFunction::CastToDate(BaseVector* input, BaseVector*& result, ExecutionC
 void CastFunction::CastToTimestamp(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     const auto size = context->GetResultRowSize();
     result = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, size);
+    const tz::TimeZone *timeZone = fromType_->GetId() == OMNI_DATE32
+        ? GetTimeZoneFromConfig(context->queryConfig())
+        : nullptr;
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         int64_t timestampValue;
         switch (fromType_->GetId()) {
@@ -1199,14 +1201,6 @@ void CastFunction::CastToTimestamp(BaseVector* input, BaseVector*& result, Execu
             {
                 static constexpr int64_t kMillisPerDay{86'400'000};
                 auto temp = static_cast<ConstVector<int32_t> *>(input)->GetConstValue();
-                auto config = context->queryConfig();
-                const tz::TimeZone *timeZone = nullptr;
-                if (config.AdjustTimestampToTimezone()) {
-                    const auto sessionTzName = config.SessionTimezone();
-                    if (!sessionTzName.empty()) {
-                        timeZone = tz::locateZone(sessionTzName);
-                    }
-                }
                 auto timestamp = Timestamp::fromMillis(temp * kMillisPerDay);
                 if (timeZone) {
                     timestamp.toGMT(*timeZone);
@@ -1232,14 +1226,6 @@ void CastFunction::CastToTimestamp(BaseVector* input, BaseVector*& result, Execu
                 {
                     static constexpr int64_t kMillisPerDay{86'400'000};
                     auto temp = VectorHelper::GetValueFromVector<int32_t>(input, row);
-                    auto config = context->queryConfig();
-                    const tz::TimeZone *timeZone = nullptr;
-                    if (config.AdjustTimestampToTimezone()) {
-                        const auto sessionTzName = config.SessionTimezone();
-                        if (!sessionTzName.empty()) {
-                            timeZone = tz::locateZone(sessionTzName);
-                        }
-                    }
                     auto timestamp = Timestamp::fromMillis(temp * kMillisPerDay);
                     if (timeZone) {
                         timestamp.toGMT(*timeZone);

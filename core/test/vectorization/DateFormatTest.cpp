@@ -749,8 +749,8 @@ TEST(DateFormatTest, FullPatternWithTimezoneTokens) {
     delete resultVec;
 }
 
-// Test: 'V' token outputs the session timezone ID (uses GetDisplayTimeZoneId
-// canonicalization, not tm_zone, so it works regardless of glibc state).
+// Test: 'V' token outputs the canonical session timezone ID stored in
+// ResolvedTimeZone, independently of the timezone abbreviation.
 TEST(DateFormatTest, ZoneIdToken_V) {
     int64_t ts = DateFormatFunctionTestHelper::ToMicros(2024, 6, 15, 12, 0, 0);
     std::vector<int64_t> tsValues = {ts};

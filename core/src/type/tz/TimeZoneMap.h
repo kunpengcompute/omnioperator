@@ -10,6 +10,14 @@
 namespace omniruntime::tz {
 class TimeZone;
 
+struct TimeZoneInfo {
+    std::chrono::seconds begin;
+    std::chrono::seconds end;
+    std::chrono::seconds offset;
+    std::chrono::minutes save;
+    std::string abbreviation;
+};
+
 /// Returns the timeZoneID for the timezone name.
 /// If failOnError = true, throws an exception for unrecognized timezone.
 /// Otherwise, returns -1.
@@ -92,6 +100,10 @@ public:
     seconds to_local(seconds timestamp) const;
 
     milliseconds to_local(milliseconds timestamp) const;
+
+    /// Returns offset/save and, when requested, abbreviation for a UTC instant
+    /// using a single timezone transition lookup.
+    TimeZoneInfo getInfo(seconds timestamp, bool includeAbbreviation = true) const;
 
     /// If a local time is nonexistent, i.e. refers to a time that exists in the
     /// gap during a time zone conversion, this returns the time adjusted by

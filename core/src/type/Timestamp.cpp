@@ -3,6 +3,7 @@
 //
 
 #include "Timestamp.h"
+#include "FastDate.h"
 #include <algorithm>
 #include <optional>
 #include <charconv>
@@ -115,6 +116,47 @@ const int16_t daysBeforeFirstDayOfMonth[][12] = {
     {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334},
     {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335},
 };
+
+bool epochToCalendarUtcSlow(int64_t epoch, std::tm &tm)
+{
+    constexpr int kDaysPerYear = 365;
+    int64_t days = epoch / kSecondsPerDay;
+    int64_t rem = epoch % kSecondsPerDay;
+    while (rem < 0) {
+        rem += kSecondsPerDay;
+        --days;
+    }
+    tm.tm_hour = rem / kSecondsPerHour;
+    rem %= kSecondsPerHour;
+    tm.tm_min = rem / 60;
+    tm.tm_sec = rem % 60;
+    tm.tm_wday = (4 + days) % 7;
+    if (tm.tm_wday < 0) {
+        tm.tm_wday += 7;
+    }
+    int64_t y = 1970;
+    if (y + days / kDaysPerYear <= -kLeapYearOffset + 10) {
+        return false;
+    }
+    bool leapYear;
+    while (days < 0 || days >= kDaysPerYear + (leapYear = isLeap(y))) {
+        auto newy = y + days / kDaysPerYear - (days < 0);
+        days -= daysBetweenYears(y, newy);
+        y = newy;
+    }
+    y -= kTmYearBase;
+    if (y > std::numeric_limits<decltype(tm.tm_year)>::max() ||
+        y < std::numeric_limits<decltype(tm.tm_year)>::min()) {
+        return false;
+    }
+    tm.tm_year = y;
+    tm.tm_yday = days;
+    auto *months = daysBeforeFirstDayOfMonth[leapYear];
+    tm.tm_mon = std::upper_bound(months, months + 12, days) - months - 1;
+    tm.tm_mday = days - months[tm.tm_mon] + 1;
+    tm.tm_isdst = 0;
+    return true;
+}
 } // namespace
 
 void Timestamp::toTimezone(const tz::TimeZone &zone)
@@ -267,42 +309,37 @@ const tz::TimeZone &Timestamp::defaultTimezone()
 
 bool Timestamp::epochToCalendarUtc(int64_t epoch, std::tm &tm)
 {
-    constexpr int kDaysPerYear = 365;
     int64_t days = epoch / kSecondsPerDay;
     int64_t rem = epoch % kSecondsPerDay;
-    while (rem < 0) {
+    if (rem < 0) {
         rem += kSecondsPerDay;
         --days;
     }
-    tm.tm_hour = rem / kSecondsPerHour;
-    rem = rem % kSecondsPerHour;
-    tm.tm_min = rem / 60;
-    tm.tm_sec = rem % 60;
-    tm.tm_wday = (4 + days) % 7;
-    if (tm.tm_wday < 0) {
-        tm.tm_wday += 7;
+    if (LIKELY(days >= fast_date::kRataDieMin && days <= fast_date::kRataDieMax)) {
+        tm.tm_hour = rem / kSecondsPerHour;
+        rem %= kSecondsPerHour;
+        tm.tm_min = rem / 60;
+        tm.tm_sec = rem % 60;
+        tm.tm_wday = (4 + days) % 7;
+        if (tm.tm_wday < 0) {
+            tm.tm_wday += 7;
+        }
+
+        const auto ymd = daysToYmd(static_cast<int32_t>(days));
+        const int64_t year = static_cast<int64_t>(ymd.year) - kTmYearBase;
+        if (year > std::numeric_limits<decltype(tm.tm_year)>::max() ||
+            year < std::numeric_limits<decltype(tm.tm_year)>::min()) {
+            return false;
+        }
+        tm.tm_year = static_cast<int>(year);
+        const auto *monthOffsets = daysBeforeFirstDayOfMonth[isLeap(ymd.year)];
+        tm.tm_mon = static_cast<int>(ymd.month) - 1;
+        tm.tm_mday = static_cast<int>(ymd.day);
+        tm.tm_yday = monthOffsets[tm.tm_mon] + tm.tm_mday - 1;
+        tm.tm_isdst = 0;
+        return true;
     }
-    int64_t y = 1970;
-    if (y + days / kDaysPerYear <= -kLeapYearOffset + 10) {
-        return false;
-    }
-    bool leapYear;
-    while (days < 0 || days >= kDaysPerYear + (leapYear = isLeap(y))) {
-        auto newy = y + days / kDaysPerYear - (days < 0);
-        days -= daysBetweenYears(y, newy);
-        y = newy;
-    }
-    y -= kTmYearBase;
-    if (y > std::numeric_limits<decltype(tm.tm_year)>::max() || y < std::numeric_limits<decltype(tm.tm_year)>::min()) {
-        return false;
-    }
-    tm.tm_year = y;
-    tm.tm_yday = days;
-    auto *months = daysBeforeFirstDayOfMonth[leapYear];
-    tm.tm_mon = std::upper_bound(months, months + 12, days) - months - 1;
-    tm.tm_mday = days - months[tm.tm_mon] + 1;
-    tm.tm_isdst = 0;
-    return true;
+    return epochToCalendarUtcSlow(epoch, tm);
 }
 
 // static
