@@ -4,6 +4,7 @@
  */
 
 #include "ToUtcTimestamp.h"
+#include "DateTimeZoneConversion.h"
 #include "vector/vector.h"
 #include "../VectorFunction.h"
 #include "type/Timestamp.h"
@@ -70,6 +71,7 @@ public:
 
         auto *inputVec = static_cast<Vector<int64_t> *>(timestampArg);
         auto *resultVec = static_cast<Vector<int64_t> *>(result);
+        datetime::LocalToUtcState timeZoneState;
 
         for (int32_t row = 0; row < size; ++row) {
             if (timestampArg->IsNull(row)) {
@@ -91,8 +93,10 @@ public:
             int64_t micros = inputVec->GetValue(row);
             Timestamp ts = Timestamp::fromMicros(micros);
 
-            auto sysSeconds = zone->to_sys(
-                std::chrono::seconds(ts.getSeconds()), tz::TimeZone::TChoose::kEarliest);
+            auto sysSeconds = datetime::ConvertLocalToUtc(
+                std::chrono::seconds(ts.getSeconds()),
+                zone,
+                tzIsConst ? &timeZoneState : nullptr);
             Timestamp converted(sysSeconds.count(), ts.getNanos());
 
             resultVec->SetValue(row, converted.toMicros());

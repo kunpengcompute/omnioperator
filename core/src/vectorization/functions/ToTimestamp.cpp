@@ -4,6 +4,8 @@
  */
 
 #include "ToTimestamp.h"
+#include "DateTimeZoneConversion.h"
+#include "SparkDateTimeFormat.h"
 #include "vector/vector.h"
 #include "../VectorFunction.h"
 #include "vectorization/SelectivityVector.h"
@@ -34,184 +36,19 @@ const tz::TimeZone *getTimeZoneFromConfig(const config::QueryConfig &config)
     return nullptr;
 }
 
-std::string ConvertJodaToStrptime(const std::string &jodaFormat)
+int64_t ConvertLocalMicrosToUtc(
+    int64_t localMicros,
+    const tz::TimeZone *timeZone,
+    datetime::LocalToUtcState &state)
 {
-    std::string result;
-    result.reserve(jodaFormat.size() * 2);
-    size_t i = 0;
-    size_t len = jodaFormat.size();
-    while (i < len) {
-        char c = jodaFormat[i];
-        if (c == '\'') {
-            ++i;
-            while (i < len && jodaFormat[i] != '\'') {
-                result += jodaFormat[i];
-                ++i;
-            }
-            if (i < len) {
-                ++i;
-            }
-        } else if (c == 'y' || c == 'Y') {
-            size_t count = 0;
-            while (i < len && (jodaFormat[i] == 'y' || jodaFormat[i] == 'Y')) {
-                ++count;
-                ++i;
-            }
-            result += "%Y";
-        } else if (c == 'M') {
-            size_t count = 0;
-            while (i < len && jodaFormat[i] == 'M') {
-                ++count;
-                ++i;
-            }
-            result += "%m";
-        } else if (c == 'd') {
-            size_t count = 0;
-            while (i < len && jodaFormat[i] == 'd') {
-                ++count;
-                ++i;
-            }
-            result += "%d";
-        } else if (c == 'H') {
-            size_t count = 0;
-            while (i < len && jodaFormat[i] == 'H') {
-                ++count;
-                ++i;
-            }
-            result += "%H";
-        } else if (c == 'h') {
-            size_t count = 0;
-            while (i < len && jodaFormat[i] == 'h') {
-                ++count;
-                ++i;
-            }
-            result += "%I";
-        } else if (c == 'm') {
-            size_t count = 0;
-            while (i < len && jodaFormat[i] == 'm') {
-                ++count;
-                ++i;
-            }
-            result += "%M";
-        } else if (c == 's') {
-            size_t count = 0;
-            while (i < len && jodaFormat[i] == 's') {
-                ++count;
-                ++i;
-            }
-            result += "%S";
-        } else if (c == 'S') {
-            size_t count = 0;
-            while (i < len && jodaFormat[i] == 'S') {
-                ++count;
-                ++i;
-            }
-            if (!result.empty() && result.back() == '.') {
-                result.pop_back();
-            }
-        } else if (c == 'a') {
-            while (i < len && jodaFormat[i] == 'a') {
-                ++i;
-            }
-            result += "%p";
-        } else {
-            result += c;
-            ++i;
-        }
+    if (timeZone == nullptr) {
+        return localMicros;
     }
-    return result;
-}
-
-int32_t ParseMillisFromString(const std::string_view &input, const std::string &jodaFormat)
-{
-    size_t sssPos = jodaFormat.find('S');
-    if (sssPos == std::string::npos) {
-        return 0;
-    }
-
-    size_t dotInInput = input.rfind('.');
-    if (dotInInput == std::string_view::npos) {
-        return 0;
-    }
-
-    std::string fracStr(input.substr(dotInInput + 1));
-    while (fracStr.size() < 3) {
-        fracStr += '0';
-    }
-    if (fracStr.size() > 3) {
-        fracStr = fracStr.substr(0, 3);
-    }
-
-    int32_t millis = 0;
-    for (size_t ci = 0; ci < fracStr.size(); ++ci) {
-        if (fracStr[ci] < '0' || fracStr[ci] > '9') {
-            return 0;
-        }
-        millis = millis * 10 + (fracStr[ci] - '0');
-    }
-    return millis;
-}
-
-bool ParseDateTimeString(const std::string_view &input, const std::string &jodaFormat,
-    int64_t &resultMicros, bool allowTrailingWhitespace = true)
-{
-    if (input.empty() || jodaFormat.empty()) {
-        return false;
-    }
-
-    std::string strptimeFormat = ConvertJodaToStrptime(jodaFormat);
-
-    std::string inputStr(input);
-
-    std::string strptimeInput = inputStr;
-    size_t dotPos = std::string::npos;
-    bool hasFractional = (jodaFormat.find('S') != std::string::npos);
-    if (hasFractional) {
-        dotPos = inputStr.rfind('.');
-        if (dotPos != std::string::npos) {
-            strptimeInput = inputStr.substr(0, dotPos);
-        }
-    }
-
-    struct tm timeInfo = {};
-    timeInfo.tm_year = 70;
-    timeInfo.tm_mday = 1;
-    timeInfo.tm_isdst = -1;
-
-    char *parseEnd = strptime(strptimeInput.c_str(), strptimeFormat.c_str(), &timeInfo);
-    if (parseEnd == nullptr) {
-        return false;
-    }
-
-    if (allowTrailingWhitespace) {
-        // LEGACY mode: Allow trailing whitespace (CHAR types are right-padded with spaces)
-        const char *remaining = parseEnd;
-        while (*remaining == ' ' || *remaining == '\0') {
-            if (*remaining == '\0') {
-                break;
-            }
-            ++remaining;
-        }
-        if (*remaining != '\0') {
-            return false;
-        }
-    } else {
-        // CORRECTED mode: Require the entire input to be consumed (JODA behavior)
-        if (*parseEnd != '\0') {
-            return false;
-        }
-    }
-
-    int64_t seconds = Timestamp::calendarUtcToEpoch(timeInfo);
-
-    int32_t millis = 0;
-    if (hasFractional) {
-        millis = ParseMillisFromString(input, jodaFormat);
-    }
-
-    resultMicros = seconds * Timestamp::kMicrosecondsInSecond +
-        static_cast<int64_t>(millis) * Timestamp::kMicrosecondsInMillisecond;
-    return true;
+    const Timestamp timestamp = Timestamp::fromMicros(localMicros);
+    const auto utcSeconds = datetime::ConvertLocalToUtc(
+        std::chrono::seconds(timestamp.getSeconds()), timeZone, &state);
+    return utcSeconds.count() * Timestamp::kMicrosecondsInSecond +
+        (localMicros % Timestamp::kMicrosecondsInSecond);
 }
 
 std::string_view GetStringValueFromVector(BaseVector *vec, int32_t row)
@@ -256,17 +93,18 @@ public:
         }
 
         bool formatIsConst = (formatArg->GetEncoding() == OMNI_ENCODING_CONST);
-        std::string constFormat;
+        datetime::CompiledParseFormat constCompiledFormat;
+        // get_timestamp has no policy argument and currently follows LEGACY parsing semantics.
+        constexpr bool isLegacy = true;
 
         if (formatIsConst) {
             auto *constFormatVec = static_cast<ConstVector<std::string_view> *>(formatArg);
             std::string_view formatView = constFormatVec->GetConstValue();
-            constFormat = std::string(formatView);
+            constCompiledFormat = datetime::CompileParseFormat(formatView, isLegacy);
         }
 
         const tz::TimeZone *sessionTz = getTimeZoneFromConfig(context->queryConfig());
-        // get_timestamp does not receive a policy parameter, default to LEGACY (allow trailing whitespace)
-        bool isLegacy = true;
+        datetime::LocalToUtcState timeZoneState;
 
         for (int32_t row = 0; row < size; ++row) {
             if (inputArg->IsNull(row)) {
@@ -281,24 +119,18 @@ public:
 
             std::string_view inputStr = GetStringValueFromVector(inputArg, row);
 
-            std::string format;
-            if (formatIsConst) {
-                format = constFormat;
-            } else {
+            datetime::CompiledParseFormat rowCompiledFormat;
+            const datetime::CompiledParseFormat *compiledFormat = &constCompiledFormat;
+            if (!formatIsConst) {
                 std::string_view formatView = GetStringValueFromVector(formatArg, row);
-                format = std::string(formatView);
+                rowCompiledFormat = datetime::CompileParseFormat(formatView, isLegacy);
+                compiledFormat = &rowCompiledFormat;
             }
 
             int64_t resultMicros = 0;
-            if (ParseDateTimeString(inputStr, format, resultMicros, isLegacy)) {
-                if (sessionTz != nullptr) {
-                    Timestamp ts = Timestamp::fromMicros(resultMicros);
-                    auto sysSeconds = sessionTz->to_sys(
-                        std::chrono::seconds(ts.getSeconds()),
-                        tz::TimeZone::TChoose::kEarliest);
-                    resultMicros = sysSeconds.count() * Timestamp::kMicrosecondsInSecond +
-                        (resultMicros % Timestamp::kMicrosecondsInSecond);
-                }
+            if (datetime::ParseDateTimeString(inputStr, *compiledFormat, resultMicros)) {
+                resultMicros =
+                    ConvertLocalMicrosToUtc(resultMicros, sessionTz, timeZoneState);
                 auto *resultVec = static_cast<Vector<int64_t> *>(result);
                 resultVec->SetValue(row, resultMicros);
                 result->SetNotNull(row);
@@ -475,8 +307,11 @@ private:
             result = VectorHelper::CreateFlatVector(OMNI_LONG, size);
         }
 
-        std::string defaultFormat(kDefaultFormat);
+        static const auto kLegacyDefaultFormat = datetime::CompileParseFormat(kDefaultFormat, true);
+        static const auto kCorrectedDefaultFormat = datetime::CompileParseFormat(kDefaultFormat, false);
+        const auto &defaultFormat = isLegacy ? kLegacyDefaultFormat : kCorrectedDefaultFormat;
         const tz::TimeZone *sessionTz = getTimeZoneFromConfig(context->queryConfig());
+        datetime::LocalToUtcState timeZoneState;
 
         for (int32_t row = 0; row < size; ++row) {
             if (inputArg->IsNull(row)) {
@@ -487,15 +322,9 @@ private:
             std::string_view inputStr = GetStringValueFromVector(inputArg, row);
 
             int64_t resultMicros = 0;
-            if (ParseDateTimeString(inputStr, defaultFormat, resultMicros, isLegacy)) {;
-                if (sessionTz != nullptr) {
-                    Timestamp ts = Timestamp::fromMicros(resultMicros);
-                    auto sysSeconds = sessionTz->to_sys(
-                        std::chrono::seconds(ts.getSeconds()),
-                        tz::TimeZone::TChoose::kEarliest);
-                    resultMicros = sysSeconds.count() * Timestamp::kMicrosecondsInSecond +
-                        (resultMicros % Timestamp::kMicrosecondsInSecond);
-                }
+            if (datetime::ParseDateTimeString(inputStr, defaultFormat, resultMicros)) {
+                resultMicros =
+                    ConvertLocalMicrosToUtc(resultMicros, sessionTz, timeZoneState);
                 int64_t seconds = resultMicros / Timestamp::kMicrosecondsInSecond;
                 auto *resultVec = static_cast<Vector<int64_t> *>(result);
                 resultVec->SetValue(row, seconds);
@@ -527,16 +356,17 @@ private:
         }
 
         bool formatIsConst = (formatArg->GetEncoding() == OMNI_ENCODING_CONST);
-        std::string constFormat;
+        datetime::CompiledParseFormat constCompiledFormat;
 
         if (formatIsConst) {
             auto *constFormatVec = static_cast<ConstVector<std::string_view> *>(formatArg);
             std::string_view formatView = constFormatVec->GetConstValue();
-            constFormat = std::string(formatView);
+            constCompiledFormat = datetime::CompileParseFormat(formatView, isLegacy);
         }
 
         const tz::TimeZone *sessionTz = (explicitTz != nullptr)
             ? explicitTz : getTimeZoneFromConfig(context->queryConfig());
+        datetime::LocalToUtcState timeZoneState;
 
         for (int32_t row = 0; row < size; ++row) {
             if (inputArg->IsNull(row)) {
@@ -551,24 +381,18 @@ private:
 
             std::string_view inputStr = GetStringValueFromVector(inputArg, row);
 
-            std::string format;
-            if (formatIsConst) {
-                format = constFormat;
-            } else {
+            datetime::CompiledParseFormat rowCompiledFormat;
+            const datetime::CompiledParseFormat *compiledFormat = &constCompiledFormat;
+            if (!formatIsConst) {
                 std::string_view formatView = GetStringValueFromVector(formatArg, row);
-                format = std::string(formatView);
+                rowCompiledFormat = datetime::CompileParseFormat(formatView, isLegacy);
+                compiledFormat = &rowCompiledFormat;
             }
 
             int64_t resultMicros = 0;
-            if (ParseDateTimeString(inputStr, format, resultMicros, isLegacy)) {
-                if (sessionTz != nullptr) {
-                    Timestamp ts = Timestamp::fromMicros(resultMicros);
-                    auto sysSeconds = sessionTz->to_sys(
-                        std::chrono::seconds(ts.getSeconds()),
-                        tz::TimeZone::TChoose::kEarliest);
-                    resultMicros = sysSeconds.count() * Timestamp::kMicrosecondsInSecond +
-                        (resultMicros % Timestamp::kMicrosecondsInSecond);
-                }
+            if (datetime::ParseDateTimeString(inputStr, *compiledFormat, resultMicros)) {
+                resultMicros =
+                    ConvertLocalMicrosToUtc(resultMicros, sessionTz, timeZoneState);
                 int64_t seconds = resultMicros / Timestamp::kMicrosecondsInSecond;
                 auto *resultVec = static_cast<Vector<int64_t> *>(result);
                 resultVec->SetValue(row, seconds);
