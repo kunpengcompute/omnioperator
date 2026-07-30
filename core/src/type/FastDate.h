@@ -61,7 +61,7 @@ inline YearMonthDay daysToYmd(int32_t dayNumber)
     const uint64_t yearProduct = uint64_t{2939745u} * yearNumerator;
     const uint32_t yearWithinCentury = static_cast<uint32_t>(yearProduct >> 32);
     const uint32_t dayWithinYear =
-        static_cast<uint32_t>(yearProduct & 0xFFFF'FFFFull) / 2939745u / 4u;
+        static_cast<uint32_t>(yearProduct & 0xFFFF'FFFFuLL) / 2939745u / 4u;
     const uint32_t yearWithinEra = 100u * century + yearWithinCentury;
 
     const uint32_t monthNumerator = 2141u * dayWithinYear + 197913u;
