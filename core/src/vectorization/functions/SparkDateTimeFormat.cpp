@@ -750,7 +750,8 @@ std::string FormatDateTime(
     const CompiledFormatPattern &format)
 {
     size_t capacity = std::max<size_t>(format.maxResultSize, 64);
-    for (;;) {
+    bool retry = true;
+    while (retry) {
         std::string result(capacity, '\0');
         const int32_t length =
             FormatDateTimeToBuffer(calendarTime, timeZone, format, result.data(), result.size());
@@ -759,10 +760,12 @@ std::string FormatDateTime(
             return result;
         }
         if (capacity > std::numeric_limits<size_t>::max() / 2) {
-            OMNI_FAIL("Date-time formatted result is too large");
+            retry = false;
+        } else {
+            capacity *= 2;
         }
-        capacity *= 2;
     }
+    OMNI_FAIL("Date-time formatted result is too large");
 }
 
 } // namespace omniruntime::vectorization::datetime
