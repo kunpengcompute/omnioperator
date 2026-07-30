@@ -4,6 +4,7 @@
  */
 #include "group_aggregation.h"
 #include <cmath>
+#include <cstring>
 #include "vector/vector_helper.h"
 #include "operator/status.h"
 #include "operator/util/operator_util.h"
@@ -212,6 +213,22 @@ void HashAggregationOperatorFactory::ChooseGroupByType()
             return;
         }
     }
+    const auto groupBySize = groupByTypes.GetSize();
+    if (normalizedKeyEnabled && groupBySize > 1) {
+        std::vector<type::DataTypeId> normalizedKeyTypes;
+        normalizedKeyTypes.reserve(groupBySize);
+        const auto *typeIds = groupByTypes.GetIds();
+        for (int32_t i = 0; i < groupBySize; ++i) {
+            normalizedKeyTypes.push_back(static_cast<type::DataTypeId>(typeIds[i]));
+        }
+        using Handler = NormalizeKeyHandler<
+            TaperFixedKeyMap<omniruntime::type::int128_t, AggregateState *>>;
+        if (Handler::CanUse(normalizedKeyTypes)) {
+            handleType = HandleType::NormalizeKey;
+            LogDebug("Use normalize key hash mode for %d group-by columns.", groupBySize);
+            return;
+        }
+    }
     handleType = HandleType::serialize;
 }
 
@@ -273,6 +290,28 @@ OmniStatus HashAggregationOperator::Init()
             }
         }
         serialize->InitRowContainer(keySizes, isVariableLen, typeIds, varcharColIndices, *executionContext->GetArena());
+    } else if (groupByColumnsHandleType == HandleType::NormalizeKey) {
+        std::vector<type::DataTypeId> typeIds;
+        std::vector<int32_t> keySizes;
+        typeIds.reserve(groupByCols.size());
+        keySizes.reserve(groupByCols.size());
+        for (const auto &col : groupByCols) {
+            typeIds.push_back(col.input->GetId());
+            keySizes.push_back(OperatorUtil::GetTypeSize(col.input));
+        }
+        if (aggregators.empty()) {
+            normalizeKeyWithoutAgg = std::make_unique<decltype(normalizeKeyWithoutAgg)::element_type>();
+            if (!normalizeKeyWithoutAgg->Init(typeIds, keySizes, 0, *executionContext->GetArena())) {
+                throw omniruntime::exception::OmniException(
+                    "UNSUPPORTED_ERROR", "Failed to initialize normalize key handler without aggregate");
+            }
+        } else {
+            normalizeKey = std::make_unique<decltype(normalizeKey)::element_type>();
+            if (!normalizeKey->Init(typeIds, keySizes, totalAggStatesSize, *executionContext->GetArena())) {
+                throw omniruntime::exception::OmniException(
+                    "UNSUPPORTED_ERROR", "Failed to initialize normalize key handler");
+            }
+        }
     } else if (groupByColumnsHandleType == HandleType::fixedInt32) {
         fixedInt32 = std::make_unique<TaperGroupbySingleFixHandler<int32_t>>(*executionContext->GetArena(), totalAggStatesSize);
     } else if (groupByColumnsHandleType == HandleType::fixedInt64) {
@@ -399,6 +438,160 @@ void HashAggregationOperator::MoveEntryArrayTableToHashMap(int64_t minValue)
     arrayTable.reset();
 }
 
+void HashAggregationOperator::PrepareSerializeMarshallers(BaseVector **groupVectors, int32_t groupColNum)
+{
+    if (serialize == nullptr) {
+        serialize = std::make_unique<TaperColumnSerializeHandler>(
+            *executionContext->GetArena(), totalAggStatesSize);
+        serialize->InitSize(groupByCols.size());
+        std::vector<int32_t> keySizes(groupByCols.size());
+        std::vector<bool> isVariableLen(groupByCols.size(), false);
+        std::vector<int32_t> typeIds(groupByCols.size());
+        std::vector<int32_t> varcharColIndices;
+        for (size_t i = 0; i < groupByCols.size(); ++i) {
+            keySizes[i] = OperatorUtil::GetTypeSize(groupByCols[i].input);
+            typeIds[i] = groupByCols[i].input->GetId();
+        }
+        serialize->InitRowContainer(
+            keySizes, isVariableLen, typeIds, varcharColIndices, *executionContext->GetArena());
+    }
+
+    serialize->ResetSerializer();
+    for (int32_t col = 0; col < groupColNum; ++col) {
+        auto *vector = groupVectors[col];
+        const auto typeId = groupByCols[col].input->GetId();
+        if (vector->GetEncoding() == Encoding::OMNI_DICTIONARY) {
+            serialize->PushBackSerializer(dicVectorSerializerCenter[typeId]);
+            serialize->PushBackComparator(dicVectorComparatorCenter[typeId]);
+        } else if (vector->GetEncoding() == Encoding::OMNI_ENCODING_CONST) {
+            serialize->PushBackSerializer(constVectorSerializerCenter[typeId]);
+            serialize->PushBackComparator(constVectorComparatorCenter[typeId]);
+        } else {
+            serialize->PushBackSerializer(vectorSerializerCenter[typeId]);
+            serialize->PushBackComparator(vectorComparatorCenter[typeId]);
+        }
+        serialize->PushBackDeSerializer(vectorDeSerializerCenter[typeId]);
+    }
+}
+
+void HashAggregationOperator::FallbackNormalizeKeyToSerialize(
+    BaseVector **groupVectors, int32_t groupColNum)
+{
+    (void)groupVectors;
+    if (normalizeKey == nullptr && normalizeKeyWithoutAgg == nullptr) {
+        return;
+    }
+
+    std::vector<std::unique_ptr<BaseVector>> temporaryVectors;
+    std::vector<BaseVector *> temporaryVectorPtrs(groupColNum);
+    temporaryVectors.reserve(groupColNum);
+    for (int32_t col = 0; col < groupColNum; ++col) {
+        switch (groupByCols[col].input->GetId()) {
+            case type::OMNI_BYTE:
+                temporaryVectors.push_back(std::make_unique<Vector<int8_t>>(1));
+                break;
+            case type::OMNI_SHORT:
+                temporaryVectors.push_back(std::make_unique<Vector<int16_t>>(1));
+                break;
+            case type::OMNI_INT:
+            case type::OMNI_DATE32:
+            case type::OMNI_TIME32:
+                temporaryVectors.push_back(std::make_unique<Vector<int32_t>>(1));
+                break;
+            case type::OMNI_LONG:
+            case type::OMNI_DATE64:
+            case type::OMNI_TIME64:
+            case type::OMNI_TIMESTAMP:
+            case type::OMNI_DECIMAL64:
+                temporaryVectors.push_back(std::make_unique<Vector<int64_t>>(1));
+                break;
+            default:
+                throw omniruntime::exception::OmniException(
+                    "UNSUPPORTED_ERROR", "Normalize key fallback has an unsupported key type");
+        }
+        temporaryVectorPtrs[col] = temporaryVectors.back().get();
+    }
+
+    PrepareSerializeMarshallers(temporaryVectorPtrs.data(), groupColNum);
+    auto emplaceSerializedKey = [&]() {
+        std::vector<uint8_t *> groups(1, nullptr);
+        std::vector<uint8_t *> newGroups;
+        serialize->DecodeGroupByColumns(temporaryVectorPtrs.data(), groupColNum, 1);
+        serialize->EmplaceTable(temporaryVectorPtrs.data(), groupColNum, 1, groups, newGroups,
+            temporaryVectorPtrs[0]->GetEncoding());
+        return groups[0] + serialize->AggStateOffset();
+    };
+
+    if (normalizeKeyWithoutAgg != nullptr) {
+        normalizeKeyWithoutAgg->ForEachKey([&](const auto &key) {
+            normalizeKeyWithoutAgg->ParseKeyToCols(key, temporaryVectorPtrs, groupColNum, 0);
+            emplaceSerializedKey();
+        });
+    } else {
+        normalizeKey->ForEachRow([&](auto mapped) {
+            normalizeKey->ParseRowToCols(mapped, temporaryVectorPtrs, groupColNum, 0);
+            auto *state = emplaceSerializedKey();
+            if (totalAggStatesSize > 0) {
+                std::memcpy(state, mapped, totalAggStatesSize);
+            }
+        });
+    }
+
+    normalizeKey.reset();
+    normalizeKeyWithoutAgg.reset();
+    groupByColumnsHandleType = HandleType::serialize;
+    vectorAnalyzer->SetNormalHashTable();
+    LogDebug("Fallback normalize key hash table to serialize hash table.");
+}
+
+bool HashAggregationOperator::TryEmplaceNormalizeKey(
+    VectorBatch *vecBatch, BaseVector **groupVectors, int32_t groupColNum)
+{
+    const int32_t rowCount = vecBatch->GetRowCount();
+    if (normalizeKeyWithoutAgg != nullptr) {
+        if (!normalizeKeyWithoutAgg->TryEncodeBatch(groupVectors, groupColNum, rowCount)) {
+            return false;
+        }
+        normalizeKeyWithoutAgg->EmplaceKeys(rowCount);
+        return true;
+    }
+
+    if (normalizeKey == nullptr) {
+        return false;
+    }
+    if (!normalizeKey->TryEncodeBatch(groupVectors, groupColNum, rowCount)) {
+        return false;
+    }
+
+    rowsAggStates.resize(static_cast<size_t>(rowCount));
+    std::vector<AggregateState *> newStates;
+    newStates.reserve(static_cast<size_t>(rowCount));
+    normalizeKey->EmplaceStates(groupVectors, rowCount, rowsAggStates, newStates);
+    if (aggFiltersCount > 0) {
+        int32_t filterOffset = vecBatch->GetVectorCount() - aggFiltersCount;
+        for (size_t aggIdx = 0; aggIdx < aggregators.size(); ++aggIdx) {
+            auto &aggregator = aggregators[aggIdx];
+            if (!newStates.empty()) {
+                aggregator->InitStates(newStates);
+            }
+            if (aggIdx < hasAggFilters.size() && hasAggFilters[aggIdx] == 1) {
+                aggregator->ProcessGroupFilter(rowsAggStates, aggIdx, vecBatch, filterOffset, 0);
+                ++filterOffset;
+            } else {
+                aggregator->ProcessGroup(rowsAggStates, vecBatch, 0);
+            }
+        }
+    } else {
+        for (auto &aggregator : aggregators) {
+            if (!newStates.empty()) {
+                aggregator->InitStates(newStates);
+            }
+            aggregator->ProcessGroup(rowsAggStates, vecBatch, 0);
+        }
+    }
+    return true;
+}
+
 int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
 {
     setInputedData(true);
@@ -439,6 +632,9 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
     }
 
     auto groupColNum = static_cast<int32_t>(this->groupByCols.size());
+    const bool isNormalizeKeyMode =
+        groupByColumnsHandleType == HandleType::NormalizeKey &&
+        (normalizeKey != nullptr || normalizeKeyWithoutAgg != nullptr);
     if (serialize != nullptr) {
         serialize->ResetSerializer();
     }
@@ -479,7 +675,14 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
         groupVectors[i] = curVector;
     }
 
-    if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
+    if (isNormalizeKeyMode) {
+        if (!TryEmplaceNormalizeKey(vecBatch, groupVectors, groupColNum)) {
+            FallbackNormalizeKeyToSerialize(groupVectors, groupColNum);
+            PrepareSerializeMarshallers(groupVectors, groupColNum);
+            serialize->DecodeGroupByColumns(groupVectors, groupColNum, rowCount);
+            Emplace(serialize, vecBatch, groupVectors, groupColNum);
+        }
+    } else if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
         // Decode all group-by columns upfront to eliminate encoding branches in hot path
         serialize->DecodeGroupByColumns(groupVectors, groupColNum, rowCount);
         Emplace(serialize, vecBatch, groupVectors, groupColNum);
@@ -662,7 +865,11 @@ int32_t HashAggregationOperator::GetOutput(VectorBatch **outputVecBatch)
         return 0;
     }
     int32_t expectedBatchSize = 0;
-    if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
+    if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKeyWithoutAgg != nullptr) {
+        expectedBatchSize = Output(normalizeKeyWithoutAgg, outputVecBatch);
+    } else if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKey != nullptr) {
+        expectedBatchSize = Output(normalizeKey, outputVecBatch);
+    } else if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
         expectedBatchSize = Output(serialize, outputVecBatch);
     } else if (LIKELY(groupByColumnsHandleType == HandleType::fixedInt32)) {
         expectedBatchSize = Output(fixedInt32, outputVecBatch);
@@ -1086,6 +1293,26 @@ void HashAggregationOperator::TraverseHashmapToGetOneResult(Deserialize &deseria
         groupOutputVectors[i] = output->Get(i);
     }
 
+    if (aggregators.empty()) {
+        if (groupByColumnsHandleType == HandleType::serialize && serialize != nullptr) {
+            serialize->Extract(expectSize, outputState,
+                [&](uint8_t *rowPtr, uint8_t *, int32_t idx) {
+                    serialize->ParseKeyToCols(rowPtr, groupOutputVectors, groupColNum, idx);
+                }, [&](uint8_t *rowPtr, uint8_t *, int32_t idx) {
+                    serialize->ParseNull(
+                        reinterpret_cast<char *>(rowPtr), groupOutputVectors, groupColNum, idx);
+                });
+        } else {
+            deserializeHashmap->Extract(expectSize, outputState,
+                [&](const auto &key, uint8_t *, int32_t idx) {
+                    deserializeHashmap->ParseKeyToCols(key, groupOutputVectors, groupColNum, idx);
+                }, [&](const auto &key, uint8_t *, int32_t idx) {
+                    deserializeHashmap->ParseNull(key, groupOutputVectors, groupColNum, idx);
+                });
+        }
+        return;
+    }
+
     std::vector<AggregateState *> groupStates(expectSize);
 
     // For the serialize handler, use the new RowContainer-based Extract
@@ -1287,6 +1514,10 @@ ErrorCode HashAggregationOperator::SpillToDisk()
 
 ErrorCode HashAggregationOperator::SpillHashMap()
 {
+    if (groupByColumnsHandleType == HandleType::NormalizeKey &&
+        (normalizeKey != nullptr || normalizeKeyWithoutAgg != nullptr)) {
+        FallbackNormalizeKeyToSerialize(nullptr, static_cast<int32_t>(groupByCols.size()));
+    }
     auto rowCount = 0;
     if (serialize != nullptr) {
         rowCount = serialize->GetElementsSize();
@@ -1352,7 +1583,11 @@ std::vector<uint64_t> HashAggregationOperator::GetSpecialMetricsInfo()
 
 uint64_t HashAggregationOperator::GetHashMapUniqueKeys()
 {
-    if (serialize != nullptr) {
+    if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKeyWithoutAgg != nullptr) {
+        return normalizeKeyWithoutAgg->GetElementsSize();
+    } else if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKey != nullptr) {
+        return normalizeKey->GetElementsSize();
+    } else if (serialize != nullptr) {
         return serialize->GetElementsSize();
     } else if (fixedInt32 != nullptr) {
         return fixedInt32->GetElementsSize();
@@ -1792,7 +2027,11 @@ int32_t HashAggregationOperator::Output(Deserialize &deserializeHashmap, VectorB
 ALWAYS_INLINE size_t HashAggregationOperator::GetElementsSize()
 {
     size_t elementSize = 0;
-    if (serialize != nullptr) {
+    if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKeyWithoutAgg != nullptr) {
+        elementSize = normalizeKeyWithoutAgg->GetElementsSize();
+    } else if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKey != nullptr) {
+        elementSize = normalizeKey->GetElementsSize();
+    } else if (serialize != nullptr) {
         elementSize = serialize->GetElementsSize();
     } else if (fixedInt32 != nullptr) {
         elementSize = fixedInt32->GetElementsSize();
@@ -1812,7 +2051,11 @@ ALWAYS_INLINE size_t HashAggregationOperator::GetElementsSize()
 
 ALWAYS_INLINE void HashAggregationOperator::ResetHashmap()
 {
-    if (serialize != nullptr) {
+    if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKeyWithoutAgg != nullptr) {
+        normalizeKeyWithoutAgg->ResetHashmap();
+    } else if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKey != nullptr) {
+        normalizeKey->ResetHashmap();
+    } else if (serialize != nullptr) {
         serialize->ResetHashmap();
     } else if (fixedInt32 != nullptr) {
         fixedInt32->ResetHashmap();

@@ -6,6 +6,9 @@
 #define OMNI_RUNTIME_COLUMN_MARSHALLER_H
 
 #include <cstdint>
+#include <algorithm>
+#include <cstring>
+#include <limits>
 #include <type_traits>
 #include <utility>
 #include "vector/vector_helper.h"
@@ -36,6 +39,7 @@ enum class HandleType {
     packedInt32,
     packedInt64,
     packedInt128,
+    NormalizeKey,
     fixed256Bytes,
     onlyOneKey
 };
@@ -3035,6 +3039,1042 @@ public:
             }
             plan[i].activeLoader = plan[i].flatLoader;
         }
+    }
+};
+
+template <typename Key, typename Value>
+class TaperFixedKeyMap {
+public:
+    using Keys = Key;
+    using Values = Value;
+    using HashTable = TaperFlatHashTable<Key, false>;
+    static constexpr bool StoresValues = true;
+    static constexpr uint32_t ROW_PTR_SIZE = 6;
+
+    static_assert(std::is_pointer_v<Value>, "TaperFixedKeyMap value must be a row pointer");
+
+    void Init(mem::SimpleArenaAllocator &pool)
+    {
+        table = std::make_unique<HashTable>(pool, sizeof(Key), ROW_PTR_SIZE);
+    }
+
+    template <typename InitValue>
+    void EmplaceBatch(const Key *keys, int32_t rowsNum, InitValue &&initValue,
+        std::vector<Value> &groups)
+    {
+        groups.resize(rowsNum);
+        table->EmplaceBatch(
+            keys,
+            rowsNum,
+            [](uint32_t) { return false; },
+            [&](uint32_t rowIdx, char *data) {
+                SetValue(data, initValue(rowIdx));
+            },
+            [&](uint32_t rowIdx, char *data, bool) {
+                groups[rowIdx] = GetValue(data);
+            });
+    }
+
+    void InsertExisting(const Key &key, Value value)
+    {
+        table->Emplace(
+            key,
+            [&](char *data) { SetValue(data, value); },
+            [&](char *, bool) {});
+    }
+
+    size_t GetElementsSize() const
+    {
+        return table == nullptr ? 0 : table->Size();
+    }
+
+    void Reset()
+    {
+        if (table != nullptr) {
+            table->Clear();
+        }
+    }
+
+    HashTable *GetTable()
+    {
+        return table.get();
+    }
+
+    static ALWAYS_INLINE void SetValue(char *buf, Value value)
+    {
+        uint64_t raw = reinterpret_cast<uint64_t>(value);
+        std::memcpy(buf, &raw, ROW_PTR_SIZE);
+    }
+
+    static ALWAYS_INLINE Value GetValue(const char *buf)
+    {
+        uint64_t raw = 0;
+        std::memcpy(&raw, buf, ROW_PTR_SIZE);
+        return reinterpret_cast<Value>(raw);
+    }
+
+private:
+    std::unique_ptr<HashTable> table;
+};
+
+template <typename Key>
+class TaperFixedKeySet {
+public:
+    using Keys = Key;
+    using Values = uint8_t *;
+    using HashTable = TaperFlatHashTable<Key, false>;
+    static constexpr bool StoresValues = false;
+
+    void Init(mem::SimpleArenaAllocator &pool)
+    {
+        table = std::make_unique<HashTable>(pool, sizeof(Key), 0);
+    }
+
+    void EmplaceBatch(const Key *keys, int32_t rowsNum)
+    {
+        table->EmplaceKeyBatch(keys, static_cast<uint32_t>(rowsNum), [](uint32_t) { return false; });
+    }
+
+    template <typename Func>
+    void ForEachKey(Func &&func)
+    {
+        auto visitor = table->GetResultVisitor();
+        while (!visitor.Finished()) {
+            func(visitor.CurKey());
+            visitor.Next();
+        }
+    }
+
+    size_t GetElementsSize() const
+    {
+        return table == nullptr ? 0 : table->Size();
+    }
+
+    void Reset()
+    {
+        if (table != nullptr) {
+            table->Clear();
+        }
+    }
+
+    HashTable *GetTable()
+    {
+        return table.get();
+    }
+
+private:
+    std::unique_ptr<HashTable> table;
+};
+
+template <typename Hashmap>
+class NormalizeKeyHandler {
+public:
+    static constexpr bool HasSpecialNullFunc = false;
+    using KeyType = typename Hashmap::Keys;
+    using ValueType = typename Hashmap::Values;
+    using SignedKey = omniruntime::type::int128_t;
+    using EncodedKey = omniruntime::type::uint128_t;
+
+    static bool CanUse(const std::vector<type::DataTypeId> &groupByTypeIds)
+    {
+        return BuildBitLayout(groupByTypeIds, nullptr, nullptr, nullptr, nullptr);
+    }
+
+    bool Init(const std::vector<type::DataTypeId> &groupByTypeIds,
+        const std::vector<int32_t> &keyTypeSizes, int32_t aggStateSize,
+        mem::SimpleArenaAllocator &pool)
+    {
+        colCount_ = static_cast<int32_t>(groupByTypeIds.size());
+        if (colCount_ <= 1 ||
+            (Hashmap::StoresValues && keyTypeSizes.size() != groupByTypeIds.size())) {
+            return false;
+        }
+        for (const auto typeId : groupByTypeIds) {
+            if (!IsSupportedType(typeId)) {
+                return false;
+            }
+        }
+        typeIds_ = groupByTypeIds;
+        if (!BuildBitLayout(typeIds_, &fullBits_, &idBits_, &bitOffsets_, &idMasks_)) {
+            return false;
+        }
+
+        if constexpr (!Hashmap::StoresValues) {
+            if (aggStateSize != 0) {
+                return false;
+            }
+        }
+        hashmap.Init(pool);
+        if constexpr (Hashmap::StoresValues) {
+            aggRows_ = std::make_unique<RowContainer>(keyTypeSizes, colCount_, aggStateSize, pool);
+            aggStateSize_ = aggStateSize;
+        }
+        hasRange_.assign(colCount_, false);
+        min_.assign(colCount_, 0);
+        max_.assign(colCount_, 0);
+        activeReadPlans_.resize(colCount_);
+        InitializeRanges();
+        return true;
+    }
+
+    bool TryEncodeBatch(BaseVector **groupVectors, int32_t groupColNum, int32_t rowCount)
+    {
+        if (UNLIKELY(groupColNum != colCount_ || rowCount < 0)) {
+            return false;
+        }
+        if constexpr (Hashmap::StoresValues) {
+            if (aggRows_ == nullptr) {
+                return false;
+            }
+        }
+        if (!PrepareReaders(groupVectors)) {
+            return false;
+        }
+
+        if (!rangeInitialized_) {
+            ResetStats();
+            AnalyzeBatch(groupVectors, rowCount);
+            if (!ConfigureRanges()) {
+                return false;
+            }
+            rangeInitialized_ = true;
+            return EncodeBatch(groupVectors, rowCount);
+        }
+
+        if (EncodeBatch(groupVectors, rowCount)) {
+            return true;
+        }
+
+        // Like Velox/Bolt, reconsider the range only after a value no longer
+        // maps. Existing distinct keys are the authoritative history.
+        ResetStats();
+        const auto oldMin = min_;
+        const auto oldMax = max_;
+        const auto oldHasRange = hasRange_;
+        if constexpr (Hashmap::StoresValues) {
+            AnalyzeStoredRows();
+        } else {
+            AnalyzeStoredKeys(oldMin);
+        }
+        AnalyzeBatch(groupVectors, rowCount);
+        if (!ConfigureRanges()) {
+            if constexpr (!Hashmap::StoresValues) {
+                min_ = oldMin;
+                max_ = oldMax;
+                hasRange_ = oldHasRange;
+            }
+            return false;
+        }
+        if (!RebuildHashmap(oldMin)) {
+            min_ = oldMin;
+            max_ = oldMax;
+            hasRange_ = oldHasRange;
+            return false;
+        }
+        return EncodeBatch(groupVectors, rowCount);
+    }
+
+    void EmplaceStates(BaseVector **groupVectors, int32_t rowCount,
+        std::vector<ValueType> &groups, std::vector<ValueType> &newGroups)
+    {
+        static_assert(Hashmap::StoresValues, "EmplaceStates requires a value map");
+        hashmap.EmplaceBatch(
+            encodedKeysBuffer_.data(), rowCount,
+            [&](uint32_t rowIdx) {
+                auto *row = aggRows_->NewRow();
+                StoreOriginalKeys(groupVectors, static_cast<int32_t>(rowIdx), row);
+                auto value = reinterpret_cast<ValueType>(row + aggRows_->AggStateOffset());
+                if (aggStateSize_ > 0) {
+                    newGroups.emplace_back(value);
+                }
+                return value;
+            },
+            groups);
+    }
+
+    void EmplaceKeys(int32_t rowCount)
+    {
+        static_assert(!Hashmap::StoresValues, "EmplaceKeys requires a key set");
+        hashmap.EmplaceBatch(encodedKeysBuffer_.data(), rowCount);
+    }
+
+    void ParseKeyToCols(const KeyType &key, std::vector<BaseVector *> &groupOutputVectors,
+        int32_t groupColNum, int32_t rowIdx)
+    {
+        const auto encoded = static_cast<EncodedKey>(key);
+        for (int32_t col = 0; col < groupColNum; ++col) {
+            const auto id = (encoded >> bitOffsets_[col]) & idMasks_[col];
+            if (id == 0) {
+                groupOutputVectors[col]->SetNull(rowIdx);
+                continue;
+            }
+            const auto value = static_cast<int64_t>(
+                static_cast<SignedKey>(min_[col]) + static_cast<SignedKey>(id) - 1);
+            SetNormalizedFixedValue(groupOutputVectors[col], rowIdx, typeIds_[col], value);
+        }
+    }
+
+    void ParseRowToCols(ValueType value, std::vector<BaseVector *> &groupOutputVectors,
+        int32_t groupColNum, int32_t rowIdx)
+    {
+        static_assert(Hashmap::StoresValues, "ParseRowToCols requires a value map");
+        const auto *row = reinterpret_cast<const char *>(value) - aggRows_->AggStateOffset();
+        for (int32_t col = 0; col < groupColNum; ++col) {
+            const auto rowColumn = aggRows_->ColumnAt(col);
+            if (RowContainer::IsNullAt(row, rowColumn.NullByte(), rowColumn.NullMask())) {
+                groupOutputVectors[col]->SetNull(rowIdx);
+                continue;
+            }
+            SetNormalizedFixedValue(groupOutputVectors[col], rowIdx, typeIds_[col],
+                ReadStoredValue(row, col));
+        }
+    }
+
+    void ParseNull(const KeyType &, std::vector<BaseVector *> &groupOutputVectors,
+        int32_t groupColNum, int32_t rowIdx)
+    {
+        for (int32_t col = 0; col < groupColNum; ++col) {
+            groupOutputVectors[col]->SetNull(rowIdx);
+        }
+    }
+
+    template <class Func, class NullFunc>
+    void Extract(int32_t rowsNum, OutputState &outputState, Func func, NullFunc nullFunc)
+    {
+        (void)nullFunc;
+        auto *table = hashmap.GetTable();
+        auto visitor = outputState.rowBegin == nullptr
+            ? table->GetResultVisitor()
+            : table->GetResultVisitor(outputState.rowBegin, static_cast<uint16_t>(outputState.rowOffset));
+        uint32_t idx = 0;
+        while (idx < static_cast<uint32_t>(rowsNum) && !visitor.Finished()) {
+            if constexpr (Hashmap::StoresValues) {
+                auto value = Hashmap::GetValue(visitor.CurVal().buf);
+                func(visitor.CurKey(), reinterpret_cast<uint8_t *>(value), idx);
+            } else {
+                func(visitor.CurKey(), nullptr, idx);
+            }
+            visitor.Next();
+            ++idx;
+        }
+        visitor.SavePos([&](auto ptr, auto tagPos) {
+            outputState.rowBegin = reinterpret_cast<char *>(ptr);
+            outputState.rowOffset = tagPos;
+            outputState.hasBeenOutputNum += idx;
+        });
+    }
+
+    template <class Func>
+    void ForEachRow(Func &&func)
+    {
+        static_assert(Hashmap::StoresValues, "ForEachRow requires a value map");
+        RowContainerIterator iterator;
+        char *rows[kRehashBatchSize];
+        int32_t rowCount = 0;
+        do {
+            rowCount = aggRows_->ListRows(&iterator, kRehashBatchSize, rows);
+            for (int32_t row = 0; row < rowCount; ++row) {
+                func(reinterpret_cast<ValueType>(rows[row] + aggRows_->AggStateOffset()));
+            }
+        } while (rowCount > 0);
+    }
+
+    template <class Func>
+    void ForEachKey(Func &&func)
+    {
+        static_assert(!Hashmap::StoresValues, "ForEachKey requires a key set");
+        hashmap.ForEachKey(std::forward<Func>(func));
+    }
+
+    size_t GetElementsSize() const
+    {
+        return hashmap.GetElementsSize();
+    }
+
+    void ResetHashmap()
+    {
+        hashmap.Reset();
+        if constexpr (Hashmap::StoresValues) {
+            if (aggRows_ != nullptr) {
+                aggRows_->Reset();
+            }
+        }
+        InitializeRanges();
+    }
+
+private:
+    static constexpr uint8_t kTotalKeyBits = 127;
+    static constexpr int32_t kRehashBatchSize = 1024;
+    using ReaderFn = int64_t (*)(BaseVector *, int32_t);
+    using AnalyzeColumnFn = void (*)(BaseVector *, int32_t, bool &, int64_t &, int64_t &);
+    using EncodeColumnFn = bool (*)(BaseVector *, int32_t, int64_t, int64_t,
+        EncodedKey, uint8_t, bool, KeyType *);
+
+    struct ColumnReadPlan {
+        ReaderFn read = nullptr;
+        AnalyzeColumnFn analyze = nullptr;
+        EncodeColumnFn encode = nullptr;
+    };
+
+    bool HasFullRange(int32_t col) const
+    {
+        return idBits_[col] == fullBits_[col];
+    }
+
+    void InitializeRanges()
+    {
+        rangeInitialized_ = true;
+        for (int32_t col = 0; col < colCount_; ++col) {
+            if (HasFullRange(col)) {
+                hasRange_[col] = true;
+                min_[col] = TypeMin(typeIds_[col]);
+                max_[col] = TypeMax(typeIds_[col]);
+            } else {
+                hasRange_[col] = false;
+                rangeInitialized_ = false;
+            }
+        }
+    }
+
+    static bool IsSupportedType(type::DataTypeId typeId)
+    {
+        return typeId == type::OMNI_BYTE || typeId == type::OMNI_SHORT ||
+            typeId == type::OMNI_INT || typeId == type::OMNI_DATE32 ||
+            typeId == type::OMNI_TIME32 || typeId == type::OMNI_LONG ||
+            typeId == type::OMNI_DATE64 || typeId == type::OMNI_TIME64 ||
+            typeId == type::OMNI_TIMESTAMP || typeId == type::OMNI_DECIMAL64;
+    }
+
+    template <type::DataTypeId TypeId, Encoding VectorEncoding>
+    static int64_t ReadNormalizedFixedValueTyped(BaseVector *vector, int32_t rowIdx)
+    {
+        using NativeType = typename NativeAndVectorType<TypeId>::type;
+        if constexpr (VectorEncoding == vec::OMNI_DICTIONARY) {
+            return static_cast<int64_t>(
+                static_cast<Vector<DictionaryContainer<NativeType>> *>(vector)->GetValue(rowIdx));
+        } else if constexpr (VectorEncoding == vec::OMNI_ENCODING_CONST) {
+            return static_cast<int64_t>(static_cast<ConstVector<NativeType> *>(vector)->GetConstValue());
+        } else {
+            return static_cast<int64_t>(static_cast<Vector<NativeType> *>(vector)->GetValue(rowIdx));
+        }
+    }
+
+    template <type::DataTypeId TypeId, Encoding VectorEncoding, bool HasNull>
+    static void AnalyzeColumnTyped(BaseVector *vector, int32_t rowCount,
+        bool &hasValue, int64_t &minValue, int64_t &maxValue)
+    {
+        for (int32_t row = 0; row < rowCount; ++row) {
+            if constexpr (HasNull) {
+                if (vector->IsNull(row)) {
+                    continue;
+                }
+            }
+            const int64_t value = ReadNormalizedFixedValueTyped<TypeId, VectorEncoding>(vector, row);
+            if (!hasValue) {
+                hasValue = true;
+                minValue = value;
+                maxValue = value;
+            } else {
+                minValue = std::min(minValue, value);
+                maxValue = std::max(maxValue, value);
+            }
+        }
+    }
+
+    template <type::DataTypeId TypeId, Encoding VectorEncoding, bool HasNull>
+    static bool EncodeColumnTyped(BaseVector *vector, int32_t rowCount,
+        int64_t minValue, int64_t maxValue, EncodedKey mask, uint8_t bitOffset,
+        bool initialize, KeyType *encodedKeys)
+    {
+        bool allMapped = true;
+        for (int32_t row = 0; row < rowCount; ++row) {
+            if constexpr (HasNull) {
+                if (vector->IsNull(row)) {
+                    if (initialize) {
+                        encodedKeys[row] = KeyType(0);
+                    }
+                    continue;
+                }
+            }
+            const int64_t value = ReadNormalizedFixedValueTyped<TypeId, VectorEncoding>(vector, row);
+            if (value < minValue || value > maxValue) {
+                allMapped = false;
+                if (initialize) {
+                    encodedKeys[row] = KeyType(0);
+                }
+                continue;
+            }
+            const auto id = static_cast<EncodedKey>(
+                static_cast<SignedKey>(value) - static_cast<SignedKey>(minValue) + 1);
+            if (id > mask) {
+                allMapped = false;
+                if (initialize) {
+                    encodedKeys[row] = KeyType(0);
+                }
+                continue;
+            }
+            const auto shifted = id << bitOffset;
+            encodedKeys[row] = initialize ? static_cast<KeyType>(shifted) :
+                static_cast<KeyType>(static_cast<EncodedKey>(encodedKeys[row]) | shifted);
+        }
+        return allMapped;
+    }
+
+    template <type::DataTypeId TypeId, Encoding VectorEncoding, bool HasNull>
+    static ColumnReadPlan MakeReadPlan()
+    {
+        return {
+            &ReadNormalizedFixedValueTyped<TypeId, VectorEncoding>,
+            &AnalyzeColumnTyped<TypeId, VectorEncoding, HasNull>,
+            &EncodeColumnTyped<TypeId, VectorEncoding, HasNull>};
+    }
+
+    template <type::DataTypeId TypeId>
+    static ColumnReadPlan SelectReaderTyped(Encoding encoding, bool hasNull)
+    {
+        switch (encoding) {
+            case vec::OMNI_FLAT:
+                return hasNull ? MakeReadPlan<TypeId, vec::OMNI_FLAT, true>() :
+                    MakeReadPlan<TypeId, vec::OMNI_FLAT, false>();
+            case vec::OMNI_DICTIONARY:
+                return hasNull ? MakeReadPlan<TypeId, vec::OMNI_DICTIONARY, true>() :
+                    MakeReadPlan<TypeId, vec::OMNI_DICTIONARY, false>();
+            case vec::OMNI_ENCODING_CONST:
+                return hasNull ? MakeReadPlan<TypeId, vec::OMNI_ENCODING_CONST, true>() :
+                    MakeReadPlan<TypeId, vec::OMNI_ENCODING_CONST, false>();
+            default:
+                return {};
+        }
+    }
+
+    static ColumnReadPlan SelectReader(type::DataTypeId typeId, Encoding encoding, bool hasNull)
+    {
+        switch (typeId) {
+            case type::OMNI_BYTE:
+                return SelectReaderTyped<type::OMNI_BYTE>(encoding, hasNull);
+            case type::OMNI_SHORT:
+                return SelectReaderTyped<type::OMNI_SHORT>(encoding, hasNull);
+            case type::OMNI_INT:
+                return SelectReaderTyped<type::OMNI_INT>(encoding, hasNull);
+            case type::OMNI_DATE32:
+                return SelectReaderTyped<type::OMNI_DATE32>(encoding, hasNull);
+            case type::OMNI_TIME32:
+                return SelectReaderTyped<type::OMNI_TIME32>(encoding, hasNull);
+            case type::OMNI_LONG:
+                return SelectReaderTyped<type::OMNI_LONG>(encoding, hasNull);
+            case type::OMNI_DATE64:
+                return SelectReaderTyped<type::OMNI_DATE64>(encoding, hasNull);
+            case type::OMNI_TIME64:
+                return SelectReaderTyped<type::OMNI_TIME64>(encoding, hasNull);
+            case type::OMNI_TIMESTAMP:
+                return SelectReaderTyped<type::OMNI_TIMESTAMP>(encoding, hasNull);
+            case type::OMNI_DECIMAL64:
+                return SelectReaderTyped<type::OMNI_DECIMAL64>(encoding, hasNull);
+            default:
+                return {};
+        }
+    }
+
+    bool PrepareReaders(BaseVector **groupVectors)
+    {
+        for (int32_t col = 0; col < colCount_; ++col) {
+            if (groupVectors[col] == nullptr) {
+                return false;
+            }
+            activeReadPlans_[col] = SelectReader(
+                typeIds_[col], groupVectors[col]->GetEncoding(), groupVectors[col]->HasNull());
+            if (activeReadPlans_[col].read == nullptr) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void ResetStats()
+    {
+        statsHasValue_.assign(colCount_, false);
+        statsMin_.assign(colCount_, std::numeric_limits<int64_t>::max());
+        statsMax_.assign(colCount_, std::numeric_limits<int64_t>::min());
+    }
+
+    ALWAYS_INLINE void UpdateStats(int32_t col, int64_t value)
+    {
+        if (!statsHasValue_[col]) {
+            statsHasValue_[col] = true;
+            statsMin_[col] = value;
+            statsMax_[col] = value;
+            return;
+        }
+        statsMin_[col] = std::min(statsMin_[col], value);
+        statsMax_[col] = std::max(statsMax_[col], value);
+    }
+
+    void AnalyzeBatch(BaseVector **groupVectors, int32_t rowCount)
+    {
+        for (int32_t col = 0; col < colCount_; ++col) {
+            if (HasFullRange(col)) {
+                continue;
+            }
+            bool hasValue = statsHasValue_[col];
+            activeReadPlans_[col].analyze(groupVectors[col], rowCount, hasValue, statsMin_[col], statsMax_[col]);
+            statsHasValue_[col] = hasValue;
+        }
+    }
+
+    void AnalyzeStoredRows()
+    {
+        RowContainerIterator iterator;
+        char *rows[kRehashBatchSize];
+        int32_t rowCount = 0;
+        do {
+            rowCount = aggRows_->ListRows(&iterator, kRehashBatchSize, rows);
+            for (int32_t row = 0; row < rowCount; ++row) {
+                for (int32_t col = 0; col < colCount_; ++col) {
+                    if (HasFullRange(col)) {
+                        continue;
+                    }
+                    const auto rowColumn = aggRows_->ColumnAt(col);
+                    if (!RowContainer::IsNullAt(rows[row], rowColumn.NullByte(), rowColumn.NullMask())) {
+                        UpdateStats(col, ReadStoredValue(rows[row], col));
+                    }
+                }
+            }
+        } while (rowCount > 0);
+    }
+
+    bool DecodeStoredKeyValue(const KeyType &key, const std::vector<int64_t> &rangeMins,
+        int32_t col, int64_t &value) const
+    {
+        const auto encoded = static_cast<EncodedKey>(key);
+        const auto id = (encoded >> bitOffsets_[col]) & idMasks_[col];
+        if (id == 0) {
+            return false;
+        }
+        value = static_cast<int64_t>(
+            static_cast<SignedKey>(rangeMins[col]) + static_cast<SignedKey>(id) - 1);
+        return true;
+    }
+
+    void AnalyzeStoredKeys(const std::vector<int64_t> &rangeMins)
+    {
+        hashmap.ForEachKey([&](const KeyType &key) {
+            for (int32_t col = 0; col < colCount_; ++col) {
+                if (HasFullRange(col)) {
+                    continue;
+                }
+                int64_t value = 0;
+                if (DecodeStoredKeyValue(key, rangeMins, col, value)) {
+                    UpdateStats(col, value);
+                }
+            }
+        });
+    }
+
+    bool ConfigureRanges()
+    {
+        for (int32_t col = 0; col < colCount_; ++col) {
+            if (HasFullRange(col)) {
+                continue;
+            }
+            if (!statsHasValue_[col]) {
+                hasRange_[col] = false;
+                continue;
+            }
+            const SignedKey observedMin = static_cast<SignedKey>(statsMin_[col]);
+            const SignedKey observedMax = static_cast<SignedKey>(statsMax_[col]);
+            const SignedKey observedWidth = observedMax - observedMin;
+            const SignedKey capacity = static_cast<SignedKey>(idMasks_[col]);
+            if (capacity == 0 || observedWidth >= capacity) {
+                return false;
+            }
+
+            const SignedKey typeMin = static_cast<SignedKey>(TypeMin(typeIds_[col]));
+            const SignedKey typeMax = static_cast<SignedKey>(TypeMax(typeIds_[col]));
+            const SignedKey typeWidth = typeMax - typeMin;
+            const SignedKey windowWidth = std::min(capacity - 1, typeWidth);
+            const SignedKey spare = windowWidth - observedWidth;
+            SignedKey newMin = observedMin - spare / 2;
+            const SignedKey maxWindowMin = typeMax - windowWidth;
+            newMin = std::max(typeMin, std::min(newMin, maxWindowMin));
+
+            min_[col] = static_cast<int64_t>(newMin);
+            max_[col] = static_cast<int64_t>(newMin + windowWidth);
+            hasRange_[col] = true;
+        }
+        return true;
+    }
+
+    bool EncodeBatch(BaseVector **groupVectors, int32_t rowCount)
+    {
+        encodedKeysBuffer_.resize(static_cast<size_t>(rowCount));
+        bool allMapped = true;
+        bool initialized = false;
+        for (int32_t col = 0; col < colCount_; ++col) {
+            if (!hasRange_[col]) {
+                if (!initialized) {
+                    std::fill(encodedKeysBuffer_.begin(), encodedKeysBuffer_.end(), KeyType(0));
+                    initialized = true;
+                }
+                for (int32_t row = 0; row < rowCount; ++row) {
+                    if (!groupVectors[col]->IsNull(row)) {
+                        allMapped = false;
+                        break;
+                    }
+                }
+                continue;
+            }
+            allMapped = activeReadPlans_[col].encode(
+                groupVectors[col], rowCount, min_[col], max_[col], idMasks_[col],
+                bitOffsets_[col], !initialized, encodedKeysBuffer_.data()) && allMapped;
+            initialized = true;
+        }
+        return allMapped;
+    }
+
+    bool EncodeStoredRow(const char *row, KeyType &encoded) const
+    {
+        EncodedKey packed = 0;
+        for (int32_t col = 0; col < colCount_; ++col) {
+            const auto rowColumn = aggRows_->ColumnAt(col);
+            if (RowContainer::IsNullAt(row, rowColumn.NullByte(), rowColumn.NullMask())) {
+                continue;
+            }
+            const int64_t value = ReadStoredValue(row, col);
+            if (!hasRange_[col] || value < min_[col] || value > max_[col]) {
+                return false;
+            }
+            const auto id = static_cast<EncodedKey>(
+                static_cast<SignedKey>(value) - static_cast<SignedKey>(min_[col]) + 1);
+            if (id > idMasks_[col]) {
+                return false;
+            }
+            packed |= id << bitOffsets_[col];
+        }
+        encoded = static_cast<KeyType>(packed);
+        return true;
+    }
+
+    bool RebuildHashmap(const std::vector<int64_t> &oldMin)
+    {
+        if constexpr (Hashmap::StoresValues) {
+            hashmap.Reset();
+            RowContainerIterator iterator;
+            char *rows[kRehashBatchSize];
+            int32_t rowCount = 0;
+            do {
+                rowCount = aggRows_->ListRows(&iterator, kRehashBatchSize, rows);
+                for (int32_t row = 0; row < rowCount; ++row) {
+                    KeyType key;
+                    if (!EncodeStoredRow(rows[row], key)) {
+                        return false;
+                    }
+                    auto value = reinterpret_cast<ValueType>(rows[row] + aggRows_->AggStateOffset());
+                    hashmap.InsertExisting(key, value);
+                }
+            } while (rowCount > 0);
+            return true;
+        } else {
+            std::vector<KeyType> rebuiltKeys;
+            rebuiltKeys.reserve(hashmap.GetElementsSize());
+            bool valid = true;
+            hashmap.ForEachKey([&](const KeyType &oldKey) {
+                EncodedKey packed = 0;
+                for (int32_t col = 0; col < colCount_; ++col) {
+                    int64_t value = 0;
+                    if (!DecodeStoredKeyValue(oldKey, oldMin, col, value)) {
+                        continue;
+                    }
+                    if (!hasRange_[col] || value < min_[col] || value > max_[col]) {
+                        valid = false;
+                        return;
+                    }
+                    const auto id = static_cast<EncodedKey>(
+                        static_cast<SignedKey>(value) - static_cast<SignedKey>(min_[col]) + 1);
+                    if (id > idMasks_[col]) {
+                        valid = false;
+                        return;
+                    }
+                    packed |= id << bitOffsets_[col];
+                }
+                rebuiltKeys.push_back(static_cast<KeyType>(packed));
+            });
+            if (!valid) {
+                return false;
+            }
+            hashmap.Reset();
+            if (!rebuiltKeys.empty()) {
+                hashmap.EmplaceBatch(rebuiltKeys.data(), static_cast<int32_t>(rebuiltKeys.size()));
+            }
+            return true;
+        }
+    }
+
+    void StoreOriginalKeys(BaseVector **groupVectors, int32_t rowIdx, char *row)
+    {
+        for (int32_t col = 0; col < colCount_; ++col) {
+            const auto rowColumn = aggRows_->ColumnAt(col);
+            if (groupVectors[col]->IsNull(rowIdx)) {
+                RowContainer::SetNullAt(row, rowColumn.NullByte(), rowColumn.NullMask());
+                continue;
+            }
+            RowContainer::ClearNullAt(row, rowColumn.NullByte(), rowColumn.NullMask());
+            StoreFixedValue(row, rowColumn.Offset(), typeIds_[col],
+                activeReadPlans_[col].read(groupVectors[col], rowIdx));
+        }
+    }
+
+    static void StoreFixedValue(char *row, int32_t offset, type::DataTypeId typeId, int64_t value)
+    {
+        switch (typeId) {
+            case type::OMNI_BYTE:
+                RowContainer::StoreValue<int8_t>(row, offset, static_cast<int8_t>(value));
+                break;
+            case type::OMNI_SHORT:
+                RowContainer::StoreValue<int16_t>(row, offset, static_cast<int16_t>(value));
+                break;
+            case type::OMNI_INT:
+            case type::OMNI_DATE32:
+            case type::OMNI_TIME32:
+                RowContainer::StoreValue<int32_t>(row, offset, static_cast<int32_t>(value));
+                break;
+            default:
+                RowContainer::StoreValue<int64_t>(row, offset, value);
+                break;
+        }
+    }
+
+    int64_t ReadStoredValue(const char *row, int32_t col) const
+    {
+        const auto offset = aggRows_->ColumnAt(col).Offset();
+        switch (typeIds_[col]) {
+            case type::OMNI_BYTE:
+                return RowContainer::ReadValue<int8_t>(row, offset);
+            case type::OMNI_SHORT:
+                return RowContainer::ReadValue<int16_t>(row, offset);
+            case type::OMNI_INT:
+            case type::OMNI_DATE32:
+            case type::OMNI_TIME32:
+                return RowContainer::ReadValue<int32_t>(row, offset);
+            default:
+                return RowContainer::ReadValue<int64_t>(row, offset);
+        }
+    }
+
+    template <type::DataTypeId TypeId>
+    static void SetNormalizedFixedValueTyped(BaseVector *vector, int32_t rowIdx, int64_t value)
+    {
+        using NativeType = typename NativeAndVectorType<TypeId>::type;
+        static_cast<Vector<NativeType> *>(vector)->SetValue(rowIdx, static_cast<NativeType>(value));
+    }
+
+    static void SetNormalizedFixedValue(BaseVector *vector, int32_t rowIdx,
+        type::DataTypeId typeId, int64_t value)
+    {
+        vector->SetNotNull(rowIdx);
+        switch (typeId) {
+            case type::OMNI_BYTE:
+                SetNormalizedFixedValueTyped<type::OMNI_BYTE>(vector, rowIdx, value);
+                break;
+            case type::OMNI_SHORT:
+                SetNormalizedFixedValueTyped<type::OMNI_SHORT>(vector, rowIdx, value);
+                break;
+            case type::OMNI_INT:
+                SetNormalizedFixedValueTyped<type::OMNI_INT>(vector, rowIdx, value);
+                break;
+            case type::OMNI_DATE32:
+                SetNormalizedFixedValueTyped<type::OMNI_DATE32>(vector, rowIdx, value);
+                break;
+            case type::OMNI_TIME32:
+                SetNormalizedFixedValueTyped<type::OMNI_TIME32>(vector, rowIdx, value);
+                break;
+            case type::OMNI_LONG:
+                SetNormalizedFixedValueTyped<type::OMNI_LONG>(vector, rowIdx, value);
+                break;
+            case type::OMNI_DATE64:
+                SetNormalizedFixedValueTyped<type::OMNI_DATE64>(vector, rowIdx, value);
+                break;
+            case type::OMNI_TIME64:
+                SetNormalizedFixedValueTyped<type::OMNI_TIME64>(vector, rowIdx, value);
+                break;
+            case type::OMNI_TIMESTAMP:
+                SetNormalizedFixedValueTyped<type::OMNI_TIMESTAMP>(vector, rowIdx, value);
+                break;
+            case type::OMNI_DECIMAL64:
+                SetNormalizedFixedValueTyped<type::OMNI_DECIMAL64>(vector, rowIdx, value);
+                break;
+            default:
+                break;
+        }
+    }
+
+    static uint8_t RequiredFullBits(type::DataTypeId typeId)
+    {
+        switch (typeId) {
+            case type::OMNI_BYTE:
+                return 9;
+            case type::OMNI_SHORT:
+                return 17;
+            case type::OMNI_INT:
+            case type::OMNI_DATE32:
+            case type::OMNI_TIME32:
+                return 33;
+            case type::OMNI_LONG:
+            case type::OMNI_DATE64:
+            case type::OMNI_TIME64:
+            case type::OMNI_TIMESTAMP:
+            case type::OMNI_DECIMAL64:
+                return 65;
+            default:
+                return 0;
+        }
+    }
+
+    static uint8_t MinUsefulBits(type::DataTypeId typeId)
+    {
+        const auto fullBits = RequiredFullBits(typeId);
+        if (fullBits <= 17) {
+            return fullBits;
+        }
+        return static_cast<uint8_t>((static_cast<uint32_t>(fullBits) * 60 + 99) / 100);
+    }
+
+    static EncodedKey MaskForBits(uint8_t bits)
+    {
+        return bits >= 128 ? ~static_cast<EncodedKey>(0) :
+            (static_cast<EncodedKey>(1) << bits) - 1;
+    }
+
+    static bool BuildBitLayout(const std::vector<type::DataTypeId> &typeIds,
+        std::vector<uint8_t> *fullBits, std::vector<uint8_t> *idBits,
+        std::vector<uint8_t> *bitOffsets, std::vector<EncodedKey> *idMasks)
+    {
+        if (typeIds.size() <= 1) {
+            return false;
+        }
+        std::vector<uint8_t> localFullBits(typeIds.size());
+        std::vector<uint8_t> localIdBits(typeIds.size());
+        uint32_t fullTotal = 0;
+        uint32_t usedBits = 0;
+        for (size_t col = 0; col < typeIds.size(); ++col) {
+            localFullBits[col] = RequiredFullBits(typeIds[col]);
+            localIdBits[col] = MinUsefulBits(typeIds[col]);
+            if (localFullBits[col] == 0 || localIdBits[col] == 0) {
+                return false;
+            }
+            fullTotal += localFullBits[col];
+            usedBits += localIdBits[col];
+        }
+        if (fullTotal <= kTotalKeyBits) {
+            localIdBits = localFullBits;
+            usedBits = fullTotal;
+        } else if (usedBits > kTotalKeyBits) {
+            return false;
+        }
+
+        while (usedBits < kTotalKeyBits) {
+            bool assigned = false;
+            for (size_t col = 0; col < typeIds.size() && usedBits < kTotalKeyBits; ++col) {
+                if (localIdBits[col] < localFullBits[col]) {
+                    ++localIdBits[col];
+                    ++usedBits;
+                    assigned = true;
+                }
+            }
+            if (!assigned) {
+                break;
+            }
+        }
+
+        std::vector<uint8_t> localOffsets(typeIds.size());
+        std::vector<EncodedKey> localMasks(typeIds.size());
+        uint32_t offset = 0;
+        for (size_t col = 0; col < typeIds.size(); ++col) {
+            if (offset + localIdBits[col] > kTotalKeyBits) {
+                return false;
+            }
+            localOffsets[col] = static_cast<uint8_t>(offset);
+            localMasks[col] = MaskForBits(localIdBits[col]);
+            offset += localIdBits[col];
+        }
+        if (fullBits != nullptr) {
+            *fullBits = std::move(localFullBits);
+        }
+        if (idBits != nullptr) {
+            *idBits = std::move(localIdBits);
+        }
+        if (bitOffsets != nullptr) {
+            *bitOffsets = std::move(localOffsets);
+        }
+        if (idMasks != nullptr) {
+            *idMasks = std::move(localMasks);
+        }
+        return true;
+    }
+
+    static int64_t TypeMin(type::DataTypeId typeId)
+    {
+        switch (typeId) {
+            case type::OMNI_BYTE:
+                return std::numeric_limits<int8_t>::min();
+            case type::OMNI_SHORT:
+                return std::numeric_limits<int16_t>::min();
+            case type::OMNI_INT:
+            case type::OMNI_DATE32:
+            case type::OMNI_TIME32:
+                return std::numeric_limits<int32_t>::min();
+            default:
+                return std::numeric_limits<int64_t>::min();
+        }
+    }
+
+    static int64_t TypeMax(type::DataTypeId typeId)
+    {
+        switch (typeId) {
+            case type::OMNI_BYTE:
+                return std::numeric_limits<int8_t>::max();
+            case type::OMNI_SHORT:
+                return std::numeric_limits<int16_t>::max();
+            case type::OMNI_INT:
+            case type::OMNI_DATE32:
+            case type::OMNI_TIME32:
+                return std::numeric_limits<int32_t>::max();
+            default:
+                return std::numeric_limits<int64_t>::max();
+        }
+    }
+
+    Hashmap hashmap;
+    std::unique_ptr<RowContainer> aggRows_;
+    int32_t colCount_ = 0;
+    int32_t aggStateSize_ = 0;
+    bool rangeInitialized_ = false;
+    std::vector<type::DataTypeId> typeIds_;
+    std::vector<uint8_t> fullBits_;
+    std::vector<uint8_t> idBits_;
+    std::vector<uint8_t> bitOffsets_;
+    std::vector<EncodedKey> idMasks_;
+    std::vector<bool> hasRange_;
+    std::vector<int64_t> min_;
+    std::vector<int64_t> max_;
+    std::vector<bool> statsHasValue_;
+    std::vector<int64_t> statsMin_;
+    std::vector<int64_t> statsMax_;
+    std::vector<ColumnReadPlan> activeReadPlans_;
+    std::vector<KeyType> encodedKeysBuffer_;
+};
+
+template <typename Hashset>
+class NormalizeKeyWithoutAggHandler : public NormalizeKeyHandler<Hashset> {
+    static_assert(!Hashset::StoresValues,
+        "NormalizeKeyWithoutAggHandler requires a key-only container");
+
+public:
+    bool Init(const std::vector<type::DataTypeId> &groupByTypeIds,
+        const std::vector<int32_t> &keyTypeSizes, int32_t aggStateSize,
+        mem::SimpleArenaAllocator &pool)
+    {
+        return aggStateSize == 0 && NormalizeKeyHandler<Hashset>::Init(
+            groupByTypeIds, keyTypeSizes, aggStateSize, pool);
     }
 };
 }
