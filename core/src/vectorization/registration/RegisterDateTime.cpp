@@ -41,6 +41,7 @@
 #include "../functions/DateTrunc.h"
 #include "../functions/Floor.h"
 #include "../functions/Ceil.h"
+#include "../functions/Time.h"
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -104,5 +105,7 @@ void RegisterDatetimeFunctions(const std::string &prefix)
     RegisterFloorFunction(prefix + "floor_time");
 
     RegisterCeilFunction(prefix + "ceil_time");
+
+    RegisterTimeFunction(prefix + "time");
 }
 }
