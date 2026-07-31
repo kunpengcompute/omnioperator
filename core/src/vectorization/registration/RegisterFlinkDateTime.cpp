@@ -16,6 +16,7 @@
 #include "../functions/FlinkWeek.h"
 #include "../functions/FlinkDayOfYear.h"
 #include "../functions/FlinkDayOfMonth.h"
+#include "../functions/FlinkDayOfWeek.h"
 
 namespace omniruntime::vectorization {
 void RegisterFlinkDatetimeFunctions(const std::string &prefix)
@@ -50,5 +51,11 @@ void RegisterFlinkDatetimeFunctions(const std::string &prefix)
     // TimestampData = millis since epoch, no session timezone). Returns day of
     // month 1-31. Distinct from "day"/"dayofmonth" which do not support OMNI_LONG.
     RegisterFlinkDayOfMonthFunction(prefix + "flink_dayofmonth");
+
+    // flink_dayofweek: OMNI_INT (date = days since epoch) / OMNI_LONG (Flink
+    // TimestampData = millis since epoch, no session timezone). Returns DOW
+    // (Sunday=1..Saturday=7), i.e. EXTRACT(DOW FROM date) — NOT ISODOW.
+    // Distinct from "dayofweek" which does not support OMNI_LONG.
+    RegisterFlinkDayOfWeekFunction(prefix + "flink_dayofweek");
 }
 }
