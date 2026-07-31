@@ -109,6 +109,8 @@ HashAggregationWithExprOperatorFactory::HashAggregationWithExprOperatorFactory(
     this->hashAggOperatorFactory =
         new HashAggregationOperatorFactory(groupByCol, *groupByTypes, aggColIdx, aggInputDataTypes, aggOutputTypes,
         aggFuncTypes, maskColumns, inputRaws, outputPartial, hasAggFilters, operatorConfig, step);
+    this->hashAggOperatorFactory->SetNormalizedKeyEnabledForFactory(
+        queryConfig.HashAggNormalizedKeyEnabled());
     this->hashAggOperatorFactory->Init();
 }
 

@@ -42,6 +42,7 @@
 #include "../functions/DateTrunc.h"
 #include "../functions/Floor.h"
 #include "../functions/Ceil.h"
+#include "../functions/Time.h"
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -110,10 +111,12 @@ void RegisterDatetimeFunctions(const std::string &prefix)
 
     RegisterFunction<CurrentRowTimestampFunction, int64_t>(prefix + "current_row_timestamp", {}, OMNI_LONG);
 
-    RegisterFunction<CurrentDateFunction, int32_t>(prefix + "current_date", {}, OMNI_DATE32);
+    RegisterFunction<CurrentDateFunction, int32_t>(prefix + "current_date", {}, OMNI_INT);
 
-    RegisterFloorFunction(prefix + "floor_time");
+    RegisterFloorFunction(prefix + "flink_floor_time");
 
-    RegisterCeilFunction(prefix + "ceil_time");
+    RegisterCeilFunction(prefix + "flink_ceil_time");
+
+    RegisterTimeFunction(prefix + "time");
 }
 }

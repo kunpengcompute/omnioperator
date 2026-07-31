@@ -20,10 +20,10 @@
 namespace omniruntime::vectorization {
 
 namespace detail {
-/// UTC microseconds since the Unix epoch for a given time_point (true UTC instant).
-inline int64_t UtcMicrosSinceEpoch(std::chrono::system_clock::time_point now)
+/// UTC milliseconds since the Unix epoch for a given time_point (true UTC instant).
+inline int64_t UtcMillisSinceEpoch(std::chrono::system_clock::time_point now)
 {
-    return std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 }
 
 /// Returns the session timezone from the config, or nullptr if not set.
@@ -42,7 +42,7 @@ inline int32_t SessionLocalDaysSinceEpoch(std::chrono::system_clock::time_point 
     const tz::TimeZone *sessionTz)
 {
     if (sessionTz != nullptr) {
-        Timestamp ts = Timestamp::fromMicros(UtcMicrosSinceEpoch(now));
+        Timestamp ts = Timestamp::fromMillis(UtcMillisSinceEpoch(now));
         ts.toTimezone(*sessionTz);
         std::tm localTm {};
         OMNI_CHECK(Timestamp::epochToCalendarUtc(ts.getSeconds(), localTm),
@@ -66,24 +66,24 @@ inline int32_t SessionLocalDaysSinceEpoch(std::chrono::system_clock::time_point 
     return static_cast<int32_t>(daysSinceEpoch);
 }
 
-/// Microseconds since the Unix epoch treating the session-local wall-clock time
-/// as if it were UTC (TIMESTAMP(6) semantics: utc_micros + session_tz_offset).
+/// Milliseconds since the Unix epoch treating the session-local wall-clock time
+/// as if it were UTC (TIMESTAMP(3) semantics: utc_millis + session_tz_offset).
 /// Uses the session timezone when available; falls back to OS local time otherwise.
-inline int64_t SessionLocalWallClockAsUtcMicros(std::chrono::system_clock::time_point now,
+inline int64_t SessionLocalWallClockAsUtcMillis(std::chrono::system_clock::time_point now,
     const tz::TimeZone *sessionTz)
 {
     if (sessionTz != nullptr) {
-        Timestamp ts = Timestamp::fromMicros(UtcMicrosSinceEpoch(now));
+        Timestamp ts = Timestamp::fromMillis(UtcMillisSinceEpoch(now));
         ts.toTimezone(*sessionTz);
-        return ts.toMicros();
+        return ts.toMillis();
     }
-    static constexpr int64_t kMicrosPerSec = 1000000LL;
+    static constexpr int64_t kMillisPerSec = 1000LL;
     static constexpr int64_t kSecsPerDay = 86400LL;
 
     auto durationSinceEpoch = now.time_since_epoch();
     auto secsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
-    auto microsSinceEpoch = std::chrono::duration_cast<std::chrono::microseconds>(durationSinceEpoch);
-    int64_t subSecondMicros = static_cast<int64_t>((microsSinceEpoch - secsSinceEpoch).count());
+    auto millisSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch);
+    int64_t subSecondMillis = static_cast<int64_t>((millisSinceEpoch - secsSinceEpoch).count());
 
     std::time_t timeNow = static_cast<std::time_t>(secsSinceEpoch.count());
     std::tm localTm {};
@@ -94,40 +94,40 @@ inline int64_t SessionLocalWallClockAsUtcMicros(std::chrono::system_clock::time_
     int32_t day = localTm.tm_mday;
     int64_t daysSinceEpoch = 0;
     Date32::DaysSinceEpochFromDate(year, month, day, daysSinceEpoch);
-    int64_t microsSinceMidnight = static_cast<int64_t>(
-        localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * kMicrosPerSec;
-    return daysSinceEpoch * kSecsPerDay * kMicrosPerSec + microsSinceMidnight + subSecondMicros;
+    int64_t millisSinceMidnight = static_cast<int64_t>(
+        localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * kMillisPerSec;
+    return daysSinceEpoch * kSecsPerDay * kMillisPerSec + millisSinceMidnight + subSecondMillis;
 }
 
-/// Microseconds since midnight in the session timezone (TIME(6) semantics).
+/// Milliseconds since midnight in the session timezone (TIME(3) semantics).
 /// Uses the session timezone when available; falls back to OS local time otherwise
 /// (aligned with Flink's ZoneId.systemDefault()).
-inline int64_t SessionLocalMicrosSinceMidnight(std::chrono::system_clock::time_point now,
+inline int64_t SessionLocalMillisSinceMidnight(std::chrono::system_clock::time_point now,
     const tz::TimeZone *sessionTz)
 {
     if (sessionTz != nullptr) {
-        int64_t utcMicros = UtcMicrosSinceEpoch(now);
-        Timestamp ts = Timestamp::fromMicros(utcMicros);
+        int64_t utcMillis = UtcMillisSinceEpoch(now);
+        Timestamp ts = Timestamp::fromMillis(utcMillis);
         ts.toTimezone(*sessionTz);
         std::tm localTm {};
         OMNI_CHECK(Timestamp::epochToCalendarUtc(ts.getSeconds(), localTm),
             "Timestamp is too large: {} seconds since epoch", ts.getSeconds());
-        return static_cast<int64_t>(localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * 1000000
-            + static_cast<int64_t>(ts.getNanos() / 1'000);
+        return static_cast<int64_t>(localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * 1000
+            + static_cast<int64_t>(ts.getNanos() / 1'000'000);
     }
     auto durationSinceEpoch = now.time_since_epoch();
     auto secsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
-    auto microsSinceEpoch = std::chrono::duration_cast<std::chrono::microseconds>(durationSinceEpoch);
-    int64_t subSecondMicros = static_cast<int64_t>((microsSinceEpoch - secsSinceEpoch).count());
+    auto millisSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch);
+    int64_t subSecondMillis = static_cast<int64_t>((millisSinceEpoch - secsSinceEpoch).count());
     std::time_t timeNow = static_cast<std::time_t>(secsSinceEpoch.count());
     std::tm localTm {};
     localtime_r(&timeNow, &localTm);
-    return static_cast<int64_t>(localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * 1000000
-        + subSecondMicros;
+    return static_cast<int64_t>(localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * 1000
+        + subSecondMillis;
 }
 } // namespace detail
 
-/// current_row_timestamp() -> int64_t (TIMESTAMP_LTZ(6))
+/// current_row_timestamp() -> int64_t (TIMESTAMP_LTZ(3))
 template <typename T>
 struct CurrentRowTimestampFunction {
     void initialize(const std::vector<omniruntime::type::DataTypeId> & /*inputTypes*/,
@@ -137,69 +137,69 @@ struct CurrentRowTimestampFunction {
 
     ALWAYS_INLINE Status call(int64_t &result)
     {
-        result = detail::UtcMicrosSinceEpoch(std::chrono::system_clock::now());
+        result = detail::UtcMillisSinceEpoch(std::chrono::system_clock::now());
         return Status::OK();
     }
 };
 
-/// current_timestamp() -> int64_t (TIMESTAMP_LTZ(6))
+/// current_timestamp() -> int64_t (TIMESTAMP_LTZ(3))
 template <typename T>
 struct CurrentTimestampFunction {
 
     void initialize(const std::vector<omniruntime::type::DataTypeId> & /*inputTypes*/,
         const config::QueryConfig & /*config*/)
     {
-        microsSinceEpoch_ = detail::UtcMicrosSinceEpoch(std::chrono::system_clock::now());
+        millisSinceEpoch_ = detail::UtcMillisSinceEpoch(std::chrono::system_clock::now());
     }
 
     ALWAYS_INLINE Status call(int64_t &result)
     {
-        result = microsSinceEpoch_;
+        result = millisSinceEpoch_;
         return Status::OK();
     }
 
 private:
-    int64_t microsSinceEpoch_ = 0;
+    int64_t millisSinceEpoch_ = 0;
 };
 
-/// localtime() -> int64_t (TIME(6))
+/// localtime() -> int64_t (TIME(3))
 template <typename T>
 struct LocalTimeFunction {
     void initialize(const std::vector<omniruntime::type::DataTypeId> & /*inputTypes*/,
         const config::QueryConfig &config)
     {
         const tz::TimeZone *sessionTz = detail::getSessionTimeZone(config);
-        microsSinceMidnight_ = detail::SessionLocalMicrosSinceMidnight(std::chrono::system_clock::now(), sessionTz);
+        millisSinceMidnight_ = detail::SessionLocalMillisSinceMidnight(std::chrono::system_clock::now(), sessionTz);
     }
 
     ALWAYS_INLINE Status call(int64_t &result)
     {
-        result = microsSinceMidnight_;
+        result = millisSinceMidnight_;
         return Status::OK();
     }
 
 private:
-    int64_t microsSinceMidnight_ = 0;
+    int64_t millisSinceMidnight_ = 0;
 };
 
-/// localtimestamp() -> int64_t (TIMESTAMP(6))
+/// localtimestamp() -> int64_t (TIMESTAMP(3))
 template <typename T>
 struct LocalTimestampFunction {
     void initialize(const std::vector<omniruntime::type::DataTypeId> & /*inputTypes*/,
         const config::QueryConfig &config)
     {
         const tz::TimeZone *sessionTz = detail::getSessionTimeZone(config);
-        microsSinceEpoch_ = detail::SessionLocalWallClockAsUtcMicros(std::chrono::system_clock::now(), sessionTz);
+        millisSinceEpoch_ = detail::SessionLocalWallClockAsUtcMillis(std::chrono::system_clock::now(), sessionTz);
     }
 
     ALWAYS_INLINE Status call(int64_t &result)
     {
-        result = microsSinceEpoch_;
+        result = millisSinceEpoch_;
         return Status::OK();
     }
 
 private:
-    int64_t microsSinceEpoch_ = 0;
+    int64_t millisSinceEpoch_ = 0;
 };
 
 /// current_date() -> int32_t (DATE)

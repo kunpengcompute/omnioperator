@@ -51,6 +51,19 @@ extern "C" DLLEXPORT const char* JsonValueRetNull(int64_t contextPtr, const char
                                                    const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
                                                    bool *outIsNull, int32_t *outLen);
 
+extern "C" DLLEXPORT const char* JsonQueryRetNull(int64_t contextPtr, const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+                                                   const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
+                                                   bool *outIsNull, int32_t *outLen);
+
+extern "C" DLLEXPORT const char* JsonQueryWithWrapperAndBehavior(
+    int64_t contextPtr,
+    const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+    const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
+    int32_t wrapperBehavior, bool wrapperBehaviorIsNull,
+    int32_t emptyBehavior, bool emptyBehaviorIsNull,
+    int32_t errorBehavior, bool errorBehaviorIsNull,
+    bool *outIsNull, int32_t *outLen);
+
 // Extended JSON_VALUE function with ON EMPTY/ERROR behaviors
 // emptyBehavior: 0=NULL, 1=ERROR, 2=DEFAULT
 // errorBehavior: 0=NULL, 1=ERROR, 2=DEFAULT
@@ -60,6 +73,30 @@ extern "C" DLLEXPORT const char* JsonValueExtended(
     const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
     int32_t emptyBehavior, const char *defaultOnEmpty, int32_t defaultOnEmptyLen, bool defaultOnEmptyIsNull,
     int32_t errorBehavior, const char *defaultOnError, int32_t defaultOnErrorLen, bool defaultOnErrorIsNull,
+    bool *outIsNull, int32_t *outLen);
+
+extern "C" DLLEXPORT const char* JsonValueWithBehaviors(
+    int64_t contextPtr,
+    const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+    const char *pathStr, int32_t pathStrWidth, int32_t pathStrLen, bool pathStrIsNull,
+    int32_t emptyBehavior, bool emptyBehaviorIsNull,
+    const char *defaultOnEmpty, int32_t defaultOnEmptyLen, bool defaultOnEmptyIsNull,
+    int32_t errorBehavior, bool errorBehaviorIsNull,
+    const char *defaultOnError, int32_t defaultOnErrorLen, bool defaultOnErrorIsNull,
+    bool *outIsNull, int32_t *outLen);
+
+
+// JSON_SPLIT_SCALAR function for splitting JSON array and joining all elements
+// Returns all elements joined with CRLF delimiter (matches jsontest UDF semantics)
+// This function takes only 1 argument (the JSON string) and returns a single VARCHAR
+extern "C" DLLEXPORT const char* JsonSplitScalar(
+    int64_t contextPtr,
+    const char *jsonStr, int32_t jsonStrLen, bool jsonStrIsNull,
+    bool *outIsNull, int32_t *outLen);
+
+extern "C" DLLEXPORT const char* JsonSplitScalarChar(
+    int64_t contextPtr,
+    const char *jsonStr, int32_t jsonStrWidth, int32_t jsonStrLen, bool jsonStrIsNull,
     bool *outIsNull, int32_t *outLen);
 
 extern "C" DLLEXPORT const char *ConcatStrStr(int64_t contextPtr, const char *ap, int32_t apLen, const char *bp,
@@ -312,6 +349,10 @@ extern "C" DLLEXPORT int32_t LengthCharReturnInt32(const char *str, int32_t widt
 extern "C" DLLEXPORT int32_t LengthStrReturnInt32(const char *str, int32_t strLen, bool isNull);
 
 extern "C" DLLEXPORT int64_t LengthStr(const char *str, int32_t strLen, bool isNull);
+
+extern "C" DLLEXPORT int32_t CharLengthStr(const char *str, int32_t strLen, bool isNull);
+
+extern "C" DLLEXPORT int32_t CharLengthChar(const char *str, int32_t strWidth, int32_t strLen, bool isNull);
 
 extern "C" DLLEXPORT const char *ReplaceStrStrStrWithRepNotReplace(int64_t contextPtr, const char *str, int32_t strLen,
     const char *searchStr, int32_t searchLen, const char *replaceStr, int32_t replaceLen, bool isNull, int32_t *outLen);

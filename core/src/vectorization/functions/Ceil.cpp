@@ -70,7 +70,7 @@ public:
             formatVector = dynamic_cast<Vector<LargeStringContainer<std::string_view>> *>(formatArg);
         }
 
-        if (valueTypeId == OMNI_DATE32 || valueTypeId == OMNI_INT) {
+        if (valueTypeId == OMNI_INT) {
             auto *valueVector = reinterpret_cast<Vector<int32_t> *>(valueArg);
             const auto *valueRaw = unsafe::UnsafeVector::GetRawValues(valueVector);
             auto *resultVector = reinterpret_cast<Vector<int32_t> *>(result);
@@ -142,11 +142,11 @@ public:
                     return;
                 }
 
-                int64_t micros = valueRaw[i];
-                Timestamp ts = Timestamp::fromMicros(micros);
+                int64_t millis = valueRaw[i];
+                Timestamp ts = Timestamp::fromMillis(millis);
                 Timestamp truncated;
                 if (Timestamp::CeilTime(ts, level, truncated) == CONVERT_SUCCESS) {
-                    resultRaw[i] = truncated.toMicros();
+                    resultRaw[i] = truncated.toMillis();
 
                     result->SetNotNull(i);
                 } else {
@@ -165,7 +165,6 @@ void RegisterCeilFunction(const std::string &name)
 {
     auto ceilFunction = std::make_shared<CeilFunction>();
     VectorFunction::RegisterVectorFunction(name, {OMNI_LONG, OMNI_VARCHAR}, OMNI_LONG, ceilFunction);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_DATE32, OMNI_VARCHAR}, OMNI_DATE32, ceilFunction);
     VectorFunction::RegisterVectorFunction(name, {OMNI_INT, OMNI_VARCHAR}, OMNI_INT, ceilFunction);
 }
 }

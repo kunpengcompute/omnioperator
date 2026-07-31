@@ -213,6 +213,13 @@ TEST(JsonValueTest, LargeJsonPerformance)
     JsonValueTest(largeJson, "$.level1.level2.level3.level4.level5.value", "deepvalue", false);
 }
 
+TEST(JsonValueTest, CacheResetsAcrossJsonSizes)
+{
+    std::string largeJson = R"({"payload":")" + std::string(8192, 'x') + R"(", "flag": true})";
+    JsonValueTest(largeJson, "$.payload", std::string(8192, 'x'), false);
+    JsonValueTest(R"({"payload":"small","flag":false})", "$.payload", "small", false);
+}
+
 // Test paths with whitespace (should handle gracefully)
 TEST(JsonValueTest, PathsWithWhitespace)
 {
@@ -383,6 +390,175 @@ TEST(JsonValueTest, ExtendedNullInput)
     EXPECT_EQ("null_input_default", std::string(result, outLen));
     
     delete context;
+}
+
+TEST(JsonValueTest, WrappedExtendedOnEmptyDefault)
+{
+    auto context = new ExecutionContext();
+    int64_t contextPtr = reinterpret_cast<int64_t>(context);
+
+    bool outIsNull = false;
+    int32_t outLen = 0;
+    std::string json = R"({"name":"John"})";
+    std::string path = "$.age";
+    std::string defaultValue = "unknown";
+
+    const char *result = JsonValueWithBehaviors(contextPtr,
+        json.c_str(), static_cast<int32_t>(json.size()), false,
+        path.c_str(), 0, static_cast<int32_t>(path.size()), false,
+        2, false, defaultValue.c_str(), static_cast<int32_t>(defaultValue.size()), false,
+        0, false, nullptr, 0, true, &outIsNull, &outLen);
+
+    EXPECT_FALSE(outIsNull);
+    EXPECT_EQ("unknown", std::string(result, outLen));
+
+    delete context;
+}
+
+// Test JsonSplitScalar function
+static void JsonSplitScalarTest(const std::string &jsonStr,
+                                const std::string &expectedResult, bool expectIsNull)
+{
+    auto context = new ExecutionContext();
+    int64_t contextPtr = reinterpret_cast<int64_t>(context);
+    
+    bool outIsNull = false;
+    int32_t outLen = 0;
+    
+    const char *result = JsonSplitScalar(
+        contextPtr,
+        jsonStr.c_str(), static_cast<int32_t>(jsonStr.size()), false,
+        &outIsNull, &outLen
+    );
+    
+    if (expectIsNull) {
+        EXPECT_TRUE(outIsNull);
+        EXPECT_EQ(outLen, 0);
+    } else {
+        EXPECT_FALSE(outIsNull);
+        EXPECT_EQ(expectedResult, std::string(result, outLen));
+    }
+    
+    delete context;
+}
+
+    static void JsonSplitScalarCharTest(const std::string &jsonStr, int32_t width,
+                                        const std::string &expectedResult, bool expectIsNull)
+    {
+        auto context = new ExecutionContext();
+        int64_t contextPtr = reinterpret_cast<int64_t>(context);
+
+        bool outIsNull = false;
+        int32_t outLen = 0;
+
+        const char *result = JsonSplitScalarChar(
+            contextPtr,
+            jsonStr.c_str(), width, static_cast<int32_t>(jsonStr.size()), false,
+            &outIsNull, &outLen
+        );
+
+        if (expectIsNull) {
+            EXPECT_TRUE(outIsNull);
+            EXPECT_EQ(outLen, 0);
+        } else {
+            EXPECT_FALSE(outIsNull);
+            EXPECT_EQ(expectedResult, std::string(result, outLen));
+        }
+
+        delete context;
+    }
+
+TEST(JsonSplitScalarTest, SimpleArray)
+{
+    JsonSplitScalarTest(R"(["a","b","c"])", "a\r\nb\r\nc", false);
+}
+
+TEST(JsonSplitScalarTest, CharInput)
+{
+    JsonSplitScalarCharTest(R"(["'dIPFMXtJL"])", 1, "'dIPFMXtJL", false);
+}
+
+TEST(JsonSplitScalarTest, NumericArray)
+{
+    JsonSplitScalarTest(R"([1,2,3,4,5])", "1\r\n2\r\n3\r\n4\r\n5", false);
+}
+
+TEST(JsonSplitScalarTest, FloatingPointFormatting)
+{
+    JsonSplitScalarTest(R"([1.2,3.14,-2.5])", "1.2\r\n3.14\r\n-2.5", false);
+}
+
+TEST(JsonSplitScalarTest, ScientificNotationFormatting)
+{
+    JsonSplitScalarTest(R"([1.171815966525443e+77])", "1.171815966525443E+77", false);
+}
+
+TEST(JsonSplitScalarTest, MixedArray)
+{
+    JsonSplitScalarTest(R"(["string",123,true,null])", "string\r\n123\r\ntrue\r\nnull", false);
+}
+
+TEST(JsonSplitScalarTest, NestedArray)
+{
+    JsonSplitScalarTest(R"([[1,2],[3,4]])", "[1,2]\r\n[3,4]", false);
+}
+
+TEST(JsonSplitScalarTest, ObjectArray)
+{
+    JsonSplitScalarTest(R"([{"name":"Alice"},{"name":"Bob"}])", "{\"name\":\"Alice\"}\r\n{\"name\":\"Bob\"}", false);
+}
+
+TEST(JsonSplitScalarTest, SingleQuotedStringArray)
+{
+    JsonSplitScalarTest(R"(['apple','banana'])", "apple\r\nbanana", false);
+}
+
+TEST(JsonSplitScalarTest, SingleQuotedJsonStringArray)
+{
+    JsonSplitScalarTest(R"(['{"id":865,"name":"Alice"}'])", "{\"id\":865,\"name\":\"Alice\"}", false);
+}
+
+TEST(JsonSplitScalarTest, SingleElementArray)
+{
+    JsonSplitScalarTest(R"(["only"])", "only", false);
+}
+
+TEST(JsonSplitScalarTest, EmptyArray)
+{
+    JsonSplitScalarTest(R"([])", "", false);
+}
+
+TEST(JsonSplitScalarTest, NotArray)
+{
+    JsonSplitScalarTest(R"({"key":"value"})", "", true);
+    JsonSplitScalarTest(R"("string")", "", true);
+    JsonSplitScalarTest(R"(123)", "", true);
+}
+
+TEST(JsonSplitScalarTest, NullInput)
+{
+    auto context = new ExecutionContext();
+    int64_t contextPtr = reinterpret_cast<int64_t>(context);
+    
+    bool outIsNull = false;
+    int32_t outLen = 0;
+    
+    // Test with null input
+    const char *result = JsonSplitScalar(
+        contextPtr,
+        nullptr, 0, true,
+        &outIsNull, &outLen
+    );
+    EXPECT_TRUE(outIsNull);
+    EXPECT_EQ(outLen, 0);
+    
+    delete context;
+}
+
+TEST(JsonSplitScalarTest, InvalidJson)
+{
+    JsonSplitScalarTest("invalid json", "", true);
+    JsonSplitScalarTest("[1,2,", "", true);
 }
 
 } // namespace omniruntime

@@ -9,16 +9,18 @@
 #include <string>
 #include <regex>
 #include <limits>
+#include <ctime>
 #include "util/compiler_util.h"
 #include "base_operations.h"
 #include "double_utils.h"
+#include <climits>
 
 namespace omniruntime {
 namespace type {
 static std::regex g_decimalRegex("[+-]?[[:digit:]]+([.][[:digit:]]+)?([eE][+-]?[[:digit:]]+)?");
 static std::regex g_doubleRegex(
     "[[:blank:]]*([+-])?[[:digit:]]+([.][[:digit:]]+)?([eE][+-]?[[:digit:]]+)?[[:blank:]]*");
-static std::regex g_dateRegex(R"(\d{4}-\d{2}-\d{2}$)");
+static std::regex g_dateRegex(R"([[:blank:]]*\d{1,5}-\d{2}-\d{2}[[:blank:]]*$)");
 
 template<typename T, bool allowTruncate = true>
 inline Status ConvertStringToInteger(T &result, const char *bytes, int length)
@@ -85,6 +87,84 @@ inline Status ConvertStringToInteger(T &result, const char *bytes, int length)
         }
         result = -result;
     }
+    return Status::CONVERT_SUCCESS;
+}
+
+inline Status ConvertDateStringToInteger(int64_t& result, const char* bytes, int length)
+{
+    int offset = 0;
+    while (offset < length && bytes[offset] == ' ') offset++;
+    if (offset == length) return Status::IS_NOT_A_NUMBER;
+
+    int end = length - 1;
+    while (end > offset && bytes[end] == ' ') end--;
+    end++;
+
+    int contentLen = end - offset;
+    if (contentLen < 10) return Status::IS_NOT_A_NUMBER;
+
+    int dash1 = -1, dash2 = -1;
+    for (int i = offset; i < end; i++) {
+        char c = bytes[i];
+        if (c == '-') {
+            if (dash1 == -1) dash1 = i;
+            else if (dash2 == -1) dash2 = i;
+            else return Status::IS_NOT_A_NUMBER;
+        } else if (c < '0' || c > '9') {
+            return Status::IS_NOT_A_NUMBER;
+        }
+    }
+    if (dash1 == -1 || dash2 == -1) return Status::IS_NOT_A_NUMBER;
+
+    int yearLen = dash1 - offset;
+    int monthLen = dash2 - dash1 - 1;
+    int dayLen = end - dash2 - 1;
+    if (yearLen < 1 || monthLen != 2 || dayLen != 2) return Status::IS_NOT_A_NUMBER;
+
+    int year, month, day;
+    char temp[16];
+    int copyLen = contentLen < 15 ? contentLen : 15;
+    memcpy(temp, bytes + offset, copyLen);
+    temp[copyLen] = '\0';
+
+    if (sscanf(temp, "%d-%d-%d", &year, &month, &day) != 3) {
+        return Status::IS_NOT_A_NUMBER;
+    }
+
+    if (year < 0 || year > 9999) {
+        return Status::CONVERT_OVERFLOW;
+    }
+    if (month < 1 || month > 12) {
+        return Status::IS_NOT_A_NUMBER;
+    }
+    if (day < 1 || day > 31) {
+        return Status::IS_NOT_A_NUMBER;
+    }
+
+    static const int daysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    int maxDays = daysInMonth[month - 1];
+    if (month == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) {
+        maxDays = 29;
+    }
+    if (day > maxDays) {
+        return Status::IS_NOT_A_NUMBER;
+    }
+
+    struct tm timeinfo = {0};
+    timeinfo.tm_year = year - 1900;
+    timeinfo.tm_mon = month - 1;
+    timeinfo.tm_mday = day;
+    timeinfo.tm_hour = 0;
+    timeinfo.tm_min = 0;
+    timeinfo.tm_sec = 0;
+    timeinfo.tm_isdst = 0;
+
+    time_t timestamp = timegm(&timeinfo);
+    if (timestamp == -1) {
+        return Status::CONVERT_OVERFLOW;
+    }
+
+    result = static_cast<int64_t>(timestamp) * 1000;
     return Status::CONVERT_SUCCESS;
 }
 
