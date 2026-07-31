@@ -95,23 +95,7 @@ public:
      * @param copy If true, return a copy instead of a view
      * @return std::shared_ptr<BaseVector> GetArrayAt(int64_t index, bool copy)
      */
-    std::shared_ptr<BaseVector> GetArrayAt(int64_t index, bool copy = false)
-    {
-        if (UNLIKELY(index < 0 || index >= size)) {
-            std::string message("index out of range(needed size:%d, real size:%d).", index,
-                size);
-            throw OmniException("OPERATOR_RUNTIME_ERROR", message);
-        }
-
-        if (IsNull(index)) {
-            return nullptr;
-        }
-
-        int64_t startOffset = GetOffset(index);
-        int64_t arraySize = GetSize(index);
-
-        return std::shared_ptr<BaseVector>(GetElementVector()->Slice(startOffset, arraySize, false));
-    }
+    std::shared_ptr<BaseVector> GetArrayAt(int64_t index, bool copy = false);
 
     /* *
      * Create a new vector based on a slice of the vector. The returned Vector is
@@ -122,27 +106,7 @@ public:
      * @param length
      * @param isCopy reserved parameters
      */
-    ArrayVector *Slice(int positionOffset, int length, bool isCopy = false) override
-    {
-        if (UNLIKELY(positionOffset + length > size)) {
-            std::string message("slice vector out of range(needed size:%d, real size:%d).", positionOffset + length,
-                size);
-            throw OmniException("OPERATOR_RUNTIME_ERROR", message);
-        }
-        auto sliced = new ArrayVector(length);
-        sliced->isSliced = true;
-        int32_t startOffset = GetOffset(positionOffset);
-        for (int i = 0; i < length; ++i) {
-            sliced->SetOffset(i + 1, GetOffset(positionOffset + 1 + i) - startOffset);
-        }
-        for (int i = 0; i < length; ++i) {
-            if (IsNull(positionOffset + i)) {
-                sliced->SetNull(i);
-            }
-        }
-        sliced->SetElementVector(std::shared_ptr<BaseVector>(GetElementVector()->Slice(startOffset, sliced->GetOffset(length), isCopy)));
-        return sliced;
-    }
+    ArrayVector *Slice(int positionOffset, int length, bool isCopy = false) override;
 
     /* *
      * Copies the values of the vector at the indicated positions
@@ -159,43 +123,7 @@ public:
         }
     }
 
-    void Expand(int32_t needCapacity) override
-    {
-        if (needCapacity <= size) {
-            return;
-        }
-
-        if (needCapacity <= capacity) {
-            size = needCapacity;
-            return;
-        }
-
-        int32_t newCapacity = std::max(capacity * 2, needCapacity);
-        int32_t oldSize = size;
-
-        auto oldOffsetsBuffer = offsetsBuffer;
-        offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(newCapacity + 1, true);
-        offsets = offsetsBuffer->GetBuffer();
-
-        if (oldOffsetsBuffer != nullptr) {
-            memcpy(
-                    offsets,
-                    oldOffsetsBuffer->GetBuffer(),
-                    (oldSize + 1) * sizeof(int64_t)
-            );
-        }
-
-        auto oldNullsBuffer = nullsBuffer;
-        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
-        if (oldNullsBuffer != nullptr) {
-            nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
-        } else {
-            nullsBuffer->SetNulls(0, false, newCapacity);
-        }
-
-        capacity = newCapacity;
-        size = needCapacity;
-    }
+    void Expand(int32_t needCapacity) override;
 
     /* *
      * Append another arrayVector to the current arrayVector starting at a specified offset
@@ -204,33 +132,7 @@ public:
      * @param positionOffset Starting index in this vector where data will be written
      * @param length Number of array entries to copy from source ArrayVector
      */
-    void Append(BaseVector *other, int positionOffset, int length)
-    {
-        auto *otherArrayVector = static_cast<ArrayVector *>(other);
-
-        if (length <= 0) {
-            return;
-        }
-        if (positionOffset < 0) {
-            std::string message = "Invalid append position";
-            throw OmniException("ARRAYVECTOR_APPEND_ERROR", message);
-        }
-
-        int32_t newSize = positionOffset + length;
-        Expand(newSize);
-
-        int newIndex = positionOffset;
-        for (int i = 0; i < length; i++) {
-            if (otherArrayVector->IsNull(i)) {
-                SetNull(newIndex);
-            } else {
-                auto tmp = otherArrayVector->GetValue(i);
-                SetValue(newIndex, tmp);
-                delete tmp;
-            }
-            newIndex++;
-        }
-    }
+    void Append(BaseVector *other, int positionOffset, int length);
 
 protected:
     int64_t* offsets;
