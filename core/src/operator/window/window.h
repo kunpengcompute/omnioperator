@@ -27,7 +27,8 @@ public:
         const type::DataTypes &allTypes, int32_t *argumentChannels, int32_t argumentChannelsCount,
         int32_t *windowFrameTypesField, int32_t *windowFrameStartTypesField, int32_t *windowFrameStartChannelsField,
         int32_t *windowFrameEndTypesField, int32_t *windowFrameEndChannelsField, const OperatorConfig &operatorConfig,
-        WindowFunctionOptions *windowFunctionOptionsField = nullptr);
+        WindowFunctionOptions *windowFunctionOptionsField = nullptr,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
 
     ~WindowOperatorFactory() override;
 
@@ -50,7 +51,8 @@ public:
         int32_t *argumentChannelsField, int32_t argumentChannelsCountField, int32_t *windowFrameTypesField,
         int32_t *windowFrameStartTypesField, int32_t *windowFrameStartChannelsField, int32_t *windowFrameEndTypesField,
         int32_t *windowFrameEndChannelsField, const OperatorConfig &operatorConfig,
-        WindowFunctionOptions *windowFunctionOptionsField = nullptr);
+        WindowFunctionOptions *windowFunctionOptionsField = nullptr,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
 
     Operator *CreateOperator() override;
 
@@ -225,7 +227,8 @@ public:
         const std::vector<int32_t> &windowFrameTypes, const std::vector<int32_t> &windowFrameStartTypes,
         const std::vector<int32_t> &windowFrameStartChannels, const std::vector<int32_t> &windowFrameEndTypes,
         const std::vector<int32_t> &windowFrameEndChannels,
-        const std::vector<WindowFunctionOptions> &windowFunctionOptions, const OperatorConfig &operatorConfig);
+        const std::vector<WindowFunctionOptions> &windowFunctionOptions, const OperatorConfig &operatorConfig,
+        const config::QueryConfig &queryConfig);
 
     ~WindowOperator() override;
 

@@ -28,7 +28,12 @@ public:
 
 class SortMergeJoinOperatorV3 {
 public:
-    SortMergeJoinOperatorV3(JoinType joinType, const std::string &filter) : joinType(joinType), filter(filter) {}
+    SortMergeJoinOperatorV3(JoinType joinType, const std::string &filter,
+        const config::QueryConfig &queryConfig = config::QueryConfig{})
+        : joinType(joinType), filter(filter), executionContext(new ExecutionContext())
+    {
+        executionContext->SetConfig(queryConfig);
+    }
 
     ~SortMergeJoinOperatorV3()
     {

@@ -36,7 +36,8 @@ public:
         uint32_t aggInputColsSize, std::vector<DataTypes> &aggInputTypes, std::vector<DataTypes> &aggOutputTypes,
         std::vector<std::unique_ptr<Aggregator>> &&aggs, std::vector<bool> &inputRaws,
         std::vector<bool> &outputPartials, const std::vector<int8_t> &hasAggFilters,
-        const OperatorConfig &operatorConfig, std::vector<uint32_t> aggFuncTypesVector, AggregationNode::Step step)
+        const OperatorConfig &operatorConfig, std::vector<uint32_t> aggFuncTypesVector, AggregationNode::Step step,
+        const config::QueryConfig &queryConfig = config::QueryConfig{})
         : AggregationCommonOperator(std::move(aggs), inputRaws, outputPartials),
           groupByCols(groupByCols),
           aggInputCols(aggInputCols),
@@ -46,6 +47,7 @@ public:
           hasAggFilters(hasAggFilters),
           operatorConfig(operatorConfig)
     {
+        executionContext->SetConfig(queryConfig);
         isStepPartials = isPartialOutput(step) && !groupByCols.empty();
         for (auto i : aggFuncTypesVector) {
             if (i == OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL || i == OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL
@@ -242,7 +244,7 @@ public:
         std::vector<std::vector<uint32_t>> &aggsCols, std::vector<DataTypes> &aggInputTypes,
         std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes,
         std::vector<uint32_t> &maskColsVector, std::vector<bool> inputRaws, std::vector<bool> outputPartials,
-        const OperatorConfig &operatorConfig)
+        const OperatorConfig &operatorConfig, const config::QueryConfig &queryConfig = config::QueryConfig{})
         : AggregationCommonOperatorFactory(inputRaws, outputPartials, maskColsVector,
         operatorConfig.GetOverflowConfig()->IsOverflowAsNull(), operatorConfig.IsStatisticalAggregate()),
           groupByColsVector(groupByCol),
@@ -252,13 +254,16 @@ public:
           aggOutputTypes(aggOutputTypes),
           aggFuncTypesVector(aggFuncTypes),
           operatorConfig(operatorConfig)
-    {}
+    {
+        this->queryConfig_ = queryConfig;
+    }
 
     HashAggregationOperatorFactory(std::vector<uint32_t> &groupByCol, const DataTypes &groupInputTypes,
         std::vector<std::vector<uint32_t>> &aggsCols, std::vector<DataTypes> &aggInputTypes,
         std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes,
         std::vector<uint32_t> &maskColsVector, std::vector<bool> inputRaws, std::vector<bool> outputPartials,
-        bool overflowAsNull = false, bool isStatisticalAggregate = false)
+        bool overflowAsNull = false, bool isStatisticalAggregate = false,
+        const config::QueryConfig &queryConfig = config::QueryConfig{})
         : AggregationCommonOperatorFactory(inputRaws, outputPartials, maskColsVector, overflowAsNull),
           groupByColsVector(groupByCol),
           groupByTypes(groupInputTypes),
@@ -266,7 +271,9 @@ public:
           aggInputTypes(aggInputTypes),
           aggOutputTypes(aggOutputTypes),
           aggFuncTypesVector(aggFuncTypes)
-    {}
+    {
+        this->queryConfig_ = queryConfig;
+    }
 
     /*
      * @param groupByCol      the col index which is used as group column in VectorBatch
@@ -286,7 +293,8 @@ public:
         std::vector<std::vector<uint32_t>> &aggsCols, std::vector<DataTypes> &aggInputTypes,
         std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes,
         std::vector<uint32_t> &maskColsVector, std::vector<bool> inputRaws, std::vector<bool> outputPartials,
-        const std::vector<int8_t> &hasAggFilters, const OperatorConfig &operatorConfig, AggregationNode::Step step)
+        const std::vector<int8_t> &hasAggFilters, const OperatorConfig &operatorConfig, AggregationNode::Step step,
+        const config::QueryConfig &queryConfig = config::QueryConfig{})
         : AggregationCommonOperatorFactory(inputRaws, outputPartials, maskColsVector,
         operatorConfig.GetOverflowConfig()->IsOverflowAsNull(), operatorConfig.IsStatisticalAggregate()),
           groupByColsVector(groupByCol),
@@ -298,7 +306,9 @@ public:
           hasAggFilters(hasAggFilters),
           operatorConfig(operatorConfig),
           step(step)
-    {}
+    {
+        this->queryConfig_ = queryConfig;
+    }
 
     ~HashAggregationOperatorFactory() override = default;
 

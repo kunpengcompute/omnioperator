@@ -22,12 +22,14 @@ public:
         int32_t leftTableOutputColsCount, int32_t originalLeftTableColsCount, DynamicPagesIndex* leftTablePagesIndex,
         const std::vector<DataTypePtr>& rightTableOutputTypes, int32_t* rightTableOutputCols,
         int32_t rightTableOutputColsCount, int32_t originalRightTableColsCount, DynamicPagesIndex* rightTablePagesIndex,
-        std::string& filter, JoinType joinType, OverflowConfig* overflowConfig);
+        std::string& filter, JoinType joinType, OverflowConfig* overflowConfig,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
     JoinResultBuilder(const std::vector<DataTypePtr>& leftTableOutputTypes, int32_t* leftTableOutputCols,
         int32_t leftTableOutputColsCount, int32_t originalLeftTableColsCount, DynamicPagesIndex* leftTablePagesIndex,
         const std::vector<DataTypePtr>& rightTableOutputTypes, int32_t* rightTableOutputCols,
         int32_t rightTableOutputColsCount, int32_t originalRightTableColsCount, DynamicPagesIndex* rightTablePagesIndex,
-        Expr* filter, JoinType joinType, OverflowConfig* overflowConfig);
+        Expr* filter, JoinType joinType, OverflowConfig* overflowConfig,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
 
     void ParsingAndOrganizationResultsForLeftTable(int32_t leftBatchId, int32_t leftRowId);
 

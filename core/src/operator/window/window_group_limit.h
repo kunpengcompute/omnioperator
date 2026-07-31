@@ -57,7 +57,8 @@ class WindowGroupLimitOperator : public Operator {
 public:
     WindowGroupLimitOperator(const type::DataTypes &sourceTypes, int32_t n, const std::string funcName,
         const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
-        const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts);
+        const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts,
+        const config::QueryConfig &queryConfig);
 
     ~WindowGroupLimitOperator() override = default;
 
@@ -202,7 +203,8 @@ class WindowGroupLimitOperatorFactory : public OperatorFactory {
 public:
     WindowGroupLimitOperatorFactory(const type::DataTypes &sourceTypes, int32_t n, const std::string funcName,
         const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
-        const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts)
+        const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts,
+        const config::QueryConfig &queryConfig = config::QueryConfig{})
         : sourceTypes(sourceTypes),
           n(n),
           funcName(funcName),
@@ -210,14 +212,16 @@ public:
           sortCols(sortCols),
           sortAscendings(sortAscendings),
           sortNullFirsts(sortNullFirsts)
-    {}
+    {
+        this->queryConfig_ = queryConfig;
+    }
 
     ~WindowGroupLimitOperatorFactory() override = default;
 
     Operator *CreateOperator() override
     {
         return new WindowGroupLimitOperator(sourceTypes, n, funcName, partitionCols, sortCols, sortAscendings,
-            sortNullFirsts);
+            sortNullFirsts, queryConfig_);
     }
 
 private:

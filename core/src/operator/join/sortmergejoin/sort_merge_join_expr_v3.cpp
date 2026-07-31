@@ -15,11 +15,36 @@ StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFacto
         filterExpression, operatorConfig);
 }
 
+StreamedTableWithExprOperatorFactoryV3 *
+StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(const type::DataTypes &streamTypes,
+    const std::vector<omniruntime::expressions::Expr *> &streamJoinKeys, const std::vector<int32_t> &streamOutputCols,
+    JoinType inputJoinType, std::string &filterExpression, const OperatorConfig &operatorConfig,
+    const config::QueryConfig &queryConfig)
+{
+    return new StreamedTableWithExprOperatorFactoryV3(streamTypes, streamJoinKeys, streamOutputCols, inputJoinType,
+        filterExpression, operatorConfig, queryConfig);
+}
+
 StreamedTableWithExprOperatorFactoryV3::StreamedTableWithExprOperatorFactoryV3(const type::DataTypes &streamTypes,
     const std::vector<omniruntime::expressions::Expr *> &streamJoinKeys, const std::vector<int32_t> &streamOutputCols,
     JoinType joinType, std::string &filter, const OperatorConfig &operatorConfig)
     : streamOutputCols(streamOutputCols), joinType(joinType), smjOperator(new SortMergeJoinOperatorV3(joinType, filter))
 {
+    std::vector<DataTypePtr> newStreamTypes;
+    OperatorUtil::CreateProjections(streamTypes, streamJoinKeys, newStreamTypes, projections, streamJoinCols,
+        operatorConfig.GetOverflowConfig());
+    this->streamTypes = std::make_unique<DataTypes>(newStreamTypes);
+    smjOperator->ConfigStreamInfo(*this->streamTypes, streamJoinCols, this->streamOutputCols, streamTypes.GetSize());
+}
+
+StreamedTableWithExprOperatorFactoryV3::StreamedTableWithExprOperatorFactoryV3(const type::DataTypes &streamTypes,
+    const std::vector<omniruntime::expressions::Expr *> &streamJoinKeys, const std::vector<int32_t> &streamOutputCols,
+    JoinType joinType, std::string &filter, const OperatorConfig &operatorConfig,
+    const config::QueryConfig &queryConfig)
+    : streamOutputCols(streamOutputCols), joinType(joinType),
+      smjOperator(new SortMergeJoinOperatorV3(joinType, filter, queryConfig))
+{
+    this->queryConfig_ = queryConfig;
     std::vector<DataTypePtr> newStreamTypes;
     OperatorUtil::CreateProjections(streamTypes, streamJoinKeys, newStreamTypes, projections, streamJoinCols,
         operatorConfig.GetOverflowConfig());
