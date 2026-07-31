@@ -6,6 +6,8 @@
 #include <string>
 #include "../functions/Coalesce.h"
 #include "../functions/If.h"
+#include "../functions/IsAlpha.h"
+#include "../functions/IsDecimal.h"
 #include "../functions/Nanvl.h"
 #include "RegistrationHelpers.h"
 
@@ -77,5 +79,17 @@ void RegisterConditionalFunctions(const std::string &prefix)
      auto nanvlFunction = std::make_shared<NanvlFunction>();	 
      VectorFunction::RegisterVectorFunction("nanvl", {OMNI_FLOAT, OMNI_FLOAT}, OMNI_FLOAT, nanvlFunction);	 
      VectorFunction::RegisterVectorFunction("nanvl", {OMNI_DOUBLE, OMNI_DOUBLE}, OMNI_DOUBLE, nanvlFunction);
+
+    // Register is_alpha: IS_ALPHA(string) -> boolean.
+    // Returns true if the string is non-empty and every character is a Unicode letter;
+    // NULL/empty input -> false (output NOT null). Numeric input -> false.
+    // Flink SqlFunctionUtils.isAlpha semantics; Path B for NULL->false (non-null) handling.
+    RegisterIsAlphaFunction(prefix + "is_alpha");
+
+    // Register is_decimal: IS_DECIMAL(string) -> boolean.
+    // Returns true if string can be parsed as a valid numeric (Java Double.parseDouble grammar);
+    // NULL/empty input -> false (output NOT null). Non-null numeric input -> true.
+    // Flink SqlFunctionUtils.isDecimal semantics; Path B for NULL->false (non-null) handling.
+    RegisterIsDecimalFunction(prefix + "is_decimal");
 }
 }
