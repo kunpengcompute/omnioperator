@@ -135,6 +135,20 @@ public:
         return status == OMNI_STATUS_FINISHED;
     }
 
+    /// Returns true if the operator can reach isFinished() before noMoreInput
+    /// (e.g. Limit, DistinctLimit, TableScan). The Driver uses this to choose
+    /// the appropriate cascade-release path. Defaults to false.
+    virtual bool isEarlyFinish() const
+    {
+        return false;
+    }
+
+    /// Exposes noMoreInput_ state for the Driver's safety checks.
+    bool hasNoMoreInput() const
+    {
+        return noMoreInput_;
+    }
+
     bool hasInputedData()
     {
         return hasInputedData_;
