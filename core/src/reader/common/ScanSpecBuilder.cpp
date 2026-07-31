@@ -28,7 +28,7 @@ namespace omniruntime::reader {
 using omniruntime::codegen::ScanSpec;
 using ::common::FilterPtr;
 
-bool allSelectedColumnsAreInt(const omniruntime::type::RowType &rowType)
+bool allSelectedColumnsAreSupported(const omniruntime::type::RowType &rowType)
 {
     for (int i = 0; i < rowType.size(); ++i) {
         switch (rowType.childAt(i)->GetId()) {
@@ -36,6 +36,8 @@ bool allSelectedColumnsAreInt(const omniruntime::type::RowType &rowType)
             case omniruntime::type::OMNI_LONG:
             case omniruntime::type::OMNI_SHORT:
             case omniruntime::type::OMNI_DATE32:
+            case omniruntime::type::OMNI_VARCHAR:
+            case omniruntime::type::OMNI_CHAR:
                 break;
             default:
                 return false;
@@ -46,51 +48,129 @@ bool allSelectedColumnsAreInt(const omniruntime::type::RowType &rowType)
 
 namespace {
 using namespace ::common;
+using omniruntime::type::DataTypeId;
 
 constexpr int64_t kMin = std::numeric_limits<int64_t>::min();
 constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
 
-// Pushable integer family (lossless into the int64 filter path). tinyint (OMNI_BYTE) uses a
-// separate byte-RLE decoder and is not included yet.
-bool isIntDataType(omniruntime::type::DataTypeId id)
+// Aligned with Velox ExprToSubfieldFilter: makeXxxFilter dispatches by type to BigintRange / BytesRange.
+// Omni int family uses the int64 path (SelectiveInteger always testInt64); VARCHAR/CHAR → Bytes*.
+FilterPtr makeEqualFilter(DataTypeId typeId, const std::string &literal)
 {
-    switch (id) {
+    switch (typeId) {
         case omniruntime::type::OMNI_INT:
         case omniruntime::type::OMNI_LONG:
         case omniruntime::type::OMNI_SHORT:
-        case omniruntime::type::OMNI_DATE32:
-            return true;
+        case omniruntime::type::OMNI_DATE32: {
+            int64_t v = std::stoll(literal);
+            return std::make_shared<BigintRange>(v, v, false);
+        }
+        case omniruntime::type::OMNI_VARCHAR:
+        case omniruntime::type::OMNI_CHAR:
+            return std::make_shared<BytesRange>(literal, false, false, literal, false, false, false);
         default:
-            return false;
+            return nullptr;
     }
 }
 
-// ---- Single-op → Filter builders (aligned with Velox ExprToSubfieldFilter makeXxxFilter) ----
-// Negation is not handled here: leafToColumnFilter picks the opposite builder when negated
-// (e.g. lt <-> gte).
-FilterPtr makeEqualFilter(int64_t v) { return std::make_shared<BigintRange>(v, v, false); }
-FilterPtr makeNotEqualFilter(int64_t v) { return std::make_shared<NegatedBigintRange>(v, v, false); }
-FilterPtr makeGreaterThanFilter(int64_t v)
+FilterPtr makeNotEqualFilter(DataTypeId typeId, const std::string &literal)
 {
-    return v == kMax ? AlwaysFalse::instance() // > MAX is always empty
-                     : std::make_shared<BigintRange>(v + 1, kMax, false);
+    switch (typeId) {
+        case omniruntime::type::OMNI_INT:
+        case omniruntime::type::OMNI_LONG:
+        case omniruntime::type::OMNI_SHORT:
+        case omniruntime::type::OMNI_DATE32: {
+            int64_t v = std::stoll(literal);
+            return std::make_shared<NegatedBigintRange>(v, v, false);
+        }
+        case omniruntime::type::OMNI_VARCHAR:
+        case omniruntime::type::OMNI_CHAR:
+            return std::make_shared<NegatedBytesRange>(literal, false, false, literal, false, false, false);
+        default:
+            return nullptr;
+    }
 }
-FilterPtr makeGreaterThanOrEqualFilter(int64_t v) { return std::make_shared<BigintRange>(v, kMax, false); }
-FilterPtr makeLessThanFilter(int64_t v)
+
+FilterPtr makeGreaterThanFilter(DataTypeId typeId, const std::string &literal)
 {
-    return v == kMin ? AlwaysFalse::instance() // < MIN is always empty
-                     : std::make_shared<BigintRange>(kMin, v - 1, false);
+    switch (typeId) {
+        case omniruntime::type::OMNI_INT:
+        case omniruntime::type::OMNI_LONG:
+        case omniruntime::type::OMNI_SHORT:
+        case omniruntime::type::OMNI_DATE32: {
+            int64_t v = std::stoll(literal);
+            return v == kMax ? AlwaysFalse::instance()
+                             : std::make_shared<BigintRange>(v + 1, kMax, false);
+        }
+        case omniruntime::type::OMNI_VARCHAR:
+        case omniruntime::type::OMNI_CHAR:
+            return std::make_shared<BytesRange>(literal, false, true, std::string(), true, false, false);
+        default:
+            return nullptr;
+    }
 }
-FilterPtr makeLessThanOrEqualFilter(int64_t v) { return std::make_shared<BigintRange>(kMin, v, false); }
+
+FilterPtr makeGreaterThanOrEqualFilter(DataTypeId typeId, const std::string &literal)
+{
+    switch (typeId) {
+        case omniruntime::type::OMNI_INT:
+        case omniruntime::type::OMNI_LONG:
+        case omniruntime::type::OMNI_SHORT:
+        case omniruntime::type::OMNI_DATE32: {
+            int64_t v = std::stoll(literal);
+            return std::make_shared<BigintRange>(v, kMax, false);
+        }
+        case omniruntime::type::OMNI_VARCHAR:
+        case omniruntime::type::OMNI_CHAR:
+            return std::make_shared<BytesRange>(literal, false, false, std::string(), true, false, false);
+        default:
+            return nullptr;
+    }
+}
+
+FilterPtr makeLessThanFilter(DataTypeId typeId, const std::string &literal)
+{
+    switch (typeId) {
+        case omniruntime::type::OMNI_INT:
+        case omniruntime::type::OMNI_LONG:
+        case omniruntime::type::OMNI_SHORT:
+        case omniruntime::type::OMNI_DATE32: {
+            int64_t v = std::stoll(literal);
+            return v == kMin ? AlwaysFalse::instance()
+                             : std::make_shared<BigintRange>(kMin, v - 1, false);
+        }
+        case omniruntime::type::OMNI_VARCHAR:
+        case omniruntime::type::OMNI_CHAR:
+            return std::make_shared<BytesRange>(std::string(), true, false, literal, false, true, false);
+        default:
+            return nullptr;
+    }
+}
+
+FilterPtr makeLessThanOrEqualFilter(DataTypeId typeId, const std::string &literal)
+{
+    switch (typeId) {
+        case omniruntime::type::OMNI_INT:
+        case omniruntime::type::OMNI_LONG:
+        case omniruntime::type::OMNI_SHORT:
+        case omniruntime::type::OMNI_DATE32: {
+            int64_t v = std::stoll(literal);
+            return std::make_shared<BigintRange>(kMin, v, false);
+        }
+        case omniruntime::type::OMNI_VARCHAR:
+        case omniruntime::type::OMNI_CHAR:
+            return std::make_shared<BytesRange>(std::string(), true, false, literal, false, false, false);
+        default:
+            return nullptr;
+    }
+}
+
 FilterPtr isNull() { return ::common::IsNull::instance(); }
 FilterPtr isNotNull() { return ::common::IsNotNull::instance(); }
 
-// Single leaf (compare / null check) → (column index, common::Filter). nullptr means "not a
-// pushable leaf" (non-compare/null op, OOB, non-int); caller turns it into residual.
-// When negated=true, push the opposite builder (lt→gte, =→!=, is null↔is not null), matching
-// Velox leafCallToSubfieldFilter. Negated compares still reject null (Spark 3VL: NOT NULL=NULL),
-// so all ranges keep nullAllowed=false.
-FilterPtr leafToColumnFilter(nlohmann::json &node, int columnCount, bool negated, int &outCol)
+// Column type from rowType[index] (Gluten often writes OMNI_INT sentinel for IS NULL).
+FilterPtr leafToColumnFilter(nlohmann::json &node, const omniruntime::type::RowType &rowType, bool negated,
+                             int &outCol)
 {
     auto op = node["op"].get<PredicateOperatorType>();
     switch (op) {
@@ -103,14 +183,14 @@ FilterPtr leafToColumnFilter(nlohmann::json &node, int columnCount, bool negated
         case IS_NULL:
             break;
         default:
-            return nullptr; // Structural ops (AND/OR/NOT/TRUE/FALSE) or unknown → caller
+            return nullptr;
     }
 
     int32_t index = node["index"].get<int32_t>();
-    auto typeId = node["dataType"].get<omniruntime::type::DataTypeId>();
-    if (index < 0 || index >= columnCount || !isIntDataType(typeId)) {
-        return nullptr; // OOB / non-int → not pushable
+    if (index < 0 || index >= rowType.size()) {
+        return nullptr;
     }
+    auto colType = rowType.childAt(index)->GetId();
     outCol = index;
 
     if (op == IS_NULL) {
@@ -120,25 +200,24 @@ FilterPtr leafToColumnFilter(nlohmann::json &node, int columnCount, bool negated
         return negated ? isNull() : isNotNull();
     }
 
-    // OMNI_DATE32: no extra rebase here. Gluten OrcPushFilterBuilder.getLiteralValue already
-    // rebases LocalDate via rebaseGregorianToJulianDays, so pushed literals are Julian. Selective
-    // row filtering runs before Next's Julian→Gregorian rebase, and decoded values are also Julian
-    // — both sides share Julian semantics. Still need new/legacy date-filter parity tests
-    // (including < 1582) to lock this in.
-    int64_t v = std::stoll(node["value"].get<std::string>());
+    const std::string literal = node["value"].get<std::string>();
     switch (op) {
         case EQUAL_TO:
-            return negated ? makeNotEqualFilter(v) : makeEqualFilter(v);
+            return negated ? makeNotEqualFilter(colType, literal) : makeEqualFilter(colType, literal);
         case GREATER_THAN:
-            return negated ? makeLessThanOrEqualFilter(v) : makeGreaterThanFilter(v);
+            return negated ? makeLessThanOrEqualFilter(colType, literal)
+                           : makeGreaterThanFilter(colType, literal);
         case GREATER_THAN_OR_EQUAL:
-            return negated ? makeLessThanFilter(v) : makeGreaterThanOrEqualFilter(v);
+            return negated ? makeLessThanFilter(colType, literal)
+                           : makeGreaterThanOrEqualFilter(colType, literal);
         case LESS_THAN:
-            return negated ? makeGreaterThanOrEqualFilter(v) : makeLessThanFilter(v);
+            return negated ? makeGreaterThanOrEqualFilter(colType, literal)
+                           : makeLessThanFilter(colType, literal);
         case LESS_THAN_OR_EQUAL:
-            return negated ? makeGreaterThanFilter(v) : makeLessThanOrEqualFilter(v);
+            return negated ? makeGreaterThanFilter(colType, literal)
+                           : makeLessThanOrEqualFilter(colType, literal);
         default:
-            return nullptr; // unreachable
+            return nullptr;
     }
 }
 
@@ -164,8 +243,7 @@ FilterPtr buildRangeUnion(std::vector<std::pair<int64_t, int64_t>> ranges)
             continue;
         }
         auto &last = merged.back();
-        // Merge if overlapping (r.first<=last.second) or adjacent (r.first==last.second+1,
-        // overflow-safe).
+        // Merge if overlapping (r.first<=last.second) or adjacent (r.first==last.second+1, overflow-safe).
         if (r.first <= last.second || (last.second != kMax && r.first == last.second + 1)) {
             last.second = std::max(last.second, r.second);
         } else {
@@ -230,18 +308,18 @@ nlohmann::json andJson(nlohmann::json lhs, nlohmann::json rhs)
     return n;
 }
 
-nlohmann::json extractFiltersFromRemainingFilter(nlohmann::json &node, int columnCount,
+nlohmann::json extractFiltersFromRemainingFilter(nlohmann::json &node, const omniruntime::type::RowType &rowType,
                                                  std::vector<FilterPtr> &filters, bool negated);
 
-// Disjunction pushdown: each arm must reduce to the same column with no residual, else the whole
-// OR becomes residual (aligned with Velox disjunction branch).
-nlohmann::json handleDisjunction(nlohmann::json &node, int columnCount, std::vector<FilterPtr> &filters, bool negated)
+nlohmann::json handleDisjunction(nlohmann::json &node, const omniruntime::type::RowType &rowType,
+                                 std::vector<FilterPtr> &filters, bool negated)
 {
+    const int columnCount = rowType.size();
     std::vector<FilterPtr> disjuncts;
     int col = -1;
     for (auto *child : {&node["left"], &node["right"]}) {
         std::vector<FilterPtr> tmp(columnCount);
-        nlohmann::json childResidual = extractFiltersFromRemainingFilter(*child, columnCount, tmp, negated);
+        nlohmann::json childResidual = extractFiltersFromRemainingFilter(*child, rowType, tmp, negated);
         int found = -1;
         int count = 0;
         for (int i = 0; i < columnCount; ++i) {
@@ -251,19 +329,20 @@ nlohmann::json handleDisjunction(nlohmann::json &node, int columnCount, std::vec
             }
         }
         if (!childResidual.is_null() || count != 1) {
-            return wrapNeg(node, negated); // Cannot reduce cleanly to one column → residual
+            return wrapNeg(node, negated);
         }
         if (col == -1) {
             col = found;
         } else if (col != found) {
-            return wrapNeg(node, negated); // Cross-column OR → residual
+            return wrapNeg(node, negated);
         }
         disjuncts.push_back(tmp[found]);
     }
 
+    // Single-column string OR goes to residual in phase 1 (only Bigint* ranges are merged).
     FilterPtr orFilter = makeOrFilter(disjuncts);
     if (orFilter == nullptr) {
-        return wrapNeg(node, negated); // Non-range (e.g. IS NULL) → residual
+        return wrapNeg(node, negated);
     }
     bool ok = false;
     FilterPtr merged = combine(filters[col], orFilter, ok);
@@ -271,26 +350,24 @@ nlohmann::json handleDisjunction(nlohmann::json &node, int columnCount, std::vec
         return wrapNeg(node, negated);
     }
     filters[col] = merged;
-    return nlohmann::json(); // Fully pushed, no residual
+    return nlohmann::json();
 }
 
-// Recursively push single-column int predicates; negated means an odd number of NOT layers.
-// Returns the unpushed residual subtree (null = none).
-nlohmann::json extractFiltersFromRemainingFilter(nlohmann::json &node, int columnCount,
+nlohmann::json extractFiltersFromRemainingFilter(nlohmann::json &node, const omniruntime::type::RowType &rowType,
                                                  std::vector<FilterPtr> &filters, bool negated)
 {
     auto op = node["op"].get<PredicateOperatorType>();
 
     if (op == NOT) {
-        return extractFiltersFromRemainingFilter(node["child"], columnCount, filters, !negated);
+        return extractFiltersFromRemainingFilter(node["child"], rowType, filters, !negated);
     }
     if ((op == AND && !negated) || (op == OR && negated)) {
-        nlohmann::json l = extractFiltersFromRemainingFilter(node["left"], columnCount, filters, negated);
-        nlohmann::json r = extractFiltersFromRemainingFilter(node["right"], columnCount, filters, negated);
+        nlohmann::json l = extractFiltersFromRemainingFilter(node["left"], rowType, filters, negated);
+        nlohmann::json r = extractFiltersFromRemainingFilter(node["right"], rowType, filters, negated);
         return andJson(std::move(l), std::move(r));
     }
     if ((op == OR && !negated) || (op == AND && negated)) {
-        return handleDisjunction(node, columnCount, filters, negated);
+        return handleDisjunction(node, rowType, filters, negated);
     }
     if (op == TRUE) {
         return negated ? wrapNeg(node, true) : nlohmann::json();
@@ -300,7 +377,7 @@ nlohmann::json extractFiltersFromRemainingFilter(nlohmann::json &node, int colum
     }
 
     int col = -1;
-    FilterPtr leaf = leafToColumnFilter(node, columnCount, negated, col);
+    FilterPtr leaf = leafToColumnFilter(node, rowType, negated, col);
     if (leaf == nullptr) {
         return wrapNeg(node, negated);
     }
@@ -333,7 +410,7 @@ std::shared_ptr<ScanSpec> makeScanSpec(const omniruntime::type::RowType &rowType
     try {
         auto condStr = (*enhancementJson)["vecPredicateCondition"].get<std::string>();
         auto cond = nlohmann::json::parse(condStr);
-        nlohmann::json residual = extractFiltersFromRemainingFilter(cond, n, filters, /*negated*/ false);
+        nlohmann::json residual = extractFiltersFromRemainingFilter(cond, rowType, filters, /*negated*/ false);
         const auto &children = root->children();
         for (int i = 0; i < n; ++i) {
             if (filters[i]) {

@@ -309,4 +309,100 @@ FilterPtr BigintValues::mergeWith(const Filter *other) const
     }
 }
 
+namespace {
+
+int CompareBytes(std::string_view a, std::string_view b)
+{
+    return a.compare(b);
+}
+
+} // namespace
+
+bool BytesRange::testBytes(const char *value, int32_t length) const
+{
+    std::string_view view(value, static_cast<size_t>(length));
+    if (singleValue_) {
+        return view == std::string_view(lower_);
+    }
+    if (!lowerUnbounded_) {
+        int c = CompareBytes(view, lower_);
+        if (lowerExclusive_ ? c <= 0 : c < 0) {
+            return false;
+        }
+    }
+    if (!upperUnbounded_) {
+        int c = CompareBytes(view, upper_);
+        if (upperExclusive_ ? c >= 0 : c > 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+FilterPtr BytesRange::mergeWith(const Filter *other) const
+{
+    switch (other->kind()) {
+        case FilterKind::kAlwaysTrue:
+        case FilterKind::kAlwaysFalse:
+        case FilterKind::kIsNull:
+            return other->mergeWith(this);
+        case FilterKind::kIsNotNull:
+            return clone(/*nullAllowed*/ false);
+        case FilterKind::kBytesRange: {
+            const auto *o = static_cast<const BytesRange *>(other);
+            if (singleValue_ && o->singleValue_) {
+                if (lower_ == o->lower_) {
+                    return clone(nullAllowed_ && o->nullAllowed_);
+                }
+                return nullOrFalse(nullAllowed_ && o->nullAllowed_);
+            }
+            return nullptr;
+        }
+        default:
+            return nullptr;
+    }
+}
+
+FilterPtr NegatedBytesRange::mergeWith(const Filter *other) const
+{
+    switch (other->kind()) {
+        case FilterKind::kAlwaysTrue:
+        case FilterKind::kAlwaysFalse:
+        case FilterKind::kIsNull:
+            return other->mergeWith(this);
+        case FilterKind::kIsNotNull:
+            return clone(/*nullAllowed*/ false);
+        default:
+            return nullptr;
+    }
+}
+
+FilterPtr BytesValues::mergeWith(const Filter *other) const
+{
+    switch (other->kind()) {
+        case FilterKind::kAlwaysTrue:
+        case FilterKind::kAlwaysFalse:
+        case FilterKind::kIsNull:
+            return other->mergeWith(this);
+        case FilterKind::kIsNotNull:
+            return clone(/*nullAllowed*/ false);
+        default:
+            return nullptr;
+    }
+}
+
+FilterPtr NegatedBytesValues::mergeWith(const Filter *other) const
+{
+    switch (other->kind()) {
+        case FilterKind::kAlwaysTrue:
+        case FilterKind::kAlwaysFalse:
+        case FilterKind::kIsNull:
+            return other->mergeWith(this);
+        case FilterKind::kIsNotNull:
+            return clone(/*nullAllowed*/ false);
+        default:
+            return nullptr;
+    }
+}
+
 } // namespace common

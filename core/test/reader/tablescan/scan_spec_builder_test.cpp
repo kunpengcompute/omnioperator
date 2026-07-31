@@ -13,13 +13,16 @@
 #include "type/data_type.h"
 #include "util/type_util.h"
 
-using omniruntime::reader::allSelectedColumnsAreInt;
+using omniruntime::reader::allSelectedColumnsAreSupported;
 using omniruntime::reader::makeScanSpec;
+using omniruntime::type::CharType;
 using omniruntime::type::Date32Type;
 using omniruntime::type::IntType;
 using omniruntime::type::LongType;
+using omniruntime::type::OMNI_CHAR;
 using omniruntime::type::OMNI_DATE32;
 using omniruntime::type::OMNI_INT;
+using omniruntime::type::OMNI_VARCHAR;
 using omniruntime::type::ROW;
 using omniruntime::type::ShortType;
 using omniruntime::type::VarcharType;
@@ -82,13 +85,16 @@ auto IntRowType2()
 
 } // namespace
 
-TEST(ScanSpecBuilderTest, AllSelectedColumnsAreInt)
+TEST(ScanSpecBuilderTest, AllSelectedColumnsAreSupported)
 {
-    auto ok = ROW({"a", "b", "c", "d"}, {IntType(), LongType(), ShortType(), Date32Type()});
-    EXPECT_TRUE(allSelectedColumnsAreInt(*ok));
+    auto ints = ROW({"a", "b", "c", "d"}, {IntType(), LongType(), ShortType(), Date32Type()});
+    EXPECT_TRUE(allSelectedColumnsAreSupported(*ints));
 
-    auto bad = ROW({"a", "b"}, {IntType(), VarcharType()});
-    EXPECT_FALSE(allSelectedColumnsAreInt(*bad));
+    auto withVarchar = ROW({"a", "b"}, {IntType(), VarcharType()});
+    EXPECT_TRUE(allSelectedColumnsAreSupported(*withVarchar));
+
+    auto withChar = ROW({"a", "b"}, {IntType(), CharType(40)});
+    EXPECT_TRUE(allSelectedColumnsAreSupported(*withChar));
 }
 
 TEST(ScanSpecBuilderTest, PushEqualAndRange)
@@ -417,4 +423,78 @@ TEST(ScanSpecBuilderTest, InvalidJsonSetsUsableFalse)
     EXPECT_FALSE(needResidual);
     EXPECT_EQ(residual, nullptr);
     (void)spec;
+}
+
+TEST(ScanSpecBuilderTest, VarcharEqualPushesBytesRange)
+{
+    // Spark STRING and VARCHAR both use OMNI_VARCHAR in Omni rowType.
+    auto rowType = ROW({"s", "i"}, {VarcharType(), IntType()});
+    bool usable = false;
+    bool needResidual = false;
+    std::shared_ptr<::common::PredicateCondition> residual;
+
+    auto enh = WrapEnhancement(Leaf(::common::EQUAL_TO, 0, OMNI_VARCHAR, "Monday"));
+    auto spec = makeScanSpec(*rowType, enh, usable, needResidual, residual);
+    ASSERT_TRUE(usable);
+    EXPECT_FALSE(needResidual);
+    EXPECT_EQ(residual, nullptr);
+    auto *f = spec->children()[0]->filter();
+    ASSERT_TRUE(f->is(FilterKind::kBytesRange));
+    EXPECT_TRUE(f->testBytes("Monday", 6));
+    EXPECT_FALSE(f->testBytes("Tuesday", 7));
+}
+
+TEST(ScanSpecBuilderTest, CharEqualPushesBytesRange)
+{
+    auto rowType = ROW({"c", "i"}, {CharType(40), IntType()});
+    bool usable = false;
+    bool needResidual = false;
+    std::shared_ptr<::common::PredicateCondition> residual;
+
+    auto enh = WrapEnhancement(Leaf(::common::EQUAL_TO, 0, OMNI_CHAR, "Monday"));
+    auto spec = makeScanSpec(*rowType, enh, usable, needResidual, residual);
+    ASSERT_TRUE(usable);
+    EXPECT_FALSE(needResidual);
+    EXPECT_EQ(residual, nullptr);
+    auto *f = spec->children()[0]->filter();
+    ASSERT_TRUE(f->is(FilterKind::kBytesRange));
+    // Filter compares raw bytes; CHAR trailing-space trim happens in the column reader, not here.
+    EXPECT_TRUE(f->testBytes("Monday", 6));
+    EXPECT_FALSE(f->testBytes("Tuesday", 7));
+}
+
+TEST(ScanSpecBuilderTest, StringFamilyIsNullFullyPushedNoResidual)
+{
+    // Gluten writes OMNI_INT sentinel for IS NULL; column type comes from rowType.
+    // Pure IS NULL on string/char/varchar → IsNull Filter, residual empty (no residual pass needed).
+    for (const auto &rowType :
+         {ROW({"s"}, {VarcharType()}), ROW({"c"}, {CharType(40)}), ROW({"v"}, {VarcharType(40)})}) {
+        bool usable = false;
+        bool needResidual = false;
+        std::shared_ptr<::common::PredicateCondition> residual;
+
+        auto enh = WrapEnhancement(Leaf(::common::IS_NULL, 0, OMNI_INT, "-1"));
+        auto spec = makeScanSpec(*rowType, enh, usable, needResidual, residual);
+        ASSERT_TRUE(usable);
+        EXPECT_FALSE(needResidual);
+        EXPECT_EQ(residual, nullptr);
+        EXPECT_TRUE(spec->children()[0]->filter()->is(FilterKind::kIsNull));
+    }
+}
+
+TEST(ScanSpecBuilderTest, IntFilterAndStringFamilyProject)
+{
+    auto rowType = ROW({"i", "s", "c", "v"}, {IntType(), VarcharType(), CharType(40), VarcharType(40)});
+    bool usable = false;
+    bool needResidual = false;
+    std::shared_ptr<::common::PredicateCondition> residual;
+
+    auto enh = WrapEnhancement(Leaf(::common::EQUAL_TO, 0, OMNI_INT, "2001"));
+    auto spec = makeScanSpec(*rowType, enh, usable, needResidual, residual);
+    ASSERT_TRUE(usable);
+    EXPECT_FALSE(needResidual);
+    EXPECT_TRUE(spec->children()[0]->hasFilter());
+    EXPECT_FALSE(spec->children()[1]->hasFilter());
+    EXPECT_FALSE(spec->children()[2]->hasFilter());
+    EXPECT_FALSE(spec->children()[3]->hasFilter());
 }

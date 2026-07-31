@@ -97,20 +97,20 @@ OrcRowReader::OrcRowReader(std::shared_ptr<FileContents> contents, const std::sh
     rowType_ = options->GetRowType();
     fileRowType_ = options->GetFileRowType();
 
-    // Capability gate (when switch ON): all selected cols are int family AND at least one
+    // Capability gate (when switch ON): all selected cols are supported types AND at least one
     // pushable single-column filter → new path; else fall back to legacy.
     // Success on new path: no log. Any fallback: LogWarn with a distinct reason (no silent fallback).
     if (options->EnableFilterWhileDecode() && rowType_ != nullptr) {
-        bool allInt = allSelectedColumnsAreInt(*rowType_);
+        bool allSupported = allSelectedColumnsAreSupported(*rowType_);
         const auto &enhancementJson = options->GetEnhancementJson();
         bool hasPredicate = enhancementJson != nullptr && enhancementJson->contains("vecPredicateCondition");
         bool usable = false;
         bool needResidual = false;
-        if (allInt && hasPredicate) {
+        if (allSupported && hasPredicate) {
             scanSpec_ = makeScanSpec(*rowType_, enhancementJson, usable, needResidual, residualPredicate_);
         }
         bool hasPushable = usable && scanSpec_ != nullptr && scanSpec_->hasAnyLeafFilter();
-        useFilterWhileDecode_ = allInt && hasPushable;
+        useFilterWhileDecode_ = allSupported && hasPushable;
         applyResidual_ = useFilterWhileDecode_ && needResidual;
 
         // Residual required but evaluator missing → disable new path to avoid under-filtering.
@@ -124,9 +124,9 @@ OrcRowReader::OrcRowReader(std::shared_ptr<FileContents> contents, const std::sh
 
         if (!useFilterWhileDecode_) {
             const char *reason = nullptr;
-            if (!allInt) {
+            if (!allSupported) {
                 reason = "selected columns include unsupported types "
-                         "(supports int/bigint/smallint/date only)";
+                         "(supports int/bigint/smallint/date/varchar/char)";
             } else if (!hasPredicate) {
                 // When Gluten does not push IN etc., C++ sees no JSON — same as pure projection.
                 reason = "no vecPredicateCondition from Gluten "
@@ -134,7 +134,7 @@ OrcRowReader::OrcRowReader(std::shared_ptr<FileContents> contents, const std::sh
             } else if (!usable) {
                 reason = "predicate JSON could not be parsed into scan filters";
             } else if (!hasPushable) {
-                reason = "no pushable single-column int filter "
+                reason = "no pushable single-column filter "
                          "(e.g. pure cross-column OR/NOT); selective path has no benefit over legacy";
             } else {
                 reason = "residual remainingFilter was required but could not be built "

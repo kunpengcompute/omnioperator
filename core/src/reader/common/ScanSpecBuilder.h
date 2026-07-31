@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// Predicate JSON → ScanSpec; layering aligned with Velox HiveConnectorUtil / ExprToSubfieldFilter.
+// Predicate JSON → ScanSpec + per-column Filter (shared by ORC/Parquet).
 
 #pragma once
 
@@ -21,8 +21,8 @@
 
 namespace omniruntime::reader {
 
-// True if all selected columns are int/bigint/smallint/date.
-bool allSelectedColumnsAreInt(const omniruntime::type::RowType &rowType);
+// True if all selected columns are filterWhileDecode-supported (int/long/short/date ∪ VARCHAR/CHAR).
+bool allSelectedColumnsAreSupported(const omniruntime::type::RowType &rowType);
 
 // usable=false → parse failed, fall back to legacy path; needResidual=true → residualPredicate is the
 // unpushed subtree (must call init(batchLen)).
