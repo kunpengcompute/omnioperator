@@ -22,6 +22,8 @@ extern void RegisterConversionFunctions(const std::string &prefix);
 
 extern void RegisterDatetimeFunctions(const std::string &prefix);
 
+extern void RegisterFlinkDatetimeFunctions(const std::string &prefix);
+
 extern void RegisterJsonFunctions(const std::string &prefix);
 
 extern void RegisterMapFunctions(const std::string &prefix);
@@ -59,6 +61,7 @@ void RegisterFunctions::RegisterAllFunctions(const std::string &prefix)
     RegisterConditionalFunctions(prefix);
     RegisterConversionFunctions(prefix);
     RegisterDatetimeFunctions(prefix);
+    RegisterFlinkDatetimeFunctions(prefix);
     RegisterJsonFunctions(prefix);
     RegisterMapFunctions(prefix);
     RegisterMathFunctions(prefix);
