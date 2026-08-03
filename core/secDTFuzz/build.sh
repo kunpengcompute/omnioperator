@@ -15,7 +15,7 @@ cp -rf /SecDTFuzz/DTFrame ${SRC_ROOT}/tools/
 
 cd ${SRC_ROOT}/tools/DTFrame
 cd build
-cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_PRODUCT=product .. && make -j 2 && make install
+cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_PRODUCT=product .. -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" -G Ninja && cmake --build . --parallel $(nproc) && cmake --install .
 cp -r ${SRC_ROOT}/tools/DTFrame/dist ${SRC_ROOT}/core/test/dt/testtree
 
 cd ${SRC_ROOT}

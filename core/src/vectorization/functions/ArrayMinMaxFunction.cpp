@@ -82,6 +82,7 @@ void ArrayMaxFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
             break;
         default:
             delete inputArg;
+            delete result;
             OMNI_THROW("ArrayMaxFunction Error:", "Unsupported element type: " + std::to_string(elementTypeId));
     }
     
@@ -240,6 +241,7 @@ void ArrayMinFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
             break;
         default:
             delete inputArg;
+            delete result;
             OMNI_THROW("ArrayMinFunction Error:", "Unsupported element type: " + std::to_string(elementTypeId));
     }
     

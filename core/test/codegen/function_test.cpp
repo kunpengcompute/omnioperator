@@ -13,8 +13,10 @@
 #include "codegen/functions/xxhash64_hash.h"
 #include "codegen/functions/dictionaryfunctions.h"
 #include "codegen/functions/udffunctions.h"
+#ifndef EXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS
 #include "codegen/functions/datetime_functions.h"
 #include "codegen/functions/json_functions.h"
+#endif
 #include "jni_mock.h"
 #include "udf/cplusplus/jni_util.h"
 #include "../util/test_util.h"
@@ -24,6 +26,7 @@ using namespace omniruntime::op;
 using namespace omniruntime::expressions;
 using namespace omniruntime::codegen::function;
 
+#ifndef EXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS
 void Date32TruncTest(const std::string &input, const std::string &level, const std::string &expect, bool expectIsNull)
 {
     int64_t date32Value;
@@ -38,6 +41,7 @@ void Date32TruncTest(const std::string &input, const std::string &level, const s
     }
     EXPECT_EQ(isNull, expectIsNull);
 }
+#endif
 
 /*
  * context helper tests
@@ -3550,6 +3554,7 @@ TEST(FunctionTest, EvaluateHiveUdfSingle)
 }
 
 // date time functions
+#ifndef EXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS
 TEST(FunctionTest, UnixTimestampFromStr)
 {
     const int32_t rowCnt = 6;
@@ -3703,6 +3708,7 @@ TEST(FunctionTest, DateFormat)
 
     delete context;
 }
+#endif
 
 TEST(FunctionTest, RegexMatch)
 {
@@ -3742,6 +3748,7 @@ TEST(FunctionTest, RegexMatch)
     EXPECT_FALSE(result);
 }
 
+#ifndef EXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS
 TEST(FunctionTest, Date32Trunc)
 {
     Date32TruncTest("0086-03-14", "YEAR", "0086-01-01", false);
@@ -3759,6 +3766,7 @@ TEST(FunctionTest, Date32Trunc)
     Date32TruncTest("0086-03-14", "ww", "0086-03-11", true);
     Date32TruncTest("0987-12-27", "weeek", "0987-12-24", true);
 }
+#endif
 
 TEST(FunctionTest, ContainsStr)
 {
@@ -4052,6 +4060,7 @@ TEST(FunctionTest, RegexpReplace)
     EXPECT_EQ(RegexpReplaceTest("abc123xyz", "$2-$1", "", 1), "abc123xyz");
 }
 
+#ifndef EXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS
 TEST(FunctionTest, GetJsonObject)
 {
     auto context = new ExecutionContext();
@@ -4123,4 +4132,5 @@ TEST(FunctionTest, GetJsonObject)
 
     delete context;
 }
+#endif
 }

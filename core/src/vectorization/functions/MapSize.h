@@ -42,7 +42,7 @@ public:
 
         MapVectorReader mapReader(mapArg);
 
-        ProcessAllRows(result, rowSize, mapReader);
+        ProcessAllRows(static_cast<Vector<int32_t> *>(result), rowSize, mapReader);
     }
 
 private:
