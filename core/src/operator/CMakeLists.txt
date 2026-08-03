@@ -1,13 +1,62 @@
-file(GLOB_RECURSE OPERATOR_LIST ${CMAKE_CURRENT_LIST_DIR}/*.cpp ../simd/*.cpp util/*.cpp ../compute/*.cpp ../plannode/*.cpp ../connectors/*.cpp)
-
+# aggregation (aggregation/ + aggregation/aggregator/)
+file(GLOB AGG_SRC ${CMAKE_CURRENT_LIST_DIR}/aggregation/*.cpp
+                  ${CMAKE_CURRENT_LIST_DIR}/aggregation/aggregator/*.cpp
+                  ${CMAKE_CURRENT_LIST_DIR}/aggregation/aggregator/regr/*.cpp)
 # SVE TU must not use the default march; exclude from glob and add conditionally below.
-list(FILTER OPERATOR_LIST EXCLUDE REGEX "sum_int64_sve_hash_agg_sve\\.cpp$")
+list(FILTER AGG_SRC EXCLUDE REGEX "sum_int64_sve_hash_agg_sve\\.cpp$")
+add_library(op_agg_obj OBJECT ${AGG_SRC})
+
+# join (join/ + join/sortmergejoin/)
+file(GLOB JOIN_SRC ${CMAKE_CURRENT_LIST_DIR}/join/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/join/sortmergejoin/*.cpp)
+add_library(op_join_obj OBJECT ${JOIN_SRC})
+
+# window
+file(GLOB WINDOW_SRC ${CMAKE_CURRENT_LIST_DIR}/window/*.cpp)
+add_library(op_window_obj OBJECT ${WINDOW_SRC})
+
+# sort family (sort/ + topn/ + topnsort/)
+file(GLOB SORT_SRC ${CMAKE_CURRENT_LIST_DIR}/sort/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/topn/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/topnsort/*.cpp)
+add_library(op_sort_obj OBJECT ${SORT_SRC})
+
+# spill
+file(GLOB SPILL_SRC ${CMAKE_CURRENT_LIST_DIR}/spill/*.cpp)
+add_library(op_spill_obj OBJECT ${SPILL_SRC})
+
+# hashmap + limit
+file(GLOB HASH_LIMIT_SRC ${CMAKE_CURRENT_LIST_DIR}/hashmap/*.cpp
+                         ${CMAKE_CURRENT_LIST_DIR}/limit/*.cpp)
+add_library(op_hashlimit_obj OBJECT ${HASH_LIMIT_SRC})
+
+# misc: operator root + remaining sub-modules
+file(GLOB MISC_SRC ${CMAKE_CURRENT_LIST_DIR}/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/config/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/expand/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/filter/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/grouping/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/projection/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/tablescan/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/union/*.cpp
+                   ${CMAKE_CURRENT_LIST_DIR}/unnest/*.cpp)
+add_library(op_misc_obj OBJECT ${MISC_SRC})
 
 set(OP_TARGET ${OMNI_OPERATOR_SO})
 find_package(nlohmann_json 3.7.3 REQUIRED)
-# compile .a file
 
-add_library(${OP_TARGET} SHARED ${OPERATOR_LIST})
+add_library(${OP_TARGET} SHARED
+    $<TARGET_OBJECTS:op_agg_obj>
+    $<TARGET_OBJECTS:op_join_obj>
+    $<TARGET_OBJECTS:op_window_obj>
+    $<TARGET_OBJECTS:op_sort_obj>
+    $<TARGET_OBJECTS:op_spill_obj>
+    $<TARGET_OBJECTS:op_hashlimit_obj>
+    $<TARGET_OBJECTS:op_misc_obj>
+    $<TARGET_OBJECTS:simd_obj>
+    $<TARGET_OBJECTS:compute_obj>
+    $<TARGET_OBJECTS:plannode_obj>
+)
 
 # Spark sum(bigint) HashAgg SVE kernel: Linux aarch64 only, compile with +sve.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
@@ -20,9 +69,23 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
     PROPERTIES COMPILE_OPTIONS "-march=armv8-a+sve")
 endif()
 
-#dependent library
-target_link_libraries(${OP_TARGET} PUBLIC expression vectorization io_core ${OMNI_CODEGEN_SO} ${OMNI_VECTOR_SO} ${OMNI_READER_SO})
+# precompiled headers: declared on the shared lib target for CMake consumption
+# but not applied to OBJECT library sources — avoids GCC 10 ICE with arm_sve.h
+target_precompile_headers(${OP_TARGET} PRIVATE
+        <vector/vector.h>
+        <operator/operator.h>
+        <operator/operator_factory.h>
+        <type/data_type.h>
+)
+
+# dependent libraries
+target_link_libraries(${OP_TARGET} PUBLIC
+    expression vectorization io_core
+    -Wl,--whole-archive connectors -Wl,--no-whole-archive
+    ${OMNI_CODEGEN_SO} ${OMNI_VECTOR_SO} ${OMNI_READER_SO})
 target_include_directories(${OP_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/simd)
+
+# install
 install(TARGETS ${OP_TARGET} DESTINATION ${CMAKE_INSTALL_PREFIX})
 install(FILES ${SOURCE_ROOT}/src/operator/operator.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
 install(FILES ${SOURCE_ROOT}/src/operator/operator_factory.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)

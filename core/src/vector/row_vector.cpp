@@ -1,6 +1,6 @@
 /*
 * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Description: MapVector  implementation
+ * Description: RowVector  implementation
  */
 
 #include "row_vector.h"
@@ -53,6 +53,64 @@ namespace {
         }
         for (auto *rawChild : rawChildren_) {
             SetChildNull(rawChild, static_cast<int32_t>(index));
+        }
+    }
+
+    RowVector *RowVector::Slice(int positionOffset, int length, bool isCopy)
+    {
+        if (UNLIKELY(positionOffset + length > size)) {
+            std::string message("slice vector out of range(needed size:%d, real size:%d).", positionOffset + length,
+                                size);
+            throw OmniException("OPERATOR_RUNTIME_ERROR", message);
+        }
+        auto sliced = new RowVector(length);
+        sliced->offset = offset + positionOffset; // update offset
+        sliced->isSliced = true;
+        for (int i = 0; i < length; ++i) {
+            if (IsNull(positionOffset + i)) {
+                sliced->SetNull(i);
+            }
+        }
+        for (int i = 0; i < children_.size(); ++i) {
+            sliced->AddChild(std::shared_ptr<BaseVector>(ChildAt(i)->Slice(positionOffset, length, isCopy)));
+        }
+        return sliced;
+    }
+
+    void RowVector::Expand(int32_t needCapacity)
+    {
+        if (needCapacity <= size) {
+            return;
+        }
+
+        if (needCapacity <= capacity) {
+            size = needCapacity;
+            for (auto &child : children_) {
+                if (child) {
+                    child->Expand(needCapacity);
+                }
+            }
+            return;
+        }
+
+        int32_t newCapacity = std::max(capacity * 2, needCapacity);
+        int32_t oldSize = size;
+
+        auto oldNullsBuffer = nullsBuffer;
+        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
+        if (oldNullsBuffer != nullptr) {
+            nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
+        } else {
+            nullsBuffer->SetNulls(0, false, newCapacity);
+        }
+
+        capacity = newCapacity;
+        size = needCapacity;
+
+        for (auto &child : children_) {
+            if (child) {
+                child->Expand(needCapacity);
+            }
         }
     }
 

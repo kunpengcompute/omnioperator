@@ -70,63 +70,9 @@ namespace omniruntime::vec {
             children_.emplace_back(std::shared_ptr<BaseVector>(addedVec));
         }
 
-        RowVector *Slice(int positionOffset, int length, bool isCopy = false) override
-        {
-            if (UNLIKELY(positionOffset + length > size)) {
-                std::string message("slice vector out of range(needed size:%d, real size:%d).", positionOffset + length,
-                                    size);
-                throw OmniException("OPERATOR_RUNTIME_ERROR", message);
-            }
-            auto sliced = new RowVector(length);
-            sliced->offset = offset + positionOffset; // update offset
-            sliced->isSliced = true;
-            for (int i = 0; i < length; ++i) {
-                if (IsNull(positionOffset + i)) {
-                    sliced->SetNull(i);
-                }
-            }
-            for (int i = 0; i < children_.size(); ++i) {
-                sliced->AddChild(std::shared_ptr<BaseVector>(ChildAt(i)->Slice(positionOffset, length, isCopy)));
-            }
-            return sliced;
-        }
+        RowVector *Slice(int positionOffset, int length, bool isCopy = false) override;
 
-        void Expand(int32_t needCapacity) override
-        {
-            if (needCapacity <= size) {
-                return;
-            }
-
-            if (needCapacity <= capacity) {
-                size = needCapacity;
-                for (auto &child : children_) {
-                    if (child) {
-                        child->Expand(needCapacity);
-                    }
-                }
-                return;
-            }
-
-            int32_t newCapacity = std::max(capacity * 2, needCapacity);
-            int32_t oldSize = size;
-
-            auto oldNullsBuffer = nullsBuffer;
-            nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
-            if (oldNullsBuffer != nullptr) {
-                nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
-            } else {
-                nullsBuffer->SetNulls(0, false, newCapacity);
-            }
-
-            capacity = newCapacity;
-            size = needCapacity;
-
-            for (auto &child : children_) {
-                if (child) {
-                    child->Expand(needCapacity);
-                }
-            }
-        }
+        void Expand(int32_t needCapacity) override;
 
         /* *
          * Copies the values of the vector at the indicated positions
