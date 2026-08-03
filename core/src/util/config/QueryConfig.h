@@ -181,6 +181,20 @@ public:
     static constexpr const char *KAdaptivePartialAggregationRatio = "adaptive_partial_aggregation_ratio";
     static constexpr const char *KPreferVectorizationExpression = "prefer_vectorization_expression";
 
+    /// When true, each executor builds the BHJ hash table only once and shares it
+    /// across all tasks that probe the same broadcast relation.
+    static constexpr const char *KBuildHashTableOncePerExecutor = "build_hash_table_once_per_executor";
+
+    /// Enable Velox-style parallel broadcast hash join table build (single hash table, bucket-range partitioning).
+    static constexpr const char *KBroadcastParallelBuildEnabled = "broadcast_parallel_build_enabled";
+
+    /// Minimum table rows per build partition to trigger parallel hash table build (aligned with Velox).
+    static constexpr const char *KMinTableRowsForParallelJoinBuild = "min_table_rows_for_parallel_join_build";
+
+    /// Target build-side bytes per parallel build thread; used to derive thread count.
+    static constexpr const char *KBroadcastParallelBuildTargetBytesPerThread =
+        "broadcast_parallel_build_target_bytes_per_thread";
+
     /// Spark partition id for deterministic per-partition behavior (e.g. rand(seed)). Aligned with Velox "spark.partition_id".
     static constexpr const char *kSparkPartitionId = "spark.partition_id";
 
@@ -430,6 +444,30 @@ public:
     {
         constexpr bool kDefaultValue = false;
         return get<bool>(KPreferVectorizationExpression, kDefaultValue);
+    }
+
+    bool buildHashTableOncePerExecutor() const
+    {
+        constexpr bool kDefaultValue = true;
+        return get<bool>(KBuildHashTableOncePerExecutor, kDefaultValue);
+    }
+
+    bool broadcastParallelBuildEnabled() const
+    {
+        constexpr bool kDefaultValue = false;
+        return get<bool>(KBroadcastParallelBuildEnabled, kDefaultValue);
+    }
+
+    uint32_t minTableRowsForParallelJoinBuild() const
+    {
+        constexpr uint32_t kDefaultValue = 1'000;
+        return get<uint32_t>(KMinTableRowsForParallelJoinBuild, kDefaultValue);
+    }
+
+    uint64_t broadcastParallelBuildTargetBytesPerThread() const
+    {
+        constexpr uint64_t kDefaultValue = 16UL << 20;
+        return get<uint64_t>(KBroadcastParallelBuildTargetBytesPerThread, kDefaultValue);
     }
 
     /// Spark partition id (aligned with Velox). Default 0 when not set so rand(seed) etc. work without Spark context.

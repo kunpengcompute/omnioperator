@@ -12,6 +12,7 @@
 
 #include <operator/aggregation/group_aggregation_expr.h>
 
+#include "operator/join/broadcast_hash_table_cache.h"
 #include "operator/join/hash_builder_expr.h"
 #include "operator/join/join_spill_state.h"
 #include "operator/join/lookup_join_expr.h"
@@ -145,20 +146,39 @@ OperatorFactory* createOperatorFactory(
     }
 }
 
+bool HasExprBuildKeys(const std::shared_ptr<const HashJoinNode>& joinNode)
+{
+    for (auto* expr : joinNode->RightKeys()) {
+        if (expr->GetType() != omniruntime::expressions::ExprType::FIELD_E) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::pair<OperatorFactory*, HashBuilderOperatorFactory*> createHashBuilderFromCachedVariants(
+    const std::shared_ptr<const HashJoinNode>& joinNode,
+    const config::QueryConfig& queryConfig,
+    op::HashTableVariants* cachedVariants,
+    const std::string& htId)
+{
+    if (HasExprBuildKeys(joinNode)) {
+        auto* exprFactory =
+            HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(joinNode, queryConfig);
+        auto* innerFactory = exprFactory->GetHashBuilderOperatorFactory();
+        innerFactory->InjectCachedVariants(cachedVariants, htId);
+        return std::make_pair(exprFactory, innerFactory);
+    }
+    auto* cachedFactory = op::HashBuilderOperatorFactory::CreateFromCachedVariants(joinNode, cachedVariants);
+    cachedFactory->SetBroadcastHashTableId(htId);
+    return std::make_pair(cachedFactory, cachedFactory);
+}
+
 std::pair<OperatorFactory*, HashBuilderOperatorFactory*> createHashBuilderOperatorPairFactory(
     const std::shared_ptr<const HashJoinNode>& joinNode,
     const config::QueryConfig& queryConfig)
 {
-    auto buildKeysSize = joinNode->RightKeys().size();
-    bool isWithExpr = false;
-    for (size_t index = 0; index < buildKeysSize; index++) {
-        auto expr = joinNode->RightKeys()[index];
-        if (expr->GetType() != omniruntime::expressions::ExprType::FIELD_E) {
-            isWithExpr = true;
-            break;
-        }
-    }
-    if (isWithExpr) {
+    if (HasExprBuildKeys(joinNode)) {
         auto hashBuilderWithExprOperatorFactory =
             HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(joinNode, queryConfig);
         auto hashBuilderOperatorFactory = hashBuilderWithExprOperatorFactory->GetHashBuilderOperatorFactory();
@@ -206,9 +226,41 @@ void planDetail(
 
     // JoinNode and UnionNode has multiple sources, so we need to create a builder driver for each source
     if (auto joinNode = std::dynamic_pointer_cast<const HashJoinNode>(planNode)) {
-        auto res = createHashBuilderOperatorPairFactory(joinNode, queryConfig);
+        const bool isBHJ = joinNode->IsBHJ();
+        const bool buildOnce = queryConfig.buildHashTableOncePerExecutor();
+        const std::string& htId = joinNode->BuildHashTableId();
+
+        // Determine factory pair: either fresh build or cache-reuse for BHJ.
+        std::pair<OperatorFactory*, op::HashBuilderOperatorFactory*> res;
+
+        if (isBHJ && buildOnce && !htId.empty()) {
+            auto& cache = op::BroadcastHashTableCache::getInstance();
+            if (cache.tryClaimBuild(htId)) {
+                // This task wins the build race. Build normally, then publish to cache.
+                res = createHashBuilderOperatorPairFactory(joinNode, queryConfig);
+                // Mark the factory so operators know to publish after build.
+                res.second->SetBroadcastHashTableId(htId);
+            } else {
+                // Another task is building (or already done). Wait for the cached table.
+                op::HashTableVariants* cachedVariants = cache.waitAndGet(htId);
+                if (cachedVariants != nullptr) {
+                    // Inject the pre-built hash table. No spill for BHJ.
+                    res = createHashBuilderFromCachedVariants(joinNode, queryConfig, cachedVariants, htId);
+                } else {
+                    // Fallback: cache entry was invalidated during wait; build from scratch.
+                    res = createHashBuilderOperatorPairFactory(joinNode, queryConfig);
+                    res.second->SetBroadcastHashTableId(htId);
+                    // Re-try claiming (will succeed if nobody else is trying now).
+                    cache.tryClaimBuild(htId);
+                }
+            }
+        } else {
+            res = createHashBuilderOperatorPairFactory(joinNode, queryConfig);
+        }
+
         auto subPartCfg = op::JoinSubPartitionConfig::FromQueryConfig(queryConfig);
-        const bool joinSpillV1Enabled = queryConfig.joinSpillEnabled() && queryConfig.maxSpillRunRows() != 0
+        const bool joinSpillV1Enabled = !isBHJ && queryConfig.joinSpillEnabled()
+            && queryConfig.maxSpillRunRows() != 0
             && subPartCfg.IsEnabled() && IsJoinSpillV1Supported(joinNode);
         std::shared_ptr<op::JoinSpillState> joinSpillState = nullptr;
         if (joinSpillV1Enabled) {
@@ -217,6 +269,10 @@ void planDetail(
         }
         res.second->SetJoinSpillSubPartitionPolicy(joinSpillV1Enabled, queryConfig.maxSpillRunRows(), subPartCfg);
         res.second->SetJoinSpillState(joinSpillState);
+        if (isBHJ && !res.second->IsPrebuilt() && !HasExprBuildKeys(joinNode)) {
+            res.second->SetBroadcastParallelBuildPolicy(
+                op::BroadcastParallelBuildPolicy::FromQueryConfig(queryConfig));
+        }
         auto builderDriver = builderDrivers[1][0];
         builderDriver->operators()->emplace_back(createOperator(res.first, joinNode));
         factories->emplace_back(res.first);

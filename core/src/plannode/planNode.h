@@ -695,9 +695,10 @@ class HashJoinNode : public AbstractJoinNode {
 public:
     HashJoinNode(const PlanNodeId &id, JoinType joinType, BuildSide buildSide, bool nullAware, bool isShuffle, const std::vector<ExprPtr> &leftKeys,
         const std::vector<ExprPtr> &rightKeys, ExprPtr filter, PlanNodePtr left, PlanNodePtr right, DataTypesPtr leftOutputType,
-        DataTypesPtr rightOutputType, const std::vector<omniruntime::expressions::Expr*>& partitionKeys)
+        DataTypesPtr rightOutputType, const std::vector<omniruntime::expressions::Expr*>& partitionKeys,
+        bool isBHJ = false, std::string buildHashTableId = "")
         : AbstractJoinNode(id, joinType, buildSide, leftKeys, rightKeys, std::move(filter), std::move(left), std::move(right), std::move(leftOutputType), std::move(rightOutputType), partitionKeys),
-        nullAware{nullAware}, isShuffle{isShuffle} {}
+        nullAware{nullAware}, isShuffle{isShuffle}, isBHJ_{isBHJ}, buildHashTableId_{std::move(buildHashTableId)} {}
 
     std::string_view Name() const override
     {
@@ -714,6 +715,16 @@ public:
         return isShuffle;
     }
 
+    bool IsBHJ() const
+    {
+        return isBHJ_;
+    }
+
+    const std::string& BuildHashTableId() const
+    {
+        return buildHashTableId_;
+    }
+
     std::vector<omniruntime::expressions::Expr*> PartitionKeys() const
     {
         return partitionKeys;
@@ -722,6 +733,8 @@ public:
 private:
     const bool nullAware;
     const bool isShuffle;
+    const bool isBHJ_ = false;
+    const std::string buildHashTableId_;
 };
 
 /// Represents inner/outer/semi/anti merge joins. Translates to an

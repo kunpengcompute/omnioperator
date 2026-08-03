@@ -156,6 +156,12 @@ public:
         return hashmap.EmplaceNotNullKey(key, hashValue);
     }
 
+    ALWAYS_INLINE std::optional<Result> TryInsertJoinKeysToHashmapWithPartition(
+        KeyType &key, size_t &hashValue, const TableInsertPartitionInfo *partitionInfo)
+    {
+        return hashmap.TryEmplaceNotNullKeyWithPartition(key, hashValue, partitionInfo);
+    }
+
     void ParseKeyToCols(const KeyType &key, std::vector<vec::BaseVector *> &groupOutputVectors, int32_t groupColNum,
         const int32_t rowIdx)
     {
