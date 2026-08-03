@@ -19,6 +19,7 @@
 #include "../functions/FlinkDayOfWeek.h"
 #include "../functions/FlinkHour.h"
 #include "../functions/FlinkMinute.h"
+#include "../functions/FlinkSecond.h"
 
 namespace omniruntime::vectorization {
 void RegisterFlinkDatetimeFunctions(const std::string &prefix)
@@ -71,5 +72,13 @@ void RegisterFlinkDatetimeFunctions(const std::string &prefix)
     // which treats OMNI_LONG as microseconds and registers OMNI_TIMESTAMP.
     // MINUTE is a timestamp extractor (no OMNI_INT/DATE support).
     RegisterFlinkMinuteFunction(prefix + "flink_minute");
+
+    // flink_second: OMNI_LONG (Flink TimestampData = millis since epoch, no
+    // session timezone). Returns integer second of minute 0-59. Distinct from
+    // "second" which treats OMNI_LONG as microseconds and registers
+    // OMNI_TIMESTAMP (and a Decimal with-fraction variant). SECOND is a
+    // timestamp extractor (no OMNI_INT/DATE support); this returns an INTEGER,
+    // not the Decimal variant.
+    RegisterFlinkSecondFunction(prefix + "flink_second");
 }
 }
