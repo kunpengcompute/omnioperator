@@ -33,51 +33,51 @@ using namespace omniruntime::type;
 using namespace omniruntime::codegen;
 
 namespace {
-// Real epoch microseconds from the system clock (UTC-based, the raw time_since_epoch).
-int64_t GetCurrentEpochMicros()
+// Real epoch milliseconds from the system clock (UTC-based, the raw time_since_epoch).
+int64_t GetCurrentEpochMillis()
 {
     auto now = std::chrono::system_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 }
 
-// localtimestamp = utc_micros + session_tz_offset, so when compared against UTC micros the
+// localtimestamp = utc_millis + session_tz_offset, so when compared against UTC millis the
 // difference equals the timezone offset.
-constexpr int64_t MAX_VALID_DRIFT_MICROS = 15LL * 3600LL * 1000000LL;
+constexpr int64_t MAX_VALID_DRIFT_MILLIS = 15LL * 3600LL * 1000LL;
 
-// Epoch micros for year 2000-01-01 and 2100-01-01; guards against unit bugs
+// Epoch millis for year 2000-01-01 and 2100-01-01; guards against unit bugs
 // (seconds ~1.7e9, millis ~1.7e12, micros ~1.7e15).
-constexpr int64_t kMinEpochMicros = 946684800000000LL;  // 2000-01-01T00:00:00Z
-constexpr int64_t kMaxEpochMicros = 4102444800000000LL; // 2100-01-01T00:00:00Z
+constexpr int64_t kMinEpochMillis = 946684800000LL;  // 2000-01-01T00:00:00Z
+constexpr int64_t kMaxEpochMillis = 4102444800000LL; // 2100-01-01T00:00:00Z
 
 // Tolerance for session-timezone exact-match checks on slow CI.
-static constexpr int64_t kMicrosTolerance = 10'000'000; // 10 seconds
+static constexpr int64_t kMillisTolerance = 10'000; // 10 seconds
 
-// Compute expected localtimestamp (utc_micros + session_tz_offset) for the current instant.
-int64_t GetSessionTzLocalTimestampMicros(const tz::TimeZone *sessionTz)
+// Compute expected localtimestamp (utc_millis + session_tz_offset) for the current instant.
+int64_t GetSessionTzLocalTimestampMillis(const tz::TimeZone *sessionTz)
 {
     auto now = std::chrono::system_clock::now();
-    auto utcMicros = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
-    Timestamp ts = Timestamp::fromMicros(utcMicros);
+    auto utcMillis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    Timestamp ts = Timestamp::fromMillis(utcMillis);
     if (sessionTz != nullptr) {
         ts.toTimezone(*sessionTz);
     }
-    return ts.toMicros();
+    return ts.toMillis();
 }
 
 // Compute expected localtimestamp using OS local time (no session timezone).
-int64_t GetOsLocalTimestampMicros()
+int64_t GetOsLocalTimestampMillis()
 {
     auto now = std::chrono::system_clock::now();
     auto durationSinceEpoch = now.time_since_epoch();
     auto secsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
-    auto microsSinceEpoch = std::chrono::duration_cast<std::chrono::microseconds>(durationSinceEpoch);
-    int64_t subSecondMicros = static_cast<int64_t>((microsSinceEpoch - secsSinceEpoch).count());
+    auto millisSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch);
+    int64_t subSecondMillis = static_cast<int64_t>((millisSinceEpoch - secsSinceEpoch).count());
 
     std::time_t timeNow = static_cast<std::time_t>(secsSinceEpoch.count());
     std::tm localTm {};
     localtime_r(&timeNow, &localTm);
 
-    constexpr int64_t kMicrosPerSec = 1000000LL;
+    constexpr int64_t kMillisPerSec = 1000LL;
     constexpr int64_t kSecsPerDay = 86400LL;
 
     int32_t year = localTm.tm_year + 1900;
@@ -85,9 +85,9 @@ int64_t GetOsLocalTimestampMicros()
     int32_t day = localTm.tm_mday;
     int64_t daysSinceEpoch = 0;
     Date32::DaysSinceEpochFromDate(year, month, day, daysSinceEpoch);
-    int64_t microsSinceMidnight = static_cast<int64_t>(
-        localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * kMicrosPerSec;
-    return daysSinceEpoch * kSecsPerDay * kMicrosPerSec + microsSinceMidnight + subSecondMicros;
+    int64_t millisSinceMidnight = static_cast<int64_t>(
+        localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * kMillisPerSec;
+    return daysSinceEpoch * kSecsPerDay * kMillisPerSec + millisSinceMidnight + subSecondMillis;
 }
 } // namespace
 
@@ -103,7 +103,7 @@ protected:
         const std::unordered_map<std::string, std::string> &configValues = {})
     {
         std::vector<DataTypeId> argTypes = {};
-        auto signature = std::make_shared<FunctionSignature>("localtimestamp", argTypes, OMNI_LONG);
+        auto signature = std::make_shared<FunctionSignature>("flink_localtimestamp", argTypes, OMNI_LONG);
 
         auto factoryIt = VectorFunction::simpleFunctionFactoryMap_.find(signature);
         if (factoryIt == VectorFunction::simpleFunctionFactoryMap_.end()) {
@@ -136,7 +136,7 @@ protected:
     }
 };
 
-// Merged: BasicLocalTimestamp + SingleRow + MatchesSystemEpochMicros + VectorFunctionPathWithSessionTimezone
+// Merged: BasicLocalTimestamp + SingleRow + MatchesSystemEpochMillis + VectorFunctionPathWithSessionTimezone
 TEST_F(LocalTimestampTest, MatchesSessionTimezoneViaFullVectorPath)
 {
     std::cout << "=== Test: localtimestamp matches session timezone via full vector path ===" << std::endl;
@@ -147,13 +147,13 @@ TEST_F(LocalTimestampTest, MatchesSessionTimezoneViaFullVectorPath)
     std::unordered_map<std::string, std::string> configValues;
     configValues[config::QueryConfig::kSessionTimezone] = tzName;
 
-    int64_t expectedBefore = GetSessionTzLocalTimestampMicros(sessionTz);
+    int64_t expectedBefore = GetSessionTzLocalTimestampMillis(sessionTz);
 
     int32_t rowSize = 5;
     BaseVector *result = nullptr;
     ExecuteLocalTimestamp(rowSize, result, configValues);
 
-    int64_t expectedAfter = GetSessionTzLocalTimestampMicros(sessionTz);
+    int64_t expectedAfter = GetSessionTzLocalTimestampMillis(sessionTz);
 
     ASSERT_NE(result, nullptr) << "Result is null";
     auto *resultVector = static_cast<Vector<int64_t> *>(result);
@@ -163,10 +163,10 @@ TEST_F(LocalTimestampTest, MatchesSessionTimezoneViaFullVectorPath)
         EXPECT_FALSE(resultVector->IsNull(i)) << "Unexpected NULL at index " << i;
         if (!resultVector->IsNull(i)) {
             int64_t actual = resultVector->GetValue(i);
-            std::cout << "Row " << i << ": localtimestamp=" << actual << " micros since epoch" << std::endl;
+            std::cout << "Row " << i << ": localtimestamp=" << actual << " millis since epoch" << std::endl;
             EXPECT_GT(actual, 0) << "localtimestamp should be > 0 at row " << i;
             int64_t minDiff = std::min(std::abs(actual - expectedBefore), std::abs(actual - expectedAfter));
-            EXPECT_LE(minDiff, kMicrosTolerance)
+            EXPECT_LE(minDiff, kMillisTolerance)
                 << "localtimestamp (" << actual << ") should match session timezone " << tzName
                 << " (expected before=" << expectedBefore << ", after=" << expectedAfter << ")";
         }
@@ -199,18 +199,18 @@ TEST_F(LocalTimestampTest, ConstantAndNonNullResult)
         }
     }
 
-    std::cout << "Large batch (" << rowSize << " rows): all rows = " << firstValue << " micros since epoch"
+    std::cout << "Large batch (" << rowSize << " rows): all rows = " << firstValue << " millis since epoch"
               << std::endl;
 
     delete result;
 }
 
-// Merged: DirectStructTest + MicrosPrecisionGuard
+// Merged: DirectStructTest + MillisPrecisionGuard
 TEST_F(LocalTimestampTest, DirectStructTest)
 {
     std::cout << "=== Test: LocalTimestampFunction struct direct test ===" << std::endl;
 
-    int64_t beforeMicros = GetCurrentEpochMicros();
+    int64_t beforeMillis = GetCurrentEpochMillis();
 
     LocalTimestampFunction<int64_t> fn;
     std::vector<DataTypeId> inputTypes;
@@ -218,35 +218,35 @@ TEST_F(LocalTimestampTest, DirectStructTest)
     config::QueryConfig queryConfig(configValues);
     fn.initialize(inputTypes, queryConfig);
 
-    int64_t afterMicros = GetCurrentEpochMicros();
+    int64_t afterMillis = GetCurrentEpochMillis();
 
     // First call - get the cached value
     int64_t result1 = 0;
     vectorization::Status status1 = fn.call(result1);
     EXPECT_TRUE(status1.ok()) << "call() should return OK status";
 
-    std::cout << "Direct call result: " << result1 << " micros since epoch" << std::endl;
+    std::cout << "Direct call result: " << result1 << " millis since epoch" << std::endl;
 
     // Verify positive
     EXPECT_GT(result1, 0) << "localtimestamp should be > 0";
 
-    // Verify within valid drift of system epoch micros (primary regression guard)
-    int64_t distBefore = std::abs(result1 - beforeMicros);
-    int64_t distAfter = std::abs(result1 - afterMicros);
+    // Verify within valid drift of system epoch millis (primary regression guard)
+    int64_t distBefore = std::abs(result1 - beforeMillis);
+    int64_t distAfter = std::abs(result1 - afterMillis);
     int64_t minDist = std::min(distBefore, distAfter);
-    EXPECT_LE(minDist, MAX_VALID_DRIFT_MICROS)
-        << "localtimestamp (" << result1 << ") drift from system epoch micros (before=" << beforeMicros
-        << ", after=" << afterMicros << ") exceeds " << MAX_VALID_DRIFT_MICROS
-        << " us; likely a timezone-offset drift or a unit mismatch";
+    EXPECT_LE(minDist, MAX_VALID_DRIFT_MILLIS)
+        << "localtimestamp (" << result1 << ") drift from system epoch millis (before=" << beforeMillis
+        << ", after=" << afterMillis << ") exceeds " << MAX_VALID_DRIFT_MILLIS
+        << " ms; likely a timezone-offset drift or a unit mismatch";
 
-    // Micros precision guard: the value should be in microsecond units (~1.7e15 for current era),
-    // not seconds (~1.7e9) or milliseconds (~1.7e12).
-    EXPECT_GE(result1, kMinEpochMicros) << "localtimestamp (" << result1
-        << ") is below the micros-range lower bound; a value near 1.7e9 suggests "
-        << "seconds, near 1.7e12 suggests millis.";
-    EXPECT_LE(result1, kMaxEpochMicros) << "localtimestamp (" << result1
-        << ") is above the micros-range upper bound; this indicates the value is "
-        << "not in microsecond units.";
+    // Millis precision guard: the value should be in millisecond units (~1.7e12 for current era),
+    // not seconds (~1.7e9) or microseconds (~1.7e15).
+    EXPECT_GE(result1, kMinEpochMillis) << "localtimestamp (" << result1
+        << ") is below the millis-range lower bound; a value near 1.7e9 suggests "
+        << "seconds, near 1.7e15 suggests micros.";
+    EXPECT_LE(result1, kMaxEpochMillis) << "localtimestamp (" << result1
+        << ") is above the millis-range upper bound; this indicates the value is "
+        << "not in millisecond units.";
 
     // Second call - should return the same cached value (batch-mode semantic)
     int64_t result2 = 0;
@@ -265,7 +265,7 @@ TEST_F(LocalTimestampTest, UsesSessionTimezone)
     for (const auto &tzName : tzNames) {
         const auto *sessionTz = tz::locateZone(tzName);
 
-        int64_t expectedBefore = GetSessionTzLocalTimestampMicros(sessionTz);
+        int64_t expectedBefore = GetSessionTzLocalTimestampMillis(sessionTz);
 
         LocalTimestampFunction<int64_t> fn;
         std::vector<DataTypeId> inputTypes;
@@ -274,17 +274,17 @@ TEST_F(LocalTimestampTest, UsesSessionTimezone)
         config::QueryConfig queryConfig(configValues);
         fn.initialize(inputTypes, queryConfig);
 
-        int64_t expectedAfter = GetSessionTzLocalTimestampMicros(sessionTz);
+        int64_t expectedAfter = GetSessionTzLocalTimestampMillis(sessionTz);
 
         int64_t actual = 0;
         ASSERT_TRUE(fn.call(actual).ok()) << "call() failed for session timezone " << tzName;
 
         int64_t minDiff = std::min(std::abs(actual - expectedBefore), std::abs(actual - expectedAfter));
-        EXPECT_LE(minDiff, kMicrosTolerance)
+        EXPECT_LE(minDiff, kMillisTolerance)
             << "localtimestamp (" << actual << ") should match session timezone " << tzName
             << " (expected before=" << expectedBefore << ", after=" << expectedAfter << ")";
 
-        std::cout << "tz=" << tzName << ": actual=" << actual << " us, minDiff=" << minDiff << " us" << std::endl;
+        std::cout << "tz=" << tzName << ": actual=" << actual << " ms, minDiff=" << minDiff << " ms" << std::endl;
     }
 }
 
@@ -293,7 +293,7 @@ TEST_F(LocalTimestampTest, NoSessionTimezoneFallsBackToOsLocal)
 {
     std::cout << "=== Test: localtimestamp falls back to OS local time without session timezone ===" << std::endl;
 
-    int64_t expectedBefore = GetOsLocalTimestampMicros();
+    int64_t expectedBefore = GetOsLocalTimestampMillis();
 
     LocalTimestampFunction<int64_t> fn;
     std::vector<DataTypeId> inputTypes;
@@ -301,13 +301,13 @@ TEST_F(LocalTimestampTest, NoSessionTimezoneFallsBackToOsLocal)
     config::QueryConfig queryConfig(configValues);
     fn.initialize(inputTypes, queryConfig);
 
-    int64_t expectedAfter = GetOsLocalTimestampMicros();
+    int64_t expectedAfter = GetOsLocalTimestampMillis();
 
     int64_t actual = 0;
     ASSERT_TRUE(fn.call(actual).ok());
 
     int64_t minDiff = std::min(std::abs(actual - expectedBefore), std::abs(actual - expectedAfter));
-    EXPECT_LE(minDiff, kMicrosTolerance)
+    EXPECT_LE(minDiff, kMillisTolerance)
         << "localtimestamp with no session timezone should match OS local time"
         << " (expected before=" << expectedBefore << ", after=" << expectedAfter << ")";
 }
@@ -317,16 +317,16 @@ TEST_F(LocalTimestampTest, DiffersFromCurrentTimestampInNonUtcZone)
 {
     std::cout << "=== Test: localtimestamp differs from current_timestamp in non-UTC zone ===" << std::endl;
 
-    // Determine the current local timezone offset in microseconds.
+    // Determine the current local timezone offset in milliseconds.
     std::time_t now = std::time(nullptr);
     std::tm tmLocal {};
     localtime_r(&now, &tmLocal);
-    int64_t tzOffsetMicros = static_cast<int64_t>(tmLocal.tm_gmtoff) * 1000000LL;
+    int64_t tzOffsetMillis = static_cast<int64_t>(tmLocal.tm_gmtoff) * 1000LL;
 
-    std::cout << "Local timezone offset from UTC: " << tzOffsetMicros << " us ("
+    std::cout << "Local timezone offset from UTC: " << tzOffsetMillis << " ms ("
               << (tmLocal.tm_gmtoff / 3600.0) << " hours)" << std::endl;
 
-    if (tzOffsetMicros == 0) {
+    if (tzOffsetMillis == 0) {
         std::cout << "Local timezone is UTC; skipping differentiation test." << std::endl;
         GTEST_SKIP() << "Local timezone is UTC; LocalTimestampFunction and "
                      << "CurrentTimestampFunction are indistinguishable here.";
@@ -346,15 +346,15 @@ TEST_F(LocalTimestampTest, DiffersFromCurrentTimestampInNonUtcZone)
     ASSERT_TRUE(ctFn.call(ctValue).ok());
     ASSERT_TRUE(ltFn.call(ltValue).ok());
 
-    std::cout << "current_timestamp: " << ctValue << " us" << std::endl;
-    std::cout << "localtimestamp:    " << ltValue << " us" << std::endl;
-    std::cout << "Difference (lt - ct): " << (ltValue - ctValue) << " us" << std::endl;
+    std::cout << "current_timestamp: " << ctValue << " ms" << std::endl;
+    std::cout << "localtimestamp:    " << ltValue << " ms" << std::endl;
+    std::cout << "Difference (lt - ct): " << (ltValue - ctValue) << " ms" << std::endl;
 
-    int64_t diff = std::abs((ltValue - ctValue) - tzOffsetMicros);
-    constexpr int64_t SLACK_MICROS = 5LL * 1000000LL;
-    EXPECT_LE(diff, SLACK_MICROS)
+    int64_t diff = std::abs((ltValue - ctValue) - tzOffsetMillis);
+    constexpr int64_t SLACK_MILLIS = 5LL * 1000LL;
+    EXPECT_LE(diff, SLACK_MILLIS)
         << "localtimestamp - current_timestamp (" << (ltValue - ctValue)
-        << ") should match the timezone offset (" << tzOffsetMicros << ").";
+        << ") should match the timezone offset (" << tzOffsetMillis << ").";
 }
 
 // New: empty batch boundary case (rowSize=0). Verifies no crash and an empty result vector.
@@ -412,7 +412,7 @@ TEST_F(LocalTimestampTest, MultiBatchReuse)
             << "Second batch row " << i << " should return the same cached value as the first batch";
     }
 
-    std::cout << "Both batches returned identical cached value: " << firstBatchValue << " micros since epoch"
+    std::cout << "Both batches returned identical cached value: " << firstBatchValue << " millis since epoch"
               << std::endl;
 
     delete result1;

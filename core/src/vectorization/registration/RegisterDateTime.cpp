@@ -103,15 +103,15 @@ void RegisterDatetimeFunctions(const std::string &prefix)
 
     RegisterFromUnixTimeFunction(prefix + "from_unixtime");
 
-    RegisterFunction<LocalTimeFunction, int64_t>(prefix + "localtime", {}, OMNI_LONG);
+    RegisterFunction<LocalTimeFunction, int64_t>(prefix + "flink_localtime", {}, OMNI_LONG);
 
-    RegisterFunction<LocalTimestampFunction, int64_t>(prefix + "localtimestamp", {}, OMNI_LONG);
+    RegisterFunction<LocalTimestampFunction, int64_t>(prefix + "flink_localtimestamp", {}, OMNI_LONG);
 
-    RegisterFunction<CurrentTimestampFunction, int64_t>(prefix + "current_timestamp", {}, OMNI_LONG);
+    RegisterFunction<CurrentTimestampFunction, int64_t>(prefix + "current_timestamp", {}, OMNI_LONG); //因为codgen有同名函数，所以不能加前缀
 
-    RegisterFunction<CurrentRowTimestampFunction, int64_t>(prefix + "current_row_timestamp", {}, OMNI_LONG);
+    RegisterFunction<CurrentRowTimestampFunction, int64_t>(prefix + "flink_current_row_timestamp", {}, OMNI_LONG);
 
-    RegisterFunction<CurrentDateFunction, int32_t>(prefix + "current_date", {}, OMNI_INT);
+    RegisterFunction<CurrentDateFunction, int32_t>(prefix + "flink_current_date", {}, OMNI_INT);
 
     RegisterFloorFunction(prefix + "flink_floor_time");
 

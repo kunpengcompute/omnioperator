@@ -111,11 +111,11 @@ protected:
         const std::unordered_map<std::string, std::string> &configValues = {})
     {
         std::vector<DataTypeId> argTypes = {};
-        auto signature = std::make_shared<FunctionSignature>("current_date", argTypes, OMNI_DATE32);
+        auto signature = std::make_shared<FunctionSignature>("flink_current_date", argTypes, OMNI_INT);
 
         auto factoryIt = VectorFunction::simpleFunctionFactoryMap_.find(signature);
         if (factoryIt == VectorFunction::simpleFunctionFactoryMap_.end()) {
-            ADD_FAILURE() << "Function factory current_date not found";
+            ADD_FAILURE() << "Function factory flink_current_date not found";
             return nullptr;
         }
 
@@ -125,7 +125,7 @@ protected:
         auto factory = factoryIt->second();
         auto vectorFunction = factory->createVectorFunction({}, queryConfig, constantInputs);
         if (vectorFunction == nullptr) {
-            ADD_FAILURE() << "Function current_date creation failed";
+            ADD_FAILURE() << "Function flink_current_date creation failed";
             return nullptr;
         }
 
@@ -133,7 +133,7 @@ protected:
         context.SetResultRowSize(rowSize);
 
         std::stack<BaseVector *> args;
-        auto resultType = std::make_shared<DataType>(OMNI_DATE32);
+        auto resultType = std::make_shared<DataType>(OMNI_INT);
         BaseVector *rawResult = nullptr;
         vectorFunction->Apply(args, resultType, rawResult, &context);
         return VectorUniquePtr(rawResult);

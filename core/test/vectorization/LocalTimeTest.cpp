@@ -33,46 +33,46 @@ using namespace omniruntime::type;
 using namespace omniruntime::codegen;
 
 namespace {
-constexpr int64_t MICROS_PER_DAY = 86400000000LL;
+constexpr int64_t MILLIS_PER_DAY = 86400000LL;
 // LocalTimeFunction falls back to OS local time when no session timezone is configured.
-int64_t GetCurrentMicrosSinceMidnight()
+int64_t GetCurrentMillisSinceMidnight()
 {
     auto now = std::chrono::system_clock::now();
     auto durationSinceEpoch = now.time_since_epoch();
     auto secsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
-    auto microsSinceEpoch = std::chrono::duration_cast<std::chrono::microseconds>(durationSinceEpoch);
-    int64_t subSecondMicros = static_cast<int64_t>((microsSinceEpoch - secsSinceEpoch).count());
+    auto millisSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch);
+    int64_t subSecondMillis = static_cast<int64_t>((millisSinceEpoch - secsSinceEpoch).count());
     std::time_t timeNow = static_cast<std::time_t>(secsSinceEpoch.count());
     std::tm tmVal {};
     localtime_r(&timeNow, &tmVal);
-    return static_cast<int64_t>(tmVal.tm_hour * 3600 + tmVal.tm_min * 60 + tmVal.tm_sec) * 1000000LL
-        + subSecondMicros;
+    return static_cast<int64_t>(tmVal.tm_hour * 3600 + tmVal.tm_min * 60 + tmVal.tm_sec) * 1000LL
+        + subSecondMillis;
 }
 
-// Compute expected localtime (micros since midnight) in a given session timezone.
-int64_t GetSessionTzLocalTimeMicros(const tz::TimeZone *sessionTz)
+// Compute expected localtime (millis since midnight) in a given session timezone.
+int64_t GetSessionTzLocalTimeMillis(const tz::TimeZone *sessionTz)
 {
     auto now = std::chrono::system_clock::now();
-    auto utcMicros = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
-    Timestamp ts = Timestamp::fromMicros(utcMicros);
+    auto utcMillis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    Timestamp ts = Timestamp::fromMillis(utcMillis);
     if (sessionTz != nullptr) {
         ts.toTimezone(*sessionTz);
     }
     std::tm localTm {};
     Timestamp::epochToCalendarUtc(ts.getSeconds(), localTm);
-    return static_cast<int64_t>(localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * 1000000LL
-        + static_cast<int64_t>(ts.getNanos() / 1000);
+    return static_cast<int64_t>(localTm.tm_hour * 3600 + localTm.tm_min * 60 + localTm.tm_sec) * 1000LL
+        + static_cast<int64_t>(ts.getNanos() / 1'000'000);
 }
 
-// Compute circular distance (in micros) between two times-of-day, handling midnight wrap-around.
-int64_t CircularDistanceMicros(int64_t a, int64_t b)
+// Compute circular distance (in millis) between two times-of-day, handling midnight wrap-around.
+int64_t CircularDistanceMillis(int64_t a, int64_t b)
 {
     int64_t diff = std::abs(a - b);
-    return std::min(diff, MICROS_PER_DAY - diff);
+    return std::min(diff, MILLIS_PER_DAY - diff);
 }
 
 // Tolerance for time-of-day matching checks on slow CI.
-static constexpr int64_t kMicrosTolerance = 10'000'000; // 10 seconds
+static constexpr int64_t kMillisTolerance = 10'000; // 10 seconds
 } // namespace
 
 class LocalTimeTest : public ::testing::Test {
@@ -87,7 +87,7 @@ protected:
         const std::unordered_map<std::string, std::string> &configValues = {})
     {
         std::vector<DataTypeId> argTypes = {};
-        auto signature = std::make_shared<FunctionSignature>("localtime", argTypes, OMNI_LONG);
+        auto signature = std::make_shared<FunctionSignature>("flink_localtime", argTypes, OMNI_LONG);
 
         auto factoryIt = VectorFunction::simpleFunctionFactoryMap_.find(signature);
         if (factoryIt == VectorFunction::simpleFunctionFactoryMap_.end()) {
@@ -138,9 +138,9 @@ TEST_F(LocalTimeTest, BasicLocalTime)
             << "Unexpected NULL at index " << i << " for localtime";
         if (!resultVector->IsNull(i)) {
             int64_t actual = resultVector->GetValue(i);
-            std::cout << "Row " << i << ": localtime=" << actual << " micros since midnight" << std::endl;
+            std::cout << "Row " << i << ": localtime=" << actual << " millis since midnight" << std::endl;
             EXPECT_GE(actual, 0) << "localtime should be >= 0 at row " << i;
-            EXPECT_LT(actual, MICROS_PER_DAY) << "localtime should be < " << MICROS_PER_DAY << " at row " << i;
+            EXPECT_LT(actual, MILLIS_PER_DAY) << "localtime should be < " << MILLIS_PER_DAY << " at row " << i;
         }
     }
 
@@ -171,7 +171,7 @@ TEST_F(LocalTimeTest, ConstantAndNonNullResult)
         }
     }
 
-    std::cout << "Large batch (" << rowSize << " rows): all rows = " << firstValue << " micros since midnight"
+    std::cout << "Large batch (" << rowSize << " rows): all rows = " << firstValue << " millis since midnight"
               << std::endl;
 
     delete result;
@@ -184,14 +184,14 @@ TEST_F(LocalTimeTest, MatchesSystemLocalTime)
     std::cout << "=== Test: localtime matches system local time ===" << std::endl;
 
     // Capture system time before function creation (initialize() runs during createVectorFunction)
-    int64_t beforeMicros = GetCurrentMicrosSinceMidnight();
+    int64_t beforeMillis = GetCurrentMillisSinceMidnight();
 
     int32_t rowSize = 1;
     BaseVector *result = nullptr;
     ExecuteLocalTime(rowSize, result);
 
     // Capture system time after function creation
-    int64_t afterMicros = GetCurrentMicrosSinceMidnight();
+    int64_t afterMillis = GetCurrentMillisSinceMidnight();
 
     ASSERT_NE(result, nullptr) << "Result is null";
     auto *resultVector = static_cast<Vector<int64_t> *>(result);
@@ -200,25 +200,25 @@ TEST_F(LocalTimeTest, MatchesSystemLocalTime)
     EXPECT_FALSE(resultVector->IsNull(0));
     int64_t actual = resultVector->GetValue(0);
 
-    std::cout << "localtime result: " << actual << " micros" << std::endl;
-    std::cout << "Before initialize: " << beforeMicros << " micros" << std::endl;
-    std::cout << "After initialize: " << afterMicros << " micros" << std::endl;
+    std::cout << "localtime result: " << actual << " millis" << std::endl;
+    std::cout << "Before initialize: " << beforeMillis << " millis" << std::endl;
+    std::cout << "After initialize: " << afterMillis << " millis" << std::endl;
 
-    int64_t minDist = std::min(CircularDistanceMicros(actual, beforeMicros),
-                               CircularDistanceMicros(actual, afterMicros));
-    EXPECT_LE(minDist, kMicrosTolerance)
-        << "localtime (" << actual << ") should be within " << kMicrosTolerance
-        << " micros of system local time. Before=" << beforeMicros << ", After=" << afterMicros;
+    int64_t minDist = std::min(CircularDistanceMillis(actual, beforeMillis),
+                               CircularDistanceMillis(actual, afterMillis));
+    EXPECT_LE(minDist, kMillisTolerance)
+        << "localtime (" << actual << ") should be within " << kMillisTolerance
+        << " millis of system local time. Before=" << beforeMillis << ", After=" << afterMillis;
 
     delete result;
 }
 
-// Merged: DirectStructTest + MicrosPrecisionGuard
+// Merged: DirectStructTest + MillisPrecisionGuard
 TEST_F(LocalTimeTest, DirectStructTest)
 {
     std::cout << "=== Test: LocalTimeFunction struct direct test ===" << std::endl;
 
-    int64_t beforeMicros = GetCurrentMicrosSinceMidnight();
+    int64_t beforeMillis = GetCurrentMillisSinceMidnight();
 
     LocalTimeFunction<int64_t> fn;
     std::vector<DataTypeId> inputTypes;
@@ -226,28 +226,28 @@ TEST_F(LocalTimeTest, DirectStructTest)
     config::QueryConfig queryConfig(configValues);
     fn.initialize(inputTypes, queryConfig);
 
-    int64_t afterMicros = GetCurrentMicrosSinceMidnight();
+    int64_t afterMillis = GetCurrentMillisSinceMidnight();
 
     // First call - get the cached value
     int64_t result1 = 0;
     vectorization::Status status1 = fn.call(result1);
     EXPECT_TRUE(status1.ok()) << "call() should return OK status";
 
-    std::cout << "Direct call result: " << result1 << " micros since midnight" << std::endl;
+    std::cout << "Direct call result: " << result1 << " millis since midnight" << std::endl;
 
-    // Verify valid range (micros precision guard: [0, 86400000000), not seconds or millis)
+    // Verify valid range (millis precision guard: [0, 86400000), not seconds)
     EXPECT_GE(result1, 0) << "localtime (" << result1
         << ") should be >= 0; a value near 86400 suggests seconds.";
-    EXPECT_LT(result1, MICROS_PER_DAY) << "localtime (" << result1
-        << ") should be < " << MICROS_PER_DAY
-        << "; a value near 86400000 suggests millis, near 86400 suggests seconds.";
+    EXPECT_LT(result1, MILLIS_PER_DAY) << "localtime (" << result1
+        << ") should be < " << MILLIS_PER_DAY
+        << "; a value near 86400 suggests seconds.";
 
     // Verify close to system local time
-    int64_t minDist = std::min(CircularDistanceMicros(result1, beforeMicros),
-                               CircularDistanceMicros(result1, afterMicros));
-    EXPECT_LE(minDist, kMicrosTolerance)
-        << "localtime (" << result1 << ") should be within " << kMicrosTolerance
-        << " micros of system local time. Before=" << beforeMicros << ", After=" << afterMicros;
+    int64_t minDist = std::min(CircularDistanceMillis(result1, beforeMillis),
+                               CircularDistanceMillis(result1, afterMillis));
+    EXPECT_LE(minDist, kMillisTolerance)
+        << "localtime (" << result1 << ") should be within " << kMillisTolerance
+        << " millis of system local time. Before=" << beforeMillis << ", After=" << afterMillis;
 
     // Second call - should return the same cached value (batch-mode semantic)
     int64_t result2 = 0;
@@ -266,7 +266,7 @@ TEST_F(LocalTimeTest, UsesSessionTimezone)
     for (const auto &tzName : tzNames) {
         const auto *sessionTz = tz::locateZone(tzName);
 
-        int64_t expectedBefore = GetSessionTzLocalTimeMicros(sessionTz);
+        int64_t expectedBefore = GetSessionTzLocalTimeMillis(sessionTz);
 
         LocalTimeFunction<int64_t> fn;
         std::vector<DataTypeId> inputTypes;
@@ -275,18 +275,18 @@ TEST_F(LocalTimeTest, UsesSessionTimezone)
         config::QueryConfig queryConfig(configValues);
         fn.initialize(inputTypes, queryConfig);
 
-        int64_t expectedAfter = GetSessionTzLocalTimeMicros(sessionTz);
+        int64_t expectedAfter = GetSessionTzLocalTimeMillis(sessionTz);
 
         int64_t actual = 0;
         ASSERT_TRUE(fn.call(actual).ok()) << "call() failed for session timezone " << tzName;
 
-        int64_t minDiff = std::min(CircularDistanceMicros(actual, expectedBefore),
-                                   CircularDistanceMicros(actual, expectedAfter));
-        EXPECT_LE(minDiff, kMicrosTolerance)
+        int64_t minDiff = std::min(CircularDistanceMillis(actual, expectedBefore),
+                                   CircularDistanceMillis(actual, expectedAfter));
+        EXPECT_LE(minDiff, kMillisTolerance)
             << "localtime (" << actual << ") should match session timezone " << tzName
             << " (expected before=" << expectedBefore << ", after=" << expectedAfter << ")";
 
-        std::cout << "tz=" << tzName << ": actual=" << actual << " us, minDiff=" << minDiff << " us" << std::endl;
+        std::cout << "tz=" << tzName << ": actual=" << actual << " ms, minDiff=" << minDiff << " ms" << std::endl;
     }
 }
 
@@ -301,10 +301,10 @@ TEST_F(LocalTimeTest, VectorFunctionPathWithSessionTimezone)
     std::unordered_map<std::string, std::string> configValues;
     configValues[config::QueryConfig::kSessionTimezone] = tzName;
 
-    int64_t expectedBefore = GetSessionTzLocalTimeMicros(sessionTz);
+    int64_t expectedBefore = GetSessionTzLocalTimeMillis(sessionTz);
     BaseVector *result = nullptr;
     ExecuteLocalTime(1, result, configValues);
-    int64_t expectedAfter = GetSessionTzLocalTimeMicros(sessionTz);
+    int64_t expectedAfter = GetSessionTzLocalTimeMillis(sessionTz);
 
     ASSERT_NE(result, nullptr);
     auto *resultVector = static_cast<Vector<int64_t> *>(result);
@@ -312,9 +312,9 @@ TEST_F(LocalTimeTest, VectorFunctionPathWithSessionTimezone)
     ASSERT_FALSE(resultVector->IsNull(0));
 
     int64_t actual = resultVector->GetValue(0);
-    int64_t minDiff = std::min(CircularDistanceMicros(actual, expectedBefore),
-                               CircularDistanceMicros(actual, expectedAfter));
-    EXPECT_LE(minDiff, kMicrosTolerance)
+    int64_t minDiff = std::min(CircularDistanceMillis(actual, expectedBefore),
+                               CircularDistanceMillis(actual, expectedAfter));
+    EXPECT_LE(minDiff, kMillisTolerance)
         << "localtime via VectorFunction path should match session timezone " << tzName;
 
     delete result;
@@ -356,7 +356,7 @@ TEST_F(LocalTimeTest, MultiBatchReuse)
     EXPECT_FALSE(resultVector1->IsNull(0));
     int64_t firstBatchValue = resultVector1->GetValue(0);
     EXPECT_GE(firstBatchValue, 0) << "First batch localtime should be >= 0";
-    EXPECT_LT(firstBatchValue, MICROS_PER_DAY) << "First batch localtime should be < MICROS_PER_DAY";
+    EXPECT_LT(firstBatchValue, MILLIS_PER_DAY) << "First batch localtime should be < MILLIS_PER_DAY";
 
     // Second batch (reusing the same function instance)
     int32_t rowSize2 = 4;
@@ -376,7 +376,7 @@ TEST_F(LocalTimeTest, MultiBatchReuse)
             << "Second batch row " << i << " should return the same cached value as the first batch";
     }
 
-    std::cout << "Both batches returned identical cached value: " << firstBatchValue << " micros since midnight"
+    std::cout << "Both batches returned identical cached value: " << firstBatchValue << " millis since midnight"
               << std::endl;
 
     delete result1;
