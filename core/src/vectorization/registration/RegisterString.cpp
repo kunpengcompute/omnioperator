@@ -13,6 +13,7 @@
 #include "../functions/EqualStringFunction.h"
 #include "../functions/ConcatFunction.h"
 #include "../functions/ReverseFunction.h"
+#include "../functions/ParseUrl.h"
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -20,6 +21,32 @@ void RegisterStringFunctions(const std::string &prefix)
 {
     RegisterFunction<InstrFunction, int32_t, std::string_view, std::string_view>(prefix + "instr", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT);
     RegisterFunction<ReplaceFunction, std::string, std::string_view, std::string_view, std::string_view>(prefix + "replace", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR);
+    // parse_url(url, part[, key]) -> varchar
+    // Supports all CHAR/VARCHAR argument combinations.
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_VARCHAR, OMNI_CHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_CHAR, OMNI_VARCHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_CHAR, OMNI_CHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_CHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_VARCHAR, OMNI_CHAR, OMNI_VARCHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_VARCHAR, OMNI_CHAR, OMNI_CHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_CHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_CHAR, OMNI_VARCHAR, OMNI_CHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_CHAR, OMNI_CHAR, OMNI_VARCHAR}, OMNI_VARCHAR);
+    RegisterFunction<ParseUrlFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "parse_url", {OMNI_CHAR, OMNI_CHAR, OMNI_CHAR}, OMNI_VARCHAR);
     RegisterString<StartsWithFunction>({prefix + "StartsWith"});
     RegisterString<EndsWithFunction>({prefix + "EndsWith"});
     RegisterString<ContainsFunction>({prefix + "Contains"});
