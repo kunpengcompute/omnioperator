@@ -40,7 +40,6 @@ void JsonStringFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr
     const DataType *inputType = (context != nullptr) ? context->GetToJsonInputType() : nullptr;
     int32_t rowSize = inputArg->GetSize();
     auto *stringResult = new Vector<LargeStringContainer<std::string_view>>(rowSize);
-    stringResult->SetIsField(true);
     for (int32_t row = 0; row < rowSize; ++row) {
         if (inputArg->IsNull(row)) {
             // Flink JSON_STRING: NULL input -> NULL output.

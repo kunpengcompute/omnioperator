@@ -59,7 +59,6 @@ void JsonArrayFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr 
         }
     }
     auto *stringResult = new Vector<LargeStringContainer<std::string_view>>(rowSize);
-    stringResult->SetIsField(true);
 
     for (int32_t row = 0; row < rowSize; ++row) {
         std::string out;
