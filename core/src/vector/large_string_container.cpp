@@ -3,6 +3,7 @@
  */
 
 #include "large_string_container.h"
+#include "memory/thread_memory_manager.h"
 
 namespace omniruntime::vec {
 template<typename RAW_DATA_TYPE>
@@ -113,8 +114,16 @@ char* LargeStringContainer<RAW_DATA_TYPE>::ExpandBufferToCapacity(size_t toCapac
 template<typename RAW_DATA_TYPE>
 void LargeStringContainer<RAW_DATA_TYPE>::Expand(int32_t needSize)
 {
+    // Vector construction reports GetContainerCapacity() once; each growth must
+    // report the delta so destructor reclaim matches total reported bytes (e.g.
+    // shuffle read-side merge appends multiple payloads into one VARCHAR column).
+    const int64_t capacityBefore = GetContainerCapacity();
     size = needSize;
     offsets.resize(needSize + 1);
+    const int64_t capacityAfter = GetContainerCapacity();
+    if (capacityAfter > capacityBefore) {
+        omniruntime::mem::ThreadMemoryManager::ReportMemory(capacityAfter - capacityBefore);
+    }
 }
 
 template<typename RAW_DATA_TYPE>
