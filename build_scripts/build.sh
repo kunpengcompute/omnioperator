@@ -18,6 +18,7 @@ check_set_prerequisites
 # init variables
 BINDING_TARGET_EXPR='boostkit-omniop-\1-binding-2.2.0-aarch64'
 CWD=$(pwd)
+SOURCE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 OPTIONS=""
 TARGETS="--target all"
 
@@ -98,3 +99,10 @@ rm -rf $CWD/build/CMakeCache.txt && cmake -S $(cd $(dirname ${BASH_SOURCE[0]})/.
 cmake --build $CWD/build --clean-first $TARGETS -j $(test -z "${OMNI_COMPILER_THREAD_COUNT}" && echo $(nproc) || echo ${OMNI_COMPILER_THREAD_COUNT})
 # install requires root privilege
 cmake --install $CWD/build
+
+OMNI_BUILD_INFO="$OMNI_HOME/lib/omni-build-info.properties"
+{
+  printf 'omni_branch=%s\n' "$(git -C "$SOURCE_DIR" rev-parse --abbrev-ref HEAD)"
+  printf 'omni_revision=%s\n' "$(git -C "$SOURCE_DIR" rev-parse HEAD)"
+  printf 'omni_revision_time=%s\n' "$(git -C "$SOURCE_DIR" show -s --format=%ci HEAD)"
+} > "$OMNI_BUILD_INFO"
