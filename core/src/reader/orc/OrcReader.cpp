@@ -127,7 +127,7 @@ OrcRowReader::OrcRowReader(std::shared_ptr<FileContents> contents, const std::sh
             const char *reason = nullptr;
             if (!allSupported) {
                 reason = "selected columns include unsupported types "
-                         "(supports int/bigint/smallint/date/varchar/char)";
+                         "(supports primitive ORC scalars; array/map/row remain on the legacy path)";
             } else if (!hasPredicate) {
                 // When Gluten does not push IN etc., C++ sees no JSON — same as pure projection.
                 reason = "no vecPredicateCondition from Gluten "

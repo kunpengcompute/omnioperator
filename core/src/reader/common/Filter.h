@@ -9,7 +9,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// Pushdown filter abstraction (aligned with Velox common::Filter); T0 int64 + A1a Bytes*.
+// Pushdown filter abstraction aligned with Velox common::Filter. T0 covers the
+// integer family, A1a covers bytes, and A1b adds BOOLEAN and DOUBLE filters.
 
 #ifndef OMNI_READER_COMMON_FILTER_H
 #define OMNI_READER_COMMON_FILTER_H
@@ -25,7 +26,7 @@
 
 namespace common {
 
-// Aligned with Velox FilterKind; T0 bigint family + A1a Bytes*.
+// Filter kinds aligned with Velox. Not every declared kind is pushable yet.
 enum class FilterKind : int8_t {
     kAlwaysFalse,
     kAlwaysTrue,
@@ -70,7 +71,8 @@ public:
 
     bool testNull() const { return nullAllowed_; }
 
-    // Value tests; T0 uses testInt64; A1a uses testBytes.
+    // Value tests used by the currently enabled filter channels.
+    virtual bool testNonNull() const { return false; }
     virtual bool testInt64(int64_t /*value*/) const { return false; }
     virtual bool testInt32(int32_t value) const { return testInt64(value); }
     virtual bool testInt16(int16_t value) const { return testInt64(value); }
@@ -113,7 +115,11 @@ class AlwaysTrue final : public Filter {
 public:
     AlwaysTrue() : Filter(FilterKind::kAlwaysTrue, true) {}
     static FilterPtr instance();
+    bool testNonNull() const override { return true; }
     bool testInt64(int64_t) const override { return true; }
+    bool testDouble(double) const override { return true; }
+    bool testFloat(float) const override { return true; }
+    bool testBool(bool) const override { return true; }
     bool testBytes(const char *, int32_t) const override { return true; }
     bool testInt64Range(int64_t, int64_t, bool) const override { return true; }
     FilterPtr mergeWith(const Filter *other) const override;
@@ -124,7 +130,11 @@ class IsNotNull final : public Filter {
 public:
     IsNotNull() : Filter(FilterKind::kIsNotNull, false) {}
     static FilterPtr instance();
+    bool testNonNull() const override { return true; }
     bool testInt64(int64_t) const override { return true; }
+    bool testDouble(double) const override { return true; }
+    bool testFloat(float) const override { return true; }
+    bool testBool(bool) const override { return true; }
     bool testBytes(const char *, int32_t) const override { return true; }
     FilterPtr mergeWith(const Filter *other) const override;
     FilterPtr clone(bool) const override { return instance(); }
@@ -139,6 +149,88 @@ public:
     FilterPtr mergeWith(const Filter *other) const override;
     FilterPtr clone(bool) const override { return instance(); }
 };
+
+// This phase pushes Boolean equality and inequality. Ordering predicates remain on the legacy path.
+class BoolValue final : public Filter {
+public:
+    BoolValue(bool value, bool negated, bool nullAllowed)
+        : Filter(FilterKind::kBoolValue, nullAllowed), value_(value), negated_(negated) {}
+
+    bool testBool(bool value) const override { return negated_ ? value != value_ : value == value_; }
+    bool value() const { return value_; }
+    bool negated() const { return negated_; }
+
+    FilterPtr mergeWith(const Filter *other) const override;
+    FilterPtr clone(bool nullAllowed) const override
+    {
+        return std::make_shared<BoolValue>(value_, negated_, nullAllowed);
+    }
+
+private:
+    bool value_;
+    bool negated_;
+};
+
+// DOUBLE interval. Bounds are kept explicitly inclusive/exclusive because there
+// is no safe "literal +/- 1" transformation for floating-point values.
+template <typename T, FilterKind Kind>
+class FloatingPointRange final : public Filter {
+public:
+    FloatingPointRange(T lower, bool lowerUnbounded, bool lowerExclusive,
+                       T upper, bool upperUnbounded, bool upperExclusive,
+                       bool negated, bool nullAllowed)
+        : Filter(Kind, nullAllowed),
+          lower_(lower),
+          upper_(upper),
+          lowerUnbounded_(lowerUnbounded),
+          upperUnbounded_(upperUnbounded),
+          lowerExclusive_(lowerExclusive),
+          upperExclusive_(upperExclusive),
+          negated_(negated)
+    {}
+
+    bool testDouble(double value) const override { return test(static_cast<T>(value)); }
+    bool testFloat(float value) const override { return test(static_cast<T>(value)); }
+
+    bool test(T value) const
+    {
+        bool inside = true;
+        if (!lowerUnbounded_) {
+            inside = lowerExclusive_ ? value > lower_ : value >= lower_;
+        }
+        if (inside && !upperUnbounded_) {
+            inside = upperExclusive_ ? value < upper_ : value <= upper_;
+        }
+        return negated_ ? !inside : inside;
+    }
+
+    T lower() const { return lower_; }
+    T upper() const { return upper_; }
+    bool lowerUnbounded() const { return lowerUnbounded_; }
+    bool upperUnbounded() const { return upperUnbounded_; }
+    bool lowerExclusive() const { return lowerExclusive_; }
+    bool upperExclusive() const { return upperExclusive_; }
+    bool negated() const { return negated_; }
+
+    FilterPtr mergeWith(const Filter *other) const override;
+    FilterPtr clone(bool nullAllowed) const override
+    {
+        return std::make_shared<FloatingPointRange<T, Kind>>(
+            lower_, lowerUnbounded_, lowerExclusive_, upper_, upperUnbounded_, upperExclusive_, negated_,
+            nullAllowed);
+    }
+
+private:
+    T lower_;
+    T upper_;
+    bool lowerUnbounded_;
+    bool upperUnbounded_;
+    bool lowerExclusive_;
+    bool upperExclusive_;
+    bool negated_;
+};
+
+using DoubleRange = FloatingPointRange<double, FilterKind::kDoubleRange>;
 
 // Closed interval [lower, upper] (equality/compare/BETWEEN normalized at construction).
 class BigintRange final : public Filter {

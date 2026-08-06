@@ -9,11 +9,14 @@
  */
 
 #include <gtest/gtest.h>
+#include <cstdio>
 #include <limits>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+
+#include <unistd.h>
 
 #include <stdexcept>
 
@@ -24,12 +27,20 @@
 #include "reader/ReaderOptions.h"
 #include "reader/common/PredicateOperatorType.h"
 #include "reader/common/UriInfo.h"
+#include "reader/orc/OmniWriter.hh"
 #include "reader/orc/OrcFileOverride.hh"
 #include "type/data_type.h"
 #include "util/type_util.h"
 #include "vector/vector_common.h"
 
 using omniruntime::type::Date32Type;
+using omniruntime::type::ByteType;
+using omniruntime::type::BooleanType;
+using omniruntime::type::Decimal128;
+using omniruntime::type::Decimal128Type;
+using omniruntime::type::Decimal64Type;
+using omniruntime::type::DoubleType;
+using omniruntime::type::FloatType;
 using omniruntime::type::IntType;
 using omniruntime::type::LongType;
 using omniruntime::type::OMNI_DATE32;
@@ -38,8 +49,14 @@ using omniruntime::type::OMNI_LONG;
 using omniruntime::type::OMNI_SHORT;
 using omniruntime::type::ROW;
 using omniruntime::type::ShortType;
+using omniruntime::type::TimestampType;
+using omniruntime::type::VarBinaryType;
 using omniruntime::vec::BaseVector;
+using omniruntime::vec::LargeStringContainer;
+using omniruntime::vec::RowVector;
 using omniruntime::vec::Vector;
+using omniruntime::writer::createOmniWriter;
+using OmniStringVector = Vector<LargeStringContainer<std::string_view>>;
 using ::common::PredicateOperatorType;
 
 namespace {
@@ -53,6 +70,22 @@ struct ScanResult {
     std::vector<std::vector<IntRow>> columns; // columns[col][row]
     uint64_t totalRows = 0;
 };
+
+struct ScalarRow {
+    bool isNull = false;
+    std::string rawValue;
+};
+
+struct ScalarScanResult {
+    std::vector<std::vector<ScalarRow>> columns;
+    uint64_t totalRows = 0;
+};
+
+template <typename T>
+std::string RawBytes(T value)
+{
+    return std::string(reinterpret_cast<const char *>(&value), sizeof(T));
+}
 
 nlohmann::json Leaf(PredicateOperatorType op, int index, int dataType, const std::string &value = "0")
 {
@@ -90,11 +123,12 @@ nlohmann::json Not(nlohmann::json child)
     return j;
 }
 
-std::string BuildEnhanceJson(bool filterWhileDecode, const nlohmann::json &cond, const std::string &includedColumns)
+std::string BuildEnhanceJson(bool filterWhileDecode, const nlohmann::json &cond, const std::string &includedColumns,
+                             const std::string &allColumns = "c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13")
 {
     nlohmann::json root;
     root["filterWhileDecode"] = filterWhileDecode;
-    root["allColumns"] = "c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13";
+    root["allColumns"] = allColumns;
     root["includedColumns"] = includedColumns;
     root["vecPredicateCondition"] = cond.dump();
     return root.dump();
@@ -136,6 +170,153 @@ IntRow ReadIntCell(BaseVector *v, int32_t row, int omniTypeId)
     }
     return cell;
 }
+
+ScalarRow ReadScalarCell(BaseVector *v, int32_t row, int omniTypeId)
+{
+    ScalarRow cell;
+    if (v->IsNull(row)) {
+        cell.isNull = true;
+        return cell;
+    }
+    switch (static_cast<omniruntime::type::DataTypeId>(omniTypeId)) {
+        case OMNI_INT:
+            cell.rawValue = RawBytes(static_cast<Vector<int32_t> *>(v)->GetValue(row));
+            break;
+        case omniruntime::type::OMNI_FLOAT:
+            cell.rawValue = RawBytes(static_cast<Vector<float> *>(v)->GetValue(row));
+            break;
+        case omniruntime::type::OMNI_DOUBLE:
+            cell.rawValue = RawBytes(static_cast<Vector<double> *>(v)->GetValue(row));
+            break;
+        case omniruntime::type::OMNI_DECIMAL64:
+        case omniruntime::type::OMNI_TIMESTAMP:
+            cell.rawValue = RawBytes(static_cast<Vector<int64_t> *>(v)->GetValue(row));
+            break;
+        case omniruntime::type::OMNI_BOOLEAN:
+            cell.rawValue = RawBytes(static_cast<Vector<bool> *>(v)->GetValue(row));
+            break;
+        case omniruntime::type::OMNI_BYTE:
+            cell.rawValue = RawBytes(static_cast<Vector<int8_t> *>(v)->GetValue(row));
+            break;
+        case omniruntime::type::OMNI_DECIMAL128:
+            cell.rawValue = static_cast<Vector<Decimal128> *>(v)->GetValue(row).ToString();
+            break;
+        case omniruntime::type::OMNI_VARBINARY: {
+            const auto value = static_cast<OmniStringVector *>(v)->GetValue(row);
+            cell.rawValue.assign(value.data(), value.size());
+            break;
+        }
+        default:
+            throw std::runtime_error("unexpected type in scalar FWD scan test");
+    }
+    return cell;
+}
+
+class PrimitiveOrcFixture {
+public:
+    explicit PrimitiveOrcFixture(const std::string &testName)
+        : filename_("/tmp/omni_scan_primitive_" + std::to_string(getpid()) + "_" + testName + ".orc")
+    {
+        constexpr int32_t numRows = 8;
+        const std::vector<int32_t> ids = {0, 1, 2, 3, 4, 5, 6, 7};
+        const std::vector<int8_t> bytes = {-128, -7, -1, 0, 1, 7, 42, 127};
+        const std::vector<bool> booleans = {false, false, true, true, false, true, false, true};
+        const std::vector<double> doubles = {-4.0, -2.0, -1.0, 0.0, 0.5, 1.0, 2.0, 4.0};
+        const std::vector<float> floats = {-4.5F, -2.5F, -1.5F, 0.0F, 0.5F, 1.5F, 2.5F, 4.5F};
+        const std::vector<int64_t> decimals64 = {
+            -123456789012345678L, -10000L, -1L, 0L, 1L, 10000L, 123456789012345677L, 123456789012345678L};
+        const std::vector<Decimal128> decimals = {
+            Decimal128("-99999999999999999999999999999999999999"),
+            Decimal128("-123456789012345678901234567890"),
+            Decimal128("-1"),
+            Decimal128("0"),
+            Decimal128("1"),
+            Decimal128("123456789012345678901234567890"),
+            Decimal128("99999999999999999999999999999999999998"),
+            Decimal128("99999999999999999999999999999999999999")};
+        const std::vector<std::string> binaries = {
+            "", "text", std::string("a\0b", 3), std::string("\x00\x01\x02\xff", 4),
+            "payload-4", "payload-5", "payload-6", "payload-7"};
+        const std::vector<int64_t> timestamps = {
+            1609459200000L, 1609459201000L, 1609459202000L, 1609459203000L,
+            1609459204000L, 1609459205000L, 1609459206000L, 1609459207000L};
+
+        UriInfo uri("file", filename_, "", "-1");
+        auto outStream = omniruntime::reader::writeFileOverride(uri);
+        auto schema = ::orc::createPrimitiveType(::orc::TypeKind::STRUCT);
+        schema->addStructField("id", ::orc::createPrimitiveType(::orc::TypeKind::INT));
+        schema->addStructField("c_byte", ::orc::createPrimitiveType(::orc::TypeKind::BYTE));
+        schema->addStructField("c_bool", ::orc::createPrimitiveType(::orc::TypeKind::BOOLEAN));
+        schema->addStructField("c_double", ::orc::createPrimitiveType(::orc::TypeKind::DOUBLE));
+        schema->addStructField("c_float", ::orc::createPrimitiveType(::orc::TypeKind::FLOAT));
+        schema->addStructField("c_decimal64", ::orc::createDecimalType(18, 4));
+        schema->addStructField("c_decimal128", ::orc::createDecimalType(38, 4));
+        schema->addStructField("c_binary", ::orc::createPrimitiveType(::orc::TypeKind::BINARY));
+        schema->addStructField("c_timestamp", ::orc::createPrimitiveType(::orc::TypeKind::TIMESTAMP));
+
+        ::orc::WriterOptions options;
+        options.setMemoryPool(::orc::getDefaultPool());
+        options.setStripeSize(67108864);
+        options.setTimezoneName("GMT");
+        options.setDictionaryKeySizeThreshold(0.0);
+        auto writer = createOmniWriter(*schema, outStream.get(), options);
+
+        auto idVector = std::make_unique<Vector<int32_t>>(numRows);
+        auto byteVector = std::make_unique<Vector<int8_t>>(numRows);
+        auto boolVector = std::make_unique<Vector<bool>>(numRows);
+        auto doubleVector = std::make_unique<Vector<double>>(numRows);
+        auto floatVector = std::make_unique<Vector<float>>(numRows);
+        auto decimal64Vector = std::make_unique<Vector<int64_t>>(numRows);
+        auto decimalVector = std::make_unique<Vector<Decimal128>>(numRows);
+        auto binaryVector = std::make_unique<OmniStringVector>(numRows);
+        auto timestampVector = std::make_unique<Vector<int64_t>>(numRows);
+        for (int32_t row = 0; row < numRows; ++row) {
+            idVector->SetValue(row, ids[row]);
+            byteVector->SetValue(row, bytes[row]);
+            boolVector->SetValue(row, booleans[row]);
+            doubleVector->SetValue(row, doubles[row]);
+            floatVector->SetValue(row, floats[row]);
+            decimal64Vector->SetValue(row, decimals64[row]);
+            decimalVector->SetValue(row, decimals[row]);
+            binaryVector->SetValue(row, std::string_view(binaries[row]));
+            timestampVector->SetValue(row, timestamps[row]);
+            idVector->SetNotNull(row);
+            byteVector->SetNotNull(row);
+            boolVector->SetNotNull(row);
+            doubleVector->SetNotNull(row);
+            floatVector->SetNotNull(row);
+            decimal64Vector->SetNotNull(row);
+            decimalVector->SetNotNull(row);
+            binaryVector->SetNotNull(row);
+            timestampVector->SetNotNull(row);
+        }
+        byteVector->SetNull(1);
+        boolVector->SetNull(2);
+        doubleVector->SetNull(3);
+        floatVector->SetNull(4);
+        decimal64Vector->SetNull(5);
+        decimalVector->SetNull(5);
+        binaryVector->SetNull(6);
+        timestampVector->SetNull(7);
+
+        std::vector<BaseVector *> columns = {
+            idVector.get(), byteVector.get(), boolVector.get(), doubleVector.get(),
+            floatVector.get(), decimal64Vector.get(), decimalVector.get(), binaryVector.get(), timestampVector.get()};
+        auto rowVector = std::make_unique<RowVector>(numRows, columns);
+        for (int32_t row = 0; row < numRows; ++row) {
+            rowVector->SetNotNull(row);
+        }
+        writer->add(rowVector.get(), 0, numRows);
+        writer->close();
+    }
+
+    ~PrimitiveOrcFixture() { std::remove(filename_.c_str()); }
+
+    const std::string &filename() const { return filename_; }
+
+private:
+    std::string filename_;
+};
 
 } // namespace
 
@@ -223,6 +404,133 @@ protected:
                     EXPECT_EQ(off.columns[c][r].value, on.columns[c][r].value) << "col " << c << " row " << r;
                 }
             }
+        }
+    }
+
+    ScalarScanResult RunScalarScanFile(bool filterWhileDecode, const nlohmann::json &cond, uint64_t batchLen,
+                                       const std::string &filename, const std::string &allColumns,
+                                       const std::string &includedColumns,
+                                       const omniruntime::type::RowTypePtr &rowType,
+                                       std::vector<int> typeIds)
+    {
+        auto readerOpts = std::make_shared<omniruntime::reader::ReaderOptions>();
+        readerOpts->ParseEnhanceJson(
+            BuildEnhanceJson(filterWhileDecode, cond, includedColumns, allColumns),
+            omniruntime::codegen::FileFormat::ORC);
+        readerOpts->SetBatchLen(static_cast<int32_t>(batchLen));
+        auto orcReaderOptions = std::make_shared<::orc::ReaderOptions>();
+        orcReaderOptions->setMemoryPool(*::orc::getDefaultPool());
+        orcReaderOptions->setTailLocation(std::numeric_limits<uint64_t>::max());
+        orcReaderOptions->setSerializedFileTail("");
+        readerOpts->SetOrcReaderOptions(std::move(orcReaderOptions));
+        readerOpts->SetOrcRowReaderOptions(std::make_shared<::orc::RowReaderOptions>());
+        readerOpts->SetUri(std::make_shared<UriInfo>("file", filename, "", "-1"));
+        readerOpts->SetRowType(rowType);
+        readerOpts->SetFileRowType(rowType);
+
+        auto reader =
+            omniruntime::reader::GetReaderFactory(omniruntime::codegen::FileFormat::ORC)->CreateReader(readerOpts);
+        auto included = readerOpts->GetIncludedColumnsList();
+        EXPECT_FALSE(included.empty()) << "includedColumns mapping failed; check allColumns/includedColumns";
+        if (included.empty()) {
+            return {};
+        }
+        readerOpts->GetOrcRowReaderOptions().include(included);
+        auto rowReader = reader->CreateRowReader();
+
+        ScalarScanResult result;
+        result.columns.resize(typeIds.size());
+        std::vector<BaseVector *> *batch = nullptr;
+        uint64_t n = rowReader->Next(&batch, typeIds.data(), batchLen);
+        while (n > 0) {
+            EXPECT_NE(batch, nullptr);
+            EXPECT_EQ(batch == nullptr ? 0 : batch->size(), typeIds.size());
+            if (batch == nullptr || batch->size() != typeIds.size()) {
+                ClearBatch(batch);
+                break;
+            }
+            result.totalRows += n;
+            for (size_t column = 0; column < typeIds.size(); ++column) {
+                for (uint64_t row = 0; row < n; ++row) {
+                    result.columns[column].push_back(
+                        ReadScalarCell((*batch)[column], static_cast<int32_t>(row), typeIds[column]));
+                }
+            }
+            ClearBatch(batch);
+            batch = nullptr;
+            n = rowReader->Next(&batch, typeIds.data(), batchLen);
+        }
+        ClearBatch(batch);
+        return result;
+    }
+
+    ScalarScanResult RunScalarScan(bool filterWhileDecode, const nlohmann::json &cond, uint64_t batchLen)
+    {
+        auto rowType = ROW(
+            {"c1", "c6", "c7", "c8", "c9", "c10", "c12"},
+            {IntType(), FloatType(), DoubleType(), Decimal64Type(9, 8), Decimal64Type(18, 5), BooleanType(),
+             TimestampType()});
+        std::vector<int> typeIds = {
+            OMNI_INT,
+            omniruntime::type::OMNI_FLOAT,
+            omniruntime::type::OMNI_DOUBLE,
+            omniruntime::type::OMNI_DECIMAL64,
+            omniruntime::type::OMNI_DECIMAL64,
+            omniruntime::type::OMNI_BOOLEAN,
+            omniruntime::type::OMNI_TIMESTAMP};
+        return RunScalarScanFile(
+            filterWhileDecode, cond, batchLen,
+            PROJECT_PATH + std::string("/../resources/orc_data_all_type"),
+            "c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13", "c1,c6,c7,c8,c9,c10,c12", rowType, typeIds);
+    }
+
+    ScalarScanResult RunGeneratedPrimitiveScan(bool filterWhileDecode, const nlohmann::json &cond,
+                                               const std::string &filename, uint64_t batchLen = 3)
+    {
+        auto rowType = ROW(
+            {"id", "c_byte", "c_bool", "c_double", "c_float", "c_decimal64", "c_decimal128", "c_binary",
+             "c_timestamp"},
+            {IntType(), ByteType(), BooleanType(), DoubleType(), FloatType(), Decimal64Type(18, 4),
+             Decimal128Type(38, 4), VarBinaryType(), TimestampType()});
+        std::vector<int> typeIds = {
+            OMNI_INT,
+            omniruntime::type::OMNI_BYTE,
+            omniruntime::type::OMNI_BOOLEAN,
+            omniruntime::type::OMNI_DOUBLE,
+            omniruntime::type::OMNI_FLOAT,
+            omniruntime::type::OMNI_DECIMAL64,
+            omniruntime::type::OMNI_DECIMAL128,
+            omniruntime::type::OMNI_VARBINARY,
+            omniruntime::type::OMNI_TIMESTAMP};
+        return RunScalarScanFile(
+            filterWhileDecode, cond, batchLen, filename,
+            "id,c_byte,c_bool,c_double,c_float,c_decimal64,c_decimal128,c_binary,c_timestamp",
+            "id,c_byte,c_bool,c_double,c_float,c_decimal64,c_decimal128,c_binary,c_timestamp", rowType, typeIds);
+    }
+
+    void ExpectScalarEqual(const ScalarScanResult &off, const ScalarScanResult &on)
+    {
+        ASSERT_EQ(off.totalRows, on.totalRows);
+        ASSERT_EQ(off.columns.size(), on.columns.size());
+        for (size_t column = 0; column < off.columns.size(); ++column) {
+            ASSERT_EQ(off.columns[column].size(), on.columns[column].size()) << "column " << column;
+            for (size_t row = 0; row < off.columns[column].size(); ++row) {
+                EXPECT_EQ(off.columns[column][row].isNull, on.columns[column][row].isNull)
+                    << "column " << column << " row " << row;
+                EXPECT_EQ(off.columns[column][row].rawValue, on.columns[column][row].rawValue)
+                    << "column " << column << " row " << row;
+            }
+        }
+    }
+
+    void ExpectScalarIds(const ScalarScanResult &result, const std::vector<int32_t> &expectedIds)
+    {
+        ASSERT_EQ(result.totalRows, expectedIds.size());
+        ASSERT_FALSE(result.columns.empty());
+        ASSERT_EQ(result.columns[0].size(), expectedIds.size());
+        for (size_t row = 0; row < expectedIds.size(); ++row) {
+            EXPECT_FALSE(result.columns[0][row].isNull) << "row " << row;
+            EXPECT_EQ(result.columns[0][row].rawValue, RawBytes(expectedIds[row])) << "row " << row;
         }
     }
 };
@@ -358,4 +666,90 @@ TEST_F(FilterWhileDecodeScanTest, EmptyResultOnOffMatch)
     auto on = RunScan(true, cond, 4096);
     ExpectEqual(off, on);
     EXPECT_EQ(on.totalRows, 0u);
+}
+
+TEST_F(FilterWhileDecodeScanTest, OtherScalarProjectionOnOffMatch)
+{
+    // c1 > 25 leaves rows 30/40/50. The projected columns exercise FLOAT, DOUBLE,
+    // DECIMAL64, BOOLEAN and TIMESTAMP, including nulls in c7/c10.
+    auto cond = Leaf(::common::GREATER_THAN, 0, OMNI_INT, "25");
+    auto off = RunScalarScan(false, cond, 2);
+    auto on = RunScalarScan(true, cond, 2);
+
+    ASSERT_EQ(off.totalRows, on.totalRows);
+    ASSERT_EQ(off.columns.size(), on.columns.size());
+    EXPECT_EQ(on.totalRows, 3u);
+    for (size_t column = 0; column < off.columns.size(); ++column) {
+        ASSERT_EQ(off.columns[column].size(), on.columns[column].size());
+        for (size_t row = 0; row < off.columns[column].size(); ++row) {
+            EXPECT_EQ(off.columns[column][row].isNull, on.columns[column][row].isNull);
+            EXPECT_EQ(off.columns[column][row].rawValue, on.columns[column][row].rawValue);
+        }
+    }
+}
+
+TEST_F(FilterWhileDecodeScanTest, GeneratedPrimitiveProjectionOnOffMatch)
+{
+    PrimitiveOrcFixture fixture("projection_on_off");
+    // Filter on a legacy-supported INT column while projecting every newly
+    // supported primitive type. This verifies that selective decoding does not
+    // require logical DataTypeId metadata in the underlying physical vectors.
+    auto cond = Leaf(::common::GREATER_THAN_OR_EQUAL, 0, OMNI_INT, "2");
+    auto off = RunGeneratedPrimitiveScan(false, cond, fixture.filename(), 2);
+    auto on = RunGeneratedPrimitiveScan(true, cond, fixture.filename(), 2);
+
+    ExpectScalarEqual(off, on);
+    ExpectScalarIds(on, {2, 3, 4, 5, 6, 7});
+}
+
+TEST_F(FilterWhileDecodeScanTest, PrimitiveValueFilters)
+{
+    PrimitiveOrcFixture fixture("value_filters");
+    auto check = [&](const nlohmann::json &cond, const std::vector<int32_t> &expectedIds) {
+        auto on = RunGeneratedPrimitiveScan(true, cond, fixture.filename());
+        ExpectScalarIds(on, expectedIds);
+    };
+
+    // These predicates enter their type-specific selective readers rather than
+    // merely projecting the corresponding columns.
+    check(Leaf(::common::EQUAL_TO, 2, omniruntime::type::OMNI_BOOLEAN, "true"), {3, 5, 7});
+    check(And(Leaf(::common::GREATER_THAN_OR_EQUAL, 1, omniruntime::type::OMNI_BYTE, "-7"),
+              Leaf(::common::LESS_THAN_OR_EQUAL, 1, omniruntime::type::OMNI_BYTE, "7")),
+          {2, 3, 4, 5});
+    check(And(Leaf(::common::GREATER_THAN, 3, omniruntime::type::OMNI_DOUBLE, "-1.0"),
+              Leaf(::common::LESS_THAN_OR_EQUAL, 3, omniruntime::type::OMNI_DOUBLE, "2.0")),
+          {4, 5, 6});
+}
+
+TEST_F(FilterWhileDecodeScanTest, ProjectionOnlyTypeNullFilters)
+{
+    PrimitiveOrcFixture fixture("null_filters");
+    const std::vector<std::pair<int, int32_t>> nullFilterColumns = {
+        {4, 4}, // FLOAT
+        {5, 5}, // DECIMAL64
+        {6, 5}, // DECIMAL128
+        {7, 6}, // BINARY
+        {8, 7}  // TIMESTAMP
+    };
+
+    for (const auto &[column, nullRow] : nullFilterColumns) {
+        // Gluten uses OMNI_INT as the type-independent null-filter sentinel.
+        auto isNull = Leaf(::common::IS_NULL, column, OMNI_INT, "-1");
+        auto nullOn = RunGeneratedPrimitiveScan(true, isNull, fixture.filename());
+        ExpectScalarIds(nullOn, {nullRow});
+        EXPECT_TRUE(nullOn.columns[column][0].isNull) << "column " << column;
+
+        auto isNotNull = Leaf(::common::IS_NOT_NULL, column, OMNI_INT, "-1");
+        auto notNullOn = RunGeneratedPrimitiveScan(true, isNotNull, fixture.filename());
+        std::vector<int32_t> expectedIds;
+        for (int32_t id = 0; id < 8; ++id) {
+            if (id != nullRow) {
+                expectedIds.push_back(id);
+            }
+        }
+        ExpectScalarIds(notNullOn, expectedIds);
+        for (const auto &cell : notNullOn.columns[column]) {
+            EXPECT_FALSE(cell.isNull) << "column " << column;
+        }
+    }
 }

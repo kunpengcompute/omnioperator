@@ -14,9 +14,14 @@
 #include <numeric>
 
 #include "util/omni_exception.h"
+#include "SelectiveBooleanColumnReader.hh"
+#include "SelectiveByteColumnReader.hh"
+#include "SelectiveDecimalColumnReader.hh"
+#include "SelectiveFloatingPointColumnReader.hh"
 #include "SelectiveIntegerColumnReader.hh"
 #include "SelectiveStringDictionaryColumnReader.hh"
 #include "SelectiveStringDirectColumnReader.hh"
+#include "SelectiveTimestampColumnReader.hh"
 
 namespace omniruntime::reader {
 
@@ -35,9 +40,26 @@ std::unique_ptr<SelectiveColumnReader> MakeSelectiveChild(codegen::ScanSpec *chi
         case ::orc::LONG:
         case ::orc::SHORT:
             return std::make_unique<SelectiveIntegerColumnReader>(childSpec, childOrcType, std::move(inner));
+        case ::orc::BOOLEAN:
+            return std::make_unique<SelectiveBooleanColumnReader>(childSpec, childOrcType, std::move(inner));
+        case ::orc::BYTE:
+            return std::make_unique<SelectiveByteColumnReader>(childSpec, childOrcType, std::move(inner));
+        case ::orc::DOUBLE:
+        case ::orc::FLOAT:
+            return std::make_unique<SelectiveFloatingPointColumnReader>(
+                childSpec, childOrcType, std::move(inner));
+        case ::orc::DECIMAL:
+            return std::make_unique<SelectiveDecimalColumnReader>(childSpec, childOrcType, std::move(inner));
+        case ::orc::TIMESTAMP:
+        case ::orc::TIMESTAMP_INSTANT:
+            return std::make_unique<SelectiveTimestampColumnReader>(
+                childSpec, childOrcType, std::move(inner));
+        case ::orc::BINARY:
         case ::orc::STRING:
         case ::orc::VARCHAR:
         case ::orc::CHAR: {
+            // BINARY shares ORC's byte-sequence encodings with string types. It supports
+            // projection and null-bitmap filters, but not value comparisons in this phase.
             const auto enc = stripe.getEncoding(childOrcType->getColumnId()).kind();
             if (enc == ::orc::proto::ColumnEncoding_Kind_DICTIONARY ||
                 enc == ::orc::proto::ColumnEncoding_Kind_DICTIONARY_V2) {

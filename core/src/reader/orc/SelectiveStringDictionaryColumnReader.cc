@@ -83,7 +83,7 @@ void SelectiveStringDictionaryColumnReader::read(uint64_t rowsToRead, common::Ro
             continue;
         }
         if (nullOnly) {
-            if (!filter->is(::common::FilterKind::kIsNull)) {
+            if (filter->testNonNull()) {
                 outputRows_.push_back(row);
             }
             continue;

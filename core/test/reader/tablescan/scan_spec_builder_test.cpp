@@ -4,8 +4,11 @@
 
 #include <gtest/gtest.h>
 #include <limits>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "reader/common/Filter.h"
 #include "reader/common/PredicateOperatorType.h"
@@ -15,16 +18,24 @@
 
 using omniruntime::reader::allSelectedColumnsAreSupported;
 using omniruntime::reader::makeScanSpec;
+using omniruntime::type::BooleanType;
+using omniruntime::type::ByteType;
 using omniruntime::type::CharType;
 using omniruntime::type::Date32Type;
+using omniruntime::type::Decimal64Type;
+using omniruntime::type::Decimal128Type;
+using omniruntime::type::DoubleType;
+using omniruntime::type::FloatType;
 using omniruntime::type::IntType;
 using omniruntime::type::LongType;
-using omniruntime::type::OMNI_CHAR;
 using omniruntime::type::OMNI_DATE32;
+using omniruntime::type::OMNI_CHAR;
 using omniruntime::type::OMNI_INT;
 using omniruntime::type::OMNI_VARCHAR;
 using omniruntime::type::ROW;
 using omniruntime::type::ShortType;
+using omniruntime::type::TimestampType;
+using omniruntime::type::VarBinaryType;
 using omniruntime::type::VarcharType;
 using ::common::FilterKind;
 using ::common::PredicateOperatorType;
@@ -95,6 +106,107 @@ TEST(ScanSpecBuilderTest, AllSelectedColumnsAreSupported)
 
     auto withChar = ROW({"a", "b"}, {IntType(), CharType(40)});
     EXPECT_TRUE(allSelectedColumnsAreSupported(*withChar));
+
+    auto allScalars = ROW(
+        {"bool", "double", "decimal64", "decimal128", "byte", "float", "binary", "timestamp"},
+        {BooleanType(), DoubleType(), Decimal64Type(18, 2), Decimal128Type(38, 4), ByteType(), FloatType(),
+         VarBinaryType(), TimestampType()});
+    EXPECT_TRUE(allSelectedColumnsAreSupported(*allScalars));
+
+    auto withArray = ROW({"a"}, {omniruntime::type::ArrayDataType(IntType())});
+    EXPECT_FALSE(allSelectedColumnsAreSupported(*withArray));
+}
+
+TEST(ScanSpecBuilderTest, PushBooleanAndDouble)
+{
+    auto rowType = ROW({"b", "d"}, {BooleanType(), DoubleType()});
+    bool usable = false;
+    bool needResidual = false;
+    std::shared_ptr<::common::PredicateCondition> residual;
+
+    auto condition = And(Leaf(::common::EQUAL_TO, 0, omniruntime::type::OMNI_BOOLEAN, "true"),
+                         Leaf(::common::GREATER_THAN, 1, omniruntime::type::OMNI_DOUBLE, "1.5"));
+    auto spec = makeScanSpec(*rowType, WrapEnhancement(condition), usable, needResidual, residual);
+
+    ASSERT_TRUE(usable);
+    EXPECT_FALSE(needResidual);
+    ASSERT_TRUE(spec->children()[0]->filter()->is(FilterKind::kBoolValue));
+    EXPECT_TRUE(spec->children()[0]->filter()->testBool(true));
+    EXPECT_FALSE(spec->children()[0]->filter()->testBool(false));
+    ASSERT_TRUE(spec->children()[1]->filter()->is(FilterKind::kDoubleRange));
+    EXPECT_FALSE(spec->children()[1]->filter()->testDouble(1.5));
+    EXPECT_TRUE(spec->children()[1]->filter()->testDouble(1.5001));
+}
+
+TEST(ScanSpecBuilderTest, ProjectionOnlyPredicatesDoNotCreateFilters)
+{
+    const std::vector<std::pair<std::shared_ptr<omniruntime::type::DataType>, omniruntime::type::DataTypeId>> types = {
+        {FloatType(), omniruntime::type::OMNI_FLOAT},
+        {Decimal64Type(18, 5), omniruntime::type::OMNI_DECIMAL64},
+        {Decimal128Type(38, 8), omniruntime::type::OMNI_DECIMAL128},
+        {VarBinaryType(), omniruntime::type::OMNI_VARBINARY},
+        {TimestampType(), omniruntime::type::OMNI_TIMESTAMP}};
+
+    for (const auto &[type, typeId] : types) {
+        auto rowType = ROW({"value"}, {type});
+        bool usable = false;
+        bool needResidual = false;
+        std::shared_ptr<::common::PredicateCondition> residual;
+        auto spec = makeScanSpec(*rowType, WrapEnhancement(Leaf(::common::EQUAL_TO, 0, typeId, "1")),
+                                 usable, needResidual, residual);
+
+        // Gluten does not currently generate these filter types. If one is
+        // received, no leaf filter is attached and the existing fallback gate
+        // keeps the scan on the legacy path.
+        EXPECT_FALSE(usable) << static_cast<int>(typeId);
+        EXPECT_FALSE(needResidual) << static_cast<int>(typeId);
+        EXPECT_EQ(residual, nullptr) << static_cast<int>(typeId);
+        EXPECT_FALSE(spec->children()[0]->hasFilter()) << static_cast<int>(typeId);
+    }
+}
+
+TEST(ScanSpecBuilderTest, ProjectionOnlyTypesPushTypeIndependentNullFilter)
+{
+    const std::vector<std::shared_ptr<omniruntime::type::DataType>> types = {
+        FloatType(), Decimal64Type(18, 2), Decimal128Type(38, 8), VarBinaryType(), TimestampType()};
+
+    for (const auto &type : types) {
+        auto rowType = ROW({"value"}, {type});
+        bool usable = false;
+        bool needResidual = false;
+        std::shared_ptr<::common::PredicateCondition> residual;
+
+        // Gluten uses OMNI_INT as a sentinel. Null filters are type independent
+        // and operate only on the actual column's null bitmap.
+        auto spec = makeScanSpec(*rowType, WrapEnhancement(Leaf(::common::IS_NULL, 0, OMNI_INT, "-1")),
+                                 usable, needResidual, residual);
+
+        ASSERT_TRUE(usable) << static_cast<int>(type->GetId());
+        EXPECT_FALSE(needResidual) << static_cast<int>(type->GetId());
+        EXPECT_EQ(residual, nullptr) << static_cast<int>(type->GetId());
+        ASSERT_TRUE(spec->children()[0]->hasFilter()) << static_cast<int>(type->GetId());
+        EXPECT_TRUE(spec->children()[0]->filter()->is(FilterKind::kIsNull));
+    }
+}
+
+TEST(ScanSpecBuilderTest, MixedUnsupportedPredicateFallsBackSafely)
+{
+    auto rowType = ROW({"byte", "float"}, {ByteType(), FloatType()});
+    bool usable = false;
+    bool needResidual = false;
+    std::shared_ptr<::common::PredicateCondition> residual;
+
+    auto condition = And(Leaf(::common::GREATER_THAN_OR_EQUAL, 0, omniruntime::type::OMNI_BYTE, "-7"),
+                         Leaf(::common::LESS_THAN, 1, omniruntime::type::OMNI_FLOAT, "2.5"));
+    auto spec = makeScanSpec(*rowType, WrapEnhancement(condition), usable, needResidual, residual);
+
+    EXPECT_FALSE(usable);
+    EXPECT_FALSE(needResidual);
+    EXPECT_EQ(residual, nullptr);
+    ASSERT_TRUE(spec->children()[0]->hasFilter());
+    EXPECT_TRUE(spec->children()[0]->filter()->testInt64(-7));
+    EXPECT_FALSE(spec->children()[0]->filter()->testInt64(-8));
+    EXPECT_FALSE(spec->children()[1]->hasFilter());
 }
 
 TEST(ScanSpecBuilderTest, PushEqualAndRange)
@@ -466,7 +578,7 @@ TEST(ScanSpecBuilderTest, CharEqualPushesBytesRange)
 TEST(ScanSpecBuilderTest, StringFamilyIsNullFullyPushedNoResidual)
 {
     // Gluten writes OMNI_INT sentinel for IS NULL; column type comes from rowType.
-    // Pure IS NULL on string/char/varchar → IsNull Filter, residual empty (no residual pass needed).
+    // Pure IS NULL on string/char/varchar -> IsNull Filter, residual empty (no residual pass needed).
     for (const auto &rowType :
          {ROW({"s"}, {VarcharType()}), ROW({"c"}, {CharType(40)}), ROW({"v"}, {VarcharType(40)})}) {
         bool usable = false;

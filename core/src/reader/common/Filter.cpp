@@ -146,6 +146,94 @@ FilterPtr IsNull::mergeWith(const Filter *other) const
     return AlwaysFalse::instance();
 }
 
+FilterPtr BoolValue::mergeWith(const Filter *other) const
+{
+    switch (other->kind()) {
+        case FilterKind::kAlwaysTrue:
+        case FilterKind::kAlwaysFalse:
+        case FilterKind::kIsNull:
+            return other->mergeWith(this);
+        case FilterKind::kIsNotNull:
+            return clone(false);
+        case FilterKind::kBoolValue: {
+            const auto *boolean = static_cast<const BoolValue *>(other);
+            const bool acceptsFalse = testBool(false) && boolean->testBool(false);
+            const bool acceptsTrue = testBool(true) && boolean->testBool(true);
+            const bool allowNull = nullAllowed_ && boolean->nullAllowed();
+            if (!acceptsFalse && !acceptsTrue) {
+                return nullOrFalse(allowNull);
+            }
+            if (acceptsFalse && acceptsTrue) {
+                return allowNull ? AlwaysTrue::instance() : IsNotNull::instance();
+            }
+            return std::make_shared<BoolValue>(acceptsTrue, false, allowNull);
+        }
+        default:
+            return nullptr;
+    }
+}
+
+template <typename T, FilterKind Kind>
+FilterPtr FloatingPointRange<T, Kind>::mergeWith(const Filter *other) const
+{
+    switch (other->kind()) {
+        case FilterKind::kAlwaysTrue:
+        case FilterKind::kAlwaysFalse:
+        case FilterKind::kIsNull:
+            return other->mergeWith(this);
+        case FilterKind::kIsNotNull:
+            return clone(false);
+        case FilterKind::kDoubleRange:
+        case FilterKind::kFloatRange: {
+            // Only ranges with the same physical type can share the typed
+            // intersection logic. A cross-type merge must remain residual.
+            if (other->kind() != Kind) {
+                return nullptr;
+            }
+            const auto *range = static_cast<const FloatingPointRange<T, Kind> *>(other);
+            // Complements can produce two disjoint intervals. Keep these uncommon combinations
+            // as residual predicates instead of silently weakening the filter.
+            if (negated_ || range->negated()) {
+                return nullptr;
+            }
+
+            T lower = lower_;
+            bool lowerUnbounded = lowerUnbounded_;
+            bool lowerExclusive = lowerExclusive_;
+            if (lowerUnbounded || (!range->lowerUnbounded() && range->lower() > lower)) {
+                lower = range->lower();
+                lowerUnbounded = range->lowerUnbounded();
+                lowerExclusive = range->lowerExclusive();
+            } else if (!range->lowerUnbounded() && range->lower() == lower) {
+                lowerExclusive = lowerExclusive || range->lowerExclusive();
+            }
+
+            T upper = upper_;
+            bool upperUnbounded = upperUnbounded_;
+            bool upperExclusive = upperExclusive_;
+            if (upperUnbounded || (!range->upperUnbounded() && range->upper() < upper)) {
+                upper = range->upper();
+                upperUnbounded = range->upperUnbounded();
+                upperExclusive = range->upperExclusive();
+            } else if (!range->upperUnbounded() && range->upper() == upper) {
+                upperExclusive = upperExclusive || range->upperExclusive();
+            }
+
+            if (!lowerUnbounded && !upperUnbounded &&
+                (lower > upper || (lower == upper && (lowerExclusive || upperExclusive)))) {
+                return nullOrFalse(nullAllowed_ && range->nullAllowed());
+            }
+            return std::make_shared<FloatingPointRange<T, Kind>>(
+                lower, lowerUnbounded, lowerExclusive, upper, upperUnbounded, upperExclusive, false,
+                nullAllowed_ && range->nullAllowed());
+        }
+        default:
+            return nullptr;
+    }
+}
+
+template class FloatingPointRange<double, FilterKind::kDoubleRange>;
+
 FilterPtr BigintRange::mergeWith(const Filter *other) const
 {
     switch (other->kind()) {
