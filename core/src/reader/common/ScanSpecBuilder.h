@@ -21,7 +21,8 @@
 
 namespace omniruntime::reader {
 
-// True if all selected columns are filterWhileDecode-supported (int/long/short/date ∪ VARCHAR/CHAR).
+// Return true when all selected columns are scalar projection types currently
+// supported by the selective reader. ARRAY, MAP, and STRUCT remain unsupported.
 bool allSelectedColumnsAreSupported(const omniruntime::type::RowType &rowType);
 
 // usable=false → parse failed, fall back to legacy path; needResidual=true → residualPredicate is the

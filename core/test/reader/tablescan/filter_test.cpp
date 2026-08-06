@@ -74,6 +74,29 @@ TEST(FilterTest, NullFilters)
     EXPECT_TRUE(isNotNull.testBytes("a", 1));
 }
 
+TEST(FilterTest, TypeIndependentFiltersAcceptOrRejectNonNullValues)
+{
+    AlwaysTrue alwaysTrue;
+    IsNotNull isNotNull;
+    AlwaysFalse alwaysFalse;
+    IsNull isNull;
+
+    for (const Filter *filter : {static_cast<const Filter *>(&alwaysTrue),
+                                 static_cast<const Filter *>(&isNotNull)}) {
+        EXPECT_TRUE(filter->testNonNull());
+        EXPECT_TRUE(filter->testBool(false));
+        EXPECT_TRUE(filter->testDouble(0.0));
+        EXPECT_TRUE(filter->testFloat(0.0F));
+    }
+    for (const Filter *filter : {static_cast<const Filter *>(&alwaysFalse),
+                                 static_cast<const Filter *>(&isNull)}) {
+        EXPECT_FALSE(filter->testNonNull());
+        EXPECT_FALSE(filter->testBool(false));
+        EXPECT_FALSE(filter->testDouble(0.0));
+        EXPECT_FALSE(filter->testFloat(0.0F));
+    }
+}
+
 TEST(FilterTest, BytesRangeAndValues)
 {
     BytesRange eq("abc", false, false, "abc", false, false, false);
@@ -268,4 +291,39 @@ TEST(FilterTest, TestInt64RangeStatsPrune)
 
     BigintRange nullable(10, 20, true);
     EXPECT_TRUE(nullable.testInt64Range(21, 30, true));
+}
+
+TEST(FilterTest, BoolValueTestAndMerge)
+{
+    BoolValue equalTrue(true, false, false);
+    EXPECT_TRUE(equalTrue.testBool(true));
+    EXPECT_FALSE(equalTrue.testBool(false));
+    EXPECT_FALSE(equalTrue.testNull());
+
+    BoolValue notTrue(true, true, false);
+    EXPECT_FALSE(notTrue.testBool(true));
+    EXPECT_TRUE(notTrue.testBool(false));
+
+    auto contradiction = equalTrue.mergeWith(&notTrue);
+    ASSERT_NE(contradiction, nullptr);
+    EXPECT_TRUE(contradiction->is(FilterKind::kAlwaysFalse));
+}
+
+TEST(FilterTest, DoubleRangeBoundariesAndMerge)
+{
+    DoubleRange greaterThan(1.5, false, true, 0.0, true, false, false, false);
+    EXPECT_FALSE(greaterThan.testDouble(1.5));
+    EXPECT_TRUE(greaterThan.testDouble(1.5001));
+
+    DoubleRange atMost(0.0, true, false, 2.5, false, false, false, false);
+    EXPECT_TRUE(atMost.testDouble(2.5));
+    EXPECT_FALSE(atMost.testDouble(2.5001));
+
+    auto merged = greaterThan.mergeWith(&atMost);
+    ASSERT_NE(merged, nullptr);
+    ASSERT_TRUE(merged->is(FilterKind::kDoubleRange));
+    EXPECT_FALSE(merged->testDouble(1.5));
+    EXPECT_TRUE(merged->testDouble(2.0));
+    EXPECT_TRUE(merged->testDouble(2.5));
+    EXPECT_FALSE(merged->testDouble(2.5001));
 }

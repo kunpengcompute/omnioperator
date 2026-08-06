@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -36,8 +37,16 @@ bool allSelectedColumnsAreSupported(const omniruntime::type::RowType &rowType)
             case omniruntime::type::OMNI_LONG:
             case omniruntime::type::OMNI_SHORT:
             case omniruntime::type::OMNI_DATE32:
+            case omniruntime::type::OMNI_BOOLEAN:
+            case omniruntime::type::OMNI_DOUBLE:
+            case omniruntime::type::OMNI_DECIMAL64:
+            case omniruntime::type::OMNI_DECIMAL128:
+            case omniruntime::type::OMNI_BYTE:
+            case omniruntime::type::OMNI_FLOAT:
             case omniruntime::type::OMNI_VARCHAR:
             case omniruntime::type::OMNI_CHAR:
+            case omniruntime::type::OMNI_VARBINARY:
+            case omniruntime::type::OMNI_TIMESTAMP:
                 break;
             default:
                 return false;
@@ -53,11 +62,31 @@ using omniruntime::type::DataTypeId;
 constexpr int64_t kMin = std::numeric_limits<int64_t>::min();
 constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
 
-// Aligned with Velox ExprToSubfieldFilter: makeXxxFilter dispatches by type to BigintRange / BytesRange.
-// Omni int family uses the int64 path (SelectiveInteger always testInt64); VARCHAR/CHAR → Bytes*.
+bool parseBool(const std::string &literal)
+{
+    if (literal == "true" || literal == "1") {
+        return true;
+    }
+    if (literal == "false" || literal == "0") {
+        return false;
+    }
+    throw std::invalid_argument("invalid boolean filter literal: " + literal);
+}
+
+template <typename T, FilterKind Kind>
+FilterPtr floatingRange(T lower, bool lowerUnbounded, bool lowerExclusive,
+                        T upper, bool upperUnbounded, bool upperExclusive, bool negated = false)
+{
+    return std::make_shared<FloatingPointRange<T, Kind>>(
+        lower, lowerUnbounded, lowerExclusive, upper, upperUnbounded, upperExclusive, negated, false);
+}
+
+// Align with Velox ExprToSubfieldFilter by dispatching makeXxxFilter to
+// bigint, double, boolean, or bytes filters based on the column type.
 FilterPtr makeEqualFilter(DataTypeId typeId, const std::string &literal)
 {
     switch (typeId) {
+        case omniruntime::type::OMNI_BYTE:
         case omniruntime::type::OMNI_INT:
         case omniruntime::type::OMNI_LONG:
         case omniruntime::type::OMNI_SHORT:
@@ -65,6 +94,12 @@ FilterPtr makeEqualFilter(DataTypeId typeId, const std::string &literal)
             int64_t v = std::stoll(literal);
             return std::make_shared<BigintRange>(v, v, false);
         }
+        case omniruntime::type::OMNI_DOUBLE: {
+            double v = std::stod(literal);
+            return floatingRange<double, FilterKind::kDoubleRange>(v, false, false, v, false, false);
+        }
+        case omniruntime::type::OMNI_BOOLEAN:
+            return std::make_shared<BoolValue>(parseBool(literal), false, false);
         case omniruntime::type::OMNI_VARCHAR:
         case omniruntime::type::OMNI_CHAR:
             return std::make_shared<BytesRange>(literal, false, false, literal, false, false, false);
@@ -76,6 +111,7 @@ FilterPtr makeEqualFilter(DataTypeId typeId, const std::string &literal)
 FilterPtr makeNotEqualFilter(DataTypeId typeId, const std::string &literal)
 {
     switch (typeId) {
+        case omniruntime::type::OMNI_BYTE:
         case omniruntime::type::OMNI_INT:
         case omniruntime::type::OMNI_LONG:
         case omniruntime::type::OMNI_SHORT:
@@ -83,6 +119,12 @@ FilterPtr makeNotEqualFilter(DataTypeId typeId, const std::string &literal)
             int64_t v = std::stoll(literal);
             return std::make_shared<NegatedBigintRange>(v, v, false);
         }
+        case omniruntime::type::OMNI_DOUBLE: {
+            double v = std::stod(literal);
+            return floatingRange<double, FilterKind::kDoubleRange>(v, false, false, v, false, false, true);
+        }
+        case omniruntime::type::OMNI_BOOLEAN:
+            return std::make_shared<BoolValue>(parseBool(literal), true, false);
         case omniruntime::type::OMNI_VARCHAR:
         case omniruntime::type::OMNI_CHAR:
             return std::make_shared<NegatedBytesRange>(literal, false, false, literal, false, false, false);
@@ -94,6 +136,7 @@ FilterPtr makeNotEqualFilter(DataTypeId typeId, const std::string &literal)
 FilterPtr makeGreaterThanFilter(DataTypeId typeId, const std::string &literal)
 {
     switch (typeId) {
+        case omniruntime::type::OMNI_BYTE:
         case omniruntime::type::OMNI_INT:
         case omniruntime::type::OMNI_LONG:
         case omniruntime::type::OMNI_SHORT:
@@ -102,6 +145,8 @@ FilterPtr makeGreaterThanFilter(DataTypeId typeId, const std::string &literal)
             return v == kMax ? AlwaysFalse::instance()
                              : std::make_shared<BigintRange>(v + 1, kMax, false);
         }
+        case omniruntime::type::OMNI_DOUBLE:
+            return floatingRange<double, FilterKind::kDoubleRange>(std::stod(literal), false, true, 0, true, false);
         case omniruntime::type::OMNI_VARCHAR:
         case omniruntime::type::OMNI_CHAR:
             return std::make_shared<BytesRange>(literal, false, true, std::string(), true, false, false);
@@ -113,6 +158,7 @@ FilterPtr makeGreaterThanFilter(DataTypeId typeId, const std::string &literal)
 FilterPtr makeGreaterThanOrEqualFilter(DataTypeId typeId, const std::string &literal)
 {
     switch (typeId) {
+        case omniruntime::type::OMNI_BYTE:
         case omniruntime::type::OMNI_INT:
         case omniruntime::type::OMNI_LONG:
         case omniruntime::type::OMNI_SHORT:
@@ -120,6 +166,8 @@ FilterPtr makeGreaterThanOrEqualFilter(DataTypeId typeId, const std::string &lit
             int64_t v = std::stoll(literal);
             return std::make_shared<BigintRange>(v, kMax, false);
         }
+        case omniruntime::type::OMNI_DOUBLE:
+            return floatingRange<double, FilterKind::kDoubleRange>(std::stod(literal), false, false, 0, true, false);
         case omniruntime::type::OMNI_VARCHAR:
         case omniruntime::type::OMNI_CHAR:
             return std::make_shared<BytesRange>(literal, false, false, std::string(), true, false, false);
@@ -131,6 +179,7 @@ FilterPtr makeGreaterThanOrEqualFilter(DataTypeId typeId, const std::string &lit
 FilterPtr makeLessThanFilter(DataTypeId typeId, const std::string &literal)
 {
     switch (typeId) {
+        case omniruntime::type::OMNI_BYTE:
         case omniruntime::type::OMNI_INT:
         case omniruntime::type::OMNI_LONG:
         case omniruntime::type::OMNI_SHORT:
@@ -139,6 +188,8 @@ FilterPtr makeLessThanFilter(DataTypeId typeId, const std::string &literal)
             return v == kMin ? AlwaysFalse::instance()
                              : std::make_shared<BigintRange>(kMin, v - 1, false);
         }
+        case omniruntime::type::OMNI_DOUBLE:
+            return floatingRange<double, FilterKind::kDoubleRange>(0, true, false, std::stod(literal), false, true);
         case omniruntime::type::OMNI_VARCHAR:
         case omniruntime::type::OMNI_CHAR:
             return std::make_shared<BytesRange>(std::string(), true, false, literal, false, true, false);
@@ -150,6 +201,7 @@ FilterPtr makeLessThanFilter(DataTypeId typeId, const std::string &literal)
 FilterPtr makeLessThanOrEqualFilter(DataTypeId typeId, const std::string &literal)
 {
     switch (typeId) {
+        case omniruntime::type::OMNI_BYTE:
         case omniruntime::type::OMNI_INT:
         case omniruntime::type::OMNI_LONG:
         case omniruntime::type::OMNI_SHORT:
@@ -157,6 +209,8 @@ FilterPtr makeLessThanOrEqualFilter(DataTypeId typeId, const std::string &litera
             int64_t v = std::stoll(literal);
             return std::make_shared<BigintRange>(kMin, v, false);
         }
+        case omniruntime::type::OMNI_DOUBLE:
+            return floatingRange<double, FilterKind::kDoubleRange>(0, true, false, std::stod(literal), false, false);
         case omniruntime::type::OMNI_VARCHAR:
         case omniruntime::type::OMNI_CHAR:
             return std::make_shared<BytesRange>(std::string(), true, false, literal, false, false, false);
