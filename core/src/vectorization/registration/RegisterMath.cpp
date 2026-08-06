@@ -8,6 +8,7 @@
 #include "../functions/Comparisons.h"
 #include "../functions/IsNull.h"
 #include "../functions/MathFunctions.h"
+#include "../functions/MathDecimalFunctions.h"
 #include "../functions/HexFunctions.h"
 #include "../functions/BinFunction.h"
 #include "../functions/ConvFunction.h"
@@ -133,5 +134,36 @@ void RegisterMathFunctions(const std::string &prefix)
         prefix + "width_bucket", {OMNI_DOUBLE, OMNI_DOUBLE, OMNI_DOUBLE, OMNI_LONG}, OMNI_LONG);
     RegisterFunction<NormalizeNaNAndZero, float, float>(prefix + "NormalizeNaNAndZero", {OMNI_FLOAT}, OMNI_FLOAT);
     RegisterFunction<NormalizeNaNAndZero, double, double>(prefix + "NormalizeNaNAndZero", {OMNI_DOUBLE}, OMNI_DOUBLE);
+
+    // Enable unary math on DECIMAL inputs (asin/... listed in DecimalMathFunctionTable()),
+    // mirroring Flink's per-function doubleValue overloads. The jsonparser gate
+    // (ParseJSONFunc) only builds a FuncExpr when the signature resolves in a registry,
+    // so we register a placeholder per name x {DECIMAL64,DECIMAL128} -> DOUBLE (same idea as
+    // the shared CastFunction placeholder in RegisterConversionFunctions). FuncExpr then
+    // overrides it with a scale-aware DecimalToDoubleMathFunction built from the operand
+    // DataType (precision/scale), which this DataTypeId-only registry cannot carry.
+    for (const auto &entry : DecimalMathFunctionTable()) {
+        auto gate = std::make_shared<DecimalToDoubleMathFunction>(type::DataTypePtr(nullptr), entry.second);
+        VectorFunction::RegisterVectorFunction(prefix + entry.first, {OMNI_DECIMAL64}, OMNI_DOUBLE, gate);
+        VectorFunction::RegisterVectorFunction(prefix + entry.first, {OMNI_DECIMAL128}, OMNI_DOUBLE, gate);
+    }
+    // Same for binary decimal math (atan2): register all DECIMAL64/DECIMAL128 operand combos so
+    // the gate passes for mixed-precision args; FuncExpr overrides with the scale-aware function.
+    for (const auto &entry : DecimalBinaryMathFunctionTable()) {
+        auto gate = std::make_shared<BinaryDecimalToDoubleMathFunction>(
+            type::DataTypePtr(nullptr), type::DataTypePtr(nullptr), entry.second);
+        VectorFunction::RegisterVectorFunction(prefix + entry.first, {OMNI_DECIMAL64, OMNI_DECIMAL64}, OMNI_DOUBLE, gate);
+        VectorFunction::RegisterVectorFunction(prefix + entry.first, {OMNI_DECIMAL64, OMNI_DECIMAL128}, OMNI_DOUBLE, gate);
+        VectorFunction::RegisterVectorFunction(prefix + entry.first, {OMNI_DECIMAL128, OMNI_DECIMAL64}, OMNI_DOUBLE, gate);
+        VectorFunction::RegisterVectorFunction(prefix + entry.first, {OMNI_DECIMAL128, OMNI_DECIMAL128}, OMNI_DOUBLE, gate);
+    }
+    // sign(DECIMAL(p,s)) -> DECIMAL(p,s) (scale-preserving, mirrors DecimalDataUtils.sign). Gate
+    // placeholder per decimal id (return type == input id); FuncExpr overrides with the scale-aware
+    // SignDecimalFunction. Uses the same input/output DataTypeId (no cross-type combos).
+    {
+        auto signGate = std::make_shared<SignDecimalFunction>(type::DataTypePtr(nullptr));
+        VectorFunction::RegisterVectorFunction(prefix + "sign", {OMNI_DECIMAL64}, OMNI_DECIMAL64, signGate);
+        VectorFunction::RegisterVectorFunction(prefix + "sign", {OMNI_DECIMAL128}, OMNI_DECIMAL128, signGate);
+    }
 }
 }
