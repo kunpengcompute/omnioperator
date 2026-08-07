@@ -1991,4 +1991,96 @@ private:
     }
 };
 
+/// flink_replace(string, search, replacement) -> varchar
+/// Flink REPLACE (SqlFunctionUtils.replace) delegates to Java String.replace(CharSequence,
+/// CharSequence), whose empty-search behaviour differs from Spark's replace: instead of
+/// returning the input unchanged, the replacement is inserted around every character.
+///   REPLACE('abc', '', 'X') -> 'XaXbXcX'   REPLACE('', '', 'X') -> 'X'
+/// Java iterates UTF-16 code units; here we iterate UTF-8 characters, which agrees for the
+/// BMP and keeps surrogate pairs intact for supplementary characters.
+template <typename T>
+struct FlinkReplaceFunction {
+    ALWAYS_INLINE bool call(std::string &result, const std::string_view &str,
+        const std::string_view &search, const std::string_view &replacement)
+    {
+        if (!search.empty()) {
+            return ReplaceFunction<T>().call(result, str, search, replacement);
+        }
+
+        result.clear();
+        result.append(replacement.data(), replacement.size());
+        size_t pos = 0;
+        while (pos < str.size()) {
+            int charSize = stringImpl::utf8proc_char_length(str.data() + pos);
+            size_t step = charSize < 0 ? 1 : static_cast<size_t>(charSize);
+            step = std::min(step, str.size() - pos);
+            result.append(str.data() + pos, step);
+            result.append(replacement.data(), replacement.size());
+            pos += step;
+        }
+        return true;
+    }
+};
+
+/// flink_substr(string, pos[, length]) -> varchar
+/// Flink SUBSTRING/SUBSTR (BinaryStringDataUtil.substringSQL), character based:
+///   - length < 0            -> NULL         (Spark substr returns an empty string)
+///   - pos > 0, pos > chars  -> ''
+///   - pos < 0               -> start counted from the end; out of range -> ''
+///                              (Spark clamps the start to the beginning instead)
+///   - pos = 0               -> same as pos = 1
+///   - length beyond the end -> truncated at the end of the string
+/// The two-argument form takes everything up to the end of the string.
+template <typename T>
+struct FlinkSubstrFunction {
+    ALWAYS_INLINE bool call(std::string &result, const std::string_view &input, int32_t pos)
+    {
+        return doCall(result, input, pos, std::numeric_limits<int32_t>::max());
+    }
+
+    ALWAYS_INLINE bool call(std::string &result, const std::string_view &input, int32_t pos, int32_t length)
+    {
+        return doCall(result, input, pos, length);
+    }
+
+private:
+    ALWAYS_INLINE bool doCall(std::string &result, const std::string_view &input, int32_t pos, int32_t length)
+    {
+        if (length < 0) {
+            return false;
+        }
+        result.clear();
+        if (input.empty()) {
+            return true;
+        }
+
+        int64_t numChars = stringImpl::length<false>(input);
+        int64_t start;
+        if (pos > 0) {
+            start = static_cast<int64_t>(pos) - 1;
+            if (start >= numChars) {
+                return true;
+            }
+        } else if (pos < 0) {
+            start = numChars + pos;
+            if (start < 0) {
+                return true;
+            }
+        } else {
+            start = 0;
+        }
+
+        int64_t charCount = std::min(static_cast<int64_t>(length), numChars - start);
+        if (charCount <= 0) {
+            return true;
+        }
+        int64_t startByte = stringImpl::cappedByteLengthUnicode(
+            input.data(), static_cast<int64_t>(input.size()), start);
+        int64_t byteCount = stringImpl::cappedByteLengthUnicode(
+            input.data() + startByte, static_cast<int64_t>(input.size()) - startByte, charCount);
+        result.assign(input.data() + startByte, static_cast<size_t>(byteCount));
+        return true;
+    }
+};
+
 }
