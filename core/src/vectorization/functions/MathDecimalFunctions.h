@@ -116,8 +116,8 @@ public:
             resultVec->SetValue(row, op_(DescaleDecimalToDouble(input, row, fromId, factor)));
         }
 
-        // Mirror CastFunction ownership: the input operand vector is owned here.
-        if (input != result) {
+        // Apply owns the popped operand vectors; always newly-allocated result above.
+        if (input != nullptr) {
             delete input;
         }
     }
@@ -170,10 +170,10 @@ public:
             resultVec->SetValue(row, op_(a0, a1));
         }
 
-        if (in0 != result) {
+        if (in0 != nullptr) {
             delete in0;
         }
-        if (in1 != result) {
+        if (in1 != nullptr) {
             delete in1;
         }
     }
@@ -297,7 +297,7 @@ public:
             }
         }
 
-        if (input != result) {
+        if (input != nullptr) {
             delete input;
         }
     }
