@@ -177,7 +177,8 @@ ExprEval::ExprEval(VectorBatch *vectorBatch, ExecutionContext *context): context
         vecBatch_.push_back(vectorBatch->Get(i));
         typeIds.push_back(vectorBatch->Get(i)->GetTypeId());
     }
-    rowSize = vectorBatch->GetRowCount();
+    inputRowSize = vectorBatch->GetRowCount();
+    rowSize = context->hasFilter ? context->GetResultRowSize() : inputRowSize;
 }
 
 ExprEval::ExprEval(ExecutionContext *context): context(context)
@@ -340,9 +341,9 @@ void ExprEval::Visit(const FieldExpr &e)
     }
     if (context->hasFilter) {
         auto isSelect = context->GetIsSelectRow();
-        int selectRow[context->GetResultRowSize()] = {-1};
+        int selectRow[inputRowSize] = {-1};
         int selectSize = 0;
-        for (int i = 0; i < context->GetResultRowSize(); i++) {
+        for (int i = 0; i < inputRowSize; i++) {
             if (isSelect[i]) {
                 selectRow[selectSize] = i;
                 ++selectSize;

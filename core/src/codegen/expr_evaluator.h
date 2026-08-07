@@ -309,7 +309,8 @@ private:
         AlignedBuffer<int32_t> *selectedRowsBuffer, intptr_t *valueAddrs, intptr_t *nullAddrs, intptr_t *offsetAddrs,
         intptr_t *dictionaries);
 
-    VectorBatch *ProcessFilterAndProject(VectorBatch *vecBatch, ExecutionContext *context);
+    VectorBatch *ProcessFilterAndProject(VectorBatch *vecBatch, ExecutionContext *context,
+        AlignedBuffer<int32_t> *selectedRowsBuffer);
 
     VectorBatch *ProcessProject(VectorBatch *vecBatch, ExecutionContext *context, intptr_t *valueAddrs,
         intptr_t *nullAddrs, intptr_t *offsetAddrs, intptr_t *dictionaries);
