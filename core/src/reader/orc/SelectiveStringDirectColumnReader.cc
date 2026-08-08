@@ -56,14 +56,4 @@ void SelectiveStringDirectColumnReader::read(uint64_t rowsToRead, common::RowSet
     }
 }
 
-BaseVector *SelectiveStringDirectColumnReader::getValues(common::RowSet rows)
-{
-    positions_.clear();
-    positions_.reserve(rows.size());
-    for (auto r : rows) {
-        positions_.push_back(static_cast<int32_t>(r - static_cast<common::vector_size_t>(decodedBase_)));
-    }
-    return decoded_->CopyPositions(positions_.data(), 0, static_cast<int>(positions_.size()));
-}
-
 } // namespace omniruntime::reader

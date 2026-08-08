@@ -9,9 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// Selective column reader: thin orchestration/filter layer; decode delegated to inner_
-// (OmniColumnReader). T0 filter/projection columns both use full-batch next; skip is unused
-// (incompatible with next run-length state).
+// Selective column reader: filter/orchestration layer; decode delegated to inner_.
 
 #ifndef OMNI_READER_ORC_SELECTIVE_COLUMN_READER_HH
 #define OMNI_READER_ORC_SELECTIVE_COLUMN_READER_HH
@@ -30,6 +28,13 @@ namespace omniruntime::reader {
 
 class SelectiveColumnReader {
 public:
+    enum class Materialization : uint8_t {
+        // Full batch in decoded_: row r at index (r - decodedBase_).
+        kBatchIndexed,
+        // Only visited rows in decoded_: decoded_[i] belongs to visitedRows_[i].
+        kDense,
+    };
+
     SelectiveColumnReader(codegen::ScanSpec *spec,
                           const ::orc::Type *orcType,
                           std::unique_ptr<::orc::ColumnReader> inner)
@@ -41,15 +46,15 @@ public:
 
     virtual ~SelectiveColumnReader() = default;
 
-    // Filter cols: decode then apply filter into outputRows_; projection cols: full-batch decode.
-    // Both advance inner_ by rowsToRead.
+    // Filter cols shrink activeRows into outputRows_; projection cols materialize activeRows.
+    // Must advance inner_ by exactly rowsToRead row positions.
     virtual void read(uint64_t rowsToRead, common::RowSet activeRows, int omniTypeId) = 0;
 
-    // Compact output by rows; caller takes ownership.
-    virtual vec::BaseVector *getValues(common::RowSet rows) = 0;
+    // Caller takes ownership. At most once per column per batch (kDense may move decoded_).
+    virtual vec::BaseVector *getValues(common::RowSet rows);
 
-    // When the batch yields nothing, still advance with next() (do not use skip).
-    void skipBatch(uint64_t rowsToRead, int omniTypeId)
+    // Advance streams when the batch yields nothing. Do not use ::orc::RleDecoderV2::skip().
+    virtual void skipBatch(uint64_t rowsToRead, int omniTypeId)
     {
         auto scratch = makeNewVector(rowsToRead, orcType_,
                                      static_cast<type::DataTypeId>(omniTypeId));
@@ -75,8 +80,13 @@ protected:
     std::unique_ptr<::orc::ColumnReader> owned_;
     OmniColumnReader *inner_;
 
+    Materialization mat_ = Materialization::kBatchIndexed;
     std::unique_ptr<vec::BaseVector> decoded_;
-    uint64_t decodedBase_ = 0; // Always 0 in T0
+    uint64_t decodedBase_ = 0;
+
+    // kDense only: view into outputRows_ or the RowSet passed to read().
+    common::RowSet visitedRows_;
+
     std::vector<common::vector_size_t> outputRows_;
     std::vector<int32_t> positions_;
 };

@@ -20,8 +20,8 @@ class SelectiveFloatingPointColumnReader final : public SelectiveColumnReader {
 public:
     using SelectiveColumnReader::SelectiveColumnReader;
 
+    // getValues comes from the base class: this reader stays on the kBatchIndexed shape.
     void read(uint64_t rowsToRead, common::RowSet activeRows, int omniTypeId) override;
-    vec::BaseVector *getValues(common::RowSet rows) override;
 };
 
 } // namespace omniruntime::reader
