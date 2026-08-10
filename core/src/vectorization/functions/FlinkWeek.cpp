@@ -35,8 +35,10 @@
 #include "../VectorFunction.h"
 #include "vectorization/SelectivityVector.h"
 #include "type/Timestamp.h"
+#include "type/tz/TimeZoneMap.h"
 #include "vector/vector_helper.h"
 #include "util/bit_util.h"
+#include "util/TimeUtils.h"
 #include <ctime>
 #include <cstring>
 
@@ -45,6 +47,23 @@ using namespace omniruntime::vec;
 using namespace omniruntime::type;
 
 namespace {
+/// Resolve a session-zone-id string into a TimeZone*. The zone-id comes
+/// from CommonExecCalc.getZoneId() on the Java side (e.g. "UTC",
+/// "Asia/Shanghai"), so it is always a valid IANA ID - but we still fall
+/// back to UTC for an unknown/empty string rather than returning nullptr,
+/// matching the lenient resolution used by the rest of the vectorized
+/// datetime layer.
+static const tz::TimeZone *ResolveSessionTimeZone(const std::string_view &tzView)
+{
+    if (tzView.empty()) {
+        return tz::locateZone("UTC", /*failOnError=*/false);
+    }
+    if (const tz::TimeZone *zone = tz::locateZone(tzView, /*failOnError=*/false)) {
+        return zone;
+    }
+    return tz::locateZone("UTC", /*failOnError=*/false);
+}
+
 static constexpr int64_t kSecondsPerDay = 86400LL;
 
 /// Compute ISO 8601 week number (1-53) from epoch seconds (UTC).
@@ -118,6 +137,14 @@ public:
             return;
         }
 
+        // Optional timezone arg sits on top of the stack (rightmost operand).
+        // flink_week:        args = [input]
+        // flink_week_with_tz: args = [input, tz]
+        BaseVector *tzArg = nullptr;
+        if (args.size() >= 2) {
+            tzArg = args.top();
+            args.pop();
+        }
         const auto inputArg = args.top();
         args.pop();
 
@@ -141,6 +168,15 @@ public:
         SelectivityVector rows(size);
         rows.setFromBitsNegate(inputNulls, size);
 
+        // The tz arg (when present) is a constant session zone-id literal from
+        // the Java side; resolve it once when it is a const non-null vector.
+        const tz::TimeZone *constZone = nullptr;
+        bool hasTz = (tzArg != nullptr);
+        bool tzIsConst = hasTz && (tzArg->GetEncoding() == OMNI_ENCODING_CONST);
+        if (tzIsConst && !tzArg->IsNull(0)) {
+            constZone = ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, 0));
+        }
+
         if (inputTypeId == OMNI_INT) {
             // date = days since epoch; extract ISO week in UTC (no timezone for DATE).
             auto *inputVector = reinterpret_cast<Vector<int32_t> *>(inputArg);
@@ -160,16 +196,21 @@ public:
             });
         } else if (inputTypeId == OMNI_LONG) {
             // Flink TIMESTAMP = milliseconds since epoch (TimestampData).
-            // No session timezone: wall-clock semantics, matching Flink's
-            // extractFromDate(WEEK, millis / 86400000).
             auto *inputVector = reinterpret_cast<Vector<int64_t> *>(inputArg);
             const auto *inputRaw = unsafe::UnsafeVector::GetRawValues(inputVector);
 
             rows.applyToSelected([&](vector_size_t i) {
                 int64_t millis = inputRaw[i];
                 Timestamp ts = Timestamp::fromMillis(millis);
-                // UTC seconds (no timezone shift) — wall-clock of the stored millis.
-                int64_t seconds = ts.getSeconds();
+                // nullptr zone => UTC seconds; non-null zone => session-local
+                // seconds (for TIMESTAMP_WITH_LOCAL_TIME_ZONE input). The ISO
+                // week is then derived from those wall-clock seconds.
+                const tz::TimeZone *zone = constZone;
+                if (hasTz && !tzIsConst) {
+                    zone = tzArg->IsNull(i) ? nullptr
+                        : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, i));
+                }
+                int64_t seconds = util::GetSeconds(ts, zone);
                 int32_t w;
                 if (getIsoWeekFromEpochSeconds(seconds, w)) {
                     resultRaw[i] = w;
@@ -180,6 +221,9 @@ public:
             });
         }
         delete inputArg;
+        if (hasTz) {
+            delete tzArg;
+        }
     }
 };
 } // namespace
@@ -192,6 +236,19 @@ void RegisterFlinkWeekFunction(const std::string &name)
     VectorFunction::RegisterVectorFunction(name, {OMNI_INT}, OMNI_INT,
         std::make_shared<FlinkWeekFunction>());
     VectorFunction::RegisterVectorFunction(name, {OMNI_LONG}, OMNI_INT,
+        std::make_shared<FlinkWeekFunction>());
+}
+
+void RegisterFlinkWeekWithTzFunction(const std::string &name)
+{
+    // _with_tz variant: same input types plus an explicit VARCHAR timezone arg
+    // (appended by the OmniAdaptor for TIMESTAMP_WITH_LOCAL_TIME_ZONE). The tz
+    // is only applied on the OMNI_LONG path; OMNI_INT (date) stays in UTC.
+    // Reuses the same FlinkWeekFunction class - it detects the tz arg by
+    // args.size() >= 2.
+    VectorFunction::RegisterVectorFunction(name, {OMNI_INT, OMNI_VARCHAR}, OMNI_INT,
+        std::make_shared<FlinkWeekFunction>());
+    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG, OMNI_VARCHAR}, OMNI_INT,
         std::make_shared<FlinkWeekFunction>());
 }
 }

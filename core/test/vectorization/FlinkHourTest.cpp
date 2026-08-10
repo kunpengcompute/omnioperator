@@ -92,6 +92,38 @@ public:
             << "flink_hour function threw an exception";
     }
 
+    // Create a const-style VARCHAR vector holding the same zone-id string for
+    // every row (the OmniAdaptor passes the session zone-id as a literal).
+    static BaseVector* CreateConstStringVector(const std::string& value, int32_t size) {
+        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+        auto* typedVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(vec);
+        std::string_view sv(value.data(), value.size());
+        for (int32_t i = 0; i < size; ++i) {
+            typedVec->SetValue(i, sv);
+        }
+        return vec;
+    }
+
+    // Execute flink_hour_with_tz(inputMillis, zoneId) -> int32. The zone-id is
+    // applied when decomposing the millis into wall-clock fields (for
+    // TIMESTAMP_WITH_LOCAL_TIME_ZONE input on the Java side).
+    static void ExecuteFlinkHourWithTz(BaseVector* inputVec, BaseVector* tzVec, BaseVector*& result) {
+        auto signature = std::make_shared<FunctionSignature>("flink_hour_with_tz",
+            std::vector<DataTypeId>{OMNI_LONG, OMNI_VARCHAR}, OMNI_INT);
+        auto function = VectorFunction::Find(signature);
+        ASSERT_NE(function, nullptr) << "flink_hour_with_tz function not found for signature";
+
+        auto outputType = std::make_shared<DataType>(OMNI_INT);
+        ExecutionContext context;
+        context.SetResultRowSize(inputVec->GetSize());
+        std::stack<BaseVector*> args;
+        args.push(inputVec);
+        args.push(tzVec);
+
+        ASSERT_NO_THROW(function->Apply(args, outputType, result, &context))
+            << "flink_hour_with_tz function threw an exception";
+    }
+
     // Convert a UTC wall-clock datetime to Flink TIMESTAMP millis (epoch millis).
     // Flink TimestampData stores millisecond = epochDay * 86400000 + nanoOfDay/1e6.
     // For whole-second values this is simply epochSeconds * 1000. The hour is
@@ -301,6 +333,83 @@ TEST(FlinkHourTest, MultiRowBatchLong) {
     BaseVector* inputVec = FlinkHourTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;
     FlinkHourTestHelper::ExecuteFlinkHour(inputVec, resultVec);
+    FlinkHourTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+// ============================================================================
+// flink_hour_with_tz — applies an explicit session timezone to the millis.
+// The stored millis are a UTC instant; the zone shifts the wall-clock hour.
+// ============================================================================
+
+TEST(FlinkHourTest, LongWithTzAsiaShanghai) {
+    std::cout << "=== Test: flink_hour_with_tz Asia/Shanghai (+8) ===" << std::endl;
+    // f18 = 1996-11-10 06:55:44 UTC -> Asia/Shanghai (+8) -> 14:55:44 -> HOUR 14.
+    // (Without tz, flink_hour returns 6; with tz it returns 14 — confirms tz applied.)
+    std::vector<int64_t> millisValues = {
+        FlinkHourTestHelper::TimestampToMillisUtc(1996, 11, 10, 6, 55, 44),
+        FlinkHourTestHelper::TimestampToMillisUtc(2024, 1, 1, 2, 30, 0)   // 02:30 UTC -> 10:30 CST
+    };
+    std::vector<int32_t> expected = {14, 10};
+
+    BaseVector* inputVec = FlinkHourTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkHourTestHelper::CreateConstStringVector("Asia/Shanghai", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkHourTestHelper::ExecuteFlinkHourWithTz(inputVec, tzVec, resultVec);
+    FlinkHourTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+TEST(FlinkHourTest, LongWithTzUtcIsIdentity) {
+    // "UTC" zone leaves the wall-clock unchanged: HOUR == the UTC hour.
+    std::vector<int64_t> millisValues = {
+        FlinkHourTestHelper::TimestampToMillisUtc(1996, 11, 10, 6, 55, 44),
+        FlinkHourTestHelper::TimestampToMillisUtc(2024, 6, 1, 12, 0, 0)
+    };
+    std::vector<int32_t> expected = {6, 12};
+
+    BaseVector* inputVec = FlinkHourTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkHourTestHelper::CreateConstStringVector("UTC", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkHourTestHelper::ExecuteFlinkHourWithTz(inputVec, tzVec, resultVec);
+    FlinkHourTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+TEST(FlinkHourTest, LongWithTzNegativeOffset) {
+    // America/Los_Angeles: PST = UTC-8 (winter), PDT = UTC-7 (summer).
+    //   2024-01-15 16:00:00 UTC (winter) -> PST -8 -> 08:00 local -> HOUR 8.
+    //   2024-07-15 16:00:00 UTC (summer) -> PDT -7 -> 09:00 local -> HOUR 9.
+    std::vector<int64_t> millisValues = {
+        FlinkHourTestHelper::TimestampToMillisUtc(2024, 1, 15, 16, 0, 0),
+        FlinkHourTestHelper::TimestampToMillisUtc(2024, 7, 15, 16, 0, 0)
+    };
+    std::vector<int32_t> expected = {8, 9};
+
+    BaseVector* inputVec = FlinkHourTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkHourTestHelper::CreateConstStringVector("America/Los_Angeles", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkHourTestHelper::ExecuteFlinkHourWithTz(inputVec, tzVec, resultVec);
+    FlinkHourTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+TEST(FlinkHourTest, LongWithTzCrossDayBoundary) {
+    // 2024-07-16 06:00:00 UTC -> America/Los_Angeles (PDT -7) -> 2024-07-15 23:00 -> HOUR 23.
+    // Confirms the tz shift can roll the wall-clock hour across a day boundary.
+    std::vector<int64_t> millisValues = {
+        FlinkHourTestHelper::TimestampToMillisUtc(2024, 7, 16, 6, 0, 0)
+    };
+    std::vector<int32_t> expected = {23};
+
+    BaseVector* inputVec = FlinkHourTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkHourTestHelper::CreateConstStringVector("America/Los_Angeles", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkHourTestHelper::ExecuteFlinkHourWithTz(inputVec, tzVec, resultVec);
     FlinkHourTestHelper::ValidateResult(resultVec, expected, millisValues.size());
 
     delete resultVec;

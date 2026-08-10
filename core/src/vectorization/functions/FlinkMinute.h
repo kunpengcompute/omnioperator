@@ -16,4 +16,5 @@
 
 namespace omniruntime::vectorization {
 void RegisterFlinkMinuteFunction(const std::string &name);
+void RegisterFlinkMinuteWithTzFunction(const std::string &name);
 }

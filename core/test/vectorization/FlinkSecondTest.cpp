@@ -93,6 +93,38 @@ public:
         ASSERT_NO_THROW(function->Apply(args, outputType, result, &context))
             << "flink_second function threw an exception";
     }
+    // Create a const-style VARCHAR vector holding the same zone-id string for
+    // every row (the OmniAdaptor passes the session zone-id as a literal).
+    static BaseVector* CreateConstStringVector(const std::string& value, int32_t size) {
+        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+        auto* typedVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(vec);
+        std::string_view sv(value.data(), value.size());
+        for (int32_t i = 0; i < size; ++i) {
+            typedVec->SetValue(i, sv);
+        }
+        return vec;
+    }
+
+    // Execute flink_second_with_tz(inputMillis, zoneId) -> int32. The zone-id is
+    // applied when decomposing the millis into wall-clock fields (for
+    // TIMESTAMP_WITH_LOCAL_TIME_ZONE input on the Java side).
+    static void ExecuteFlinkSecondWithTz(BaseVector* inputVec, BaseVector* tzVec, BaseVector*& result) {
+        auto signature = std::make_shared<FunctionSignature>("flink_second_with_tz",
+            std::vector<DataTypeId>{OMNI_LONG, OMNI_VARCHAR}, OMNI_INT);
+        auto function = VectorFunction::Find(signature);
+        ASSERT_NE(function, nullptr) << "flink_second_with_tz function not found for signature";
+
+        auto outputType = std::make_shared<DataType>(OMNI_INT);
+        ExecutionContext context;
+        context.SetResultRowSize(inputVec->GetSize());
+        std::stack<BaseVector*> args;
+        args.push(inputVec);
+        args.push(tzVec);
+
+        ASSERT_NO_THROW(function->Apply(args, outputType, result, &context))
+            << "flink_second_with_tz function threw an exception";
+    }
+
 
     // Convert a UTC wall-clock datetime to Flink TIMESTAMP millis (epoch millis).
     // Flink TimestampData stores millisecond = epochDay * 86400000 + nanoOfDay/1e6.
@@ -303,6 +335,80 @@ TEST(FlinkSecondTest, MultiRowBatchLong) {
     BaseVector* inputVec = FlinkSecondTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;
     FlinkSecondTestHelper::ExecuteFlinkSecond(inputVec, resultVec);
+    FlinkSecondTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+// ============================================================================
+// flink_second_with_tz — applies an explicit session timezone to the millis.
+// The stored millis are a UTC instant; the zone shifts the wall-clock second.
+// ============================================================================
+
+TEST(FlinkSecond, LongWithTzAsiaShanghai) {
+    std::cout << "=== Test: flink_second_with_tz Asia/Shanghai (+8) ===" << std::endl;
+    // Asia/Shanghai is UTC+8 (no DST): shifts the wall-clock +8h.
+    std::vector<int64_t> millisValues = {
+        FlinkSecondTestHelper::TimestampToMillisUtc(1996, 11, 10, 6, 55, 44),
+        FlinkSecondTestHelper::TimestampToMillisUtc(2024, 1, 1, 2, 30, 0)
+    };
+    std::vector<int32_t> expected = {44, 0};
+
+    BaseVector* inputVec = FlinkSecondTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkSecondTestHelper::CreateConstStringVector("Asia/Shanghai", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkSecondTestHelper::ExecuteFlinkSecondWithTz(inputVec, tzVec, resultVec);
+    FlinkSecondTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+TEST(FlinkSecond, LongWithTzUtcIsIdentity) {
+    // "UTC" zone leaves the wall-clock unchanged.
+    std::vector<int64_t> millisValues = {
+        FlinkSecondTestHelper::TimestampToMillisUtc(1996, 11, 10, 6, 55, 44),
+        FlinkSecondTestHelper::TimestampToMillisUtc(2024, 6, 1, 12, 0, 0)
+    };
+    std::vector<int32_t> expected = {44, 0};
+
+    BaseVector* inputVec = FlinkSecondTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkSecondTestHelper::CreateConstStringVector("UTC", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkSecondTestHelper::ExecuteFlinkSecondWithTz(inputVec, tzVec, resultVec);
+    FlinkSecondTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+TEST(FlinkSecond, LongWithTzNegativeOffset) {
+    // America/Los_Angeles: PST = UTC-8 (winter), PDT = UTC-7 (summer).
+    std::vector<int64_t> millisValues = {
+        FlinkSecondTestHelper::TimestampToMillisUtc(2024, 1, 15, 16, 0, 0),
+        FlinkSecondTestHelper::TimestampToMillisUtc(2024, 7, 15, 16, 0, 0)
+    };
+    std::vector<int32_t> expected = {0, 0};
+
+    BaseVector* inputVec = FlinkSecondTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkSecondTestHelper::CreateConstStringVector("America/Los_Angeles", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkSecondTestHelper::ExecuteFlinkSecondWithTz(inputVec, tzVec, resultVec);
+    FlinkSecondTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+TEST(FlinkSecond, LongWithTzCrossDayBoundary) {
+    // 2024-07-16 06:00:00 UTC -> America/Los_Angeles (PDT -7) -> 2024-07-15 23:00.
+    // Confirms the tz shift can roll the wall-clock across a day boundary.
+    std::vector<int64_t> millisValues = {
+        FlinkSecondTestHelper::TimestampToMillisUtc(2024, 7, 16, 6, 0, 0)
+    };
+    std::vector<int32_t> expected = {0};
+
+    BaseVector* inputVec = FlinkSecondTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkSecondTestHelper::CreateConstStringVector("America/Los_Angeles", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkSecondTestHelper::ExecuteFlinkSecondWithTz(inputVec, tzVec, resultVec);
     FlinkSecondTestHelper::ValidateResult(resultVec, expected, millisValues.size());
 
     delete resultVec;

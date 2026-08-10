@@ -15,4 +15,5 @@
 
 namespace omniruntime::vectorization {
 void RegisterFlinkQuarterFunction(const std::string &name);
+void RegisterFlinkQuarterWithTzFunction(const std::string &name);
 }

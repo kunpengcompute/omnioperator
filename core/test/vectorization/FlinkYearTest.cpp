@@ -97,6 +97,38 @@ public:
         ASSERT_NO_THROW(function->Apply(args, outputType, result, &context))
             << "flink_year function threw an exception";
     }
+    // Create a const-style VARCHAR vector holding the same zone-id string for
+    // every row (the OmniAdaptor passes the session zone-id as a literal).
+    static BaseVector* CreateConstStringVector(const std::string& value, int32_t size) {
+        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+        auto* typedVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(vec);
+        std::string_view sv(value.data(), value.size());
+        for (int32_t i = 0; i < size; ++i) {
+            typedVec->SetValue(i, sv);
+        }
+        return vec;
+    }
+
+    // Execute flink_year_with_tz(inputMillis, zoneId) -> int32. The zone-id is
+    // applied when decomposing the millis into wall-clock fields (for
+    // TIMESTAMP_WITH_LOCAL_TIME_ZONE input on the Java side).
+    static void ExecuteFlinkYearWithTz(BaseVector* inputVec, BaseVector* tzVec, BaseVector*& result) {
+        auto signature = std::make_shared<FunctionSignature>("flink_year_with_tz",
+            std::vector<DataTypeId>{OMNI_LONG, OMNI_VARCHAR}, OMNI_INT);
+        auto function = VectorFunction::Find(signature);
+        ASSERT_NE(function, nullptr) << "flink_year_with_tz function not found for signature";
+
+        auto outputType = std::make_shared<DataType>(OMNI_INT);
+        ExecutionContext context;
+        context.SetResultRowSize(inputVec->GetSize());
+        std::stack<BaseVector*> args;
+        args.push(inputVec);
+        args.push(tzVec);
+
+        ASSERT_NO_THROW(function->Apply(args, outputType, result, &context))
+            << "flink_year_with_tz function threw an exception";
+    }
+
 
     // Convert date components to days since epoch (matches the implementation's
     // date calculation, same helper as YearTest).
@@ -346,6 +378,80 @@ TEST(FlinkYearTest, MultiRowBatchLong) {
     BaseVector* inputVec = FlinkYearTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;
     FlinkYearTestHelper::ExecuteFlinkYear(inputVec, OMNI_LONG, resultVec);
+    FlinkYearTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+// ============================================================================
+// flink_year_with_tz — applies an explicit session timezone to the millis.
+// The stored millis are a UTC instant; the zone shifts the wall-clock year.
+// ============================================================================
+
+TEST(FlinkYear, LongWithTzAsiaShanghai) {
+    std::cout << "=== Test: flink_year_with_tz Asia/Shanghai (+8) ===" << std::endl;
+    // Asia/Shanghai is UTC+8 (no DST): shifts the wall-clock +8h.
+    std::vector<int64_t> millisValues = {
+        FlinkYearTestHelper::TimestampToMillisUtc(1996, 11, 10, 6, 55, 44),
+        FlinkYearTestHelper::TimestampToMillisUtc(2024, 1, 1, 2, 30, 0)
+    };
+    std::vector<int32_t> expected = {1996, 2024};
+
+    BaseVector* inputVec = FlinkYearTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkYearTestHelper::CreateConstStringVector("Asia/Shanghai", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkYearTestHelper::ExecuteFlinkYearWithTz(inputVec, tzVec, resultVec);
+    FlinkYearTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+TEST(FlinkYear, LongWithTzUtcIsIdentity) {
+    // "UTC" zone leaves the wall-clock unchanged.
+    std::vector<int64_t> millisValues = {
+        FlinkYearTestHelper::TimestampToMillisUtc(1996, 11, 10, 6, 55, 44),
+        FlinkYearTestHelper::TimestampToMillisUtc(2024, 6, 1, 12, 0, 0)
+    };
+    std::vector<int32_t> expected = {1996, 2024};
+
+    BaseVector* inputVec = FlinkYearTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkYearTestHelper::CreateConstStringVector("UTC", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkYearTestHelper::ExecuteFlinkYearWithTz(inputVec, tzVec, resultVec);
+    FlinkYearTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+TEST(FlinkYear, LongWithTzNegativeOffset) {
+    // America/Los_Angeles: PST = UTC-8 (winter), PDT = UTC-7 (summer).
+    std::vector<int64_t> millisValues = {
+        FlinkYearTestHelper::TimestampToMillisUtc(2024, 1, 15, 16, 0, 0),
+        FlinkYearTestHelper::TimestampToMillisUtc(2024, 7, 15, 16, 0, 0)
+    };
+    std::vector<int32_t> expected = {2024, 2024};
+
+    BaseVector* inputVec = FlinkYearTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkYearTestHelper::CreateConstStringVector("America/Los_Angeles", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkYearTestHelper::ExecuteFlinkYearWithTz(inputVec, tzVec, resultVec);
+    FlinkYearTestHelper::ValidateResult(resultVec, expected, millisValues.size());
+
+    delete resultVec;
+}
+
+TEST(FlinkYear, LongWithTzCrossDayBoundary) {
+    // 2024-07-16 06:00:00 UTC -> America/Los_Angeles (PDT -7) -> 2024-07-15 23:00.
+    // Confirms the tz shift can roll the wall-clock across a day boundary.
+    std::vector<int64_t> millisValues = {
+        FlinkYearTestHelper::TimestampToMillisUtc(2024, 7, 16, 6, 0, 0)
+    };
+    std::vector<int32_t> expected = {2024};
+
+    BaseVector* inputVec = FlinkYearTestHelper::CreateLongVector(millisValues);
+    BaseVector* tzVec = FlinkYearTestHelper::CreateConstStringVector("America/Los_Angeles", millisValues.size());
+    BaseVector* resultVec = nullptr;
+    FlinkYearTestHelper::ExecuteFlinkYearWithTz(inputVec, tzVec, resultVec);
     FlinkYearTestHelper::ValidateResult(resultVec, expected, millisValues.size());
 
     delete resultVec;

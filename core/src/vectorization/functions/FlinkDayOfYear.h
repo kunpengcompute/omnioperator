@@ -15,4 +15,5 @@
 
 namespace omniruntime::vectorization {
 void RegisterFlinkDayOfYearFunction(const std::string &name);
+void RegisterFlinkDayOfYearWithTzFunction(const std::string &name);
 }

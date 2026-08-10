@@ -15,4 +15,5 @@
 
 namespace omniruntime::vectorization {
 void RegisterFlinkDayOfWeekFunction(const std::string &name);
+void RegisterFlinkDayOfWeekWithTzFunction(const std::string &name);
 }

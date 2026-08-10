@@ -17,4 +17,5 @@
 
 namespace omniruntime::vectorization {
 void RegisterFlinkSecondFunction(const std::string &name);
+void RegisterFlinkSecondWithTzFunction(const std::string &name);
 }
