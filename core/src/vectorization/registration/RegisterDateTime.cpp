@@ -38,6 +38,7 @@
 #include "../functions/DateDiff.h"
 #include "../functions/DateFormat.h"
 #include "../functions/FromUnixTime.h"
+#include "../functions/ConvertTz.h"
 #include "../functions/DateTrunc.h"
 #include "../functions/Floor.h"
 #include "../functions/Ceil.h"
@@ -102,6 +103,8 @@ void RegisterDatetimeFunctions(const std::string &prefix)
     RegisterDateFormatFunction(prefix + "DateFormat");
 
     RegisterFromUnixTimeFunction(prefix + "from_unixtime");
+
+    RegisterConvertTzFunction(prefix + "convert_tz");
 
     RegisterFloorFunction(prefix + "floor_time");
 
