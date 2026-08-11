@@ -256,6 +256,55 @@ TEST(ConcatTest, ConcatFunctionNullTest) {
     delete resultVector;
 }
 
+TEST(ConcatTest, ConcatFunctionThreeArgsFlatCallTest) {
+    // Flink emits a single concat call with all operands instead of nested 2-argument calls,
+    // so the 3-argument signature must consume all three vectors.
+    int rowSize = 5;
+    vec::BaseVector *inputVec1, *inputVec2, *inputVec3;
+
+    std::vector<std::string> inputStrs1 = {"a", "hello", "", "single", "x"};
+    std::vector<std::string> inputStrs2 = {"b", "world", "b", "", "y"};
+    std::vector<std::string> inputStrs3 = {"c", "!", "c", "", "z"};
+    std::vector<std::string> expectedStrs = {"abc", "helloworld!", "bc", "single", ""};
+
+    ConcatFunctionTestHelper::SetupTestVector(rowSize, inputStrs1, inputVec1);
+    ConcatFunctionTestHelper::SetupTestVector(rowSize, inputStrs2, inputVec2);
+    ConcatFunctionTestHelper::SetupTestVector(rowSize, inputStrs3, inputVec3);
+
+    // NULL in the first argument must make the whole row NULL; a wrong pop order would
+    // silently drop that argument and produce "yz" here.
+    inputVec1->SetNull(4);
+
+    auto signature = std::make_shared<FunctionSignature>("concat",
+        std::vector<DataTypeId>{OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR},
+        OMNI_VARCHAR);
+    auto function = VectorFunction::Find(signature);
+    ASSERT_NE(function, nullptr) << "concat(varchar, varchar, varchar) not found";
+
+    vec::BaseVector* resultVector = nullptr;
+    auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
+
+    op::ExecutionContext context;
+    context.SetResultRowSize(rowSize);
+    std::stack<vec::BaseVector*> args;
+    // ExprEval pushes the arguments left to right
+    args.push(inputVec1);
+    args.push(inputVec2);
+    args.push(inputVec3);
+
+    ASSERT_NO_THROW(function->Apply(args, varcharType, resultVector, &context))
+        << "ConcatFunction.apply() threw an unexpected exception";
+    EXPECT_TRUE(args.empty()) << "All three arguments should have been popped off the stack";
+
+    auto* resultStrVec = dynamic_cast<Vector<LargeStringContainer<std::string_view>>*>(resultVector);
+    ASSERT_NE(resultStrVec, nullptr) << "Result vector type conversion failed";
+
+    ConcatFunctionTestHelper::ValidateResult(resultStrVec, expectedStrs, rowSize);
+    EXPECT_TRUE(resultStrVec->IsNull(4)) << "Row 4 should be NULL (first argument is NULL)";
+
+    delete resultVector;
+}
+
 TEST(ConcatTest, ConcatFunctionMultipleArgsTest) {
     // This test simulates how Gluten's UnfoldConcatStringFunc handles 4 arguments:
     // concat(a, b, c, d) becomes concat(a, concat(b, concat(c, d)))
