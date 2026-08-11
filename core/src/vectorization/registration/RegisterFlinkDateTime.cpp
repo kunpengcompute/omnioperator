@@ -20,6 +20,7 @@
 #include "../functions/FlinkHour.h"
 #include "../functions/FlinkMinute.h"
 #include "../functions/FlinkSecond.h"
+#include "../functions/FlinkToTimestamp.h"
 
 namespace omniruntime::vectorization {
 void RegisterFlinkDatetimeFunctions(const std::string &prefix)
@@ -90,5 +91,12 @@ void RegisterFlinkDatetimeFunctions(const std::string &prefix)
     // not the Decimal variant.
     RegisterFlinkSecondFunction(prefix + "flink_second");
     RegisterFlinkSecondWithTzFunction(prefix + "flink_second_with_tz");
+
+    // flink_to_timestamp: OMNI_VARCHAR/CHAR (1-arg default format, or 2-arg with
+    // explicit format) -> OMNI_LONG (Flink TimestampData = millis since epoch, no
+    // session timezone). Mirrors Flink TO_TIMESTAMP(string1[, string2]) — wall-clock
+    // stored as UTC millis (Flink "under the 'UTC+0' time zone"). Distinct from
+    // "get_timestamp" (Spark semantics) which applies session tz and returns micros.
+    RegisterFlinkToTimestampFunction(prefix + "flink_to_timestamp");
 }
 }
