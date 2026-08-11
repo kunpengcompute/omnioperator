@@ -1251,24 +1251,6 @@ struct OverlayFunction {
     }
 };
 
-namespace detail {
-/// Helper function to convert a hex character to its numeric value.
-/// Returns -1 for invalid hex characters.
-/// Supports: '0'-'9' -> 0-9, 'A'-'F' -> 10-15, 'a'-'f' -> 10-15
-ALWAYS_INLINE int8_t fromHex(char c) {
-    if (c >= '0' && c <= '9') {
-        return c - '0';
-    }
-    if (c >= 'A' && c <= 'F') {
-        return 10 + c - 'A';
-    }
-    if (c >= 'a' && c <= 'f') {
-        return 10 + c - 'a';
-    }
-    return -1;
-}
-} // namespace detail
-
 /// unhex function
 /// unhex(string) -> varbinary
 /// Converts a hexadecimal string to binary data.
@@ -1297,7 +1279,7 @@ struct UnhexFunction {
         size_t i = 0;
         // Handle odd-length input: first character is a single hex digit
         if ((input.size() & 0x01) != 0) {
-            const auto v = detail::fromHex(inputBuffer[0]);
+            const auto v = fromHex(inputBuffer[0]);
             if (v == -1) {
                 return false;  // Invalid hex character, return NULL
             }
@@ -1307,8 +1289,8 @@ struct UnhexFunction {
 
         // Process pairs of hex characters
         while (i < input.size()) {
-            const auto first = detail::fromHex(inputBuffer[i]);
-            const auto second = detail::fromHex(inputBuffer[i + 1]);
+            const auto first = fromHex(inputBuffer[i]);
+            const auto second = fromHex(inputBuffer[i + 1]);
             if (first == -1 || second == -1) {
                 return false;  // Invalid hex character, return NULL
             }
@@ -1325,6 +1307,24 @@ struct UnhexFunction {
             return false;  // NULL input returns NULL
         }
         return call(result, *input);
+    }
+
+private:
+    /// Convert a hex character to its numeric value.
+    /// Returns -1 for invalid hex characters.
+    /// Supports: '0'-'9' -> 0-9, 'A'-'F' -> 10-15, 'a'-'f' -> 10-15
+    ALWAYS_INLINE static int8_t fromHex(char c)
+    {
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        }
+        if (c >= 'A' && c <= 'F') {
+            return 10 + c - 'A';
+        }
+        if (c >= 'a' && c <= 'f') {
+            return 10 + c - 'a';
+        }
+        return -1;
     }
 };
 
