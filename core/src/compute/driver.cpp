@@ -17,6 +17,8 @@
 #include "driver.h"
 #include "codegen/time_util.h"
 #include "operator/join/hash_builder.h"
+#include "util/debug.h"
+#include "vector/vector_helper.h"
 #include <memory>
 
 namespace omniruntime::compute {
@@ -61,7 +63,10 @@ void OmniDriver::close()
     }
     updatePipelineStats();
     for (auto &op : operators_) {
-        op->Close();
+        // Cascade release may have set some entries to nullptr.
+        if (op != nullptr) {
+            op->Close();
+        }
         op = nullptr;
     }
     for (auto &factory : operatorFactories_) {
@@ -96,7 +101,9 @@ void OpCallStatus::Stop()
 
 CpuWallTiming OmniDriver::processLazyIoStats(op::Operator& op, const CpuWallTiming& timing)
 {
-    if (&op == operators_[0].get()) {
+    // If the source operator has been released (via cascade release), there is no
+    // lazy I/O to account for — return timing unchanged.
+    if (&op == operators_[0].get() || operators_[0] == nullptr) {
         return timing;
     }
     auto lockStats = op.stats();
@@ -148,6 +155,12 @@ StopReason OmniDriver::RunInternal(
                 if (shouldStop) {
                     return StopReason::kAtEnd;
                 }
+
+                // Skip operators already released by cascade release.
+                if (operators_[i] == nullptr) {
+                    continue;
+                }
+
                 auto *op = operators_[i].get();
                 curOperatorId_ = i;
 
@@ -158,6 +171,29 @@ StopReason OmniDriver::RunInternal(
 
                 if (i < numOperators - 1) {
                     auto *nextOp = operators_[i + 1].get();
+
+                    // The downstream operator has been released (e.g. an early-finish
+                    // Limit that reached its row quota). The current operator may still
+                    // hold residual output that cannot be delivered downstream. Drain
+                    // and discard this output to advance the operator to isFinished(),
+                    // otherwise it would never be released.
+                    if (nextOp == nullptr) {
+                        vec::VectorBatch *orphan = nullptr;
+                        withDeltaCpuWallTimer(op, &OperatorStats::getOutputTime, [&]() {
+                            CALL_OPERATOR(op->GetOutput(&orphan), op, curOperatorId_, kOpMethodGetOutput);
+                        });
+                        if (orphan != nullptr) {
+                            VectorHelper::FreeVecBatch(orphan);
+                            LogDebug("Orphan output from operator %d discarded (downstream released).", i);
+                        }
+                        if (op->isFinished()) {
+                            ReleaseFinishedOperators(i);
+                            break;
+                        }
+                        i += 1;
+                        continue;
+                    }
+
                     blockingReason_ = nextOp->IsBlocked(&future);
                     if (blockingReason_ != BlockingReason::kNotBlocked) {
                         return BlockDriver(self, i + 1, std::move(future), blockingState);
@@ -199,6 +235,8 @@ StopReason OmniDriver::RunInternal(
                             }
                             if (op->isFinished()) {
                                 nextOp->noMoreInput();
+
+                                ReleaseFinishedOperators(i);
                                 break;
                             }
                         }
@@ -274,6 +312,10 @@ void OmniDriver::withDeltaCpuWallTimer(op::Operator* op, TimingMemberPtr opTimin
 void OmniDriver::updatePipelineStats()
 {
     for (auto& op : operators_) {
+        // Cascade release may have set some entries to nullptr.
+        if (op == nullptr) {
+            continue;
+        }
         auto opStatsCopy = op->stats(false);
         int32_t pipelineId = opStatsCopy.pipelineId;
         int32_t operatorId = opStatsCopy.operatorId;
@@ -282,6 +324,72 @@ void OmniDriver::updatePipelineStats()
         }
         pipelineStats_.operatorStats[operatorId].Add(opStatsCopy);
         pipelineStats_.pipelineId = pipelineId;
+    }
+}
+
+void OmniDriver::CollectStatsBeforeClose(int32_t operatorIdx)
+{
+    auto &op = operators_[operatorIdx];
+    if (op == nullptr) {
+        return;
+    }
+    auto opStatsCopy = op->stats(false);
+    int32_t pipelineId = opStatsCopy.pipelineId;
+    int32_t operatorId = opStatsCopy.operatorId;
+    if (pipelineStats_.operatorStats.size() <= static_cast<size_t>(operatorId)) {
+        pipelineStats_.operatorStats.resize(operatorId + 1);
+    }
+    pipelineStats_.operatorStats[operatorId].Add(opStatsCopy);
+    pipelineStats_.pipelineId = pipelineId;
+}
+
+void OmniDriver::ReleaseFinishedOperators(int32_t finishedIndex)
+{
+    auto *finishedOp = operators_[finishedIndex].get();
+    if (finishedOp == nullptr) {
+        return;
+    }
+
+    // Early-finish path: release the operator itself and propagate noMoreInput
+    // upstream, but do NOT release upstream operators yet.
+    //
+    // noMoreInput signals "begin winding down"; isFinished signals "safe to free".
+    // Between the two, an operator must finish draining its internal state
+    // (e.g. a Sort emitting sorted pagesIndex, a Filter flushing projectedVecs).
+    // Releasing upstream before that drain completes would discard query results.
+    // Upstream is released later, once the orphan-drain path drives it to
+    // isFinished and calls this function again.
+    if (finishedOp->isEarlyFinish() && !finishedOp->hasNoMoreInput()) {
+        CollectStatsBeforeClose(finishedIndex);
+        finishedOp->Close();
+        operators_[finishedIndex] = nullptr;
+        LogDebug("Early-finish operator %d released, propagating noMoreInput upstream.", finishedIndex);
+
+        for (int32_t j = finishedIndex - 1; j >= 0; --j) {
+            if (operators_[j] != nullptr) {
+                operators_[j]->noMoreInput();
+                LogDebug("noMoreInput propagated to operator %d (early-finish cascade from %d).", j, finishedIndex);
+            }
+        }
+        return;
+    }
+
+    // Normal path: release all finished operators in [0..finishedIndex].
+    // Each entry is defensively checked with isFinished() so that an unexpected
+    // state only degrades to "release fewer" (performance) rather than
+    // "release too many" (crash/data corruption).
+    for (int32_t j = finishedIndex; j >= 0; --j) {
+        if (operators_[j] == nullptr) {
+            continue;
+        }
+        if (!operators_[j]->isFinished()) {
+            LogWarn("Operator %d not finished during cascade release from %d, skip (defensive).", j, finishedIndex);
+            continue;
+        }
+        CollectStatsBeforeClose(j);
+        operators_[j]->Close();
+        operators_[j] = nullptr;
+        LogDebug("Operator %d released early (cascade from finished operator %d).", j, finishedIndex);
     }
 }
 } // end of omniruntime
