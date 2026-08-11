@@ -52,6 +52,25 @@ void SelectiveStringDictionaryColumnReader::RebuildAcceptedIds(::common::Filter 
 
 void SelectiveStringDictionaryColumnReader::read(uint64_t rowsToRead, common::RowSet activeRows, int omniTypeId)
 {
+    auto *filter = hasFilter() ? spec_->filter() : nullptr;
+    if (filter != nullptr && orcType_->getKind() == ::orc::BINARY) {
+        // Binary value filters are not implemented yet. Fail before decoding if a future
+        // ScanSpec change starts pushing one without adding the matching reader evaluation.
+        switch (filter->kind()) {
+            case ::common::FilterKind::kAlwaysFalse:
+            case ::common::FilterKind::kAlwaysTrue:
+            case ::common::FilterKind::kIsNull:
+            case ::common::FilterKind::kIsNotNull:
+                break;
+            default:
+                throw omniruntime::exception::OmniException(
+                    "EXPRESSION_NOT_SUPPORT",
+                    "SelectiveStringDictionaryColumnReader unsupported filter kind: " +
+                        std::to_string(static_cast<int>(filter->kind())) +
+                        ", omniTypeId: " + std::to_string(omniTypeId));
+        }
+    }
+
     auto *dictReader = AsDictReader(inner_);
     decoded_.reset(dictReader->nextAsDictionary(rowsToRead, nullptr, omniTypeId));
     decodedBase_ = 0;
@@ -60,7 +79,6 @@ void SelectiveStringDictionaryColumnReader::read(uint64_t rowsToRead, common::Ro
         return;
     }
 
-    auto *filter = spec_->filter();
     const bool nullOnly =
         filter->is(::common::FilterKind::kIsNull) || filter->is(::common::FilterKind::kIsNotNull);
     // Dictionary is stripe-scoped; this reader is recreated each stripe. Rebuild acceptedIds_

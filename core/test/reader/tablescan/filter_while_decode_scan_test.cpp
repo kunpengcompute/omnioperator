@@ -10,9 +10,11 @@
 
 #include <gtest/gtest.h>
 #include <cstdio>
+#include <initializer_list>
 #include <limits>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -36,6 +38,7 @@
 using omniruntime::type::Date32Type;
 using omniruntime::type::ByteType;
 using omniruntime::type::BooleanType;
+using omniruntime::type::CharType;
 using omniruntime::type::Decimal128;
 using omniruntime::type::Decimal128Type;
 using omniruntime::type::Decimal64Type;
@@ -51,6 +54,7 @@ using omniruntime::type::ROW;
 using omniruntime::type::ShortType;
 using omniruntime::type::TimestampType;
 using omniruntime::type::VarBinaryType;
+using omniruntime::type::VarcharType;
 using omniruntime::vec::BaseVector;
 using omniruntime::vec::LargeStringContainer;
 using omniruntime::vec::RowVector;
@@ -182,6 +186,12 @@ ScalarRow ReadScalarCell(BaseVector *v, int32_t row, int omniTypeId)
         case OMNI_INT:
             cell.rawValue = RawBytes(static_cast<Vector<int32_t> *>(v)->GetValue(row));
             break;
+        case OMNI_SHORT:
+            cell.rawValue = RawBytes(static_cast<Vector<int16_t> *>(v)->GetValue(row));
+            break;
+        case OMNI_LONG:
+            cell.rawValue = RawBytes(static_cast<Vector<int64_t> *>(v)->GetValue(row));
+            break;
         case omniruntime::type::OMNI_FLOAT:
             cell.rawValue = RawBytes(static_cast<Vector<float> *>(v)->GetValue(row));
             break;
@@ -202,6 +212,12 @@ ScalarRow ReadScalarCell(BaseVector *v, int32_t row, int omniTypeId)
             cell.rawValue = static_cast<Vector<Decimal128> *>(v)->GetValue(row).ToString();
             break;
         case omniruntime::type::OMNI_VARBINARY: {
+            const auto value = static_cast<OmniStringVector *>(v)->GetValue(row);
+            cell.rawValue.assign(value.data(), value.size());
+            break;
+        }
+        case omniruntime::type::OMNI_VARCHAR:
+        case omniruntime::type::OMNI_CHAR: {
             const auto value = static_cast<OmniStringVector *>(v)->GetValue(row);
             cell.rawValue.assign(value.data(), value.size());
             break;
@@ -311,6 +327,80 @@ public:
     }
 
     ~PrimitiveOrcFixture() { std::remove(filename_.c_str()); }
+
+    const std::string &filename() const { return filename_; }
+
+private:
+    std::string filename_;
+};
+
+// Mirrors the nullable columns used by docs/scripts/setup_scan_filter_db.sql.
+// The raw value in NULL slots is deliberately zero so the legacy evaluator's
+// former "compare the value slot and ignore nulls" behavior is deterministic.
+class NullablePredicateOrcFixture {
+public:
+    explicit NullablePredicateOrcFixture(const std::string &testName)
+        : filename_("/tmp/omni_scan_nullable_predicate_" + std::to_string(getpid()) + "_" + testName + ".orc")
+    {
+        constexpr int32_t numRows = 8;
+        const std::vector<int64_t> ids = {1, 2, 3, 4, 5, 6, 0, 100};
+        const std::vector<int32_t> ints = {1, 2, 3, 6, 11, 0, 1, -5};
+        const std::vector<int16_t> shorts = {1, 12, 3, 20, -1, 0, 1, 15};
+        const std::vector<std::string> strings = {"x", "alpha", "", "", "text", "", "x", "omega"};
+        const std::vector<std::string> chars = {"x", "alpha", "x", "", "text", "", "x", "omega"};
+
+        UriInfo uri("file", filename_, "", "-1");
+        auto outStream = omniruntime::reader::writeFileOverride(uri);
+        auto schema = ::orc::createPrimitiveType(::orc::TypeKind::STRUCT);
+        schema->addStructField("id", ::orc::createPrimitiveType(::orc::TypeKind::LONG));
+        schema->addStructField("c_int", ::orc::createPrimitiveType(::orc::TypeKind::INT));
+        schema->addStructField("c_short", ::orc::createPrimitiveType(::orc::TypeKind::SHORT));
+        schema->addStructField("c_string", ::orc::createPrimitiveType(::orc::TypeKind::STRING));
+        schema->addStructField("c_char", ::orc::createCharType(::orc::TypeKind::CHAR, 16));
+
+        ::orc::WriterOptions options;
+        options.setMemoryPool(::orc::getDefaultPool());
+        options.setStripeSize(67108864);
+        options.setTimezoneName("GMT");
+        options.setDictionaryKeySizeThreshold(0.0);
+        auto writer = createOmniWriter(*schema, outStream.get(), options);
+
+        auto idVector = std::make_unique<Vector<int64_t>>(numRows);
+        auto intVector = std::make_unique<Vector<int32_t>>(numRows);
+        auto shortVector = std::make_unique<Vector<int16_t>>(numRows);
+        auto stringVector = std::make_unique<OmniStringVector>(numRows);
+        auto charVector = std::make_unique<OmniStringVector>(numRows);
+        for (int32_t row = 0; row < numRows; ++row) {
+            idVector->SetValue(row, ids[row]);
+            intVector->SetValue(row, ints[row]);
+            shortVector->SetValue(row, shorts[row]);
+            stringVector->SetValue(row, std::string_view(strings[row]));
+            charVector->SetValue(row, std::string_view(chars[row]));
+            idVector->SetNotNull(row);
+            intVector->SetNotNull(row);
+            shortVector->SetNotNull(row);
+            stringVector->SetNotNull(row);
+            charVector->SetNotNull(row);
+        }
+        idVector->SetNull(6);
+        intVector->SetNull(5);
+        shortVector->SetNull(5);
+        stringVector->SetNull(2);
+        stringVector->SetNull(5);
+        charVector->SetNull(3);
+        charVector->SetNull(5);
+
+        std::vector<BaseVector *> columns = {
+            idVector.get(), intVector.get(), shortVector.get(), stringVector.get(), charVector.get()};
+        auto rowVector = std::make_unique<RowVector>(numRows, columns);
+        for (int32_t row = 0; row < numRows; ++row) {
+            rowVector->SetNotNull(row);
+        }
+        writer->add(rowVector.get(), 0, numRows);
+        writer->close();
+    }
+
+    ~NullablePredicateOrcFixture() { std::remove(filename_.c_str()); }
 
     const std::string &filename() const { return filename_; }
 
@@ -508,6 +598,27 @@ protected:
             "id,c_byte,c_bool,c_double,c_float,c_decimal64,c_decimal128,c_binary,c_timestamp", rowType, typeIds);
     }
 
+    ScalarScanResult RunNullablePredicateScan(bool filterWhileDecode, const nlohmann::json &cond,
+                                              const std::string &filename, bool projectStrings = false,
+                                              uint64_t batchLen = 3)
+    {
+        const std::string allColumns = "id,c_int,c_short,c_string,c_char";
+        if (projectStrings) {
+            auto rowType = ROW(
+                {"id", "c_int", "c_short", "c_string", "c_char"},
+                {LongType(), IntType(), ShortType(), VarcharType(), CharType(16)});
+            return RunScalarScanFile(
+                filterWhileDecode, cond, batchLen, filename, allColumns, allColumns, rowType,
+                {OMNI_LONG, OMNI_INT, OMNI_SHORT, omniruntime::type::OMNI_VARCHAR,
+                 omniruntime::type::OMNI_CHAR});
+        }
+
+        auto rowType = ROW({"id", "c_int", "c_short"}, {LongType(), IntType(), ShortType()});
+        return RunScalarScanFile(
+            filterWhileDecode, cond, batchLen, filename, allColumns, "id,c_int,c_short", rowType,
+            {OMNI_LONG, OMNI_INT, OMNI_SHORT});
+    }
+
     void ExpectScalarEqual(const ScalarScanResult &off, const ScalarScanResult &on)
     {
         ASSERT_EQ(off.totalRows, on.totalRows);
@@ -531,6 +642,22 @@ protected:
         for (size_t row = 0; row < expectedIds.size(); ++row) {
             EXPECT_FALSE(result.columns[0][row].isNull) << "row " << row;
             EXPECT_EQ(result.columns[0][row].rawValue, RawBytes(expectedIds[row])) << "row " << row;
+        }
+    }
+
+    void ExpectNullableLongIds(
+        const ScalarScanResult &result, std::initializer_list<std::optional<int64_t>> expectedIds)
+    {
+        ASSERT_EQ(result.totalRows, expectedIds.size());
+        ASSERT_FALSE(result.columns.empty());
+        ASSERT_EQ(result.columns[0].size(), expectedIds.size());
+        size_t row = 0;
+        for (const auto &expectedId : expectedIds) {
+            EXPECT_EQ(result.columns[0][row].isNull, !expectedId.has_value()) << "row " << row;
+            if (expectedId.has_value()) {
+                EXPECT_EQ(result.columns[0][row].rawValue, RawBytes(*expectedId)) << "row " << row;
+            }
+            ++row;
         }
     }
 };
@@ -752,4 +879,94 @@ TEST_F(FilterWhileDecodeScanTest, ProjectionOnlyTypeNullFilters)
             EXPECT_FALSE(cell.isNull) << "column " << column;
         }
     }
+}
+
+TEST_F(FilterWhileDecodeScanTest, A11AndA21NullableSameColumnRangesMatchSqlWhere)
+{
+    NullablePredicateOrcFixture fixture("a11_a21");
+    auto firstRange = Or(
+        Leaf(::common::LESS_THAN, 1, OMNI_INT, "3"),
+        Leaf(::common::GREATER_THAN, 1, OMNI_INT, "10"));
+
+    auto a11Off = RunNullablePredicateScan(false, firstRange, fixture.filename());
+    auto a11On = RunNullablePredicateScan(true, firstRange, fixture.filename());
+    ExpectScalarEqual(a11Off, a11On);
+    ExpectNullableLongIds(a11On, {1, 2, 5, std::nullopt, 100});
+
+    auto secondRange = Or(
+        Leaf(::common::LESS_THAN, 1, OMNI_INT, "5"),
+        Leaf(::common::GREATER_THAN, 1, OMNI_INT, "8"));
+    auto a21 = And(firstRange, secondRange);
+    auto a21Off = RunNullablePredicateScan(false, a21, fixture.filename());
+    auto a21On = RunNullablePredicateScan(true, a21, fixture.filename());
+    ExpectScalarEqual(a21Off, a21On);
+    ExpectNullableLongIds(a21On, {1, 2, 5, std::nullopt, 100});
+}
+
+TEST_F(FilterWhileDecodeScanTest, B01ResidualCrossColumnOrRejectsUnknown)
+{
+    NullablePredicateOrcFixture fixture("b01");
+    auto cond = And(
+        Leaf(::common::GREATER_THAN_OR_EQUAL, 0, OMNI_LONG, "0"),
+        Or(Leaf(::common::LESS_THAN, 1, OMNI_INT, "3"),
+           Leaf(::common::GREATER_THAN, 2, OMNI_SHORT, "10")));
+
+    auto off = RunNullablePredicateScan(false, cond, fixture.filename());
+    auto on = RunNullablePredicateScan(true, cond, fixture.filename());
+    ExpectScalarEqual(off, on);
+    ExpectNullableLongIds(on, {1, 2, 4, 100});
+}
+
+TEST_F(FilterWhileDecodeScanTest, B02ResidualNotAndPreservesUnknown)
+{
+    NullablePredicateOrcFixture fixture("b02");
+    auto cond = And(
+        Leaf(::common::GREATER_THAN_OR_EQUAL, 0, OMNI_LONG, "0"),
+        Not(And(Leaf(::common::GREATER_THAN, 1, OMNI_INT, "6"),
+                Leaf(::common::GREATER_THAN, 2, OMNI_SHORT, "10"))));
+
+    auto off = RunNullablePredicateScan(false, cond, fixture.filename());
+    auto on = RunNullablePredicateScan(true, cond, fixture.filename());
+    ExpectScalarEqual(off, on);
+    ExpectNullableLongIds(on, {1, 2, 3, 4, 5, 100});
+}
+
+TEST_F(FilterWhileDecodeScanTest, B04ResidualOrWithStringProjectionRejectsUnknown)
+{
+    NullablePredicateOrcFixture fixture("b04");
+    auto cond = And(
+        Leaf(::common::GREATER_THAN_OR_EQUAL, 0, OMNI_LONG, "0"),
+        Or(Leaf(::common::LESS_THAN, 1, OMNI_INT, "3"),
+           Leaf(::common::GREATER_THAN, 2, OMNI_SHORT, "10")));
+
+    auto off = RunNullablePredicateScan(false, cond, fixture.filename(), true);
+    auto on = RunNullablePredicateScan(true, cond, fixture.filename(), true);
+    ExpectScalarEqual(off, on);
+    ExpectNullableLongIds(on, {1, 2, 4, 100});
+}
+
+TEST_F(FilterWhileDecodeScanTest, C14LegacyFallbackCrossColumnOrRejectsUnknown)
+{
+    NullablePredicateOrcFixture fixture("c14");
+    auto cond = Or(
+        Leaf(::common::LESS_THAN, 1, OMNI_INT, "3"),
+        Leaf(::common::GREATER_THAN, 2, OMNI_SHORT, "10"));
+
+    auto off = RunNullablePredicateScan(false, cond, fixture.filename());
+    auto on = RunNullablePredicateScan(true, cond, fixture.filename());
+    ExpectScalarEqual(off, on);
+    ExpectNullableLongIds(on, {1, 2, 4, std::nullopt, 100});
+}
+
+TEST_F(FilterWhileDecodeScanTest, C15LegacyFallbackNotAndPreservesUnknown)
+{
+    NullablePredicateOrcFixture fixture("c15");
+    auto cond = Not(And(
+        Leaf(::common::GREATER_THAN, 1, OMNI_INT, "6"),
+        Leaf(::common::GREATER_THAN, 2, OMNI_SHORT, "10")));
+
+    auto off = RunNullablePredicateScan(false, cond, fixture.filename());
+    auto on = RunNullablePredicateScan(true, cond, fixture.filename());
+    ExpectScalarEqual(off, on);
+    ExpectNullableLongIds(on, {1, 2, 3, 4, 5, std::nullopt, 100});
 }

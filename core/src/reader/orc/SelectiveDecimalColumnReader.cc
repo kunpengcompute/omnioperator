@@ -12,6 +12,7 @@
 #include "SelectiveDecimalColumnReader.hh"
 
 #include "reader/common/Filter.h"
+#include "util/omni_exception.h"
 
 namespace omniruntime::reader {
 
@@ -20,26 +21,53 @@ using omniruntime::vec::BaseVector;
 void SelectiveDecimalColumnReader::read(
     uint64_t rowsToRead, common::RowSet activeRows, int omniTypeId)
 {
+    const auto *filter = hasFilter() ? spec_->filter() : nullptr;
+    bool acceptsNull = false;
+    bool acceptsNonNull = false;
+    if (filter != nullptr) {
+        // Decimal value filters are not implemented yet. Fail before decoding if a future
+        // ScanSpec change starts pushing one without adding the matching reader evaluation.
+        switch (filter->kind()) {
+            case ::common::FilterKind::kAlwaysFalse:
+                break;
+            case ::common::FilterKind::kAlwaysTrue:
+                acceptsNull = true;
+                acceptsNonNull = true;
+                break;
+            case ::common::FilterKind::kIsNull:
+                acceptsNull = true;
+                break;
+            case ::common::FilterKind::kIsNotNull:
+                acceptsNonNull = true;
+                break;
+            default:
+                throw omniruntime::exception::OmniException(
+                    "EXPRESSION_NOT_SUPPORT",
+                    "SelectiveDecimalColumnReader unsupported filter kind: " +
+                        std::to_string(static_cast<int>(filter->kind())) +
+                        ", omniTypeId: " + std::to_string(omniTypeId));
+        }
+    }
+
     decoded_ = makeNewVector(
         rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId));
     inner_->next(decoded_.get(), rowsToRead, nullptr, omniTypeId);
     decodedBase_ = 0;
 
-    if (!hasFilter()) {
+    if (filter == nullptr) {
         return;
     }
 
-    const auto *filter = spec_->filter();
     outputRows_.clear();
     outputRows_.reserve(activeRows.size());
     for (auto row : activeRows) {
         if (decoded_->IsNull(row)) {
-            if (filter->testNull()) {
+            if (acceptsNull) {
                 outputRows_.push_back(row);
             }
             continue;
         }
-        if (filter->testNonNull()) {
+        if (acceptsNonNull) {
             outputRows_.push_back(row);
         }
     }

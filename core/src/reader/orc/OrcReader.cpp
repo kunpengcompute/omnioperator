@@ -48,7 +48,9 @@ std::vector<BaseVector*> *recordBatch, uint64_t &batchRowSize, int *omniTypeId, 
         return false;
     }
     try {
-        uint8_t *bitMark = predicateCondition->compute(*recordBatch);
+        auto predicateResult = predicateCondition->compute(*recordBatch);
+        // WHERE keeps TRUE only; FALSE and UNKNOWN are both rejected.
+        uint8_t *bitMark = predicateResult.trueBits;
         int32_t vectorSize = (*recordBatch)[0]->GetSize();
         if (omniruntime::BitUtil::CountBits(reinterpret_cast<const uint64_t *>(bitMark), 0, vectorSize) == 0) {
             ClearRecordBatch(*recordBatch);
@@ -58,7 +60,7 @@ std::vector<BaseVector*> *recordBatch, uint64_t &batchRowSize, int *omniTypeId, 
             predicateCondition->getIsAllNotNullColumns());
     } catch (const std::exception &e) {
         ClearRecordBatch(*recordBatch);
-        LogError("filterData fail: %s", e.what());
+        throw OmniException("OPERATOR_RUNTIME_ERROR", std::string("ORC predicate filtering failed: ") + e.what());
     }
     return false;
 }
@@ -71,7 +73,9 @@ uint64_t ApplyResidualFilter(std::shared_ptr<common::PredicateCondition> &predic
         return rows;
     }
     try {
-        uint8_t *bitMark = predicateCondition->compute(*recordBatch);
+        auto predicateResult = predicateCondition->compute(*recordBatch);
+        // WHERE keeps TRUE only; FALSE and UNKNOWN are both rejected.
+        uint8_t *bitMark = predicateResult.trueBits;
         int32_t vectorSize = (*recordBatch)[0]->GetSize();
         if (omniruntime::BitUtil::CountBits(reinterpret_cast<const uint64_t *>(bitMark), 0, vectorSize) == 0) {
             ClearRecordBatch(*recordBatch);
@@ -80,8 +84,7 @@ uint64_t ApplyResidualFilter(std::shared_ptr<common::PredicateCondition> &predic
         return FilterData(bitMark, recordBatch, vectorSize, predicateCondition->getIsAllNullColumns(),
                           predicateCondition->getIsAllNotNullColumns());
     } catch (const std::exception &e) {
-        LogError("ApplyResidualFilter fail: %s", e.what());
-        return rows;
+        throw OmniException("OPERATOR_RUNTIME_ERROR", std::string("ApplyResidualFilter failed: ") + e.what());
     }
 }
 
