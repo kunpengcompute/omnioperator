@@ -1,7 +1,7 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
  * Description: ToDate function unit tests
- *              to_date(string, format) -> DATE32 (days since epoch, UTC)
+ *              to_date(string, format) -> INT (days since epoch, UTC)
  */
 
 #include <gtest/gtest.h>
@@ -64,7 +64,7 @@ public:
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << funcName << " function not found for signature";
 
-        auto outType = std::make_shared<DataType>(OMNI_DATE32);
+        auto outType = std::make_shared<DataType>(OMNI_INT);
         ExecutionContext context;
         int32_t sz = 0;
         if (!args.empty()) {
@@ -95,7 +95,7 @@ TEST(ToDateTest, ToDate_BasicDateFormat) {
 
     BaseVector* resultVec = nullptr;
     ToDateTestHelper::ExecuteFunction("to_date",
-        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_DATE32, args, resultVec);
+        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT, args, resultVec);
 
     ASSERT_NE(resultVec, nullptr);
     auto* resultTyped = dynamic_cast<Vector<int32_t>*>(resultVec);
@@ -125,7 +125,7 @@ TEST(ToDateTest, ToDate_SlashFormat) {
 
     BaseVector* resultVec = nullptr;
     ToDateTestHelper::ExecuteFunction("to_date",
-        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_DATE32, args, resultVec);
+        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT, args, resultVec);
 
     ASSERT_NE(resultVec, nullptr);
     auto* resultTyped = dynamic_cast<Vector<int32_t>*>(resultVec);
@@ -153,7 +153,7 @@ TEST(ToDateTest, ToDate_DateTimeFormatTruncatesToDate) {
 
     BaseVector* resultVec = nullptr;
     ToDateTestHelper::ExecuteFunction("to_date",
-        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_DATE32, args, resultVec);
+        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT, args, resultVec);
 
     ASSERT_NE(resultVec, nullptr);
     auto* resultTyped = dynamic_cast<Vector<int32_t>*>(resultVec);
@@ -180,7 +180,7 @@ TEST(ToDateTest, ToDate_LeapYearAndBoundaries) {
 
     BaseVector* resultVec = nullptr;
     ToDateTestHelper::ExecuteFunction("to_date",
-        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_DATE32, args, resultVec);
+        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT, args, resultVec);
 
     ASSERT_NE(resultVec, nullptr);
     auto* resultTyped = dynamic_cast<Vector<int32_t>*>(resultVec);
@@ -211,7 +211,7 @@ TEST(ToDateTest, ToDate_NullInput) {
 
     BaseVector* resultVec = nullptr;
     ToDateTestHelper::ExecuteFunction("to_date",
-        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_DATE32, args, resultVec);
+        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT, args, resultVec);
 
     ASSERT_NE(resultVec, nullptr);
     EXPECT_FALSE(resultVec->IsNull(0));
@@ -232,7 +232,7 @@ TEST(ToDateTest, ToDate_ParseError) {
 
     BaseVector* resultVec = nullptr;
     ToDateTestHelper::ExecuteFunction("to_date",
-        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_DATE32, args, resultVec);
+        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT, args, resultVec);
 
     ASSERT_NE(resultVec, nullptr);
     EXPECT_FALSE(resultVec->IsNull(0));
@@ -252,7 +252,7 @@ TEST(ToDateTest, ToDate_EmptyString) {
 
     BaseVector* resultVec = nullptr;
     ToDateTestHelper::ExecuteFunction("to_date",
-        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_DATE32, args, resultVec);
+        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT, args, resultVec);
 
     ASSERT_NE(resultVec, nullptr);
     EXPECT_TRUE(resultVec->IsNull(0));
@@ -262,7 +262,7 @@ TEST(ToDateTest, ToDate_EmptyString) {
 }
 
 TEST(ToDateTest, ToDate_CharInputType) {
-    // Verify the {OMNI_CHAR, OMNI_VARCHAR} -> OMNI_DATE32 overload resolves and parses correctly.
+    // Verify the {OMNI_CHAR, OMNI_VARCHAR} -> OMNI_INT overload resolves and parses correctly.
     std::vector<std::string> inputs = {"2024-01-15"};
     BaseVector* inputVec = ToDateTestHelper::CreateStringVector(inputs);
     BaseVector* formatVec = ToDateTestHelper::CreateConstStringVector("yyyy-MM-dd", inputs.size());
@@ -273,7 +273,7 @@ TEST(ToDateTest, ToDate_CharInputType) {
 
     BaseVector* resultVec = nullptr;
     ToDateTestHelper::ExecuteFunction("to_date",
-        {OMNI_CHAR, OMNI_VARCHAR}, OMNI_DATE32, args, resultVec);
+        {OMNI_CHAR, OMNI_VARCHAR}, OMNI_INT, args, resultVec);
 
     ASSERT_NE(resultVec, nullptr);
     auto* resultTyped = dynamic_cast<Vector<int32_t>*>(resultVec);

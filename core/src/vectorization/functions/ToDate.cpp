@@ -252,7 +252,7 @@ public:
         const auto size = inputArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_DATE32, size);
+            result = VectorHelper::CreateFlatVector(OMNI_INT, size);
         }
 
         bool formatIsConst = (formatArg->GetEncoding() == OMNI_ENCODING_CONST);
@@ -328,7 +328,7 @@ public:
 void RegisterToDateFunction(const std::string &name)
 {
     auto toDateFunction = std::make_shared<ToDateFunction>();
-    VectorFunction::RegisterVectorFunction(name, {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_DATE32, toDateFunction);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_CHAR, OMNI_VARCHAR}, OMNI_DATE32, toDateFunction);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT, toDateFunction);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_CHAR, OMNI_VARCHAR}, OMNI_INT, toDateFunction);
 }
 }
