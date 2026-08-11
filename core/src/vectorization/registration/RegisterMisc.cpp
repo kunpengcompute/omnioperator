@@ -21,6 +21,11 @@ void RegisterMiscFunctions(const std::string& prefix)
     // The random generator is initialized with (seed + partitionId) for partition-aware randomness
     // Each call within the same batch returns a different UUID string
     RegisterFunction<UuidFunction, std::string, int64_t>(prefix + "uuid", {OMNI_LONG}, OMNI_VARCHAR);
+
+    // Register uuid(): uuid() -> varchar (Flink UUID(), RFC 4122 v4, 0-arg overload)
+    // OmniAdaptor emits UUID() with zero arguments; this overload serves that path.
+    // Non-deterministic: each row gets a new random UUID.
+    RegisterFunction<UuidNoArgFunction, std::string>(prefix + "uuid", {}, OMNI_VARCHAR);
 }
 
 } // namespace omniruntime::vectorization

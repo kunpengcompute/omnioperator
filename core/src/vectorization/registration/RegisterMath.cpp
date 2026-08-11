@@ -11,6 +11,7 @@
 #include "../functions/HexFunctions.h"
 #include "../functions/BinFunction.h"
 #include "../functions/ConvFunction.h"
+#include "../functions/FlinkRandomFunctions.h"
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -75,6 +76,17 @@ void RegisterMathFunctions(const std::string &prefix)
     RegisterFunction<RandFunction, double>(prefix + "random", {}, OMNI_DOUBLE);
     RegisterFunction<RandSeedFunctionInt32, double, int32_t>(prefix + "random", {OMNI_INT}, OMNI_DOUBLE);
     RegisterFunction<RandSeedFunctionInt64, double, int64_t>(prefix + "random", {OMNI_LONG}, OMNI_DOUBLE);
+    // flink_rand() / flink_rand(seed) -> DOUBLE in [0,1), Flink RAND() / RAND(seed) semantics.
+    // Registered under a dedicated name to coexist with the existing Velox/Spark "rand" above.
+    // Seeded overload replicates java.util.Random for value-by-value parity with native Flink.
+    RegisterFunction<FlinkRandFunction, double>(prefix + "flink_rand", {}, OMNI_DOUBLE);
+    RegisterFunction<FlinkRandSeedFunction, double, int32_t>(prefix + "flink_rand", {OMNI_INT}, OMNI_DOUBLE);
+    // rand_integer(bound) / rand_integer(seed, bound) -> INT in [0, bound), Flink semantics.
+    // Seeded overload replicates java.util.Random for value-by-value parity with native Flink.
+    RegisterFunction<FlinkRandIntegerFunction, int32_t, int32_t>(prefix + "rand_integer", {OMNI_INT}, OMNI_INT);
+    RegisterFunction<FlinkRandIntegerSeedFunction, int32_t, int32_t, int32_t>(
+        prefix + "rand_integer", {OMNI_INT, OMNI_INT}, OMNI_INT);
+
     // pi()/e() — 0-arg constant functions returning Math.PI / Math.E (DOUBLE).
     // Matches Flink PI()/E() (NILADIC, DOUBLE, deterministic constant).
     RegisterFunction<PiFunction, double>(prefix + "pi", {}, OMNI_DOUBLE);

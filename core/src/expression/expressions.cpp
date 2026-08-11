@@ -1059,7 +1059,11 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     if (this->function == nullptr) {
         this->function = FunctionRegistry::LookupFunction(signature.get());
     }
-    vectorFunction = VectorFunction::Find(signature);
+    constantInputs = GetConstantInputs(arguments);
+    vectorFunction = VectorFunction::Find(signature, constantInputs);
+    if (vectorFunction == nullptr) {
+        vectorFunction = VectorFunction::Find(signature);
+    }
     if (funcName == "named_struct") {
         vectorFunction = std::make_shared<NamedStructFunction>(GetInputDataTypes());
     }
@@ -1085,7 +1089,11 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     });
     auto signature = std::make_shared<FunctionSignature>(funcName, argTypes, dataType->GetId());
     this->function = FunctionRegistry::LookupFunction(signature.get());
-    vectorFunction = VectorFunction::Find(signature);
+    constantInputs = GetConstantInputs(arguments);
+    vectorFunction = VectorFunction::Find(signature, constantInputs);
+    if (vectorFunction == nullptr) {
+        vectorFunction = VectorFunction::Find(signature);
+    }
     if (funcName == "named_struct") {
         vectorFunction = std::make_shared<NamedStructFunction>(GetInputDataTypes());
     }
