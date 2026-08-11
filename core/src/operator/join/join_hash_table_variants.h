@@ -18,6 +18,10 @@
 #include "common_join.h"
 #include "row_ref.h"
 
+#ifdef SVEHT
+#include "sve_join_hash_table32.h"
+#endif
+
 namespace omniruntime {
 namespace op {
 
@@ -38,7 +42,8 @@ using JoinHashTableVariant = ColumnSerializeHandler<JoinHashMap<KeyType, RowRefL
 
 enum class HashTableImplementationType {
     NORMAL_HASH_TABLE,
-    ARRAY_HASH_TABLE
+    ARRAY_HASH_TABLE,
+    SVE_HASH_TABLE32
 };
 
 template <typename KeyType, typename RowRefListType> class JoinHashTableVariants {
@@ -83,6 +88,13 @@ public:
         return arrayTables[partitionIndex];
     }
 
+#ifdef SVEHT
+    ALWAYS_INLINE std::unique_ptr<SveJoinHashTable32<uint32_t, uint32_t>> &GetSve32HashTable(int32_t partitionIndex)
+    {
+        return sve32HashTables[partitionIndex];
+    }
+#endif
+
     ALWAYS_INLINE std::pair<int64_t, int64_t> &GetmaxMinValue(int32_t partitionIndex)
     {
         return maxMins[partitionIndex];
@@ -102,6 +114,26 @@ public:
     InsertResult<RowRefListType *> Find(std::vector<VectorSerializerIgnoreNull> &probeSerializers,
                                         ExecutionContext *probeArena, BaseVector **probeHashColumns,
                                         int32_t probeHashColCount, int32_t probePosition, uint32_t partition);
+
+#ifdef SVEHT
+    int32_t ProbeBatchSVE32(const uint32_t *probeKeys,
+                            const uint32_t *probePayloads,
+                            int32_t numRows,
+                            uint32_t partition,
+                            uint32_t *outputHandles,
+                            uint32_t *outputProbePayloads) const;
+
+    ALWAYS_INLINE bool IsSve32HashTable(uint32_t partition) const
+    {
+        return partition < hashTableTypes.size() &&
+               hashTableTypes[partition] == HashTableImplementationType::SVE_HASH_TABLE32;
+    }
+
+    ALWAYS_INLINE RowRefListType *GetSve32RowRefList(uint32_t partition, uint32_t handle) const
+    {
+        return sve32RowRefPools[partition][handle];
+    }
+#endif
 
     ALWAYS_INLINE bool CanProbeSIMD(BaseVector** probeHashColumns, int32_t probeHashColCount, uint32_t partition)
     {
@@ -260,6 +292,10 @@ private:
     uint32_t hashTableCount;            // the number of hashTables will be built
     std::atomic_uint32_t hashTableSize; // the number of hashTables having been built already
     std::vector<std::unique_ptr<JoinHashTableVariant<KeyType, RowRefListType>>> hashTables;
+#ifdef SVEHT
+    std::vector<std::unique_ptr<SveJoinHashTable32<uint32_t, uint32_t>>> sve32HashTables;
+    std::vector<std::vector<RowRefListType *>> sve32RowRefPools;
+#endif
     std::vector<std::unique_ptr<DefaultArrayMap<RowRefListType>>> arrayTables;
     std::vector<HashTableImplementationType> hashTableTypes;
     std::vector<std::pair<int64_t, int64_t>> maxMins;

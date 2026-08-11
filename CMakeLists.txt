@@ -47,9 +47,20 @@ endif (CCACHE_FOUND)
 find_package(re2 REQUIRED)
 find_package(fmt REQUIRED)
 
+option(SVEHT "Enable SVE vectorized hash tables" OFF)
+message(STATUS "Option Enable SVEHT: ${SVEHT}")
+
 if (DEFINED COVERAGE AND COVERAGE STREQUAL "ON")
     add_definitions(-DCOVERAGE)
     set(SIMD_COMPILE_LEVEL "-march=armv8-a+crc -fpermissive")
+elseif (SVEHT)
+    # SVEHT: SVE32 vectorized hash table-based inner join for single INT keys
+    # OMNI_SVEHT32_HASH_AGG: SVE32 vectorized hash table-based hash agg for single and dual INT keys
+    # OMNI_SVEHT32_JOIN_KEY_REWRITE: convert eligible CAST(INT AS LONG) join keys back to INT
+    # SVEHTMISSES: optimize SVE agg miss handling with known miss slots
+    #add_definitions(-DSVEHT -DOMNI_SVEHT32_HASH_AGG -DOMNI_SVEHT32_JOIN_KEY_REWRITE -DSVEHTMISSES)
+    add_definitions(-DSVEHT -DOMNI_SVEHT32_HASH_AGG -DSVEHTMISSES)
+    set(SIMD_COMPILE_LEVEL "-march=armv8-a+crc+sve -fpermissive")
 else ()
     # Detect SVE/SVE2 support on ARM
     if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "aarch64")

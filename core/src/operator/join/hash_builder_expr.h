@@ -30,15 +30,16 @@ public:
 
     HashBuilderWithExprOperatorFactory(JoinType joinType, const DataTypes &buildTypes,
         const std::vector<omniruntime::expressions::Expr *> &buildHashKeys, int32_t hashTableCount,
-        OverflowConfig *overflowConfig);
+        OverflowConfig *overflowConfig, bool enableInt32KeyRewrite = false);
 
     HashBuilderWithExprOperatorFactory(JoinType joinType, BuildSide buildSide, const DataTypes &buildTypes,
         const std::vector<omniruntime::expressions::Expr *> &buildHashKeys, int32_t hashTableCount,
-        OverflowConfig *overflowConfig);
+        OverflowConfig *overflowConfig, bool enableInt32KeyRewrite = false);
 
     HashBuilderWithExprOperatorFactory::HashBuilderWithExprOperatorFactory(JoinType joinType, BuildSide buildSide,
         const type::DataTypes &buildTypes, const std::vector<omniruntime::expressions::Expr *> &buildHashKeys,
-        int32_t hashTableCount, OverflowConfig *overflowConfig, const config::QueryConfig &queryConfig);
+        int32_t hashTableCount, OverflowConfig *overflowConfig, const config::QueryConfig &queryConfig,
+        bool enableInt32KeyRewrite = false);
 
     ~HashBuilderWithExprOperatorFactory() override;
 
@@ -52,6 +53,8 @@ public:
 private:
     std::unique_ptr<DataTypes> buildTypes;
     std::vector<int32_t> buildHashCols;
+    std::vector<std::unique_ptr<omniruntime::expressions::Expr>> rewrittenBuildHashKeyOwners;
+    std::vector<omniruntime::expressions::Expr *> effectiveBuildHashKeys;
     std::vector<std::unique_ptr<Projection>> projections;
     HashBuilderOperatorFactory *operatorFactory;
 };
