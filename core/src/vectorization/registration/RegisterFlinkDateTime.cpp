@@ -21,6 +21,7 @@
 #include "../functions/FlinkMinute.h"
 #include "../functions/FlinkSecond.h"
 #include "../functions/FlinkToTimestamp.h"
+#include "../functions/FlinkUnixTimestamp.h"
 
 namespace omniruntime::vectorization {
 void RegisterFlinkDatetimeFunctions(const std::string &prefix)
@@ -98,5 +99,17 @@ void RegisterFlinkDatetimeFunctions(const std::string &prefix)
     // stored as UTC millis (Flink "under the 'UTC+0' time zone"). Distinct from
     // "get_timestamp" (Spark semantics) which applies session tz and returns micros.
     RegisterFlinkToTimestampFunction(prefix + "flink_to_timestamp");
+
+    // flink_unix_timestamp: 0-arg (current seconds) / 1-arg string (default format) /
+    // 2-arg string+format -> OMNI_LONG (epoch seconds). Applies session timezone
+    // (unlike flink_to_timestamp). Parse failure returns Long.MIN_VALUE (Flink
+    // semantics, not NULL). Distinct from "unix_timestamp"/"to_unix_timestamp"
+    // (Spark semantics) which returns NULL on failure and lacks the no-arg form.
+    RegisterFlinkUnixTimestampFunction(prefix + "flink_unix_timestamp");
+    // _with_tz variant: trailing VARCHAR tz arg (Plan A). The OmniAdaptor
+    // appends CommonExecCalc.getZoneId().getId() (table.local-time-zone) as the
+    // last operand for UNIX_TIMESTAMP(string[, fmt]) so the session timezone is
+    // applied on the Flink path (where QueryConfig.session_timezone is not populated).
+    RegisterFlinkUnixTimestampWithTzFunction(prefix + "flink_unix_timestamp_with_tz");
 }
 }
