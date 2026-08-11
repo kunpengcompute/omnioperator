@@ -3,7 +3,7 @@
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *          http://license.coscl.org.cn/MulanPSL2
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
  * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
@@ -22,16 +22,26 @@ class Filter;
 
 namespace omniruntime::reader {
 
-// Dictionary/Dictionary_V2: nextAsDictionary + dict-entry prefilter (id accel) + DictionaryVector out.
+// Dictionary/Dictionary_V2: selective projection gathers survivor dict ids into a DictionaryVector.
+// Value filters are rejected until Gluten pushes string predicates; null-only filters keep
+// full-batch decode + post-filter.
 class SelectiveStringDictionaryColumnReader final : public SelectiveColumnReader {
 public:
-    using SelectiveColumnReader::SelectiveColumnReader;
+    SelectiveStringDictionaryColumnReader(codegen::ScanSpec *spec, const ::orc::Type *orcType,
+                                          std::unique_ptr<::orc::ColumnReader> inner);
 
-    // getValues comes from the base class: this reader stays on the kBatchIndexed shape.
     void read(uint64_t rowsToRead, common::RowSet activeRows, int omniTypeId) override;
+    void skipBatch(uint64_t rowsToRead, int omniTypeId) override;
 
 private:
+    void RejectUnsupportedValueFilter() const;
     void RebuildAcceptedIds(::common::Filter *filter);
+    void EnsureNullsScratch(uint64_t rowsToRead);
+    void ReadProjectionDense(uint64_t rowsToRead, common::RowSet activeRows, int omniTypeId);
+
+    OmniStringDictionaryColumnReader *dictInner_ = nullptr;
+    std::vector<uint64_t> nullsScratch_;
+
     // Built once per Selective reader lifetime (one stripe); reused across batches.
     std::vector<uint8_t> acceptedIds_;
     ::common::Filter *acceptedForFilter_ = nullptr;

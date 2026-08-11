@@ -411,7 +411,15 @@ namespace omniruntime::reader {
 
             void seekToRowGroup(std::unordered_map<uint64_t, ::orc::PositionProvider>& positions) override;
 
+            // Selective string projection: PRESENT + DATA(id) without full nextAsDictionary.
+            bool readNullsForBatch(uint64_t rowsToRead, uint64_t *nullsScratch);
+            OmniRleDecoderV2 *dataDecoder() const { return rle.get(); }
+
             int32_t GetOmniDictSize() const { return omniDictSize_; }
+            std::shared_ptr<omniruntime::vec::LargeStringContainer<std::string_view>> GetOmniDict() const
+            {
+                return omniDict_;
+            }
             std::string_view GetOmniDictValue(int32_t id) const
             {
                 return omniDict_->GetValue(id);
@@ -448,6 +456,14 @@ namespace omniruntime::reader {
 
         void seekToRowGroup(
                 std::unordered_map<uint64_t, ::orc::PositionProvider>& positions) override;
+
+        // Selective string projection helpers.
+        bool readNullsForBatch(uint64_t rowsToRead, uint64_t *nullsScratch);
+        OmniRleDecoderV2 *lengthDecoder() const { return lengthRle.get(); }
+        bool isCharType() const { return isChar; }
+        // Skip / read contiguous DATA bytes (respects lastBuffer_* window).
+        void skipDataBytes(size_t bytes);
+        void readDataBytes(size_t bytes, char *dest);
     };
 
     class OmniDecimal64ColumnReader: public OmniColumnReader {

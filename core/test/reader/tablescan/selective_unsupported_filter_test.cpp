@@ -19,8 +19,6 @@
 #include "reader/common/Filter.h"
 #include "reader/orc/SelectiveDecimalColumnReader.hh"
 #include "reader/orc/SelectiveFloatingPointColumnReader.hh"
-#include "reader/orc/SelectiveStringDictionaryColumnReader.hh"
-#include "reader/orc/SelectiveStringDirectColumnReader.hh"
 #include "reader/orc/SelectiveTimestampColumnReader.hh"
 #include "type/data_type.h"
 #include "util/omni_exception.h"
@@ -103,20 +101,5 @@ TEST(SelectiveUnsupportedFilterTest, TimestampValueFilterThrowsBeforeDecode)
         "SelectiveTimestampColumnReader");
 }
 
-TEST(SelectiveUnsupportedFilterTest, BinaryDirectValueFilterThrowsBeforeDecode)
-{
-    ExpectUnsupportedFilterBeforeDecode<omniruntime::reader::SelectiveStringDirectColumnReader>(
-        ::orc::createPrimitiveType(::orc::BINARY),
-        omniruntime::type::OMNI_VARBINARY,
-        ::common::FilterKind::kBytesRange,
-        "SelectiveStringDirectColumnReader");
-}
-
-TEST(SelectiveUnsupportedFilterTest, BinaryDictionaryValueFilterThrowsBeforeDecode)
-{
-    ExpectUnsupportedFilterBeforeDecode<omniruntime::reader::SelectiveStringDictionaryColumnReader>(
-        ::orc::createPrimitiveType(::orc::BINARY),
-        omniruntime::type::OMNI_VARBINARY,
-        ::common::FilterKind::kBytesRange,
-        "SelectiveStringDictionaryColumnReader");
-}
+// String/binary value-filter rejection is covered by
+// StringProjectionFilterWhileDecodeTest.{String,Binary}ValueFilterThrowsOnFwd.

@@ -926,6 +926,17 @@ namespace omniruntime::reader {
             static_cast<int>(numValues), container, nullsBuf.get(), dataTypeId);
     }
 
+    bool OmniStringDictionaryColumnReader::readNullsForBatch(uint64_t rowsToRead, uint64_t *nullsScratch)
+    {
+        if (!notNullDecoder) {
+            return false;
+        }
+        const uint64_t words = BitUtil::Nwords(static_cast<int32_t>(rowsToRead)) + 1;
+        memset(nullsScratch, 0, words * sizeof(uint64_t));
+        notNullDecoder->nextNulls(reinterpret_cast<char *>(nullsScratch), rowsToRead, nullptr);
+        return BitUtil::HasBitSet(nullsScratch, 0, static_cast<int32_t>(rowsToRead));
+    }
+
     void OmniStringDirectColumnReader::next(BaseVector *vec, uint64_t numValues, 
         uint64_t *incomingNulls, int omniTypeId) {
         auto nulls = omniruntime::vec::unsafe::UnsafeBaseVector::GetNulls(vec);
@@ -1418,6 +1429,62 @@ namespace omniruntime::reader {
         // clear buffer state after seek
         lastBuffer = nullptr;
         lastBufferLength =0;
+    }
+
+    bool OmniStringDirectColumnReader::readNullsForBatch(uint64_t rowsToRead, uint64_t *nullsScratch)
+    {
+        if (!notNullDecoder) {
+            return false;
+        }
+        const uint64_t words = BitUtil::Nwords(static_cast<int32_t>(rowsToRead)) + 1;
+        memset(nullsScratch, 0, words * sizeof(uint64_t));
+        notNullDecoder->nextNulls(reinterpret_cast<char *>(nullsScratch), rowsToRead, nullptr);
+        return BitUtil::HasBitSet(nullsScratch, 0, static_cast<int32_t>(rowsToRead));
+    }
+
+    void OmniStringDirectColumnReader::skipDataBytes(size_t bytes)
+    {
+        if (bytes == 0) {
+            return;
+        }
+        if (bytes <= lastBufferLength) {
+            lastBufferLength -= bytes;
+            lastBuffer += bytes;
+            return;
+        }
+        bytes -= lastBufferLength;
+        lastBufferLength = 0;
+        lastBuffer = nullptr;
+        const size_t cap = static_cast<size_t>(std::numeric_limits<int>::max());
+        while (bytes != 0) {
+            size_t step = bytes > cap ? cap : bytes;
+            blobStream->Skip(static_cast<int>(step));
+            bytes -= step;
+        }
+    }
+
+    void OmniStringDirectColumnReader::readDataBytes(size_t bytes, char *dest)
+    {
+        if (bytes == 0) {
+            return;
+        }
+        size_t filled = 0;
+        while (filled < bytes) {
+            if (lastBufferLength == 0) {
+                const void *readBuffer = nullptr;
+                int readLength = 0;
+                if (!blobStream->Next(&readBuffer, &readLength) || readLength <= 0) {
+                    throw ::orc::ParseError("failed to read in OmniStringDirectColumnReader.readDataBytes");
+                }
+                lastBuffer = static_cast<const char *>(readBuffer);
+                lastBufferLength = static_cast<size_t>(readLength);
+            }
+            const size_t take = std::min(lastBufferLength, bytes - filled);
+            memcpy(dest + filled, lastBuffer, take);
+            lastBuffer += take;
+            lastBufferLength -= take;
+            filled += take;
+        }
     }
 
     OmniStringDictionaryColumnReader::OmniStringDictionaryColumnReader(const Type& type, StripeStreams& stripe)
