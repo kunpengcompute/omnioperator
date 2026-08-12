@@ -83,6 +83,9 @@ else
       elif [ "$i" == '--exclude-duplicate-codegen' ]; then
           echo "-- Exclude Duplicate Codegen Functions"
           OPTIONS+=" -DEXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS=ON"
+      elif [ "$i" == '--enable-sveht' ]; then
+          echo "-- ENABLE SVEHT"
+          OPTIONS+=" -DSVEHT=ON"
       else
           exit_with_message_and_print_help "ERROR: Invalid option: $i"
       fi

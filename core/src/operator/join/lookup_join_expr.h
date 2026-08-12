@@ -32,14 +32,15 @@ public:
         int32_t probeOutputColsCount, const std::vector<omniruntime::expressions::Expr *> &probeHashKeys,
         int32_t probeHashKeysCount, int32_t *buildOutputCols, int32_t buildOutputColsCount,
         const DataTypes &buildOutputTypes, int64_t hashBuilderFactoryAddr,
-        Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig, int32_t *outputList = nullptr);
+        Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig, int32_t *outputList = nullptr,
+        bool enableInt32KeyRewrite = false);
 
     LookupJoinWithExprOperatorFactory(const DataTypes &probeTypes, int32_t *probeOutputCols,
         int32_t probeOutputColsCount, const std::vector<omniruntime::expressions::Expr *> &probeHashKeys,
         int32_t probeHashKeysCount, int32_t *buildOutputCols, int32_t buildOutputColsCount,
         const DataTypes &buildOutputTypes, int64_t hashBuilderFactoryAddr, Expr *filterExpr,
         bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig, const config::QueryConfig &queryConfig,
-        int32_t *outputList = nullptr);
+        int32_t *outputList = nullptr, bool enableInt32KeyRewrite = false);
 
     ~LookupJoinWithExprOperatorFactory() override;
 
@@ -48,6 +49,8 @@ public:
 private:
     std::unique_ptr<DataTypes> probeTypes; // all types for probe
     std::vector<int32_t> probeHashCols;    // join columns for probe
+    std::vector<std::unique_ptr<omniruntime::expressions::Expr>> rewrittenProbeHashKeyOwners;
+    std::vector<omniruntime::expressions::Expr *> effectiveProbeHashKeys;
     std::vector<std::unique_ptr<Projection>> projections;
     std::vector<ProjFunc> projectFuncs;
     LookupJoinOperatorFactory *operatorFactory;

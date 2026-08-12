@@ -22,6 +22,126 @@ using namespace omniruntime::type;
 
 static constexpr int32_t UNSPILL_ROW_COUNT_ONE_BATCH = 128;
 
+#ifdef SVEHTMISSES
+static constexpr int32_t SVE_MISS_ESTIMATE_THRESHOLD = 32;
+static constexpr int32_t SVE_MISS_ESTIMATE_SAMPLE_SIZE = 128;
+static constexpr uint32_t SVE_MISS_ESTIMATE_SET_SIZE = 256;
+static constexpr uint32_t SVE_MISS_ESTIMATE_SET_MASK = SVE_MISS_ESTIMATE_SET_SIZE - 1;
+
+static ALWAYS_INLINE uint32_t HashEstimateKey(uint32_t value)
+{
+    value ^= value >> 16;
+    value *= 0x85ebca6bu;
+    value ^= value >> 13;
+    value *= 0xc2b2ae35u;
+    value ^= value >> 16;
+    return value;
+}
+
+static ALWAYS_INLINE uint32_t EstimateDistinctFromSample(uint32_t sampleDistinct, int32_t sampleCount, int32_t totalCount)
+{
+    if (totalCount <= 0) {
+        return 0;
+    }
+    if (sampleCount <= 0 || sampleDistinct == 0) {
+        return 1;
+    }
+    uint64_t estimated = (static_cast<uint64_t>(sampleDistinct) * static_cast<uint64_t>(totalCount) +
+                         static_cast<uint64_t>(sampleCount - 1)) /
+                         static_cast<uint64_t>(sampleCount);
+    estimated = std::max<uint64_t>(1, estimated);
+    estimated = std::min<uint64_t>(estimated, static_cast<uint64_t>(totalCount));
+    return static_cast<uint32_t>(estimated);
+}
+
+static uint32_t EstimateDistinctMisses32(const uint32_t *keys, int32_t missCount)
+{
+    const int32_t sampleCount = std::min(missCount, SVE_MISS_ESTIMATE_SAMPLE_SIZE);
+    bool used[SVE_MISS_ESTIMATE_SET_SIZE] = {};
+    uint32_t storedKeys[SVE_MISS_ESTIMATE_SET_SIZE] = {};
+    uint32_t sampleDistinct = 0;
+
+    for (int32_t i = 0; i < sampleCount; ++i) {
+        uint32_t slot = HashEstimateKey(keys[i]) & SVE_MISS_ESTIMATE_SET_MASK;
+        bool found = false;
+        while (used[slot]) {
+            if (storedKeys[slot] == keys[i]) {
+                found = true;
+                break;
+            }
+            slot = (slot + 1) & SVE_MISS_ESTIMATE_SET_MASK;
+        }
+        if (found) {
+            continue;
+        }
+        used[slot] = true;
+        storedKeys[slot] = keys[i];
+        ++sampleDistinct;
+    }
+
+    return EstimateDistinctFromSample(sampleDistinct, sampleCount, missCount);
+}
+
+static ALWAYS_INLINE bool EstimatePairKeyEquals(
+    const hashmap::SveAggAosHashTable32Pair::Key &left,
+    const hashmap::SveAggAosHashTable32Pair::Key &right)
+{
+    return left.key0 == right.key0 && left.key1 == right.key1 && left.nullMask == right.nullMask;
+}
+
+static ALWAYS_INLINE uint32_t HashEstimatePairKey(const hashmap::SveAggAosHashTable32Pair::Key &key)
+{
+    uint32_t hash = HashEstimateKey(key.key0);
+    hash ^= (HashEstimateKey(key.key1) << 16) | (HashEstimateKey(key.key1) >> 16);
+    hash ^= HashEstimateKey(key.nullMask);
+    return HashEstimateKey(hash);
+}
+
+static uint32_t EstimateDistinctMisses32Pair(
+    const hashmap::SveAggAosHashTable32Pair::Key *keys, int32_t missCount)
+{
+    const int32_t sampleCount = std::min(missCount, SVE_MISS_ESTIMATE_SAMPLE_SIZE);
+    bool used[SVE_MISS_ESTIMATE_SET_SIZE] = {};
+    hashmap::SveAggAosHashTable32Pair::Key storedKeys[SVE_MISS_ESTIMATE_SET_SIZE] = {};
+    uint32_t sampleDistinct = 0;
+
+    for (int32_t i = 0; i < sampleCount; ++i) {
+        uint32_t slot = HashEstimatePairKey(keys[i]) & SVE_MISS_ESTIMATE_SET_MASK;
+        bool found = false;
+        while (used[slot]) {
+            if (EstimatePairKeyEquals(storedKeys[slot], keys[i])) {
+                found = true;
+                break;
+            }
+            slot = (slot + 1) & SVE_MISS_ESTIMATE_SET_MASK;
+        }
+        if (found) {
+            continue;
+        }
+        used[slot] = true;
+        storedKeys[slot] = keys[i];
+        ++sampleDistinct;
+    }
+
+    return EstimateDistinctFromSample(sampleDistinct, sampleCount, missCount);
+}
+
+template<typename Table, typename EstimateFn>
+static bool ShouldUseKnownMissInsert(Table *table, int32_t missCount, EstimateFn estimateDistinctMisses)
+{
+    if (missCount <= 0) {
+        return false;
+    }
+    if (table->CanInsertAdditional(static_cast<uint32_t>(missCount))) {
+        return true;
+    }
+    if (missCount < SVE_MISS_ESTIMATE_THRESHOLD) {
+        return false;
+    }
+    return table->CanInsertAdditional(estimateDistinctMisses());
+}
+#endif
+
 static ALWAYS_INLINE uint8_t PackedBitWidthForType(int32_t typeId)
 {
     switch (typeId) {
@@ -180,7 +300,25 @@ void HashAggregationOperatorFactory::ChooseGroupByType()
     // Currently, the serialization and singleFix method is used for column types that need to be grouped by.
     // The serialization method can be continuously evolved based on different types.
     // The singleFix method is used for OMNI_INT/OMNI_LONG which is only one column.
-    if (groupByTypes.GetSize() == 1) {
+    const auto groupBySize = groupByTypes.GetSize();
+#ifdef OMNI_SVEHT32_HASH_AGG
+    if (!operatorConfig.GetSpillConfig()->IsSpillEnabled() && groupBySize >= 1 && groupBySize <= 2) {
+        bool all32Bit = true;
+        for (uint32_t i = 0; i < groupBySize; ++i) {
+            const auto &type = groupByTypes.GetIds()[i];
+            all32Bit = all32Bit && (type == OMNI_INT || type == OMNI_DATE32);
+        }
+        if (all32Bit) {
+            if (groupBySize == 1) {
+                handleType = HandleType::fixedInt32SveAos;
+            } else {
+                handleType = HandleType::fixedInt32PairSveAos;
+            }
+            return;
+        }
+    }
+#endif
+    if (groupBySize == 1) {
         auto &type = groupByTypes.GetIds()[0];
         if (type == OMNI_INT || type == OMNI_DATE32) {
             handleType = HandleType::fixedInt32;
@@ -193,9 +331,9 @@ void HashAggregationOperatorFactory::ChooseGroupByType()
             return;
         }
     }
-    if (groupByTypes.GetSize() > 1) {
+    if (groupBySize > 1) {
         int32_t valueBits = 0;
-        for (int32_t i = 0; i < groupByTypes.GetSize(); ++i) {
+        for (int32_t i = 0; i < groupBySize; ++i) {
             auto typeId = groupByTypes.GetIds()[i];
             auto bits = PackedBitWidthForType(typeId);
             if (bits == 0) {
@@ -204,7 +342,7 @@ void HashAggregationOperatorFactory::ChooseGroupByType()
             }
             valueBits += bits;
         }
-        int32_t totalBits = valueBits + static_cast<int32_t>(groupByTypes.GetSize()); // + null mask bits
+        int32_t totalBits = valueBits + static_cast<int32_t>(groupBySize); // + null mask bits
         if (totalBits > 0 && totalBits <= 32) {
             handleType = HandleType::packedInt32;
             return;
@@ -213,7 +351,6 @@ void HashAggregationOperatorFactory::ChooseGroupByType()
             return;
         }
     }
-    const auto groupBySize = groupByTypes.GetSize();
     if (normalizedKeyEnabled && groupBySize > 1) {
         std::vector<type::DataTypeId> normalizedKeyTypes;
         normalizedKeyTypes.reserve(groupBySize);
@@ -251,9 +388,7 @@ OmniStatus HashAggregationOperator::Init()
     // 6 calculate every aggregator's size and set offset of aggregator
     CalcAndSetStatesSize();
 
-    // 3. check group by handle methcd
-    // put at beginning so that we do not allocate memory if there is error
-    if (groupByColumnsHandleType == HandleType::serialize) {
+    auto initSerializeHandler = [&]() {
         serialize = std::make_unique<TaperColumnSerializeHandler>(*executionContext->GetArena(), totalAggStatesSize);
         serialize->InitSize(groupByCols.size());
         // Initialize RowContainer with key type sizes for the serialize handler
@@ -290,6 +425,12 @@ OmniStatus HashAggregationOperator::Init()
             }
         }
         serialize->InitRowContainer(keySizes, isVariableLen, typeIds, varcharColIndices, *executionContext->GetArena());
+    };
+
+    // 3. check group by handle methcd
+    // put at beginning so that we do not allocate memory if there is error
+    if (groupByColumnsHandleType == HandleType::serialize) {
+        initSerializeHandler();
     } else if (groupByColumnsHandleType == HandleType::NormalizeKey) {
         std::vector<type::DataTypeId> typeIds;
         std::vector<int32_t> keySizes;
@@ -314,6 +455,15 @@ OmniStatus HashAggregationOperator::Init()
         }
     } else if (groupByColumnsHandleType == HandleType::fixedInt32) {
         fixedInt32 = std::make_unique<TaperGroupbySingleFixHandler<int32_t>>(*executionContext->GetArena(), totalAggStatesSize);
+#ifdef OMNI_SVEHT32_HASH_AGG
+    } else if (groupByColumnsHandleType == HandleType::fixedInt32SveAos) {
+        fixedInt32SveAos = std::make_unique<hashmap::SveAggAosHashTable32>();
+        fixedInt32 = std::make_unique<TaperGroupbySingleFixHandler<int32_t>>(*executionContext->GetArena(),
+            totalAggStatesSize);
+    } else if (groupByColumnsHandleType == HandleType::fixedInt32PairSveAos) {
+        fixedInt32PairSveAos = std::make_unique<hashmap::SveAggAosHashTable32Pair>();
+        initSerializeHandler();
+#endif
     } else if (groupByColumnsHandleType == HandleType::fixedInt64) {
         fixedInt64 = std::make_unique<TaperGroupbySingleFixHandler<int64_t>>(*executionContext->GetArena(), totalAggStatesSize);
     } else if (groupByColumnsHandleType == HandleType::fixedInt16) {
@@ -413,11 +563,39 @@ void HashAggregationOperator::ResizeArrayMap(int64_t oldMin)
 void HashAggregationOperator::MoveEntryArrayTableToHashMap(int64_t minValue)
 {
     bool hasAgg = aggregators.size() > 0;
+#ifdef OMNI_SVEHT32_HASH_AGG
+    if (groupByColumnsHandleType == HandleType::fixedInt32SveAos) {
+        bool hasReservedKey = false;
+        arrayTable->ForEachValue([&](const auto &value, const auto &index) {
+            if (index != 0) {
+                const auto key = static_cast<uint32_t>(static_cast<int32_t>(index + minValue - 1));
+                if (key == hashmap::SveAggAosHashTable32::kEmptyKey) {
+                    hasReservedKey = true;
+                }
+            }
+        });
+        if (hasReservedKey) {
+            FallbackSveAggToFixedInt32();
+        }
+    }
+#endif
     arrayTable->ForEachValue([&](const auto &value, const auto &index) {
         if (index != 0) {
-            if (groupByColumnsHandleType == HandleType::fixedInt32) {
+            if (groupByColumnsHandleType == HandleType::fixedInt32
+#ifdef OMNI_SVEHT32_HASH_AGG
+                || (groupByColumnsHandleType == HandleType::fixedInt32SveAos && sveAosFallbackToFixedInt32)
+#endif
+            ) {
                 fixedInt32->InsertOneValueToHashmap<false>(static_cast<int32_t>(index + minValue - 1),
                             reinterpret_cast<AggregateState *>(value));
+#ifdef OMNI_SVEHT32_HASH_AGG
+            } else if (groupByColumnsHandleType == HandleType::fixedInt32SveAos) {
+                const auto key = static_cast<uint32_t>(static_cast<int32_t>(index + minValue - 1));
+                auto ret = fixedInt32SveAos->EmplaceScalar(key);
+                if (ret.IsInsert() && hasAgg) {
+                    ret.SetValue(RegisterSveAggState(reinterpret_cast<AggregateState *>(value)));
+                }
+#endif
             } else if (groupByColumnsHandleType == HandleType::fixedInt64) {
                 fixedInt64->InsertOneValueToHashmap<false>(static_cast<int64_t>(index + minValue - 1),
                             reinterpret_cast<AggregateState *>(value));
@@ -427,8 +605,19 @@ void HashAggregationOperator::MoveEntryArrayTableToHashMap(int64_t minValue)
             }
             return;
         }
-        if (groupByColumnsHandleType == HandleType::fixedInt32) {
+        if (groupByColumnsHandleType == HandleType::fixedInt32
+#ifdef OMNI_SVEHT32_HASH_AGG
+            || (groupByColumnsHandleType == HandleType::fixedInt32SveAos && sveAosFallbackToFixedInt32)
+#endif
+        ) {
             fixedInt32->InsertOneValueToHashmap<true>(0, reinterpret_cast<AggregateState *>(value));
+#ifdef OMNI_SVEHT32_HASH_AGG
+        } else if (groupByColumnsHandleType == HandleType::fixedInt32SveAos) {
+            hasNullGroupState32 = true;
+            if (hasAgg) {
+                nullGroupState32 = reinterpret_cast<AggregateState *>(value);
+            }
+#endif
         } else if (groupByColumnsHandleType == HandleType::fixedInt64) {
             fixedInt64->InsertOneValueToHashmap<true>(0, reinterpret_cast<AggregateState *>(value));
         } else if (groupByColumnsHandleType == HandleType::fixedInt16) {
@@ -682,7 +871,24 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
             serialize->DecodeGroupByColumns(groupVectors, groupColNum, rowCount);
             Emplace(serialize, vecBatch, groupVectors, groupColNum);
         }
-    } else if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
+    }
+#ifdef OMNI_SVEHT32_HASH_AGG
+    else if (groupByColumnsHandleType == HandleType::fixedInt32SveAos) {
+        if (sveAosFallbackToFixedInt32) {
+            Emplace(fixedInt32, vecBatch, groupVectors, groupColNum);
+        } else {
+            EmplaceFixedInt32SveAos(vecBatch, groupVectors[0]);
+        }
+    } else if (groupByColumnsHandleType == HandleType::fixedInt32PairSveAos) {
+        if (svePairFallbackToSerialize) {
+            serialize->DecodeGroupByColumns(groupVectors, groupColNum, rowCount);
+            Emplace(serialize, vecBatch, groupVectors, groupColNum);
+        } else {
+            EmplaceFixedInt32PairSveAos(vecBatch, groupVectors[0], groupVectors[1]);
+        }
+    }
+#endif
+    else if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
         // Decode all group-by columns upfront to eliminate encoding branches in hot path
         serialize->DecodeGroupByColumns(groupVectors, groupColNum, rowCount);
         Emplace(serialize, vecBatch, groupVectors, groupColNum);
@@ -869,6 +1075,19 @@ int32_t HashAggregationOperator::GetOutput(VectorBatch **outputVecBatch)
         expectedBatchSize = Output(normalizeKeyWithoutAgg, outputVecBatch);
     } else if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKey != nullptr) {
         expectedBatchSize = Output(normalizeKey, outputVecBatch);
+#ifdef OMNI_SVEHT32_HASH_AGG
+    } else if (groupByColumnsHandleType == HandleType::fixedInt32SveAos && arrayTable != nullptr &&
+        vectorAnalyzer != nullptr && vectorAnalyzer->IsArrayHashTableType()) {
+        return Output(fixedInt32, outputVecBatch);
+    } else if (groupByColumnsHandleType == HandleType::fixedInt32SveAos && !sveAosFallbackToFixedInt32) {
+        return OutputFixedInt32SveAos(outputVecBatch);
+    } else if (groupByColumnsHandleType == HandleType::fixedInt32SveAos && sveAosFallbackToFixedInt32) {
+        return Output(fixedInt32, outputVecBatch);
+    } else if (groupByColumnsHandleType == HandleType::fixedInt32PairSveAos && !svePairFallbackToSerialize) {
+        return OutputFixedInt32PairSveAos(outputVecBatch);
+    } else if (groupByColumnsHandleType == HandleType::fixedInt32PairSveAos && svePairFallbackToSerialize) {
+        return Output(serialize, outputVecBatch);
+#endif
     } else if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
         expectedBatchSize = Output(serialize, outputVecBatch);
     } else if (LIKELY(groupByColumnsHandleType == HandleType::fixedInt32)) {
@@ -956,6 +1175,580 @@ void HashAggregationOperator::ProcessStates(VectorBatch *vecBatch)
         }
     }
 }
+
+#ifdef OMNI_SVEHT32_HASH_AGG
+AggregateState *HashAggregationOperator::AllocateAggState()
+{
+    return reinterpret_cast<AggregateState *>(executionContext->GetArena()->Allocate(totalAggStatesSize));
+}
+
+uint32_t HashAggregationOperator::RegisterSveAggState(AggregateState *state)
+{
+    fixedInt32SveAosStates.emplace_back(state);
+    return static_cast<uint32_t>(fixedInt32SveAosStates.size() - 1);
+}
+
+uint32_t HashAggregationOperator::RegisterSvePairAggState(AggregateState *state)
+{
+    fixedInt32PairSveAosStates.emplace_back(state);
+    return static_cast<uint32_t>(fixedInt32PairSveAosStates.size() - 1);
+}
+
+bool HashAggregationOperator::HasSveAggData() const
+{
+    return fixedInt32SveAos != nullptr &&
+           (fixedInt32SveAos->GetElementsSize() > 0 || hasNullGroupState32);
+}
+
+bool HashAggregationOperator::HasSvePairAggData() const
+{
+    return fixedInt32PairSveAos != nullptr && fixedInt32PairSveAos->GetElementsSize() > 0;
+}
+
+bool HashAggregationOperator::IsActiveSveHandle() const
+{
+    return (fixedInt32SveAos != nullptr && !sveAosFallbackToFixedInt32) ||
+           (fixedInt32PairSveAos != nullptr && !svePairFallbackToSerialize);
+}
+
+AggregateState *HashAggregationOperator::GetOrCreateNullGroupState32(std::vector<AggregateState *> &newGroupStates)
+{
+    if (!hasNullGroupState32) {
+        nullGroupState32 = AllocateAggState();
+        hasNullGroupState32 = true;
+        newGroupStates.emplace_back(nullGroupState32);
+    }
+    return nullGroupState32;
+}
+
+void HashAggregationOperator::FallbackSveAggToFixedInt32()
+{
+    if (fixedInt32SveAos != nullptr) {
+        const bool hasAgg = !aggregators.empty();
+        constexpr int32_t kMigrationBatchSize = 1024;
+        std::vector<uint32_t> keys(kMigrationBatchSize);
+        std::vector<uint32_t> handles(kMigrationBatchSize);
+        uint64_t slot = 0;
+        const uint64_t capacity = fixedInt32SveAos->GetCapacity();
+
+        while (slot < capacity) {
+            uint64_t nextSlot = slot;
+            int32_t copied = fixedInt32SveAos->CopyGroups(
+                slot, kMigrationBatchSize, keys.data(), handles.data(), nextSlot);
+            for (int32_t i = 0; i < copied; ++i) {
+                fixedInt32->InsertOneValueToHashmap<false>(
+                    static_cast<int32_t>(keys[i]), hasAgg ? fixedInt32SveAosStates[handles[i]] : nullptr);
+            }
+            slot = nextSlot;
+        }
+
+        if (hasNullGroupState32) {
+            fixedInt32->InsertOneValueToHashmap<true>(0, hasAgg ? nullGroupState32 : nullptr);
+        }
+
+        fixedInt32SveAos->Reset();
+        fixedInt32SveAosStates.clear();
+        nullGroupState32 = nullptr;
+        hasNullGroupState32 = false;
+        sveAosNullGroupOutput = false;
+        sveAosFallbackToFixedInt32 = true;
+        return;
+    }
+    sveAosFallbackToFixedInt32 = true;
+}
+
+void HashAggregationOperator::FallbackSvePairAggToSerializeIfEmpty()
+{
+    if (HasSvePairAggData()) {
+        throw omniruntime::exception::OmniException(
+            "UNSUPPORTED_ERROR",
+            "SVE pair hash aggregation cannot fallback after SVE groups have been created");
+    }
+    svePairFallbackToSerialize = true;
+}
+
+void HashAggregationOperator::ProcessStatesWithNewGroups(
+    VectorBatch *vecBatch, std::vector<AggregateState *> &newGroupStates)
+{
+    const size_t aggNum = aggregators.size();
+    if (aggFiltersCount > 0) {
+        int32_t filterOffset = vecBatch->GetVectorCount() - aggFiltersCount;
+        for (size_t aggIdx = 0; aggIdx < aggNum; ++aggIdx) {
+            auto &aggregator = aggregators[aggIdx];
+            if (!newGroupStates.empty()) {
+                aggregator->InitStates(newGroupStates);
+            }
+            if (hasAggFilters[aggIdx] == 1) {
+                aggregator->ProcessGroupFilter(rowsAggStates, aggIdx, vecBatch, filterOffset, 0);
+                filterOffset++;
+            } else {
+                aggregator->ProcessGroup(rowsAggStates, vecBatch, 0);
+            }
+        }
+    } else {
+        for (size_t aggIdx = 0; aggIdx < aggNum; ++aggIdx) {
+            auto &aggregator = aggregators[aggIdx];
+            if (!newGroupStates.empty()) {
+                aggregator->InitStates(newGroupStates);
+            }
+            aggregator->ProcessGroup(rowsAggStates, vecBatch, 0);
+        }
+    }
+}
+
+struct SveInt32KeyLoader {
+    BaseVector *vector = nullptr;
+    uint32_t *values = nullptr;
+    uint32_t constValue = 0;
+    bool isConst = false;
+    bool constIsNull = false;
+
+    ALWAYS_INLINE uint32_t GetValue(int32_t row) const
+    {
+        return isConst ? constValue : values[row];
+    }
+
+    ALWAYS_INLINE bool IsNull(int32_t row) const
+    {
+        return isConst ? constIsNull : vector->IsNull(row);
+    }
+};
+
+static SveInt32KeyLoader MakeSveInt32KeyLoader(BaseVector *vector)
+{
+    SveInt32KeyLoader loader;
+    loader.vector = vector;
+    if (vector->GetEncoding() == OMNI_ENCODING_CONST) {
+        loader.isConst = true;
+        loader.constIsNull = vector->IsNull(0);
+        if (!loader.constIsNull) {
+            loader.constValue =
+                static_cast<uint32_t>(reinterpret_cast<ConstVector<int32_t> *>(vector)->GetConstValue());
+        }
+        return loader;
+    }
+    loader.values = reinterpret_cast<uint32_t *>(VectorHelper::UnsafeGetValues(vector));
+    return loader;
+}
+
+static ALWAYS_INLINE bool IsConstVector(BaseVector *vector)
+{
+    return vector->GetEncoding() == OMNI_ENCODING_CONST;
+}
+
+void HashAggregationOperator::EmplaceFixedInt32SveAos(VectorBatch *vecBatch, BaseVector *groupVector)
+{
+    if (groupVector->GetEncoding() == OMNI_DICTIONARY) {
+        FallbackSveAggToFixedInt32();
+        BaseVector *groupVectors[] = {groupVector};
+        Emplace(fixedInt32, vecBatch, groupVectors, 1);
+        return;
+    }
+
+    const bool hasAgg = !aggregators.empty();
+    const int32_t rowCount = vecBatch->GetRowCount();
+
+    if (groupVector->GetEncoding() == OMNI_ENCODING_CONST) {
+        std::vector<AggregateState *> newGroupStates;
+        if (groupVector->IsNull(0)) {
+            if (!hasAgg) {
+                hasNullGroupState32 = true;
+                return;
+            }
+            rowsAggStates.resize(rowCount);
+            auto *state = GetOrCreateNullGroupState32(newGroupStates);
+            std::fill(rowsAggStates.begin(), rowsAggStates.end(), state);
+            ProcessStatesWithNewGroups(vecBatch, newGroupStates);
+            return;
+        }
+
+        auto key = static_cast<uint32_t>(reinterpret_cast<ConstVector<int32_t> *>(groupVector)->GetConstValue());
+        if (key == hashmap::SveAggAosHashTable32::kEmptyKey) {
+            FallbackSveAggToFixedInt32();
+            BaseVector *groupVectors[] = {groupVector};
+            Emplace(fixedInt32, vecBatch, groupVectors, 1);
+            return;
+        }
+
+        auto ret = fixedInt32SveAos->EmplaceScalar(key);
+        if (!hasAgg) {
+            return;
+        }
+
+        uint32_t handle;
+        if (ret.IsInsert()) {
+            auto *state = AllocateAggState();
+            handle = RegisterSveAggState(state);
+            ret.SetValue(handle);
+            newGroupStates.emplace_back(state);
+        } else {
+            handle = ret.GetValue();
+        }
+        rowsAggStates.resize(rowCount);
+        std::fill(rowsAggStates.begin(), rowsAggStates.end(), fixedInt32SveAosStates[handle]);
+        ProcessStatesWithNewGroups(vecBatch, newGroupStates);
+        return;
+    }
+
+    auto *values = reinterpret_cast<uint32_t *>(VectorHelper::UnsafeGetValues(groupVector));
+    std::vector<uint32_t> compactKeys;
+    std::vector<uint32_t> compactRows;
+    compactKeys.reserve(rowCount);
+    compactRows.reserve(rowCount);
+    std::vector<AggregateState *> newGroupStates;
+    std::vector<uint32_t> nullRows;
+    bool hasNullInBatch = false;
+    for (int32_t rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
+        if (groupVector->IsNull(rowIdx)) {
+            if (hasAgg) {
+                if (nullRows.empty()) {
+                    nullRows.reserve(16);
+                }
+                nullRows.emplace_back(static_cast<uint32_t>(rowIdx));
+            } else {
+                hasNullInBatch = true;
+            }
+            continue;
+        }
+        if (values[rowIdx] == hashmap::SveAggAosHashTable32::kEmptyKey) {
+            FallbackSveAggToFixedInt32();
+            BaseVector *groupVectors[] = {groupVector};
+            Emplace(fixedInt32, vecBatch, groupVectors, 1);
+            return;
+        }
+        compactKeys.emplace_back(values[rowIdx]);
+        compactRows.emplace_back(static_cast<uint32_t>(rowIdx));
+    }
+
+    if (hasAgg) {
+        rowsAggStates.resize(rowCount);
+        for (uint32_t rowIdx : nullRows) {
+            rowsAggStates[rowIdx] = GetOrCreateNullGroupState32(newGroupStates);
+        }
+    } else if (hasNullInBatch) {
+        hasNullGroupState32 = true;
+    }
+
+    const int32_t compactCount = static_cast<int32_t>(compactKeys.size());
+    if (compactCount > 0) {
+        std::vector<uint32_t> hitRows(compactCount);
+        std::vector<uint32_t> hitHandles(compactCount);
+        std::vector<uint32_t> missRows(compactCount);
+        std::vector<uint32_t> missKeys(compactCount);
+#ifdef SVEHTMISSES
+        std::vector<uint32_t> missSlots(compactCount);
+        auto counts = fixedInt32SveAos->LookupBatchSVEForInsert(compactKeys.data(), compactRows.data(), compactCount,
+            hitRows.data(), hitHandles.data(), missRows.data(), missKeys.data(), missSlots.data());
+        const bool useKnownMissInsert = ShouldUseKnownMissInsert(fixedInt32SveAos.get(), counts.missCount,
+            [&]() { return EstimateDistinctMisses32(missKeys.data(), counts.missCount); });
+#else
+        auto counts = fixedInt32SveAos->LookupBatchSVE(compactKeys.data(), compactRows.data(), compactCount,
+            hitRows.data(), hitHandles.data(), missRows.data(), missKeys.data());
+#endif
+
+        if (!hasAgg) {
+#ifdef SVEHTMISSES
+            bool knownMissActive = useKnownMissInsert;
+#endif
+            for (int32_t i = 0; i < counts.missCount; ++i) {
+#ifdef SVEHTMISSES
+                if (knownMissActive) {
+                    const uint64_t capacityBefore = fixedInt32SveAos->GetCapacity();
+                    fixedInt32SveAos->EmplaceKnownMiss(missKeys[i], missSlots[i]);
+                    knownMissActive = fixedInt32SveAos->GetCapacity() == capacityBefore;
+                } else {
+                    fixedInt32SveAos->EmplaceScalar(missKeys[i]);
+                }
+#else
+                fixedInt32SveAos->EmplaceScalar(missKeys[i]);
+#endif
+            }
+            return;
+        }
+
+        for (int32_t i = 0; i < counts.hitCount; ++i) {
+            rowsAggStates[hitRows[i]] = fixedInt32SveAosStates[hitHandles[i]];
+        }
+
+#ifdef SVEHTMISSES
+        bool knownMissActive = useKnownMissInsert;
+#endif
+        for (int32_t i = 0; i < counts.missCount; ++i) {
+#ifdef SVEHTMISSES
+            auto ret = [&]() {
+                if (knownMissActive) {
+                    const uint64_t capacityBefore = fixedInt32SveAos->GetCapacity();
+                    auto knownMissRet = fixedInt32SveAos->EmplaceKnownMiss(missKeys[i], missSlots[i]);
+                    knownMissActive = fixedInt32SveAos->GetCapacity() == capacityBefore;
+                    return knownMissRet;
+                }
+                return fixedInt32SveAos->EmplaceScalar(missKeys[i]);
+            }();
+#else
+            auto ret = fixedInt32SveAos->EmplaceScalar(missKeys[i]);
+#endif
+            uint32_t handle;
+            if (ret.IsInsert()) {
+                auto *state = AllocateAggState();
+                handle = RegisterSveAggState(state);
+                ret.SetValue(handle);
+                newGroupStates.emplace_back(state);
+            } else {
+                handle = ret.GetValue();
+            }
+            rowsAggStates[missRows[i]] = fixedInt32SveAosStates[handle];
+        }
+    }
+
+    if (hasAgg) {
+        ProcessStatesWithNewGroups(vecBatch, newGroupStates);
+    }
+}
+
+void HashAggregationOperator::EmplaceFixedInt32PairSveAos(
+    VectorBatch *vecBatch, BaseVector *groupVector0, BaseVector *groupVector1)
+{
+    if (groupVector0->GetEncoding() == OMNI_DICTIONARY || groupVector1->GetEncoding() == OMNI_DICTIONARY) {
+        FallbackSvePairAggToSerializeIfEmpty();
+        BaseVector *groupVectors[] = {groupVector0, groupVector1};
+        serialize->DecodeGroupByColumns(groupVectors, 2, vecBatch->GetRowCount());
+        Emplace(serialize, vecBatch, groupVectors, 2);
+        return;
+    }
+
+    const bool hasAgg = !aggregators.empty();
+    const int32_t rowCount = vecBatch->GetRowCount();
+    const bool hasConst = IsConstVector(groupVector0) || IsConstVector(groupVector1);
+
+    if (hasConst) {
+        auto loader0 = MakeSveInt32KeyLoader(groupVector0);
+        auto loader1 = MakeSveInt32KeyLoader(groupVector1);
+        if (loader0.isConst && loader1.isConst) {
+            hashmap::SveAggAosHashTable32Pair::Key key;
+            if (loader0.constIsNull) {
+                key.nullMask |= hashmap::SveAggAosHashTable32Pair::kKey0Null;
+            } else {
+                key.key0 = loader0.constValue;
+            }
+            if (loader1.constIsNull) {
+                key.nullMask |= hashmap::SveAggAosHashTable32Pair::kKey1Null;
+            } else {
+                key.key1 = loader1.constValue;
+            }
+
+            auto ret = fixedInt32PairSveAos->EmplaceScalar(key);
+            if (!hasAgg) {
+                return;
+            }
+
+            std::vector<AggregateState *> newGroupStates;
+            uint32_t handle;
+            if (ret.IsInsert()) {
+                auto *state = AllocateAggState();
+                handle = RegisterSvePairAggState(state);
+                ret.SetValue(handle);
+                newGroupStates.emplace_back(state);
+            } else {
+                handle = ret.GetValue();
+            }
+            rowsAggStates.resize(rowCount);
+            std::fill(rowsAggStates.begin(), rowsAggStates.end(), fixedInt32PairSveAosStates[handle]);
+            ProcessStatesWithNewGroups(vecBatch, newGroupStates);
+            return;
+        }
+
+        std::vector<uint32_t> keys0(rowCount);
+        std::vector<uint32_t> keys1(rowCount);
+        std::vector<uint32_t> nullMasks(rowCount);
+        std::vector<uint32_t> rowIds(rowCount);
+        for (int32_t rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
+            uint32_t nullMask = 0;
+            if (loader0.IsNull(rowIdx)) {
+                nullMask |= hashmap::SveAggAosHashTable32Pair::kKey0Null;
+                keys0[rowIdx] = 0;
+            } else {
+                keys0[rowIdx] = loader0.GetValue(rowIdx);
+            }
+            if (loader1.IsNull(rowIdx)) {
+                nullMask |= hashmap::SveAggAosHashTable32Pair::kKey1Null;
+                keys1[rowIdx] = 0;
+            } else {
+                keys1[rowIdx] = loader1.GetValue(rowIdx);
+            }
+            nullMasks[rowIdx] = nullMask;
+            rowIds[rowIdx] = static_cast<uint32_t>(rowIdx);
+        }
+
+        std::vector<uint32_t> hitRows(rowCount);
+        std::vector<uint32_t> hitHandles(rowCount);
+        std::vector<uint32_t> missRows(rowCount);
+        std::vector<hashmap::SveAggAosHashTable32Pair::Key> missKeys(rowCount);
+#ifdef SVEHTMISSES
+        std::vector<uint32_t> missSlots(rowCount);
+        auto counts = fixedInt32PairSveAos->LookupBatchSVEForInsert(keys0.data(), keys1.data(), nullMasks.data(),
+            rowIds.data(), rowCount, hitRows.data(), hitHandles.data(), missRows.data(), missKeys.data(),
+            missSlots.data());
+        const bool useKnownMissInsert = ShouldUseKnownMissInsert(fixedInt32PairSveAos.get(), counts.missCount,
+            [&]() { return EstimateDistinctMisses32Pair(missKeys.data(), counts.missCount); });
+#else
+        auto counts = fixedInt32PairSveAos->LookupBatchSVE(keys0.data(), keys1.data(), nullMasks.data(),
+            rowIds.data(), rowCount, hitRows.data(), hitHandles.data(), missRows.data(), missKeys.data());
+#endif
+
+        if (!hasAgg) {
+#ifdef SVEHTMISSES
+            bool knownMissActive = useKnownMissInsert;
+#endif
+            for (int32_t i = 0; i < counts.missCount; ++i) {
+#ifdef SVEHTMISSES
+                if (knownMissActive) {
+                    const uint64_t capacityBefore = fixedInt32PairSveAos->GetCapacity();
+                    fixedInt32PairSveAos->EmplaceKnownMiss(missKeys[i], missSlots[i]);
+                    knownMissActive = fixedInt32PairSveAos->GetCapacity() == capacityBefore;
+                } else {
+                    fixedInt32PairSveAos->EmplaceScalar(missKeys[i]);
+                }
+#else
+                fixedInt32PairSveAos->EmplaceScalar(missKeys[i]);
+#endif
+            }
+            return;
+        }
+
+        rowsAggStates.resize(rowCount);
+        std::vector<AggregateState *> newGroupStates;
+        for (int32_t i = 0; i < counts.hitCount; ++i) {
+            rowsAggStates[hitRows[i]] = fixedInt32PairSveAosStates[hitHandles[i]];
+        }
+
+#ifdef SVEHTMISSES
+        bool knownMissActive = useKnownMissInsert;
+#endif
+        for (int32_t i = 0; i < counts.missCount; ++i) {
+#ifdef SVEHTMISSES
+            auto ret = [&]() {
+                if (knownMissActive) {
+                    const uint64_t capacityBefore = fixedInt32PairSveAos->GetCapacity();
+                    auto knownMissRet = fixedInt32PairSveAos->EmplaceKnownMiss(missKeys[i], missSlots[i]);
+                    knownMissActive = fixedInt32PairSveAos->GetCapacity() == capacityBefore;
+                    return knownMissRet;
+                }
+                return fixedInt32PairSveAos->EmplaceScalar(missKeys[i]);
+            }();
+#else
+            auto ret = fixedInt32PairSveAos->EmplaceScalar(missKeys[i]);
+#endif
+            uint32_t handle;
+            if (ret.IsInsert()) {
+                auto *state = AllocateAggState();
+                handle = RegisterSvePairAggState(state);
+                ret.SetValue(handle);
+                newGroupStates.emplace_back(state);
+            } else {
+                handle = ret.GetValue();
+            }
+            rowsAggStates[missRows[i]] = fixedInt32PairSveAosStates[handle];
+        }
+
+        ProcessStatesWithNewGroups(vecBatch, newGroupStates);
+        return;
+    }
+
+    auto *values0 = reinterpret_cast<uint32_t *>(VectorHelper::UnsafeGetValues(groupVector0));
+    auto *values1 = reinterpret_cast<uint32_t *>(VectorHelper::UnsafeGetValues(groupVector1));
+
+    std::vector<uint32_t> keys0(rowCount);
+    std::vector<uint32_t> keys1(rowCount);
+    std::vector<uint32_t> nullMasks(rowCount);
+    std::vector<uint32_t> rowIds(rowCount);
+    for (int32_t rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
+        uint32_t nullMask = 0;
+        if (groupVector0->IsNull(rowIdx)) {
+            nullMask |= hashmap::SveAggAosHashTable32Pair::kKey0Null;
+        }
+        if (groupVector1->IsNull(rowIdx)) {
+            nullMask |= hashmap::SveAggAosHashTable32Pair::kKey1Null;
+        }
+        keys0[rowIdx] = values0[rowIdx];
+        keys1[rowIdx] = values1[rowIdx];
+        nullMasks[rowIdx] = nullMask;
+        rowIds[rowIdx] = static_cast<uint32_t>(rowIdx);
+    }
+
+    std::vector<uint32_t> hitRows(rowCount);
+    std::vector<uint32_t> hitHandles(rowCount);
+    std::vector<uint32_t> missRows(rowCount);
+    std::vector<hashmap::SveAggAosHashTable32Pair::Key> missKeys(rowCount);
+#ifdef SVEHTMISSES
+    std::vector<uint32_t> missSlots(rowCount);
+    auto counts = fixedInt32PairSveAos->LookupBatchSVEForInsert(keys0.data(), keys1.data(), nullMasks.data(),
+        rowIds.data(), rowCount, hitRows.data(), hitHandles.data(), missRows.data(), missKeys.data(),
+        missSlots.data());
+    const bool useKnownMissInsert = ShouldUseKnownMissInsert(fixedInt32PairSveAos.get(), counts.missCount,
+        [&]() { return EstimateDistinctMisses32Pair(missKeys.data(), counts.missCount); });
+#else
+    auto counts = fixedInt32PairSveAos->LookupBatchSVE(keys0.data(), keys1.data(), nullMasks.data(), rowIds.data(),
+        rowCount, hitRows.data(), hitHandles.data(), missRows.data(), missKeys.data());
+#endif
+
+    if (!hasAgg) {
+#ifdef SVEHTMISSES
+        bool knownMissActive = useKnownMissInsert;
+#endif
+        for (int32_t i = 0; i < counts.missCount; ++i) {
+#ifdef SVEHTMISSES
+            if (knownMissActive) {
+                const uint64_t capacityBefore = fixedInt32PairSveAos->GetCapacity();
+                fixedInt32PairSveAos->EmplaceKnownMiss(missKeys[i], missSlots[i]);
+                knownMissActive = fixedInt32PairSveAos->GetCapacity() == capacityBefore;
+            } else {
+                fixedInt32PairSveAos->EmplaceScalar(missKeys[i]);
+            }
+#else
+            fixedInt32PairSveAos->EmplaceScalar(missKeys[i]);
+#endif
+        }
+        return;
+    }
+
+    rowsAggStates.resize(rowCount);
+    std::vector<AggregateState *> newGroupStates;
+    for (int32_t i = 0; i < counts.hitCount; ++i) {
+        rowsAggStates[hitRows[i]] = fixedInt32PairSveAosStates[hitHandles[i]];
+    }
+
+#ifdef SVEHTMISSES
+    bool knownMissActive = useKnownMissInsert;
+#endif
+    for (int32_t i = 0; i < counts.missCount; ++i) {
+#ifdef SVEHTMISSES
+        auto ret = [&]() {
+            if (knownMissActive) {
+                const uint64_t capacityBefore = fixedInt32PairSveAos->GetCapacity();
+                auto knownMissRet = fixedInt32PairSveAos->EmplaceKnownMiss(missKeys[i], missSlots[i]);
+                knownMissActive = fixedInt32PairSveAos->GetCapacity() == capacityBefore;
+                return knownMissRet;
+            }
+            return fixedInt32PairSveAos->EmplaceScalar(missKeys[i]);
+        }();
+#else
+        auto ret = fixedInt32PairSveAos->EmplaceScalar(missKeys[i]);
+#endif
+        uint32_t handle;
+        if (ret.IsInsert()) {
+            auto *state = AllocateAggState();
+            handle = RegisterSvePairAggState(state);
+            ret.SetValue(handle);
+            newGroupStates.emplace_back(state);
+        } else {
+            handle = ret.GetValue();
+        }
+        rowsAggStates[missRows[i]] = fixedInt32PairSveAosStates[handle];
+    }
+
+    ProcessStatesWithNewGroups(vecBatch, newGroupStates);
+}
+#endif
 
 template <bool hasNull>
 void ComputeHashSIMD(int64_t *key, uint8_t nullMask, uint64_t *hashes, int64x2_t vMin, uint64x2_t vOne)
@@ -1587,6 +2380,12 @@ uint64_t HashAggregationOperator::GetHashMapUniqueKeys()
         return normalizeKeyWithoutAgg->GetElementsSize();
     } else if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKey != nullptr) {
         return normalizeKey->GetElementsSize();
+#ifdef OMNI_SVEHT32_HASH_AGG
+    } else if (fixedInt32PairSveAos != nullptr && !svePairFallbackToSerialize) {
+        return fixedInt32PairSveAos->GetElementsSize();
+    } else if (fixedInt32SveAos != nullptr && !sveAosFallbackToFixedInt32) {
+        return fixedInt32SveAos->GetElementsSize() + (hasNullGroupState32 ? 1 : 0);
+#endif
     } else if (serialize != nullptr) {
         return serialize->GetElementsSize();
     } else if (fixedInt32 != nullptr) {
@@ -1971,6 +2770,150 @@ void HashAggregationOperator::CalcAndSetStatesSize()
     }
 }
 
+#ifdef OMNI_SVEHT32_HASH_AGG
+int32_t HashAggregationOperator::OutputFixedInt32SveAos(VectorBatch **outputVecBatch)
+{
+    usedMemBytes = executionContext->GetArena()->UsedBytes();
+    totalMemBytes = executionContext->GetArena()->TotalBytes();
+
+    const bool hasAgg = !aggregators.empty();
+    const int32_t totalRowCount = static_cast<int32_t>(fixedInt32SveAos->GetElementsSize()) +
+                                  (hasNullGroupState32 ? 1 : 0);
+    if (totalRowCount == 0) {
+        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+        return 0;
+    }
+
+    const int32_t remainingRows = totalRowCount - static_cast<int32_t>(outputState.hasBeenOutputNum);
+    const int32_t curRowCount = std::min(rowsPerBatch, remainingRows);
+    auto output = std::make_unique<VectorBatch>(curRowCount);
+    auto outputPtr = output.get();
+    SetVectors(outputPtr, outputTypes, curRowCount);
+
+    auto *groupVector = outputPtr->Get(0);
+    std::vector<uint32_t> keys(curRowCount);
+    std::vector<uint32_t> handles(curRowCount);
+    std::vector<AggregateState *> states;
+    if (hasAgg) {
+        states.resize(curRowCount);
+    }
+
+    uint64_t nextSlot = outputState.outputHashmapPos;
+    int32_t rowIdx = fixedInt32SveAos->CopyGroups(outputState.outputHashmapPos, curRowCount, keys.data(),
+        handles.data(), nextSlot);
+    for (int32_t i = 0; i < rowIdx; ++i) {
+        reinterpret_cast<Vector<int32_t> *>(groupVector)->SetValue(i, static_cast<int32_t>(keys[i]));
+        if (hasAgg) {
+            states[i] = fixedInt32SveAosStates[handles[i]];
+        }
+    }
+    outputState.outputHashmapPos = static_cast<uint32_t>(nextSlot);
+
+    if (rowIdx < curRowCount && hasNullGroupState32 && !sveAosNullGroupOutput) {
+        groupVector->SetNull(rowIdx);
+        if (hasAgg) {
+            states[rowIdx] = nullGroupState32;
+        }
+        sveAosNullGroupOutput = true;
+        ++rowIdx;
+    }
+
+    if (hasAgg) {
+        auto aggOutputStartIndex = 1;
+        for (size_t aggIndex = 0; aggIndex < aggregators.size(); ++aggIndex) {
+            auto &aggregator = aggregators[aggIndex];
+            const auto oneAggOutputCols = aggOutputTypes[aggIndex].GetSize();
+            std::vector<BaseVector *> adaptAggVectors(oneAggOutputCols);
+            for (auto j = 0; j < oneAggOutputCols; j++) {
+                adaptAggVectors[j] = outputPtr->Get(aggOutputStartIndex + j);
+            }
+            aggOutputStartIndex += oneAggOutputCols;
+            aggregator->ExtractValuesBatch(states, adaptAggVectors, 0, rowIdx);
+        }
+    }
+
+    outputState.hasBeenOutputNum += rowIdx;
+    *outputVecBatch = output.release();
+    UpdateGetOutputInfo((*outputVecBatch)->GetRowCount());
+    if (static_cast<int32_t>(outputState.hasBeenOutputNum) == totalRowCount) {
+        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+    }
+    return 1;
+}
+
+int32_t HashAggregationOperator::OutputFixedInt32PairSveAos(VectorBatch **outputVecBatch)
+{
+    usedMemBytes = executionContext->GetArena()->UsedBytes();
+    totalMemBytes = executionContext->GetArena()->TotalBytes();
+
+    const bool hasAgg = !aggregators.empty();
+    const int32_t totalRowCount = static_cast<int32_t>(fixedInt32PairSveAos->GetElementsSize());
+    if (totalRowCount == 0) {
+        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+        return 0;
+    }
+
+    const int32_t remainingRows = totalRowCount - static_cast<int32_t>(outputState.hasBeenOutputNum);
+    const int32_t curRowCount = std::min(rowsPerBatch, remainingRows);
+    auto output = std::make_unique<VectorBatch>(curRowCount);
+    auto outputPtr = output.get();
+    SetVectors(outputPtr, outputTypes, curRowCount);
+
+    auto *groupVector0 = outputPtr->Get(0);
+    auto *groupVector1 = outputPtr->Get(1);
+    std::vector<uint32_t> keys0(curRowCount);
+    std::vector<uint32_t> keys1(curRowCount);
+    std::vector<uint32_t> nullMasks(curRowCount);
+    std::vector<uint32_t> handles(curRowCount);
+    std::vector<AggregateState *> states;
+    if (hasAgg) {
+        states.resize(curRowCount);
+    }
+
+    uint64_t nextSlot = outputState.outputHashmapPos;
+    int32_t rowIdx = fixedInt32PairSveAos->CopyGroups(outputState.outputHashmapPos, curRowCount, keys0.data(),
+        keys1.data(), nullMasks.data(), handles.data(), nextSlot);
+    for (int32_t i = 0; i < rowIdx; ++i) {
+        if ((nullMasks[i] & hashmap::SveAggAosHashTable32Pair::kKey0Null) != 0) {
+            groupVector0->SetNull(i);
+        } else {
+            reinterpret_cast<Vector<int32_t> *>(groupVector0)->SetValue(i, static_cast<int32_t>(keys0[i]));
+        }
+        if ((nullMasks[i] & hashmap::SveAggAosHashTable32Pair::kKey1Null) != 0) {
+            groupVector1->SetNull(i);
+        } else {
+            reinterpret_cast<Vector<int32_t> *>(groupVector1)->SetValue(i, static_cast<int32_t>(keys1[i]));
+        }
+        if (hasAgg) {
+            states[i] = fixedInt32PairSveAosStates[handles[i]];
+        }
+    }
+    outputState.outputHashmapPos = static_cast<uint32_t>(nextSlot);
+
+    if (hasAgg) {
+        auto aggOutputStartIndex = 2;
+        for (size_t aggIndex = 0; aggIndex < aggregators.size(); ++aggIndex) {
+            auto &aggregator = aggregators[aggIndex];
+            const auto oneAggOutputCols = aggOutputTypes[aggIndex].GetSize();
+            std::vector<BaseVector *> adaptAggVectors(oneAggOutputCols);
+            for (auto j = 0; j < oneAggOutputCols; j++) {
+                adaptAggVectors[j] = outputPtr->Get(aggOutputStartIndex + j);
+            }
+            aggOutputStartIndex += oneAggOutputCols;
+            aggregator->ExtractValuesBatch(states, adaptAggVectors, 0, rowIdx);
+        }
+    }
+
+    outputState.hasBeenOutputNum += rowIdx;
+    *outputVecBatch = output.release();
+    UpdateGetOutputInfo((*outputVecBatch)->GetRowCount());
+    if (static_cast<int32_t>(outputState.hasBeenOutputNum) == totalRowCount) {
+        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+    }
+    return 1;
+}
+#endif
+
 template<typename Deserialize>
 int32_t HashAggregationOperator::Output(Deserialize &deserializeHashmap, VectorBatch **outputVecBatch)
 {
@@ -2031,6 +2974,12 @@ ALWAYS_INLINE size_t HashAggregationOperator::GetElementsSize()
         elementSize = normalizeKeyWithoutAgg->GetElementsSize();
     } else if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKey != nullptr) {
         elementSize = normalizeKey->GetElementsSize();
+#ifdef OMNI_SVEHT32_HASH_AGG
+    } else if (fixedInt32PairSveAos != nullptr && !svePairFallbackToSerialize) {
+        elementSize = fixedInt32PairSveAos->GetElementsSize();
+    } else if (fixedInt32SveAos != nullptr && !sveAosFallbackToFixedInt32) {
+        elementSize = fixedInt32SveAos->GetElementsSize() + (hasNullGroupState32 ? 1 : 0);
+#endif
     } else if (serialize != nullptr) {
         elementSize = serialize->GetElementsSize();
     } else if (fixedInt32 != nullptr) {
@@ -2055,6 +3004,17 @@ ALWAYS_INLINE void HashAggregationOperator::ResetHashmap()
         normalizeKeyWithoutAgg->ResetHashmap();
     } else if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKey != nullptr) {
         normalizeKey->ResetHashmap();
+#ifdef OMNI_SVEHT32_HASH_AGG
+    } else if (fixedInt32PairSveAos != nullptr && !svePairFallbackToSerialize) {
+        fixedInt32PairSveAos->Reset();
+        fixedInt32PairSveAosStates.clear();
+    } else if (fixedInt32SveAos != nullptr && !sveAosFallbackToFixedInt32) {
+        fixedInt32SveAos->Reset();
+        fixedInt32SveAosStates.clear();
+        nullGroupState32 = nullptr;
+        hasNullGroupState32 = false;
+        sveAosNullGroupOutput = false;
+#endif
     } else if (serialize != nullptr) {
         serialize->ResetHashmap();
     } else if (fixedInt32 != nullptr) {
