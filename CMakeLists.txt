@@ -47,7 +47,7 @@ endif (CCACHE_FOUND)
 find_package(re2 REQUIRED)
 find_package(fmt REQUIRED)
 
-option(SVEHT "Enable SVE vectorized hash tables" OFF)
+option(SVEHT "Enable SVE vectorized hash tables" ON)
 message(STATUS "Option Enable SVEHT: ${SVEHT}")
 
 if (DEFINED COVERAGE AND COVERAGE STREQUAL "ON")
