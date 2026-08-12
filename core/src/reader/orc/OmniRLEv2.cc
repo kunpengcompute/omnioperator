@@ -540,6 +540,240 @@ namespace omniruntime::reader {
         return copyDataFromBuffer(data, offset, numValues, nulls);
     }
 
+    // Selective API (shares run state with next()).
+
+    OmniRleDecoderV2::RunSlice OmniRleDecoderV2::currentRun() {
+        ensureRun();
+        RunSlice slice;
+        slice.repeated = (currentEncoding() == ::orc::SHORT_REPEAT);
+        slice.values = slice.repeated ? literals.data() : (literals.data() + runRead);
+        slice.count = runLength - runRead;
+        return slice;
+    }
+
+    void OmniRleDecoderV2::skipValues(uint64_t numValues) {
+        while (numValues > 0) {
+            ensureRun();
+            uint64_t take = std::min(runLength - runRead, numValues);
+            runRead += take;
+            numValues -= take;
+        }
+    }
+
+    void OmniRleDecoderV2::ensureRun() {
+        if (runRead == runLength) {
+            resetRun();
+            firstByte = readByte();
+            prepareRun();
+        }
+    }
+
+    void OmniRleDecoderV2::prepareRun() {
+        switch (static_cast<int64_t>(currentEncoding())) {
+            case ::orc::SHORT_REPEAT:
+                return prepareShortRepeatRun();
+            case ::orc::DIRECT:
+                return prepareDirectRun();
+            case ::orc::PATCHED_BASE:
+                return preparePatchedRun();
+            case ::orc::DELTA:
+                return prepareDeltaRun();
+            default:
+                throw ::orc::ParseError("unknown encoding");
+        }
+    }
+
+    // Copied from nextShortRepeats<T>.
+    void OmniRleDecoderV2::prepareShortRepeatRun() {
+        // extract the number of fixed bytes
+        uint64_t byteSize = (firstByte >> 3) & 0x07;
+        byteSize += 1;
+
+        runLength = firstByte & 0x07;
+        // run lengths values are stored only after MIN_REPEAT value is met
+        runLength += MIN_REPEAT;
+        runRead = 0;
+
+        // read the repeated value which is store using fixed bytes
+        literals[0] = readLongBE(byteSize);
+
+        if (isSigned) {
+            literals[0] = ::orc::unZigZag(static_cast<uint64_t>(literals[0]));
+        }
+    }
+
+    // Copied from nextDirect<T>.
+    void OmniRleDecoderV2::prepareDirectRun() {
+        // extract the number of fixed bits
+        unsigned char fbo = (firstByte >> 1) & 0x1f;
+        uint32_t bitSize = ::orc::decodeBitWidth(fbo);
+
+        // extract the run length
+        runLength = static_cast<uint64_t>(firstByte & 0x01) << 8;
+        runLength |= readByte();
+        // runs are one off
+        runLength += 1;
+        runRead = 0;
+
+        readLongs(literals.data(), 0, runLength, bitSize);
+
+        if (isSigned) {
+            UnZigZagBatchHEFs8p2(reinterpret_cast<uint64_t*>(literals.data()), runLength);
+        }
+    }
+
+    // Copied from nextPatched<T>.
+    void OmniRleDecoderV2::preparePatchedRun() {
+        // extract the number of fixed bits
+        unsigned char fbo = (firstByte >> 1) & 0x1f;
+        uint32_t bitSize = ::orc::decodeBitWidth(fbo);
+
+        // extract the run length
+        runLength = static_cast<uint64_t>(firstByte & 0x01) << 8;
+        runLength |= readByte();
+        // runs are one off
+        runLength += 1;
+        runRead = 0;
+
+        // extract the number of bytes occupied by base
+        uint64_t thirdByte = readByte();
+        uint64_t byteSize = (thirdByte >> 5) & 0x07;
+        // base width is one off
+        byteSize += 1;
+
+        // extract patch width
+        uint32_t pwo = thirdByte & 0x1f;
+        uint32_t patchBitSize = ::orc::decodeBitWidth(pwo);
+
+        // read fourth byte and extract patch gap width
+        uint64_t fourthByte = readByte();
+        uint32_t pgw = (fourthByte >> 5) & 0x07;
+        // patch gap width is one off
+        pgw += 1;
+
+        // extract the length of the patch list
+        size_t pl = fourthByte & 0x1f;
+        if (pl == 0) {
+            throw ::orc::ParseError("Corrupt PATCHED_BASE encoded data (pl==0)!");
+        }
+
+        // read the next base width number of bytes to extract base value
+        int64_t base = readLongBE(byteSize);
+        int64_t mask = (static_cast<int64_t>(1) << ((byteSize * 8) - 1));
+        // if mask of base value is 1 then base is negative value else positive
+        if ((base & mask) != 0) {
+            base = base & ~mask;
+            base = -base;
+        }
+
+        readLongs(literals.data(), 0, runLength, bitSize);
+        // any remaining bits are thrown out
+        resetReadLongs();
+
+        unpackedPatch.resize(pl);
+        if ((patchBitSize + pgw) > 64) {
+            throw ::orc::ParseError("Corrupt PATCHED_BASE encoded data "
+                             "(patchBitSize + pgw > 64)!");
+        }
+        uint32_t cfb = ::orc::getClosestFixedBits(patchBitSize + pgw);
+        readLongs(unpackedPatch.data(), 0, pl, cfb);
+        // any remaining bits are thrown out
+        resetReadLongs();
+
+        // apply the patch directly when decoding the packed data
+        int64_t patchMask = ((static_cast<int64_t>(1) << patchBitSize) - 1);
+
+        int64_t gap = 0;
+        int64_t patch = 0;
+        uint64_t patchIdx = 0;
+        adjustGapAndPatch(patchBitSize, patchMask, &gap, &patch, &patchIdx);
+
+        for (uint64_t i = 0; i < runLength; ++i) {
+            if (static_cast<int64_t>(i) != gap) {
+                // no patching required. add base to unpacked value to get final value
+                literals[i] += base;
+            } else {
+                // extract the patch value
+                int64_t patchedVal = literals[i] | (patch << bitSize);
+
+                // add base to patched value
+                literals[i] = base + patchedVal;
+
+                // increment the patch to point to next entry in patch list
+                ++patchIdx;
+
+                if (patchIdx < unpackedPatch.size()) {
+                    adjustGapAndPatch(patchBitSize, patchMask, &gap, &patch,
+                                    &patchIdx);
+
+                    // next gap is relative to the current gap
+                    gap += i;
+                }
+            }
+        }
+    }
+
+    // Copied from nextDelta<T>.
+    void OmniRleDecoderV2::prepareDeltaRun() {
+        // extract the number of fixed bits
+        unsigned char fbo = (firstByte >> 1) &0x1f;
+        uint32_t bitSize;
+        if (fbo != 0) {
+            bitSize = ::orc::decodeBitWidth(fbo);
+        } else {
+            bitSize = 0;
+        }
+
+        // extract the run length
+        runLength = static_cast<uint64_t>(firstByte & 0x01) << 8;
+        runLength |= readByte();
+        ++runLength; // account for first value
+        runRead = 0;
+
+        int64_t prevValue;
+        // read the first value stored as vint
+        if (isSigned) {
+            prevValue = readVslong();
+        } else {
+            prevValue = static_cast<int64_t>(readVulong());
+        }
+
+        literals[0] = prevValue;
+
+        // read the fixed delta value stored as vint (deltas can be negative even
+        // if all number are positive)
+        int64_t deltaBase = readVslong();
+
+        if (bitSize == 0) {
+            // add fixed deltas to adjacent values
+            for (uint64_t i = 1; i < runLength; ++i) {
+                literals[i] = literals[i - 1] + deltaBase;
+            }
+        } else {
+            prevValue = literals[1] = prevValue + deltaBase;
+            if (runLength < 2) {
+                std::stringstream ss;
+                ss << "Illegal run length for delta encoding: " << runLength;
+                throw ::orc::ParseError(ss.str());
+            }
+            // write the unpacked values, add it to previous value and store final
+            // value to result buffer. if the delta base value is negative then it
+            // is a decreasing sequence else an increasing sequence.
+            // read deltas using the literals buffer.
+            readLongs(literals.data(), 2, runLength - 2, bitSize);
+
+            if (deltaBase < 0) {
+                for (uint64_t i = 2; i < runLength; ++i) {
+                    prevValue = literals[i] = prevValue - literals[i];
+                }
+            } else {
+                for (uint64_t i = 2; i < runLength; ++i) {
+                    prevValue = literals[i] = prevValue + literals[i];
+                }
+            }
+        }
+    }
+
     void OmniRleDecoderV2::readLongs(int64_t *data, uint64_t offset, uint64_t len, uint64_t fbs) {
         switch (fbs) {
             case 4:

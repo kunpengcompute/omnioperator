@@ -234,10 +234,17 @@ namespace omniruntime::reader {
 
         uint64_t skip(uint64_t numValues) override;
 
-        void next(omniruntime::vec::BaseVector *vec, uint64_t numValues, 
+        void next(omniruntime::vec::BaseVector *vec, uint64_t numValues,
             uint64_t *incomingNulls, int omniTypeId) override;
 
         void seekToRowGroup(std::unordered_map<uint64_t, ::orc::PositionProvider>& positions) override;
+
+        // Advance PRESENT by rowsToRead; write null bitmap into scratch (bit set = null).
+        // Returns whether any null exists. No PRESENT stream: returns false, leaves scratch untouched.
+        // nullsScratch must hold at least BitUtil::Nwords(rowsToRead) + 1 words.
+        bool readNullsForBatch(uint64_t rowsToRead, uint64_t *nullsScratch);
+
+        OmniRleDecoderV2 *dataDecoder() const { return rle.get(); }
     };
 
     class OmniTimestampColumnReader: public OmniColumnReader {

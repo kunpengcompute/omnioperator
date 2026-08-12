@@ -647,6 +647,17 @@ namespace omniruntime::reader {
         rle->next(vec, numValues, hasNull ? reinterpret_cast<uint64_t*>(nulls) : nullptr, omniTypeId);
     }
 
+    bool OmniIntegerColumnReader::readNullsForBatch(uint64_t rowsToRead, uint64_t *nullsScratch) {
+        if (!notNullDecoder) {
+            return false;
+        }
+        // nextNulls may leave the tail untouched; zero so unread bits read as not-null.
+        const uint64_t words = BitUtil::Nwords(static_cast<int32_t>(rowsToRead)) + 1;
+        memset(nullsScratch, 0, words * sizeof(uint64_t));
+        notNullDecoder->nextNulls(reinterpret_cast<char*>(nullsScratch), rowsToRead, nullptr);
+        return BitUtil::HasBitSet(nullsScratch, 0, static_cast<int32_t>(rowsToRead));
+    }
+
     void OmniBooleanColumnReader::next(BaseVector *vec, uint64_t numValues, uint64_t *incomingNulls,
         int omniTypeId) {
         auto nulls = omniruntime::vec::unsafe::UnsafeBaseVector::GetNulls(vec);

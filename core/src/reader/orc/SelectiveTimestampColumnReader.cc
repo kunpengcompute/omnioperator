@@ -15,8 +15,6 @@
 
 namespace omniruntime::reader {
 
-using omniruntime::vec::BaseVector;
-
 void SelectiveTimestampColumnReader::read(
     uint64_t rowsToRead, common::RowSet activeRows, int omniTypeId)
 {
@@ -43,17 +41,6 @@ void SelectiveTimestampColumnReader::read(
             outputRows_.push_back(row);
         }
     }
-}
-
-BaseVector *SelectiveTimestampColumnReader::getValues(common::RowSet rows)
-{
-    positions_.clear();
-    positions_.reserve(rows.size());
-    for (auto row : rows) {
-        positions_.push_back(
-            static_cast<int32_t>(row - static_cast<common::vector_size_t>(decodedBase_)));
-    }
-    return decoded_->CopyPositions(positions_.data(), 0, static_cast<int>(positions_.size()));
 }
 
 } // namespace omniruntime::reader
