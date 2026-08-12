@@ -256,7 +256,10 @@ TEST(HashUtilTest, TestCRCHashNumericTypes)
     size_t hash;
     Decimal128 decimal128Values[] = {Decimal128(0, 1L), Decimal128(0, 2L), Decimal128(0, 3L),
                                      Decimal128(INT64_MAX, UINT64_MAX), Decimal128(INT64_MIN, 0)};
-    size_t expectedDecimal128Hashes[] = {1334012139, 1551566872, 2927035878, 2451998871, 1064918637};
+    // Expected values are Mix64(crc32) after 64-bit finalizer was added to HashCRC32.
+    size_t expectedDecimal128Hashes[] = {16659874196125503182ULL, 7892095643793723572ULL,
+                                         1258195152865728751ULL, 7048826221867799195ULL,
+                                         1032637311268616768ULL};
     for (int i = 0; i < 5; ++i) {
         hash = HashCRC32<Decimal128>()(decimal128Values[i]);
         EXPECT_EQ(hash, expectedDecimal128Hashes[i]);
@@ -272,7 +275,10 @@ TEST(HashUtilTest, TestCRCHashVarchar)
     const std::string str4 = "abcdefghijklmnopqrstuvwxyz";
     const std::string str5 = "01234567890123456789abcdefghijklmnopqrstuvwxyz";
     StringRef stringValue[] = {StringRef(str1), StringRef(str2), StringRef(str3), StringRef(str4), StringRef(str5)};
-    size_t expectedStringHashes[] = {306354154, 3808858755, 2825671668, 2665934629, 1551261344};
+    // Expected values are Mix64(Extend(...)) after 64-bit finalizer was added to HashCRC32.
+    size_t expectedStringHashes[] = {16369963224949658263ULL, 5746606707544395626ULL,
+                                     17263859273988243364ULL, 3107724510144351376ULL,
+                                     17719068638850505829ULL};
     for (int i = 0; i < 5; ++i) {
         hash = HashCRC32<StringRef>()(stringValue[i]);
         EXPECT_EQ(hash, expectedStringHashes[i]);
