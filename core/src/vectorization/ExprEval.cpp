@@ -7,6 +7,7 @@
 #include <string>
 #include "codegen/expr_evaluator.h"
 #include "type/data_type.h"
+#include "vectorization/functions/Md5ConcatWsFusion.h"
 
 namespace omniruntime::vectorization {
 using namespace omniruntime::expressions;
@@ -525,8 +526,35 @@ void ExprEval::Visit(const IsNullExpr &e)
     inputValues_.push(result);
 }
 
+bool ExprEval::TryEvaluateMd5ConcatWsFusion(const FuncExpr &e)
+{
+    const auto fusionPlan = Md5ConcatWsFusion::Match(e);
+    if (fusionPlan.has_value()) {
+        std::vector<DataTypeId> fusedArgTypes(fusionPlan->concatWs->arguments.size());
+        std::transform(fusionPlan->concatWs->arguments.begin(), fusionPlan->concatWs->arguments.end(),
+            fusedArgTypes.begin(), [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
+        auto fusedSignature = std::make_shared<codegen::FunctionSignature>(
+            fusionPlan->fusedFunctionName, fusedArgTypes, e.dataType->GetId());
+        auto fusedFunction = VectorFunction::Find(fusedSignature, context->queryConfigRef());
+        if (fusedFunction != nullptr) {
+            for (Expr *argument : fusionPlan->concatWs->arguments) {
+                argument->Accept(*this);
+            }
+            BaseVector *fusedResult = nullptr;
+            fusedFunction->Apply(inputValues_, e.dataType, fusedResult, context);
+            inputValues_.push(fusedResult);
+            return true;
+        }
+    }
+    return false;
+}
+
 void ExprEval::Visit(const FuncExpr &e)
 {
+    if (TryEvaluateMd5ConcatWsFusion(e)) {
+        return;
+    }
+
     for (auto arg : e.arguments) {
         arg->Accept(*this);
     }

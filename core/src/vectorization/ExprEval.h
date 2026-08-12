@@ -51,6 +51,8 @@ public:
     std::unordered_map<std::string, int32_t> paramNameToIdxMap;
 
 private:
+    bool TryEvaluateMd5ConcatWsFusion(const expressions::FuncExpr &e);
+
     std::vector<type::DataTypeId> typeIds;
     op::ExecutionContext *context;
     std::vector<vec::BaseVector *> vecBatch_;
