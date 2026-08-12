@@ -2487,4 +2487,29 @@ struct DecodeFunction {
     }
 };
 
+/// is_digit(string) -> bool
+/// Returns true if all characters in the string are digits ('0'-'9'), false otherwise.
+/// Empty string returns false. NULL input yields NULL output.
+template <typename T>
+struct IsDigitFunction {
+    ALWAYS_INLINE bool callNullable(bool &result, const std::string_view *str)
+    {
+        if (str == nullptr) {
+            return false;
+        }
+        if (str->empty()) {
+            result = false;
+            return true;
+        }
+        for (char c : *str) {
+            if (c < '0' || c > '9') {
+                result = false;
+                return true;
+            }
+        }
+        result = true;
+        return true;
+    }
+};
+
 }
