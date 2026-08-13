@@ -46,6 +46,11 @@ extern void RegisterHashFunctions(const std::string &prefix);
 
 extern void RegisterCollectionFunctions(const std::string &prefix);
 
+// Functions whose Flink semantics differ from Spark's; see RegisterFlink*.cpp.
+extern void RegisterFlinkCompareFunctions(const std::string &prefix);
+
+extern void RegisterFlinkStringFunctions(const std::string &prefix);
+
 int RegisterFunctions::Register()
 {
     RegisterAllFunctions();
@@ -70,6 +75,8 @@ void RegisterFunctions::RegisterAllFunctions(const std::string &prefix)
     RegisterRegexpFunctions(prefix);
     RegisterHashFunctions(prefix);
     RegisterCollectionFunctions(prefix);
+    RegisterFlinkCompareFunctions(prefix);
+    RegisterFlinkStringFunctions(prefix);
 }
 
 // Called from CreateProjections/ProjectionOperatorFactory so that ProjectVec can resolve

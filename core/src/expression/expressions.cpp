@@ -11,6 +11,8 @@
 #include "vectorization/functions/Cast.h"
 #include "vectorization/functions/NamedStruct.h"
 #include "vectorization/functions/MapFunction.h"
+#include "vectorization/functions/JsonObject.h"
+#include "vectorization/functions/JsonArray.h"
 #include "type/data_type.h"
 #include "vector/vector.h"
 #include "codegen/func_registry.h"
@@ -1017,6 +1019,42 @@ FuncExpr::~FuncExpr()
     constantInputs.clear();
 }
 
+namespace {
+// A value operand is a "raw" JSON node iff it is itself a JSON_OBJECT / JSON_ARRAY constructor
+// call (mirrors Flink JsonGenerateUtils.isJsonFunctionOperand at the RexNode level). Its
+// already-serialized JSON text is inserted verbatim by json_object / json_array instead of being
+// re-quoted as a string, so JSON_ARRAY(JSON_ARRAY(1)) -> [[1]] and
+// JSON_OBJECT(KEY 'k' VALUE JSON_OBJECT(...)) -> {"k":{...}}.
+inline bool IsJsonConstructorExpr(const Expr *e)
+{
+    if (e == nullptr || e->GetType() != ExprType::FUNC_E) {
+        return false;
+    }
+    const auto *fe = static_cast<const FuncExpr *>(e);
+    return fe->funcName == "json_array" || fe->funcName == "json_object";
+}
+
+// json_array layout: [flag, v0, v1, ...] -> one raw flag per value (args[1 + i]).
+inline std::vector<bool> JsonArrayValueRawFlags(const std::vector<Expr *> &args)
+{
+    std::vector<bool> flags;
+    for (size_t i = 1; i < args.size(); ++i) {
+        flags.push_back(IsJsonConstructorExpr(args[i]));
+    }
+    return flags;
+}
+
+// json_object layout: [flag, k0, v0, k1, v1, ...] -> one raw flag per pair value (args[2 + 2*p]).
+inline std::vector<bool> JsonObjectValueRawFlags(const std::vector<Expr *> &args)
+{
+    std::vector<bool> flags;
+    for (size_t i = 2; i < args.size(); i += 2) {
+        flags.push_back(IsJsonConstructorExpr(args[i]));
+    }
+    return flags;
+}
+}  // namespace
+
 FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, DataTypePtr returnType)
     : funcName(fnName), arguments(args), functionType(BUILTIN)
 {
@@ -1040,6 +1078,14 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     }
     if (funcName == "concat_ws") {
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
+    }
+    if (funcName == "json_object") {
+        vectorFunction = std::make_shared<JsonObjectFunction>(GetInputDataTypes(),
+            JsonObjectValueRawFlags(arguments));
+    }
+    if (funcName == "json_array") {
+        vectorFunction = std::make_shared<JsonArrayFunction>(GetInputDataTypes(),
+            JsonArrayValueRawFlags(arguments));
     }
     if (funcName == "CAST") {
         vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
@@ -1069,6 +1115,14 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     if (funcName == "concat_ws") {
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
     }
+    if (funcName == "json_object") {
+        vectorFunction = std::make_shared<JsonObjectFunction>(GetInputDataTypes(),
+            JsonObjectValueRawFlags(arguments));
+    }
+    if (funcName == "json_array") {
+        vectorFunction = std::make_shared<JsonArrayFunction>(GetInputDataTypes(),
+            JsonArrayValueRawFlags(arguments));
+    }
     if (funcName == "CAST") {
         vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
     }
@@ -1094,6 +1148,14 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     }
     if (funcName == "concat_ws") {
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
+    }
+    if (funcName == "json_object") {
+        vectorFunction = std::make_shared<JsonObjectFunction>(GetInputDataTypes(),
+            JsonObjectValueRawFlags(arguments));
+    }
+    if (funcName == "json_array") {
+        vectorFunction = std::make_shared<JsonArrayFunction>(GetInputDataTypes(),
+            JsonArrayValueRawFlags(arguments));
     }
     if (funcName == "CAST") {
         vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);

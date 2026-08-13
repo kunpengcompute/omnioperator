@@ -4,6 +4,7 @@
  */
 
 #include <string>
+#include <vector>
 #include "../functions/String.h"
 #include "../functions/SplitFunction.h"
 #include "../functions/Cast.h"
@@ -14,6 +15,10 @@
 #include "../functions/ConcatFunction.h"
 #include "../functions/ReverseFunction.h"
 #include "../functions/ParseUrl.h"
+#include "../functions/FusedMd5ConcatWsFunction.h"
+#ifdef OMNI_HAVE_ISAL_CRYPTO_MD5
+#include "../functions/Md5VectorFunction.h"
+#endif
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -77,10 +82,6 @@ void RegisterStringFunctions(const std::string &prefix)
     RegisterFunction<Base64Function, std::string, std::string_view>(prefix + "base64", {OMNI_VARBINARY}, OMNI_VARCHAR);
     RegisterFunction<Base64Function, std::string, std::string_view>(prefix + "base64", {OMNI_VARCHAR}, OMNI_VARCHAR);
     RegisterFunction<UnBase64Function, std::string, std::string_view>(prefix + "unbase64", {OMNI_VARCHAR}, OMNI_VARBINARY);
-    // Flink FROM_BASE64(string) -> STRING: decoded bytes are interpreted as a UTF-8 string.
-    // Register a VARCHAR-returning overload so the result is marshallable to RowData and the
-    // signature matches what RexNodeUtil emits (returnType=VARCHAR). Same UnBase64Function body.
-    RegisterFunction<UnBase64Function, std::string, std::string_view>(prefix + "unbase64", {OMNI_VARCHAR}, OMNI_VARCHAR);
     // unhex(string) -> varbinary: converts hex string to binary data
     RegisterFunction<UnhexFunction, std::string, std::string_view>(prefix + "unhex", {OMNI_VARCHAR}, OMNI_VARBINARY);
 
@@ -119,18 +120,13 @@ void RegisterStringFunctions(const std::string &prefix)
     RegisterFunction<RightFunction, std::string, std::string_view, int64_t>(
         prefix + "right", {OMNI_CHAR, OMNI_LONG}, OMNI_VARCHAR);
 
-    // Register concat function with variable arity support
-    // Register multiple signatures for different argument counts (2 to 10 arguments)
-    auto concatFunction = std::make_shared<ConcatFunction>();
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
+    // Register concat function with variable arity support (2 to 10 arguments).
+    // Each arity gets its own instance so that Apply() knows how many operands to pop.
+    constexpr size_t maxConcatArity = 10;
+    for (size_t arity = 2; arity <= maxConcatArity; ++arity) {
+        VectorFunction::RegisterVectorFunction("concat", std::vector<DataTypeId>(arity, OMNI_VARCHAR),
+            OMNI_VARCHAR, std::make_shared<ConcatFunction>(arity));
+    }
 
     // Register reverse function: reverses a string character by character
     VectorFunction::RegisterVectorFunction("reverse", {OMNI_VARCHAR}, OMNI_VARCHAR,
@@ -287,7 +283,15 @@ void RegisterStringFunctions(const std::string &prefix)
 
     RegisterFunction<Sha1HexStringFunction, std::string, std::string_view>(prefix + "sha1", {OMNI_VARBINARY}, OMNI_VARCHAR);
     RegisterFunction<Sha2HexStringFunction, std::string, std::string_view, int32_t>(prefix + "sha2", {OMNI_VARBINARY, OMNI_INT}, OMNI_VARCHAR);
-    RegisterFunction<Md5Function, std::string, std::string_view>(prefix + "Md5", {OMNI_VARBINARY}, OMNI_VARCHAR);
+#ifdef OMNI_HAVE_ISAL_CRYPTO_MD5
+    VectorFunction::RegisterVectorFunctionFactory(
+        prefix + "Md5", {OMNI_VARBINARY}, OMNI_VARCHAR, MakeMd5VectorFunction);
+#else
+    RegisterFunction<Md5Function, std::string, std::string_view>(
+        prefix + "Md5", {OMNI_VARBINARY}, OMNI_VARCHAR);
+#endif
+    VectorFunction::RegisterVectorFunctionFactory(
+        FusedMd5ConcatWsSignatures(prefix + "FusedMd5ConcatWs"), MakeFusedMd5ConcatWsFunction);
     RegisterFunction<StaticInvokeVarcharTypeWriteSideCheckFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeVarcharTypeWriteSideCheck", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
     RegisterFunction<StaticInvokeCharTypeWriteSideCheckFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeCharTypeWriteSideCheck", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
     RegisterFunction<StaticInvokeCharReadPaddingFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeCharReadPadding", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);

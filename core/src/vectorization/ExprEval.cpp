@@ -7,6 +7,7 @@
 #include <string>
 #include "codegen/expr_evaluator.h"
 #include "type/data_type.h"
+#include "vectorization/functions/Md5ConcatWsFusion.h"
 
 namespace omniruntime::vectorization {
 using namespace omniruntime::expressions;
@@ -177,7 +178,8 @@ ExprEval::ExprEval(VectorBatch *vectorBatch, ExecutionContext *context): context
         vecBatch_.push_back(vectorBatch->Get(i));
         typeIds.push_back(vectorBatch->Get(i)->GetTypeId());
     }
-    rowSize = vectorBatch->GetRowCount();
+    inputRowSize = vectorBatch->GetRowCount();
+    rowSize = context->hasFilter ? context->GetResultRowSize() : inputRowSize;
 }
 
 ExprEval::ExprEval(ExecutionContext *context): context(context)
@@ -340,9 +342,9 @@ void ExprEval::Visit(const FieldExpr &e)
     }
     if (context->hasFilter) {
         auto isSelect = context->GetIsSelectRow();
-        int selectRow[context->GetResultRowSize()] = {-1};
+        int selectRow[inputRowSize] = {-1};
         int selectSize = 0;
-        for (int i = 0; i < context->GetResultRowSize(); i++) {
+        for (int i = 0; i < inputRowSize; i++) {
             if (isSelect[i]) {
                 selectRow[selectSize] = i;
                 ++selectSize;
@@ -524,8 +526,35 @@ void ExprEval::Visit(const IsNullExpr &e)
     inputValues_.push(result);
 }
 
+bool ExprEval::TryEvaluateMd5ConcatWsFusion(const FuncExpr &e)
+{
+    const auto fusionPlan = Md5ConcatWsFusion::Match(e);
+    if (fusionPlan.has_value()) {
+        std::vector<DataTypeId> fusedArgTypes(fusionPlan->concatWs->arguments.size());
+        std::transform(fusionPlan->concatWs->arguments.begin(), fusionPlan->concatWs->arguments.end(),
+            fusedArgTypes.begin(), [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
+        auto fusedSignature = std::make_shared<codegen::FunctionSignature>(
+            fusionPlan->fusedFunctionName, fusedArgTypes, e.dataType->GetId());
+        auto fusedFunction = VectorFunction::Find(fusedSignature, context->queryConfigRef());
+        if (fusedFunction != nullptr) {
+            for (Expr *argument : fusionPlan->concatWs->arguments) {
+                argument->Accept(*this);
+            }
+            BaseVector *fusedResult = nullptr;
+            fusedFunction->Apply(inputValues_, e.dataType, fusedResult, context);
+            inputValues_.push(fusedResult);
+            return true;
+        }
+    }
+    return false;
+}
+
 void ExprEval::Visit(const FuncExpr &e)
 {
+    if (TryEvaluateMd5ConcatWsFusion(e)) {
+        return;
+    }
+
     for (auto arg : e.arguments) {
         arg->Accept(*this);
     }
@@ -557,6 +586,10 @@ void ExprEval::Visit(const FuncExpr &e)
     // emit real field names instead of field0/field1. The Apply interface only passes the
     // output type, so stash the input type on the context for ToJson to read.
     if (e.funcName == "to_json" && !e.arguments.empty()) {
+        context->SetToJsonInputType(e.arguments[0]->dataType.get());
+    }
+    // json_string (Flink JSON_STRING) needs the same input DataType for ROW field names.
+    if (e.funcName == "json_string" && !e.arguments.empty()) {
         context->SetToJsonInputType(e.arguments[0]->dataType.get());
     }
 
