@@ -1,8 +1,10 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
  * Description: ApproxPercentile aggregate implementation (KLL sketch). Reference: approx_count_distinct.
- * - Partial: accumulates raw values into KLL sketch, reads percentile/accuracy from curVectorBatch; output VARBINARY.
- * - Final: merges VARBINARY partials, then estimateQuantile for each requested percentile; output scalar or ARRAY.
+ * - Partial:      accumulates raw values into KLL sketch, reads percentile/accuracy from curVectorBatch; output VARBINARY.
+ * - PartialMerge: merges VARBINARY partials into accumulator, re-serializes to VARBINARY on output.
+ * - Final:        merges VARBINARY partials, then estimateQuantile for each requested percentile; output scalar or ARRAY.
+ * - Complete:     accumulates raw values, then estimateQuantile for each requested percentile; output scalar or ARRAY.
  */
 #include "approx_percentile_aggregator.h"
 #include "operator/aggregation/aggregator/aggregator_factory.h"
@@ -231,7 +233,9 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void ApproxPercentileAggregator<IN_ID, OUT_ID>::InitState(AggregateState* state) {
     auto* aggState = ApproxPercentileAggState::CastState(state + aggStateOffset);
     auto* acc = new ApproxPercentileAccumulator();
-    if (IsInputRaw() && IsOutputPartial())
+    // Partial (raw->partial) and Complete (raw->final) both accumulate raw values, so ensure a sketch up front.
+    // PartialMerge / Final (input is VARBINARY partial) create the sketch lazily inside mergeDeserialized.
+    if (IsInputRaw())
         acc->ensureSketch(IN_ID, kll::kFromEpsilon(kDefaultAccuracy));
     stateAccumulatorPtrs_.push_back(reinterpret_cast<int64_t>(acc));
     aggState->accumulatorPtr = reinterpret_cast<int64_t>(acc);
@@ -625,9 +629,12 @@ ApproxPercentileAggregator<IN_ID, OUT_ID>::ApproxPercentileAggregator(const Data
 }
 
 /**
- * Factory entry: selects ApproxPercentileAggregator<IN, OUT> by value type (Partial) or output type (Final).
- * Partial: inputRaw=true, outputPartial=true, value type from inputTypes[0], output VARBINARY.
- * Final:   inputRaw=false, outputPartial=false, output type scalar or ARRAY from outputTypes.
+ * Factory entry: selects ApproxPercentileAggregator<IN, OUT> by stage (inputRaw/outputPartial) and value/output type.
+ *
+ * Partial:      inputRaw=true,  outputPartial=true;  value type -> VARBINARY.
+ * PartialMerge: inputRaw=false, outputPartial=true;  VARBINARY -> VARBINARY (merge serialized partials, re-serialize).
+ * Final:        inputRaw=false, outputPartial=false; VARBINARY -> scalar or ARRAY<value_type>.
+ * Complete:     inputRaw=true,  outputPartial=false; value type -> scalar or ARRAY<value_type> (single-stage, no shuffle).
  */
 std::unique_ptr<Aggregator> ApproxPercentileAggregatorFactory::CreateAggregator(const DataTypes& inputTypes,
     const DataTypes& outputTypes, std::vector<int32_t>& channels, bool inputRaw, bool outputPartial,
@@ -640,6 +647,15 @@ std::unique_ptr<Aggregator> ApproxPercentileAggregatorFactory::CreateAggregator(
         throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", "ApproxPercentile merge requires 1 column (partial)");
     type::DataTypeId valueTypeId = inputTypes.GetType(0)->GetId();
     type::DataTypeId outTypeId = outputTypes.GetType(0)->GetId();
+
+    // PartialMerge: VARBINARY partial -> VARBINARY partial (shuffle-merge stage between Partial and Final).
+    if (!inputRaw && outputPartial) {
+        if (valueTypeId != type::OMNI_VARBINARY || outTypeId != type::OMNI_VARBINARY)
+            throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR",
+                "ApproxPercentile partialMerge requires VARBINARY input/output");
+        return ApproxPercentileAggregator<type::OMNI_VARBINARY, type::OMNI_VARBINARY>::Create(inputTypes, outputTypes,
+            channels, inputRaw, outputPartial, isOverflowAsNull);
+    }
 
     if (inputRaw && outputPartial) {
         switch (valueTypeId) {
@@ -677,22 +693,55 @@ std::unique_ptr<Aggregator> ApproxPercentileAggregatorFactory::CreateAggregator(
             }
         }
     }
+    // Complete: raw value -> scalar or ARRAY<value_type> (single-stage, no shuffle). Output type equals value type.
+    if (inputRaw && !outputPartial) {
+        if (outTypeId == type::OMNI_ARRAY) {
+            type::DataTypeId elemId = outputTypes.GetType(0)->asArray().ElementType()->GetId();
+            if (elemId != valueTypeId)
+                throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR",
+                    "ApproxPercentile complete array element type must match value type");
+        } else if (outTypeId != valueTypeId) {
+            throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR",
+                "ApproxPercentile complete output type must match value type");
+        }
+        switch (valueTypeId) {
+            case type::OMNI_BYTE: return ApproxPercentileAggregator<type::OMNI_BYTE, type::OMNI_BYTE>::Create(inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull);
+            case type::OMNI_SHORT: return ApproxPercentileAggregator<type::OMNI_SHORT, type::OMNI_SHORT>::Create(inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull);
+            case type::OMNI_INT: return ApproxPercentileAggregator<type::OMNI_INT, type::OMNI_INT>::Create(inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull);
+            case type::OMNI_LONG: return ApproxPercentileAggregator<type::OMNI_LONG, type::OMNI_LONG>::Create(inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull);
+            case type::OMNI_FLOAT: return ApproxPercentileAggregator<type::OMNI_FLOAT, type::OMNI_FLOAT>::Create(inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull);
+            case type::OMNI_DOUBLE: return ApproxPercentileAggregator<type::OMNI_DOUBLE, type::OMNI_DOUBLE>::Create(inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull);
+            default: throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", "ApproxPercentile value type must be BYTE/SHORT/INT/LONG/FLOAT/DOUBLE");
+        }
+    }
+
     throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", "ApproxPercentile invalid inputRaw/outputPartial");
 }
 
-/* Explicit template instantiations: Partial (value type -> VARBINARY) and Final (VARBINARY -> value type or ARRAY). */
+/* Explicit template instantiations:
+ * - Partial      (value type -> VARBINARY)
+ * - PartialMerge (VARBINARY -> VARBINARY)
+ * - Final        (VARBINARY -> value type or ARRAY)
+ * - Complete     (value type -> value type or ARRAY) */
 template class ApproxPercentileAggregator<type::OMNI_BYTE, type::OMNI_VARBINARY>;
 template class ApproxPercentileAggregator<type::OMNI_SHORT, type::OMNI_VARBINARY>;
 template class ApproxPercentileAggregator<type::OMNI_INT, type::OMNI_VARBINARY>;
 template class ApproxPercentileAggregator<type::OMNI_LONG, type::OMNI_VARBINARY>;
 template class ApproxPercentileAggregator<type::OMNI_FLOAT, type::OMNI_VARBINARY>;
 template class ApproxPercentileAggregator<type::OMNI_DOUBLE, type::OMNI_VARBINARY>;
+template class ApproxPercentileAggregator<type::OMNI_VARBINARY, type::OMNI_VARBINARY>;
 template class ApproxPercentileAggregator<type::OMNI_VARBINARY, type::OMNI_BYTE>;
 template class ApproxPercentileAggregator<type::OMNI_VARBINARY, type::OMNI_SHORT>;
 template class ApproxPercentileAggregator<type::OMNI_VARBINARY, type::OMNI_INT>;
 template class ApproxPercentileAggregator<type::OMNI_VARBINARY, type::OMNI_LONG>;
 template class ApproxPercentileAggregator<type::OMNI_VARBINARY, type::OMNI_FLOAT>;
 template class ApproxPercentileAggregator<type::OMNI_VARBINARY, type::OMNI_DOUBLE>;
+template class ApproxPercentileAggregator<type::OMNI_BYTE, type::OMNI_BYTE>;
+template class ApproxPercentileAggregator<type::OMNI_SHORT, type::OMNI_SHORT>;
+template class ApproxPercentileAggregator<type::OMNI_INT, type::OMNI_INT>;
+template class ApproxPercentileAggregator<type::OMNI_LONG, type::OMNI_LONG>;
+template class ApproxPercentileAggregator<type::OMNI_FLOAT, type::OMNI_FLOAT>;
+template class ApproxPercentileAggregator<type::OMNI_DOUBLE, type::OMNI_DOUBLE>;
 
 }  // namespace op
 }  // namespace omniruntime
