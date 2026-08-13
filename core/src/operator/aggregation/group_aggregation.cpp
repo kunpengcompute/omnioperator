@@ -12,10 +12,16 @@
 #include "util/debug.h"
 #include "operator/aggregation/aggregator/aggregator_factory.h"
 #include "type/data_type.h"
+#include "vector/unsafe_vector.h"
 
 #if defined(DEBUG_OPERATOR) && defined(TRACE)
 #include <sstream>
 #endif
+
+#if defined(SVEHTMISSES) && !defined(OMNI_SVEHT32_HASH_AGG)
+#error "SVEHTMISSES requires OMNI_SVEHT32_HASH_AGG"
+#endif
+
 namespace omniruntime {
 namespace op {
 using namespace omniruntime::type;
@@ -1299,13 +1305,22 @@ void HashAggregationOperator::ProcessStatesWithNewGroups(
 struct SveInt32KeyLoader {
     BaseVector *vector = nullptr;
     uint32_t *values = nullptr;
+    uint32_t *dictValues = nullptr;
+    int32_t *dictIds = nullptr;
     uint32_t constValue = 0;
     bool isConst = false;
     bool constIsNull = false;
+    bool isDictionary = false;
 
     ALWAYS_INLINE uint32_t GetValue(int32_t row) const
     {
-        return isConst ? constValue : values[row];
+        if (isConst) {
+            return constValue;
+        }
+        if (isDictionary) {
+            return dictValues[dictIds[row]];
+        }
+        return values[row];
     }
 
     ALWAYS_INLINE bool IsNull(int32_t row) const
@@ -1327,6 +1342,13 @@ static SveInt32KeyLoader MakeSveInt32KeyLoader(BaseVector *vector)
         }
         return loader;
     }
+    if (vector->GetEncoding() == OMNI_DICTIONARY) {
+        auto *dictVector = reinterpret_cast<Vector<DictionaryContainer<int32_t>> *>(vector);
+        loader.isDictionary = true;
+        loader.dictValues = reinterpret_cast<uint32_t *>(unsafe::UnsafeDictionaryVector::GetDictionary(dictVector));
+        loader.dictIds = unsafe::UnsafeDictionaryVector::GetIds(dictVector);
+        return loader;
+    }
     loader.values = reinterpret_cast<uint32_t *>(VectorHelper::UnsafeGetValues(vector));
     return loader;
 }
@@ -1336,15 +1358,13 @@ static ALWAYS_INLINE bool IsConstVector(BaseVector *vector)
     return vector->GetEncoding() == OMNI_ENCODING_CONST;
 }
 
+static ALWAYS_INLINE bool IsDictionaryVector(BaseVector *vector)
+{
+    return vector->GetEncoding() == OMNI_DICTIONARY;
+}
+
 void HashAggregationOperator::EmplaceFixedInt32SveAos(VectorBatch *vecBatch, BaseVector *groupVector)
 {
-    if (groupVector->GetEncoding() == OMNI_DICTIONARY) {
-        FallbackSveAggToFixedInt32();
-        BaseVector *groupVectors[] = {groupVector};
-        Emplace(fixedInt32, vecBatch, groupVectors, 1);
-        return;
-    }
-
     const bool hasAgg = !aggregators.empty();
     const int32_t rowCount = vecBatch->GetRowCount();
 
@@ -1390,7 +1410,9 @@ void HashAggregationOperator::EmplaceFixedInt32SveAos(VectorBatch *vecBatch, Bas
         return;
     }
 
-    auto *values = reinterpret_cast<uint32_t *>(VectorHelper::UnsafeGetValues(groupVector));
+    const bool isDictionary = IsDictionaryVector(groupVector);
+    auto *values = isDictionary ? nullptr : reinterpret_cast<uint32_t *>(VectorHelper::UnsafeGetValues(groupVector));
+    auto loader = isDictionary ? MakeSveInt32KeyLoader(groupVector) : SveInt32KeyLoader {};
     std::vector<uint32_t> compactKeys;
     std::vector<uint32_t> compactRows;
     compactKeys.reserve(rowCount);
@@ -1410,13 +1432,14 @@ void HashAggregationOperator::EmplaceFixedInt32SveAos(VectorBatch *vecBatch, Bas
             }
             continue;
         }
-        if (values[rowIdx] == hashmap::SveAggAosHashTable32::kEmptyKey) {
+        const uint32_t key = isDictionary ? loader.GetValue(rowIdx) : values[rowIdx];
+        if (key == hashmap::SveAggAosHashTable32::kEmptyKey) {
             FallbackSveAggToFixedInt32();
             BaseVector *groupVectors[] = {groupVector};
             Emplace(fixedInt32, vecBatch, groupVectors, 1);
             return;
         }
-        compactKeys.emplace_back(values[rowIdx]);
+        compactKeys.emplace_back(key);
         compactRows.emplace_back(static_cast<uint32_t>(rowIdx));
     }
 
@@ -1508,19 +1531,12 @@ void HashAggregationOperator::EmplaceFixedInt32SveAos(VectorBatch *vecBatch, Bas
 void HashAggregationOperator::EmplaceFixedInt32PairSveAos(
     VectorBatch *vecBatch, BaseVector *groupVector0, BaseVector *groupVector1)
 {
-    if (groupVector0->GetEncoding() == OMNI_DICTIONARY || groupVector1->GetEncoding() == OMNI_DICTIONARY) {
-        FallbackSvePairAggToSerializeIfEmpty();
-        BaseVector *groupVectors[] = {groupVector0, groupVector1};
-        serialize->DecodeGroupByColumns(groupVectors, 2, vecBatch->GetRowCount());
-        Emplace(serialize, vecBatch, groupVectors, 2);
-        return;
-    }
-
     const bool hasAgg = !aggregators.empty();
     const int32_t rowCount = vecBatch->GetRowCount();
-    const bool hasConst = IsConstVector(groupVector0) || IsConstVector(groupVector1);
+    const bool needsKeyLoader = IsConstVector(groupVector0) || IsConstVector(groupVector1) ||
+                                IsDictionaryVector(groupVector0) || IsDictionaryVector(groupVector1);
 
-    if (hasConst) {
+    if (needsKeyLoader) {
         auto loader0 = MakeSveInt32KeyLoader(groupVector0);
         auto loader1 = MakeSveInt32KeyLoader(groupVector1);
         if (loader0.isConst && loader1.isConst) {
