@@ -870,4 +870,132 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_const_vect
     op::Operator::DeleteOperator(aggFinal);
     VectorHelper::FreeVecBatch(finalOutput);
 }
+
+// Three-stage: Partial -> PartialMerge -> Final. Two partials are merged into one VARBINARY, then finalized.
+// Validates the partialMerge stage (inputRaw=false, outputPartial=true) that was previously rejected.
+TEST(ApproxPercentileAggregationTest, approx_percentile_partial_merge_final)
+{
+    const int32_t rowsPerBatch = 1000;
+    std::vector<DataTypePtr> sourceTypesVec = { LongType(), DoubleType() };
+    std::vector<DataTypePtr> partialOutputTypes = { VarBinaryType(65536) };
+    std::vector<DataTypePtr> finalOutputTypes = { LongType() };
+
+    // Batch 1: values 0..999
+    VectorBatch* vec1 = new VectorBatch(rowsPerBatch);
+    Vector<int64_t>* v1 = new Vector<int64_t>(rowsPerBatch);
+    Vector<double>* p1 = new Vector<double>(rowsPerBatch);
+    for (int32_t rowIdx = 0; rowIdx < rowsPerBatch; ++rowIdx) {
+        v1->SetValue(rowIdx, static_cast<int64_t>(rowIdx));
+        p1->SetValue(rowIdx, 0.5);
+    }
+    vec1->Append(v1);
+    vec1->Append(p1);
+
+    // Batch 2: values 1000..1999
+    VectorBatch* vec2 = new VectorBatch(rowsPerBatch);
+    Vector<int64_t>* v2 = new Vector<int64_t>(rowsPerBatch);
+    Vector<double>* p2 = new Vector<double>(rowsPerBatch);
+    for (int32_t rowIdx = 0; rowIdx < rowsPerBatch; ++rowIdx) {
+        v2->SetValue(rowIdx, static_cast<int64_t>(1000 + rowIdx));
+        p2->SetValue(rowIdx, 0.5);
+    }
+    vec2->Append(v2);
+    vec2->Append(p2);
+
+    // Partial factory: raw (Long, Double) -> VARBINARY
+    std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
+    BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
+
+    auto aggP1 = partialFactory->CreateOperator();
+    aggP1->AddInput(vec1);
+    VectorBatch* out1 = nullptr;
+    (void)aggP1->GetOutput(&out1);
+    ASSERT_NE(out1, nullptr);
+
+    auto aggP2 = partialFactory->CreateOperator();
+    aggP2->AddInput(vec2);
+    VectorBatch* out2 = nullptr;
+    (void)aggP2->GetOutput(&out2);
+    ASSERT_NE(out2, nullptr);
+
+    // PartialMerge factory: VARBINARY -> VARBINARY (inputRaw=false, outputPartial=true)
+    std::vector<uint32_t> mergeAggFuncTypes = { OMNI_AGGREGATION_TYPE_APPROX_PERCENTILE };
+    auto mergeFactory = CreateAggregationOperatorFactory(mergeAggFuncTypes, std::vector<uint32_t>({0}),
+        partialOutputTypes, partialOutputTypes, std::vector<uint32_t>(), false, true, false);
+
+    auto aggMerge = mergeFactory->CreateOperator();
+    aggMerge->AddInput(out1);
+    aggMerge->AddInput(out2);
+    op::Operator::DeleteOperator(aggP1);
+    op::Operator::DeleteOperator(aggP2);
+
+    VectorBatch* mergedOutput = nullptr;
+    (void)aggMerge->GetOutput(&mergedOutput);
+    ASSERT_NE(mergedOutput, nullptr);
+    EXPECT_EQ(mergedOutput->GetRowCount(), 1);
+    EXPECT_EQ(mergedOutput->GetVectorCount(), 1);
+
+    // Final factory: VARBINARY -> Long
+    auto aggFinal = finalFactory->CreateOperator();
+    aggFinal->AddInput(mergedOutput);
+    op::Operator::DeleteOperator(aggMerge);
+
+    VectorBatch* finalOutput = nullptr;
+    (void)aggFinal->GetOutput(&finalOutput);
+    ASSERT_NE(finalOutput, nullptr);
+    auto* resultVec = static_cast<Vector<int64_t>*>(finalOutput->Get(0));
+    int64_t approxMedian = resultVec->GetValue(0);
+    // Median of 0..1999 is ~999.5; allow generous tolerance for KLL approximation.
+    EXPECT_GE(approxMedian, 800);
+    EXPECT_LE(approxMedian, 1200);
+
+    op::Operator::DeleteOperator(aggFinal);
+    VectorHelper::FreeVecBatch(finalOutput);
+}
+
+// Single-stage Complete: raw values -> final scalar (inputRaw=true, outputPartial=false). No shuffle.
+TEST(ApproxPercentileAggregationTest, approx_percentile_complete_single_stage)
+{
+    const int32_t rowCount = 2000;
+    std::vector<DataTypePtr> sourceTypesVec = { LongType(), DoubleType() };
+    std::vector<DataTypePtr> completeOutputTypes = { LongType() };
+
+    VectorBatch* vecBatch = new VectorBatch(rowCount);
+    Vector<int64_t>* valueCol = new Vector<int64_t>(rowCount);
+    Vector<double>* percentileCol = new Vector<double>(rowCount);
+    for (int32_t rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
+        valueCol->SetValue(rowIdx, static_cast<int64_t>(rowIdx));
+        percentileCol->SetValue(rowIdx, 0.5);
+    }
+    vecBatch->Append(valueCol);
+    vecBatch->Append(percentileCol);
+
+    // Complete factory: raw (Long, Double) -> Long (inputRaw=true, outputPartial=false).
+    // Create directly (like BuildPartialFinalFactories) because approx_percentile takes 2 input columns
+    // (value + percentile) for one aggregator; CreateAggregationOperatorFactory would treat {0,1} as two aggregators.
+    DataTypes sourceTypes(sourceTypesVec);
+    std::vector<std::vector<uint32_t>> aggsInputColsVector = { std::vector<uint32_t>({0, 1}) };
+    std::vector<uint32_t> aggFuncTypes = { OMNI_AGGREGATION_TYPE_APPROX_PERCENTILE };
+    std::vector<uint32_t> maskCols = { static_cast<uint32_t>(-1) };
+    std::vector<DataTypes> aggsOutputTypes = { DataTypes(completeOutputTypes) };
+    std::vector<bool> inputRaws = { true };
+    std::vector<bool> outputPartials = { false };
+    auto completeFactory = std::make_unique<AggregationOperatorFactory>(sourceTypes, aggFuncTypes, aggsInputColsVector,
+        maskCols, aggsOutputTypes, inputRaws, outputPartials, false);
+    completeFactory->Init();
+
+    auto aggComplete = completeFactory->CreateOperator();
+    aggComplete->AddInput(vecBatch);
+
+    VectorBatch* completeOutput = nullptr;
+    (void)aggComplete->GetOutput(&completeOutput);
+    ASSERT_NE(completeOutput, nullptr);
+    auto* resultVec = static_cast<Vector<int64_t>*>(completeOutput->Get(0));
+    int64_t approxMedian = resultVec->GetValue(0);
+    EXPECT_GE(approxMedian, static_cast<int64_t>(rowCount * 0.4));
+    EXPECT_LE(approxMedian, static_cast<int64_t>(rowCount * 0.6));
+
+    op::Operator::DeleteOperator(aggComplete);
+    VectorHelper::FreeVecBatch(completeOutput);
+}
 }
