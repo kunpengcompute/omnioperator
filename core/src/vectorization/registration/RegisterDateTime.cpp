@@ -39,10 +39,12 @@
 #include "../functions/DateFormat.h"
 #include "../functions/FromUnixTime.h"
 #include "../functions/CurrentDateTimeFunctions.h"
+#include "../functions/ConvertTz.h"
 #include "../functions/DateTrunc.h"
 #include "../functions/Floor.h"
 #include "../functions/Ceil.h"
 #include "../functions/Time.h"
+#include "../functions/TimestampDiff.h"
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -103,6 +105,8 @@ void RegisterDatetimeFunctions(const std::string &prefix)
 
     RegisterFromUnixTimeFunction(prefix + "from_unixtime");
 
+    RegisterConvertTzFunction(prefix + "convert_tz");
+
     RegisterFunction<LocalTimeFunction, int64_t>(prefix + "flink_localtime", {}, OMNI_LONG);
 
     RegisterFunction<LocalTimestampFunction, int64_t>(prefix + "flink_localtimestamp", {}, OMNI_LONG);
@@ -118,5 +122,7 @@ void RegisterDatetimeFunctions(const std::string &prefix)
     RegisterCeilFunction(prefix + "flink_ceil_time");
 
     RegisterTimeFunction(prefix + "time");
+
+    RegisterTimestampDiffFunction(prefix + "timestampdiff");
 }
 }

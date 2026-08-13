@@ -31,8 +31,6 @@ void RegisterMathFunctions(const std::string &prefix)
     RegisterFunction<AbsFunction, int64_t, int64_t>(prefix + "abs", {OMNI_LONG}, OMNI_LONG);
     RegisterFunction<AbsFunction, float, float>(prefix + "abs", {OMNI_FLOAT}, OMNI_FLOAT);
     RegisterFunction<AbsFunction, double, double>(prefix + "abs", {OMNI_DOUBLE}, OMNI_DOUBLE);
-    RegisterFunction<AbsFunction, double, double>(prefix + "abs", {OMNI_DECIMAL64}, OMNI_DECIMAL64);
-    RegisterFunction<AbsFunction, double, double>(prefix + "abs", {OMNI_DECIMAL128}, OMNI_DECIMAL128);
     RegisterFunction<AcoshFunction, double, double>(prefix + "acosh", {OMNI_DOUBLE}, OMNI_DOUBLE);
     RegisterFunction<AcosFunction, double, double>(prefix + "acos", {OMNI_DOUBLE}, OMNI_DOUBLE);
     RegisterUnaryNumeric<NegativeFunction>({prefix + "negative"});

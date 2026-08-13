@@ -11,6 +11,7 @@
  #include "../functions/GetJsonObject.h"
  #include "../functions/IsJson.h"
  #include "../functions/JsonExists.h"
+ #include "../functions/JsonString.h"
  #include "RegistrationHelpers.h"
  
  namespace omniruntime::vectorization {
@@ -81,6 +82,26 @@
          {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_BOOLEAN, jsonExistsFunc);
      VectorFunction::RegisterVectorFunction(prefix + "json_exists",
          {OMNI_CHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_BOOLEAN, jsonExistsFunc);
+
+     // json_string: Flink SQL JSON_STRING(value). Serializes a scalar or composite value
+     // into a JSON string. NULL input -> NULL output. Same instance handles all registered
+     // input types (dispatch happens inside Apply via the vector's type id).
+     // Out of scope this version: DECIMAL / VARBINARY / DATE32 / TIMESTAMP.
+     auto jsonStringFunc = std::make_shared<JsonStringFunction>();
+     // Scalar types
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_BOOLEAN}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_BYTE}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_SHORT}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_INT}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_LONG}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_FLOAT}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_DOUBLE}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_VARCHAR}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_CHAR}, OMNI_VARCHAR, jsonStringFunc);
+     // Composite types
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_ARRAY}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_MAP}, OMNI_VARCHAR, jsonStringFunc);
+     VectorFunction::RegisterVectorFunction(prefix + "json_string", {OMNI_ROW}, OMNI_VARCHAR, jsonStringFunc);
  }
  }
  

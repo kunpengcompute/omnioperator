@@ -4,11 +4,17 @@
  */
 #include "join_hash_table_variants.h"
 #include "operator/util/operator_util.h"
+#include "vector/unsafe_vector.h"
+#ifdef SVEHT
+#include <cstdio>
+#include "simd/sve.h"
+#endif
 
 namespace omniruntime {
 namespace op {
 static constexpr uint32_t ARRAY_THRESHOLD = 8;
 static constexpr double LOAD_FACTOR = 0.75;
+static constexpr double SVE_LOAD_FACTOR = 0.75;
 static constexpr uint32_t BLOCK_SIZE = 1024;
 static constexpr uint8_t MIN_DEGREE = 5;
 
@@ -29,6 +35,10 @@ JoinHashTableVariants<KeyType, RowRefListType>::JoinHashTableVariants(uint32_t h
       isMultiCols(isMultiCols)
 {
     hashTables = std::vector<std::unique_ptr<JoinHashTableVariant<KeyType, RowRefListType>>>(hashTableCount);
+#ifdef SVEHT
+    sve32HashTables = std::vector<std::unique_ptr<SveJoinHashTable32<uint32_t, uint32_t>>>(hashTableCount);
+    sve32RowRefPools = std::vector<std::vector<RowRefListType *>>(hashTableCount);
+#endif
     arrayTables = std::vector<std::unique_ptr<DefaultArrayMap<RowRefListType>>>(hashTableCount);
     hashTableTypes = std::vector<HashTableImplementationType>(hashTableCount);
     maxMins = std::vector<std::pair<int64_t, int64_t>>(hashTableCount);
@@ -215,6 +225,29 @@ InsertResult<RowRefListType *> JoinHashTableVariants<KeyType, RowRefListType>::F
         return hashTables[partition]->FindValueFromHashmap(key);
     }
 }
+
+#ifdef SVEHT
+template <typename KeyType, typename RowRefListType>
+int32_t JoinHashTableVariants<KeyType, RowRefListType>::ProbeBatchSVE32(
+    const uint32_t *probeKeys,
+    const uint32_t *probePayloads,
+    int32_t numRows,
+    uint32_t partition,
+    uint32_t *outputHandles,
+    uint32_t *outputProbePayloads) const
+{
+    if constexpr (!(std::is_same_v<KeyType, int32_t> || std::is_same_v<KeyType, uint32_t>)) {
+        return 0;
+    } else {
+        return sve32HashTables[partition]->ProbeBatchSVE(
+            probeKeys,
+            probePayloads,
+            numRows,
+            outputHandles,
+            outputProbePayloads);
+    }
+}
+#endif
 
 template<typename KeyType, typename RowRefListType>
 KeyType JoinHashTableVariants<KeyType, RowRefListType>::GetKeyValue(BaseVector **probeHashColumns,
@@ -736,6 +769,15 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceFixedKeyToNormalHash
 template <typename KeyType, typename RowRefListType>
 void JoinHashTableVariants<KeyType, RowRefListType>::BuildHashTable(int32_t partitionIndex)
 {
+    /// if build size partition is an empty partition, we need to provide a empty HashTable for probe size.
+    if (totalRowCount[partitionIndex] == 0) {
+        if (isFixedKeys) {
+            BuildNormalHashTableWithFixedKey(partitionIndex, MIN_DEGREE);
+        } else {
+            BuildNormalHashTableWithVariableKey(partitionIndex, MIN_DEGREE);
+        }
+        return;
+    }
     auto initDegree = static_cast<uint8_t>(std::ceil(log2(totalRowCount[partitionIndex] / LOAD_FACTOR)));
     auto lengthOfArrayHT = static_cast<int64_t>(std::pow(2, initDegree));
     bool shouldBuildArrayTable = false;
@@ -778,6 +820,105 @@ void JoinHashTableVariants<KeyType, RowRefListType>::BuildHashTable(int32_t part
     }
 
     if (!shouldBuildArrayTable) {
+#ifdef SVEHT
+        if constexpr (std::is_same_v<KeyType, int32_t> || std::is_same_v<KeyType, uint32_t>) {
+            if (!isMultiCols && joinType == OMNI_JOIN_TYPE_INNER && hashTableCount == 1) {
+                auto sveInitDegree =
+                    static_cast<uint8_t>(std::ceil(log2(totalRowCount[partitionIndex] / SVE_LOAD_FACTOR)));
+                auto sveHashTable =
+                    std::make_unique<SveJoinHashTable32<uint32_t, uint32_t>>(std::max(sveInitDegree, MIN_DEGREE));
+                auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
+                auto &vecBatchesOnePartition = inputVecBatches[partitionIndex];
+                const int32_t buildHashCol = buildHashCols[0];
+                auto &rowRefPool = sve32RowRefPools[partitionIndex];
+
+                for (int32_t vecBatchIdx = 0; vecBatchIdx < static_cast<int32_t>(vecBatchesOnePartition.size());
+                     ++vecBatchIdx) {
+                    VectorBatch *vecBatch = vecBatchesOnePartition[vecBatchIdx];
+                    auto *buildVector = vecBatch->Get(buildHashCol);
+                    const int32_t rowCount = vecBatch->GetRowCount();
+                    std::vector<uint32_t> compactedKeys(static_cast<size_t>(rowCount));
+                    std::vector<uint32_t> buildRowIdx(static_cast<size_t>(rowCount));
+                    std::vector<uint32_t> compactedBuildRowIdx(static_cast<size_t>(rowCount));
+                    for (int32_t offset = 0; offset < rowCount; ++offset) {
+                        buildRowIdx[static_cast<size_t>(offset)] = static_cast<uint32_t>(offset);
+                    }
+
+                    int32_t compactedCount = 0;
+                    uint32_t *keysForBuild = compactedKeys.data();
+                    uint32_t *rowIdxForBuild = compactedBuildRowIdx.data();
+
+                    if (buildVector->GetEncoding() == OMNI_ENCODING_CONST) {
+                        if (!buildVector->IsNull(0)) {
+                            compactedCount = rowCount;
+                            compactedKeys.assign(static_cast<size_t>(rowCount),
+                                static_cast<uint32_t>(
+                                    static_cast<ConstVector<KeyType> *>(buildVector)->GetConstValue()));
+                            keysForBuild = compactedKeys.data();
+                            rowIdxForBuild = buildRowIdx.data();
+                        }
+                    } else if (buildVector->GetEncoding() != OMNI_DICTIONARY) {
+                        auto *rawValues = omniruntime::vec::unsafe::UnsafeVector::GetRawValues(
+                            reinterpret_cast<Vector<KeyType> *>(buildVector));
+                        auto *buildNulls = omniruntime::vec::unsafe::UnsafeBaseVector::GetNulls(buildVector);
+                        const bool isAllNotNull = !buildVector->HasNull() ||
+                            is_null_bitmap_all_zero_chunk256(buildNulls, static_cast<size_t>(rowCount));
+                        if (isAllNotNull) {
+                            compactedCount = rowCount;
+                            keysForBuild = reinterpret_cast<uint32_t *>(rawValues);
+                            rowIdxForBuild = buildRowIdx.data();
+                        } else {
+                            compactedCount = compact_u32_array_using_null_bitmap_sve<true>(
+                                buildNulls,
+                                reinterpret_cast<uint32_t *>(rawValues),
+                                compactedKeys.data(),
+                                rowCount,
+                                buildRowIdx.data(),
+                                compactedBuildRowIdx.data());
+                        }
+                    } else {
+                        auto *dictVector = reinterpret_cast<Vector<DictionaryContainer<KeyType>> *>(buildVector);
+                        auto *dictSrc = reinterpret_cast<const uint32_t *>(
+                            omniruntime::vec::unsafe::UnsafeDictionaryVector::GetDictionary(dictVector));
+                        auto *dictIndices = reinterpret_cast<const uint32_t *>(
+                            omniruntime::vec::unsafe::UnsafeDictionaryVector::GetIds(dictVector));
+                        auto *buildNulls = omniruntime::vec::unsafe::UnsafeBaseVector::GetNulls(buildVector);
+                        compactedCount = compact_u32_dict_using_null_bitmap_sve<true>(
+                            buildNulls,
+                            dictSrc,
+                            dictIndices,
+                            compactedKeys.data(),
+                            rowCount,
+                            buildRowIdx.data(),
+                            compactedBuildRowIdx.data());
+                    }
+
+                    for (int32_t idx = 0; idx < compactedCount; ++idx) {
+                        const uint32_t key = keysForBuild[idx];
+                        const uint32_t offset = rowIdxForBuild[idx];
+                        RowRefListType *rowRef = nullptr;
+                        auto ret = sveHashTable->InsertJoinKeysToHashmap(key);
+
+                        if (ret.IsInsert()) {
+                            rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
+                            *rowRef = RowRefListType(offset, static_cast<uint32_t>(vecBatchIdx));
+                            rowRefPool.push_back(rowRef);
+                            ret.SetValue(static_cast<uint32_t>(rowRefPool.size() - 1));
+                        } else {
+                            rowRef = rowRefPool[ret.GetValue()];
+                            rowRef->Insert({offset, static_cast<uint32_t>(vecBatchIdx)}, arenaAllocator);
+                        }
+                    }
+                }
+
+                sve32HashTables[partitionIndex] = std::move(sveHashTable);
+                hashTableTypes[partitionIndex] = HashTableImplementationType::SVE_HASH_TABLE32;
+                hashTableSize++;
+                return;
+            }
+        }
+#endif
+
         if (isFixedKeys) {
             BuildNormalHashTableWithFixedKey(partitionIndex, initDegree);
         } else {

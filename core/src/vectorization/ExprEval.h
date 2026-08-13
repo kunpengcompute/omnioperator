@@ -51,11 +51,16 @@ public:
     std::unordered_map<std::string, int32_t> paramNameToIdxMap;
 
 private:
+    bool TryEvaluateMd5ConcatWsFusion(const expressions::FuncExpr &e);
+
     std::vector<type::DataTypeId> typeIds;
     op::ExecutionContext *context;
     std::vector<vec::BaseVector *> vecBatch_;
     std::stack<vec::BaseVector *> inputValues_;
     int32_t rowSize;
+    // Row count of the input batch. Differs from rowSize when a filter is active, because
+    // then the expression tree runs over the compacted (selected) rows only.
+    int32_t inputRowSize = 0;
     mem::Allocator *allocator = mem::Allocator::GetAllocator();
 };
 }
