@@ -8,6 +8,7 @@
 #include "../functions/Comparisons.h"
 #include "../functions/IsNull.h"
 #include "../functions/MathFunctions.h"
+#include "../functions/TryArithmetic.h"
 #include "../functions/HexFunctions.h"
 #include "../functions/BinFunction.h"
 #include "../functions/ConvFunction.h"
@@ -25,6 +26,7 @@ void RegisterMathFunctions(const std::string &prefix)
     RegisterBinaryNumeric<MultiplyFunction>({prefix + "multiply"});
     RegisterBinaryNumeric<DivideFunction>({prefix + "divide"});
     RegisterBinaryNumeric<RemainderFunction>({prefix + "modulus"});
+    RegisterTryArithmeticFunctions(prefix);
     RegisterFunction<AbsFunction, int8_t, int8_t>(prefix + "abs", {OMNI_BYTE}, OMNI_BYTE);
     RegisterFunction<AbsFunction, int16_t, int16_t>(prefix + "abs", {OMNI_SHORT}, OMNI_SHORT);
     RegisterFunction<AbsFunction, int32_t, int32_t>(prefix + "abs", {OMNI_INT}, OMNI_INT);
