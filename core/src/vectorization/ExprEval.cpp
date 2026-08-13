@@ -15,6 +15,15 @@ using namespace omniruntime::mem;
 using namespace omniruntime::vec;
 using namespace omniruntime::op;
 
+BaseVector *PreserveDecimalType(BaseVector *source, BaseVector *projected)
+{
+    if (source->GetDataType() != nullptr &&
+        (source->GetTypeId() == OMNI_DECIMAL64 || source->GetTypeId() == OMNI_DECIMAL128)) {
+        VectorHelper::SetVectorDataType(projected, source->GetDataType().get());
+    }
+    return projected;
+}
+
 template <typename T>
 BaseVector *ColumnProjectionHelper(BaseVector *colVec, int32_t numSelectedRows)
 {
@@ -25,12 +34,13 @@ BaseVector *ColumnProjectionHelper(BaseVector *colVec, int32_t numSelectedRows)
         if (constVec->HasNull() && constVec->IsNull(0)) {
             newConst->SetNulls(0, true, numSelectedRows);
         }
-        return newConst;
+        return PreserveDecimalType(colVec, newConst);
     }
     if (colVec->GetEncoding() == OMNI_DICTIONARY) {
-        return reinterpret_cast<Vector<DictionaryContainer<T>> *>(colVec)->Slice(0, numSelectedRows);
+        return PreserveDecimalType(
+            colVec, reinterpret_cast<Vector<DictionaryContainer<T>> *>(colVec)->Slice(0, numSelectedRows));
     }
-    return reinterpret_cast<Vector<T> *>(colVec)->Slice(0, numSelectedRows);
+    return PreserveDecimalType(colVec, reinterpret_cast<Vector<T> *>(colVec)->Slice(0, numSelectedRows));
 }
 
 template <typename T>
@@ -43,13 +53,15 @@ BaseVector *ColumnProjectionCopyPositionsHelper(BaseVector *colVec, int32_t *sel
         if (constVec->HasNull() && constVec->IsNull(0)) {
             newConst->SetNulls(0, true, numSelectedRows);
         }
-        return newConst;
+        return PreserveDecimalType(colVec, newConst);
     }
     if (colVec->GetEncoding() == OMNI_DICTIONARY) {
-        return reinterpret_cast<Vector<DictionaryContainer<T>> *>(colVec)->CopyPositions(selectedRows, 0,
-            numSelectedRows);
+        return PreserveDecimalType(colVec,
+            reinterpret_cast<Vector<DictionaryContainer<T>> *>(colVec)->CopyPositions(
+                selectedRows, 0, numSelectedRows));
     }
-    return reinterpret_cast<Vector<T> *>(colVec)->CopyPositions(selectedRows, 0, numSelectedRows);
+    return PreserveDecimalType(
+        colVec, reinterpret_cast<Vector<T> *>(colVec)->CopyPositions(selectedRows, 0, numSelectedRows));
 }
 
 template <typename T>
@@ -266,6 +278,9 @@ void ExprEval::Visit(const LiteralExpr &e)
         }
         if (constVec != nullptr && e.isNull) {
             constVec->SetNulls(0, true, constVec->GetSize());
+        }
+        if (constVec != nullptr && (typeId == OMNI_DECIMAL64 || typeId == OMNI_DECIMAL128)) {
+            VectorHelper::SetVectorDataType(constVec, e.dataType.get());
         }
         inputValues_.push(constVec);
         return;
