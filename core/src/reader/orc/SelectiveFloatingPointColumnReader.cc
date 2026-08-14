@@ -20,6 +20,26 @@ namespace omniruntime::reader {
 void SelectiveFloatingPointColumnReader::read(
     uint64_t rowsToRead, common::RowSet activeRows, int omniTypeId)
 {
+    const auto typeId = static_cast<type::DataTypeId>(omniTypeId);
+    const auto *filter = hasFilter() ? spec_->filter() : nullptr;
+    if (filter != nullptr && typeId == type::OMNI_FLOAT) {
+        // Float value filters are not implemented yet. Fail before decoding if a future
+        // ScanSpec change starts pushing one without adding the matching reader evaluation.
+        switch (filter->kind()) {
+            case ::common::FilterKind::kAlwaysFalse:
+            case ::common::FilterKind::kAlwaysTrue:
+            case ::common::FilterKind::kIsNull:
+            case ::common::FilterKind::kIsNotNull:
+                break;
+            default:
+                throw omniruntime::exception::OmniException(
+                    "EXPRESSION_NOT_SUPPORT",
+                    "SelectiveFloatingPointColumnReader unsupported filter kind: " +
+                        std::to_string(static_cast<int>(filter->kind())) +
+                        ", omniTypeId: " + std::to_string(omniTypeId));
+        }
+    }
+
     decoded_ = makeNewVector(
         rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId));
     inner_->next(decoded_.get(), rowsToRead, nullptr, omniTypeId);
@@ -29,14 +49,12 @@ void SelectiveFloatingPointColumnReader::read(
         return;
     }
 
-    const auto typeId = static_cast<type::DataTypeId>(omniTypeId);
     if (typeId != type::OMNI_DOUBLE && typeId != type::OMNI_FLOAT) {
         throw omniruntime::exception::OmniException(
             "EXPRESSION_NOT_SUPPORT",
             "SelectiveFloatingPointColumnReader unsupported omniTypeId: " + std::to_string(omniTypeId));
     }
 
-    const auto *filter = spec_->filter();
     outputRows_.clear();
     outputRows_.reserve(activeRows.size());
     for (auto row : activeRows) {

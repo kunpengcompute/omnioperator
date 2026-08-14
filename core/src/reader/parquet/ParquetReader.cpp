@@ -75,7 +75,9 @@ bool ReadAndFilterData(ParquetRowReader& rowReaderPtr,
         return false;
     }
     try {
-        uint8_t *bitMark = predicateCondition->compute(*recordBatch);
+        auto predicateResult = predicateCondition->compute(*recordBatch);
+        // WHERE keeps TRUE only; FALSE and UNKNOWN are both rejected.
+        uint8_t *bitMark = predicateResult.trueBits;
         int32_t vectorSize = (*recordBatch)[0]->GetSize();
         if (omniruntime::BitUtil::CountBits(reinterpret_cast<const uint64_t *>(bitMark), 0, vectorSize) == 0) {
             ClearRecordBatch(*recordBatch);
@@ -84,7 +86,8 @@ bool ReadAndFilterData(ParquetRowReader& rowReaderPtr,
         batchRowSize = FilterData(bitMark, recordBatch, vectorSize, predicateCondition->getIsAllNullColumns(),
                                   predicateCondition->getIsAllNotNullColumns());
     } catch (const std::exception &e) {
-        LogError("filterData fail: %s", e.what());
+        ClearRecordBatch(*recordBatch);
+        throw OmniException("OPERATOR_RUNTIME_ERROR", std::string("Parquet predicate filtering failed: ") + e.what());
     }
     return false;
 }
