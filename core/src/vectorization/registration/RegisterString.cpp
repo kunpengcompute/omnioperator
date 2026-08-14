@@ -13,6 +13,10 @@
 #include "../functions/EqualStringFunction.h"
 #include "../functions/ConcatFunction.h"
 #include "../functions/ReverseFunction.h"
+#include "../functions/FusedMd5ConcatWsFunction.h"
+#ifdef OMNI_HAVE_ISAL_CRYPTO_MD5
+#include "../functions/Md5VectorFunction.h"
+#endif
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -231,7 +235,15 @@ void RegisterStringFunctions(const std::string &prefix)
 
     RegisterFunction<Sha1HexStringFunction, std::string, std::string_view>(prefix + "sha1", {OMNI_VARBINARY}, OMNI_VARCHAR);
     RegisterFunction<Sha2HexStringFunction, std::string, std::string_view, int32_t>(prefix + "sha2", {OMNI_VARBINARY, OMNI_INT}, OMNI_VARCHAR);
-    RegisterFunction<Md5Function, std::string, std::string_view>(prefix + "Md5", {OMNI_VARBINARY}, OMNI_VARCHAR);
+#ifdef OMNI_HAVE_ISAL_CRYPTO_MD5
+    VectorFunction::RegisterVectorFunctionFactory(
+        prefix + "Md5", {OMNI_VARBINARY}, OMNI_VARCHAR, MakeMd5VectorFunction);
+#else
+    RegisterFunction<Md5Function, std::string, std::string_view>(
+        prefix + "Md5", {OMNI_VARBINARY}, OMNI_VARCHAR);
+#endif
+    VectorFunction::RegisterVectorFunctionFactory(
+        FusedMd5ConcatWsSignatures(prefix + "FusedMd5ConcatWs"), MakeFusedMd5ConcatWsFunction);
     RegisterFunction<StaticInvokeVarcharTypeWriteSideCheckFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeVarcharTypeWriteSideCheck", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
     RegisterFunction<StaticInvokeCharTypeWriteSideCheckFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeCharTypeWriteSideCheck", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
     RegisterFunction<StaticInvokeCharReadPaddingFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeCharReadPadding", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
