@@ -13,6 +13,10 @@
 
 #include "operator/hashmap/base_hash_map.h"
 
+#if defined(SVEHTMISSES) && !defined(OMNI_SVEHT32_HASH_AGG)
+#error "SVEHTMISSES requires OMNI_SVEHT32_HASH_AGG"
+#endif
+
 #ifndef likely
 #define likely(x) __builtin_expect(!!(x), 1)
 #endif
