@@ -84,6 +84,9 @@ private:
     int64_t filePreloadThreshold_ = 8 << 20;
     std::shared_ptr<nlohmann::json> enhancementJson_;
     std::shared_ptr<common::JulianGregorianRebase> julianPtr_;
+    // Session-timezone modern raw offset (micros) passed from the JVM, used by the
+    // Spark-compatible ORC instant reader to reverse the writer's tz shift.
+    int64_t timezoneRawOffsetMicros_ = 0;
     std::shared_ptr<common::PredicateCondition> predicatePtr_;
     std::string ugiString_;
     int64_t splitStart_;
@@ -226,6 +229,11 @@ public:
     const std::shared_ptr<common::JulianGregorianRebase> &GetJulianPtr() const
     {
         return julianPtr_;
+    }
+
+    int64_t GetTimezoneRawOffsetMicros() const
+    {
+        return timezoneRawOffsetMicros_;
     }
 
     const std::shared_ptr<common::PredicateCondition> &GetPredicatePtr() const

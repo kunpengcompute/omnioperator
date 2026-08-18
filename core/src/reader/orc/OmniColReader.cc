@@ -124,7 +124,8 @@ namespace omniruntime::reader {
     * Create a reader for the given stripe.
     */
     std::unique_ptr<ColumnReader> omniBuildReader(const Type& type,
-                                                 StripeStreams& stripe, common::JulianGregorianRebase *julianPtr) {
+                                                 StripeStreams& stripe, common::JulianGregorianRebase *julianPtr,
+                                                 int64_t rawOffsetMicros) {
         switch (static_cast<int64_t>(type.getKind())) {
             case ::orc::DATE:
             case ::orc::INT:
@@ -154,13 +155,13 @@ namespace omniruntime::reader {
                 return std::make_unique<OmniByteColumnReader>(type, stripe);
 
             case ::orc::STRUCT:
-                return std::make_unique<OmniStructColumnReader>(type, stripe, julianPtr);
+                return std::make_unique<OmniStructColumnReader>(type, stripe, julianPtr, rawOffsetMicros);
 
             case ::orc::TIMESTAMP:
-                return std::make_unique<OmniTimestampColumnReader>(type, stripe, false, julianPtr);
+                return std::make_unique<OmniTimestampColumnReader>(type, stripe, false, julianPtr, rawOffsetMicros);
 
             case ::orc::TIMESTAMP_INSTANT:
-                return std::make_unique<OmniTimestampColumnReader>(type, stripe, true, julianPtr);
+                return std::make_unique<OmniTimestampColumnReader>(type, stripe, true, julianPtr, rawOffsetMicros);
 
             case ::orc::DECIMAL:
                 // Is this a Hive 0.11 or 0.12 file?
@@ -172,9 +173,9 @@ namespace omniruntime::reader {
                     return std::make_unique<OmniDecimal128ColumnReader>(type, stripe);
                 }
             case ::orc::MAP:
-                return std::make_unique<OmniMapColumnReader>(type, stripe, julianPtr);
+                return std::make_unique<OmniMapColumnReader>(type, stripe, julianPtr, rawOffsetMicros);
             case ::orc::LIST:
-                return std::make_unique<OmniListColumnReader>(type, stripe, julianPtr);
+                return std::make_unique<OmniListColumnReader>(type, stripe, julianPtr, rawOffsetMicros);
             case ::orc::FLOAT:
                 return std::make_unique<OmniFloatColumnReader>(type, stripe);
             case ::orc::DOUBLE:
@@ -257,7 +258,7 @@ namespace omniruntime::reader {
     * OmniStructColumnReader funcs
     */
     OmniStructColumnReader::OmniStructColumnReader(const Type& type, StripeStreams& stripe,
-        common::JulianGregorianRebase *julianPtr): OmniColumnReader(type, stripe), type_(&type) {
+        common::JulianGregorianRebase *julianPtr, int64_t rawOffsetMicros): OmniColumnReader(type, stripe), type_(&type) {
         // count the number of selected sub-columns
         const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
         switch (static_cast<int64_t>(stripe.getEncoding(columnId).kind())) {
@@ -265,7 +266,7 @@ namespace omniruntime::reader {
                 for(unsigned int i = 0; i < type.getSubtypeCount(); ++i) {
                     const Type& child = *type.getSubtype(i);
                     if (selectedColumns[static_cast<uint64_t>(child.getColumnId())]) {
-                        children.push_back(omniBuildReader(child, stripe, julianPtr));
+                        children.push_back(omniBuildReader(child, stripe, julianPtr, rawOffsetMicros));
                         selectedChildIndices_.push_back(i);
                     }
                 }
@@ -372,7 +373,8 @@ namespace omniruntime::reader {
      * OmniListColumnReader funcs
      */
     OmniListColumnReader::OmniListColumnReader(const orc::Type& type, orc::StripeStreams& stripe,
-                                               common::JulianGregorianRebase *julianPtr): OmniColumnReader(type, stripe), orcType(&type) {
+                                               common::JulianGregorianRebase *julianPtr,
+                                               int64_t rawOffsetMicros): OmniColumnReader(type, stripe), orcType(&type) {
         // count the number of selected sub-columns
         const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
         RleVersion vers = omniConvertRleVersion(stripe.getEncoding(columnId).kind());
@@ -383,7 +385,7 @@ namespace omniruntime::reader {
         rle = createOmniRleDecoder(std::move(stream), false, vers, memoryPool);
         const Type& childType = *type.getSubtype(0);
         if (selectedColumns[static_cast<uint64_t>(childType.getColumnId())]) {
-            child = omniBuildReader(childType, stripe, julianPtr);
+            child = omniBuildReader(childType, stripe, julianPtr, rawOffsetMicros);
         }
     }
 
@@ -471,7 +473,8 @@ namespace omniruntime::reader {
     }
 
     OmniMapColumnReader::OmniMapColumnReader(const orc::Type& type, orc::StripeStreams& stripe,
-                                             common::JulianGregorianRebase *julianPtr): OmniColumnReader(type, stripe), orcType(&type) {
+                                             common::JulianGregorianRebase *julianPtr,
+                                             int64_t rawOffsetMicros): OmniColumnReader(type, stripe), orcType(&type) {
         const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
         RleVersion vers = omniConvertRleVersion(stripe.getEncoding(columnId).kind());
         std::unique_ptr<SeekableInputStream> stream =
@@ -480,11 +483,11 @@ namespace omniruntime::reader {
 
         const Type* keyType = type.getSubtype(0);
         if (selectedColumns[static_cast<uint64_t>(keyType->getColumnId())]) {
-            keyReader = omniBuildReader(*keyType, stripe, julianPtr);
+            keyReader = omniBuildReader(*keyType, stripe, julianPtr, rawOffsetMicros);
         }
         const Type* valueType = type.getSubtype(1);
         if (selectedColumns[static_cast<uint64_t>(valueType->getColumnId())]) {
-            valueReader = omniBuildReader(*valueType, stripe, julianPtr);
+            valueReader = omniBuildReader(*valueType, stripe, julianPtr, rawOffsetMicros);
         }
     }
 
@@ -737,7 +740,14 @@ namespace omniruntime::reader {
                     secsBuffer[i] -= 1;
                 }
 
-                if (julianPtr != nullptr) {
+                if (useSparkInstantConvention) {
+                    // Reverse the writer's session-tz shift: stored instant was
+                    // rebaseGregorianToJulian(micros) - tzOffset, so add tzOffset back. No
+                    // Julian->Gregorian rebase reverse (Spark's reader doesn't either), keeping
+                    // Omni reads byte-compatible with Spark's reads.
+                    data[i] = static_cast<T>(
+                            secsBuffer[i] * 1000000L + nanoBuffer[i] / 1000L + tzOffsetMicros);
+                } else if (julianPtr != nullptr) {
                     data[i] = static_cast<T>(
                             julianPtr->RebaseJulianToGregorianMicros(secsBuffer[i] * 1000000L + nanoBuffer[i] / 1000L));
                 } else {
@@ -1286,7 +1296,8 @@ namespace omniruntime::reader {
     OmniTimestampColumnReader::OmniTimestampColumnReader(const Type& type,
                                                          StripeStreams& stripe,
                                                          bool isInstantType,
-                                                         common::JulianGregorianRebase *julianPtr
+                                                         common::JulianGregorianRebase *julianPtr,
+                                                         int64_t rawOffsetMicros
     ): OmniColumnReader(type, stripe),
         writerTimezone(isInstantType ?
                        ::orc::getTimezoneByName("GMT") :
@@ -1296,7 +1307,9 @@ namespace omniruntime::reader {
                        (julianPtr == nullptr ? ::orc::getLocalTimezone() : ::orc::getTimezoneByName(julianPtr->GetTz()))),
         epochOffset(writerTimezone.getEpoch()),
         sameTimezone(writerTimezone.getEpoch() == readerTimezone.getEpoch()),
-        julianPtr(julianPtr) {
+        julianPtr(julianPtr),
+        useSparkInstantConvention(isInstantType && rawOffsetMicros != 0),
+        tzOffsetMicros(useSparkInstantConvention ? rawOffsetMicros : 0L) {
         RleVersion vers = omniConvertRleVersion(stripe.getEncoding(columnId).kind());
         std::unique_ptr<SeekableInputStream> stream =
                 stripe.getStream(columnId, ::orc::proto::Stream_Kind_DATA, true);

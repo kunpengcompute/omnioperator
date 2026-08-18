@@ -374,6 +374,10 @@ uint64_t SplitReader::next(vec::VectorBatch **output_, int * /*omniTypeId*/, uin
 
         for (int i = 0; i < rowType_->size(); ++i) {
             const auto& outputName = rowType_->nameOf(i);
+            if (isRowIndexColumn(outputName)) {
+                output->Append(createRowIndexVec(static_cast<int32_t>(batchRowSize)));
+                continue;
+            }
             if (IsPartitionColumn(outputName, partitionKeys_, hiveSplit_->partitionKeys)) {
                 auto dataTypeId = rowType_->children_()[i]->GetId();
                 auto splitPartitionIt = hiveSplit_->partitionKeys.find(outputName);
@@ -439,12 +443,48 @@ void SplitReader::createReader()
         ->CreateReader(baseReaderOpts_);
 }
 
+bool SplitReader::isRowIndexColumn(const std::string &name) const
+{
+    auto *fieldSpec = scanSpec_->childByName(name);
+    return fieldSpec != nullptr &&
+        fieldSpec->columnType() == codegen::ScanSpec::ColumnType::kRowIndex;
+}
+
+vec::BaseVector* SplitReader::createRowIndexVec(int32_t batchRowSize)
+{
+    auto *rowIndexVec = reinterpret_cast<vec::Vector<int64_t> *>(
+        vec::VectorHelper::CreateFlatVector(type::OMNI_LONG, batchRowSize));
+    // When vec-predicate filtering is applied inside the native reader (ORC/Parquet),
+    // the surviving rows are not sequential. Use the exact file-absolute positions
+    // captured during filtering (stored in the shared PredicateCondition) to keep
+    // row_index semantically correct. Falls back to sequential numbering otherwise.
+    auto &predicatePtr = baseRowReader_->GetPredicatePtr();
+    if (predicatePtr != nullptr) {
+        const std::vector<int64_t> *survivingPositions = predicatePtr->GetSurvivingPositions();
+        if (survivingPositions != nullptr) {
+            for (int32_t i = 0; i < batchRowSize && i < static_cast<int32_t>(survivingPositions->size()); ++i) {
+                rowIndexVec->SetValue(i, survivingPositions->at(i));
+            }
+            return rowIndexVec;
+        }
+    }
+    // Fallback: sequential row_index starting from the reader's file-absolute position.
+    int64_t batchStart = static_cast<int64_t>(baseRowReader_->LastReadRowPosition());
+    for (int32_t i = 0; i < batchRowSize; ++i) {
+        rowIndexVec->SetValue(i, batchStart + i);
+    }
+    return rowIndexVec;
+}
+
 void SplitReader::createRowReader(omniruntime::type::RowTypePtr &rowType, uint64_t batchLen)
 {
     std::vector <std::string> readColumnNames;
     std::vector <std::shared_ptr<omniruntime::type::DataType>> readColumnTypes;
     for (int i = 0; i < rowType->names().size(); i++) {
         const auto &outputName = rowType->names()[i];
+        if (isRowIndexColumn(outputName)) {
+            continue;
+        }
         if (!IsPartitionColumn(outputName, partitionKeys_, hiveSplit_->partitionKeys)) {
             readColumnNames.push_back(outputName);
             readColumnTypes.push_back(rowType->children_()[i]);
