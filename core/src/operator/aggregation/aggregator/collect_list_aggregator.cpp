@@ -5,9 +5,24 @@
 
 #include "collect_list_aggregator.h"
 #include "vector/vector_helper.h"
+#include "vector/nulls_buffer.h"
 #include <algorithm>
 
 namespace omniruntime::op {
+
+static std::shared_ptr<NullsHelper> SliceNullMapForSingleRow(const std::shared_ptr<NullsHelper> &nullMap,
+    int32_t rowIdx)
+{
+    if (nullMap == nullptr) {
+        return nullptr;
+    }
+    auto nullsBuffer = std::make_shared<vec::NullsBuffer>(1);
+    auto rowNullMap = std::make_shared<NullsHelper>(nullsBuffer);
+    if ((*nullMap)[rowIdx]) {
+        rowNullMap->SetNull(0, true);
+    }
+    return rowNullMap;
+}
 
 /**
  * We have a List (std::vector<T>) in state; iterate over it and store the elements in the arrayVector (order preserved).
@@ -204,12 +219,14 @@ void CollectListAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<Aggr
         ListState<stateType> *listState = ListState<stateType>::CastState(rowStates[rowIndex] + aggStateOffset);
         if (IsInputRaw()) {
             BaseVector *sliced = vector->Slice(rowIdx, 1);
-            listState->UpdatePartialState(sliced, 1, nullMap, isDictionary, static_cast<int32_t>(rowIndex));
+            auto rowNullMap = SliceNullMapForSingleRow(nullMap, rowIdx);
+            listState->UpdatePartialState(sliced, 1, rowNullMap, isDictionary, 0);
             delete sliced;
         } else {
             auto arrayVector = reinterpret_cast<ArrayVector *>(vector);
             BaseVector *sliced = arrayVector->Slice(rowIdx, 1);
-            listState->UpdateFinalState(static_cast<ArrayVector *>(sliced), 1, nullMap, isDictionary, static_cast<int32_t>(rowIndex));
+            auto rowNullMap = SliceNullMapForSingleRow(nullMap, rowIdx);
+            listState->UpdateFinalState(static_cast<ArrayVector *>(sliced), 1, rowNullMap, isDictionary, 0);
             delete sliced;
         }
         ++rowIdx;

@@ -6,9 +6,24 @@
 #include "collect_set_varchar_aggregator.h"
 #include "vector/vector_helper.h"
 #include "vector/vector.h"
+#include "vector/nulls_buffer.h"
 #include <algorithm>
 
 namespace omniruntime::op {
+
+static std::shared_ptr<NullsHelper> SliceNullMapForSingleRow(const std::shared_ptr<NullsHelper> &nullMap,
+    int32_t rowIdx)
+{
+    if (nullMap == nullptr) {
+        return nullptr;
+    }
+    auto nullsBuffer = std::make_shared<vec::NullsBuffer>(1);
+    auto rowNullMap = std::make_shared<NullsHelper>(nullsBuffer);
+    if ((*nullMap)[rowIdx]) {
+        rowNullMap->SetNull(0, true);
+    }
+    return rowNullMap;
+}
 
 #pragma pack(push, 1)
 struct CollectSetVarcharState {
@@ -201,12 +216,14 @@ void CollectSetVarcharAggregator::ProcessGroupInternal(std::vector<AggregateStat
         auto *uniqueValues = reinterpret_cast<DefaultHashMap<std::string, int8_t> *>(s->uniqueValuesAddr);
         if (IsInputRaw()) {
             BaseVector *sliced = vector->Slice(offset, 1);
-            UpdatePartialStateVarchar(uniqueValues, sliced, 1, nullMap, isDictionary, static_cast<int32_t>(rowIndex));
+            auto rowNullMap = SliceNullMapForSingleRow(nullMap, offset);
+            UpdatePartialStateVarchar(uniqueValues, sliced, 1, rowNullMap, isDictionary, 0);
             delete sliced;
         } else {
             auto *arrayVector = reinterpret_cast<ArrayVector *>(vector);
             BaseVector *sliced = arrayVector->Slice(offset, 1);
-            UpdateFinalStateVarchar(uniqueValues, static_cast<ArrayVector *>(sliced), 1, nullMap, static_cast<int32_t>(rowIndex));
+            auto rowNullMap = SliceNullMapForSingleRow(nullMap, offset);
+            UpdateFinalStateVarchar(uniqueValues, static_cast<ArrayVector *>(sliced), 1, rowNullMap, 0);
             delete sliced;
         }
         ++offset;
