@@ -142,6 +142,48 @@ TEST(DateAddTest, DateAddPositive) {
     delete resultVec;
 }
 
+// Test: DateAdd with constant date literal
+TEST(DateAddTest, DateAddConstantDate) {
+    std::cout << "=== Test: DateAdd with constant date literal ===" << std::endl;
+
+    const int32_t baseDate = DateAddFunctionTestHelper::DateToDays(1, 1, 1);
+    std::vector<int32_t> numDaysValues = {0, 1, 31, 2922897};
+    std::vector<int32_t> expected = {
+        baseDate,
+        baseDate + 1,
+        baseDate + 31,
+        baseDate + 2922897
+    };
+
+    BaseVector* dateVec = new ConstVector<int32_t>(baseDate, OMNI_DATE32, numDaysValues.size());
+    BaseVector* numDaysVec = DateAddFunctionTestHelper::CreateInt32Vector(numDaysValues);
+
+    BaseVector* resultVec = nullptr;
+    DateAddFunctionTestHelper::ExecuteDateAdd(dateVec, numDaysVec, resultVec);
+    DateAddFunctionTestHelper::ValidateResult(resultVec, expected, numDaysValues.size());
+
+    delete resultVec;
+}
+
+// Test: DateAdd with NULL constant date literal
+TEST(DateAddTest, DateAddNullConstantDate) {
+    std::cout << "=== Test: DateAdd with NULL constant date literal ===" << std::endl;
+
+    std::vector<int32_t> numDaysValues = {0, 1, 31};
+    BaseVector* dateVec = new ConstVector<int32_t>(0, OMNI_DATE32, numDaysValues.size());
+    dateVec->SetNulls(0, true, numDaysValues.size());
+    BaseVector* numDaysVec = DateAddFunctionTestHelper::CreateInt32Vector(numDaysValues);
+
+    BaseVector* resultVec = nullptr;
+    DateAddFunctionTestHelper::ExecuteDateAdd(dateVec, numDaysVec, resultVec);
+
+    for (size_t i = 0; i < numDaysValues.size(); ++i) {
+        EXPECT_TRUE(resultVec->IsNull(i)) << "Row " << i << " should be NULL";
+    }
+
+    delete resultVec;
+}
+
 // Test: DateAdd - negative days (subtract)
 TEST(DateAddTest, DateAddNegative) {
     std::cout << "=== Test: DateAdd - negative days ===" << std::endl;
