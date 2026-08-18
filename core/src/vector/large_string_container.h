@@ -19,7 +19,12 @@ public:
 
     ~LargeStringContainer() = default;
 
-    std::string_view GetValue(int index) const;
+    ALWAYS_INLINE std::string_view GetValue(int index) const
+    {
+        char *valuePtr = bufferSupplier->Data() + offsets[index];
+        size_t valueLen = offsets[index + 1] - offsets[index];
+        return std::string_view(valuePtr, valueLen);
+    }
 
     void SetValue(int index, const std::string_view &value);
 

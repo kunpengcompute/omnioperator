@@ -20,14 +20,6 @@ LargeStringContainer<RAW_DATA_TYPE>::LargeStringContainer(int valueSize, int cap
 }
 
 template<typename RAW_DATA_TYPE>
-std::string_view LargeStringContainer<RAW_DATA_TYPE>::GetValue(int index) const
-{
-    char *valuePtr = bufferSupplier->Data() + offsets[index];
-    size_t valueLen = offsets[index + 1] - offsets[index];
-    return std::string_view(valuePtr, valueLen);
-}
-
-template<typename RAW_DATA_TYPE>
 void LargeStringContainer<RAW_DATA_TYPE>::SetValue(int index, const std::string_view &value)
 {
     FillSlots(index); // rescue offset for null values

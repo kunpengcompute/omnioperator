@@ -1186,7 +1186,7 @@ namespace detail {
 /// Helper function to convert a hex character to its numeric value.
 /// Returns -1 for invalid hex characters.
 /// Supports: '0'-'9' -> 0-9, 'A'-'F' -> 10-15, 'a'-'f' -> 10-15
-ALWAYS_INLINE int8_t fromHex(char c) {
+static ALWAYS_INLINE int8_t fromHex(char c) {
     if (c >= '0' && c <= '9') {
         return c - '0';
     }

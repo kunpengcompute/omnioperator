@@ -8,15 +8,18 @@
 
 #include <cstdint>
 #include <cstring>
+#include <utility>
 #include <vector>
 #include <memory>
 #include "memory/simple_arena_allocator.h"
+#include "util/compiler_util.h"
 
 namespace omniruntime::vec {
 class BaseVector;
 }
 
 namespace omniruntime::op {
+
    struct RowContainerIterator;
    using namespace omniruntime::vec;   
 
@@ -73,18 +76,25 @@ public:
     /// are set to 1 (aggregates start as null).
     char* NewRow();
 
+    /// Batch allocate 'count' contiguous rows (no free-list rows available).
+    /// Allocates exactly 'count' rows and zero-initializes them in one pass.
+    /// Returns the contiguous base (row i = base + i*fixedRowSize) and the
+    /// actual count via 'outCount'. Returns nullptr if free-list rows exist
+    /// (caller should fall back to per-row NewRow).
+    char* NewRowBatch(int32_t count, int32_t* outCount);
+
     /// Check if a column is null in the given row.
-    static bool IsNullAt(const char* row, int32_t nullByte, uint8_t nullMask) {
+    static ALWAYS_INLINE bool IsNullAt(const char* row, int32_t nullByte, uint8_t nullMask) {
         return (row[nullByte] & nullMask) != 0;
     }
 
     /// Set a column to null in the given row.
-    static void SetNullAt(char* row, int32_t nullByte, uint8_t nullMask) {
+    static ALWAYS_INLINE void SetNullAt(char* row, int32_t nullByte, uint8_t nullMask) {
         row[nullByte] |= nullMask;
     }
 
     /// Clear a column's null flag in the given row.
-    static void ClearNullAt(char* row, int32_t nullByte, uint8_t nullMask) {
+    static ALWAYS_INLINE void ClearNullAt(char* row, int32_t nullByte, uint8_t nullMask) {
         row[nullByte] &= ~nullMask;
     }
 
@@ -117,15 +127,21 @@ public:
 
     /// Store a fixed-width value into a row at the given column index.
     template <typename T>
-    static void StoreValue(char* row, int32_t offset, T value) {
+    static ALWAYS_INLINE void StoreValue(char* row, int32_t offset, T value) {
         *reinterpret_cast<T*>(row + offset) = value;
     }
 
     /// Read a fixed-width value from a row at the given column index.
     template <typename T>
-    static T ReadValue(const char* row, int32_t offset) {
+    static ALWAYS_INLINE T ReadValue(const char* row, int32_t offset) {
         return *reinterpret_cast<const T*>(row + offset);
     }
+
+    /// Packed {ptr, size} storage for zero-copy strings in RowContainer rows.
+    struct __attribute__((packed)) StringViewStorage {
+        const char* data;
+        uint32_t size;
+    };
 
     /// Iterate through all allocated rows and collect pointers to active rows.
     /// This follows the bolt RowContainer::listRows pattern.
@@ -149,6 +165,9 @@ public:
 
     /// Get the number of rows in the container.
     int64_t NumRows() const { return numRows; }
+
+    /// True if free-list rows exist (per-row NewRow fallback required).
+    bool HasFreeRows() const { return firstFreeRow != nullptr; }
 
     void Reset()
     {
@@ -180,7 +199,7 @@ private:
 
     // Row storage
     mem::SimpleArenaAllocator& pool;
-    std::vector<char*> allocations; // all allocated row pointers
+    std::vector<std::pair<char*, int32_t>> allocations; // {block base, row count} per allocation
     char* firstFreeRow = nullptr;
     int64_t numRows = 0;
     int64_t numFreeRows = 0;
@@ -188,6 +207,42 @@ private:
     char* batchPtr = nullptr;
     int32_t batchRemaining = 0;
 };
+
+namespace PrefetchHelper
+{
+    constexpr int32_t kPrefetchDistance = 32;
+    // Prefetch helpers for ExtractColumn — 预取行数据和可选字符串内容
+    inline void PrefetchRow(const char *row, int32_t offset, int32_t nullByte)
+    {
+        __builtin_prefetch(row + offset, 0, 2);
+        __builtin_prefetch(row + nullByte, 0, 2);
+    }
+    inline void PrefetchRowString(char** rows, int32_t offset, int32_t nullByte, int32_t nullMask,
+        int32_t numRows, int32_t i)
+    {
+        if (LIKELY(i + 2 * kPrefetchDistance < numRows))
+        {
+            if (LIKELY(rows[i + 2 * kPrefetchDistance] != nullptr))
+            {
+                PrefetchRow(rows[i + 2 * kPrefetchDistance], offset, nullByte);
+            }
+        }
+
+        if (LIKELY(i + kPrefetchDistance < numRows))
+        {
+            if (LIKELY(rows[i + kPrefetchDistance] != nullptr))
+            {
+                auto stringViewStorage = RowContainer::ReadValue<RowContainer::StringViewStorage>(
+                    rows[i + kPrefetchDistance], offset);
+                if (LIKELY(RowContainer::IsNullAt(rows[i + kPrefetchDistance], nullByte, nullMask) == false &&
+                           stringViewStorage.data != nullptr && stringViewStorage.size > 0))
+                {
+                    __builtin_prefetch(stringViewStorage.data, 0, 2);
+                }
+            }
+        }
+    }
+} // namespace PrefetchHelper
 
 /// Iterator for RowContainer::listRows, tracking position across calls.
 struct RowContainerIterator {

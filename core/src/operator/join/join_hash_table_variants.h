@@ -44,6 +44,8 @@ public:
     static constexpr bool IS_SIMPLE_KEY = (std::is_same_v<KeyType, int16_t> || std::is_same_v<KeyType, int32_t> ||
                                            std::is_same_v<KeyType, int64_t>);
 
+    ALWAYS_INLINE bool HasDuplicates() const { return false; }
+
     explicit JoinHashTableVariants(uint32_t hashTableCount, DataTypes *buildDataTypes,
         std::vector<int32_t> &buildHashCols, JoinType joinType, BuildSide buildSide, bool isMultiCols = false);
 
@@ -81,6 +83,10 @@ public:
     {
         return arrayTables[partitionIndex];
     }
+
+    // Uniform raw accessors for taper array-join dispatch (non-taper returns null; taper path never invoked).
+    ALWAYS_INLINE char** GetArraySlots(int32_t /*partitionIndex*/) { return nullptr; }
+    ALWAYS_INLINE bool* GetArrayAssigned(int32_t /*partitionIndex*/) { return nullptr; }
 
     ALWAYS_INLINE std::pair<int64_t, int64_t> &GetmaxMinValue(int32_t partitionIndex)
     {

@@ -208,25 +208,29 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
     if (this->isFinished()) {
         return 0;
     }
-    std::visit(
-        [&](auto &&arg) {
-            arg.Prepare(partitionIndex);
-            arg.BuildHashTable(partitionIndex);
-        },
-        *hashTablesVariants);
+    {
+        std::visit(
+            [&](auto &&arg) {
+                arg.Prepare(partitionIndex);
+                arg.BuildHashTable(partitionIndex);
+            },
+            *hashTablesVariants);
+    }
+#ifndef OMNI_USE_TAPER_JOIN
     if (UNLIKELY(IsDebugEnable())) {
         int32_t hashTableSize = 0;
         auto hashTableType =
             std::visit([&](auto &&arg) { return arg.GetHashTableTypes(partitionIndex); }, *hashTablesVariants);
         if (hashTableType == HashTableImplementationType::NORMAL_HASH_TABLE) {
-            hashTableSize = std::visit([&](auto &&arg) { return arg.GetHashTable(partitionIndex)->GetElementsSize(); },
-                *hashTablesVariants);
+            hashTableSize = std::visit(
+                [&](auto &&arg) { return arg.GetHashTable(partitionIndex)->GetElementsSize(); }, *hashTablesVariants);
         } else if (hashTableType == HashTableImplementationType::ARRAY_HASH_TABLE) {
             hashTableSize = std::visit([&](auto &&arg) { return arg.GetArrayTable(partitionIndex)->GetElementsSize(); },
                 *hashTablesVariants);
         }
         UpdateGetOutputInfo(hashTableSize);
     }
+#endif
     SetStatus(OMNI_STATUS_FINISHED);
     std::visit([&](auto &&arg) { arg.SetStatus(OMNI_STATUS_FINISHED); }, *hashTablesVariants);
     return 0;
