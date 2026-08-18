@@ -1,6 +1,6 @@
 /*
-* Copyright (c) Huawei Technologies Co., Ltd. 2026-2028. All rights reserved.
-*/
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026-2028. All rights reserved.
+ */
 
 #pragma once
 
@@ -11,18 +11,15 @@
 #include <sstream>
 #include <type_traits>
 
-#include "util/compiler_util.h"
-#include "util/bit_util.h"
-#include "memory/simple_arena_allocator.h"
 #include "memory/allocator.h"
+#include "memory/simple_arena_allocator.h"
+#include "util/bit_util.h"
+#include "util/compiler_util.h"
 
-
-// #define TAPER_HASH_STAT
-// #define HWP_PREFETCH
-// #define DISABLE_PREFETCH
 #define DUMMY_CMP [](auto, auto, auto) { return false; }
 
-namespace omniruntime::op {
+namespace omniruntime {
+namespace op {
 
 static constexpr size_t kHashMapPrefetchDist = 16;
 
@@ -376,12 +373,6 @@ class TaperHashTableBase : public TaperContainer {
   size_t hwpPrefetchCount_ = 0;
   size_t hwpPrefetchItemsNum_ = 0;
   size_t hwpPrefetchTerminateCount_ = 0;
-#endif
-
-#ifdef DEBUG_STAT_ENABLED
-  debug::DebugStat* debugStat() {
-    return &debugStat_;
-  }
 #endif
 
  private:
@@ -1026,8 +1017,8 @@ class TaperFlatHashTable : public TaperHashTableBase<Key, KeyScattered> {
         std::forward<FInit>(fInit),
         std::forward<FUpdate>(fUpdate));
   }
-  
-  // --- Probe counterpart of EmplaceBatch (read-only) -----------------------
+
+  // Probe counterpart of EmplaceBatch (read-only)
   template <typename Filter, typename FInit, typename FUpdate>
   void ProbeBatch(
       const Key* keys,
@@ -1206,6 +1197,7 @@ class TaperFlatHashTable : public TaperHashTableBase<Key, KeyScattered> {
     }
   }
 };
-} // namespace omniruntime::op
+} // namespace op
+} // namespace omniruntime
 
 #undef DUMMY_CMP

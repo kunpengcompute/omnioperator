@@ -10,7 +10,6 @@
 #include "type/data_type.h"
 #include "type/decimal128.h"
 #include "util/bit_util.h"
-#include "util/compiler_util.h"
 #include "util/debug.h"
 #include "operator/hashmap/vector_marshaller.h"
 
@@ -89,10 +88,24 @@ char* RowContainer::NewRow()
         }
         row = batchPtr + (kBatchSize - batchRemaining) * fixedRowSize;
         --batchRemaining;
-        allocations.push_back(row);
+        allocations.emplace_back(row, 1);
     }
 
     return InitializeRow(row);
+}
+
+char* RowContainer::NewRowBatch(int32_t count, int32_t* outCount)
+{
+    if (firstFreeRow != nullptr) {
+        *outCount = 0;
+        return nullptr;
+    }
+    char* base = reinterpret_cast<char*>(pool.Allocate(count * fixedRowSize));
+    memset(base, 0, count * fixedRowSize);
+    numRows += count;
+    allocations.emplace_back(base, count);
+    *outCount = count;
+    return base;
 }
 
 char* RowContainer::InitializeRow(char* row)
@@ -107,8 +120,16 @@ int32_t RowContainer::ListRows(RowContainerIterator* iter, int32_t maxRows, char
     int32_t numAllocations = static_cast<int32_t>(allocations.size());
 
     while (count < maxRows && iter->allocationIndex < numAllocations) {
-        rows[count++] = allocations[iter->allocationIndex];
-        iter->allocationIndex++;
+        auto [base, n] = allocations[iter->allocationIndex];
+        int32_t take = std::min(n - iter->rowOffset, maxRows - count);
+        for (int32_t i = 0; i < take; ++i) {
+            rows[count++] = base + (iter->rowOffset + i) * fixedRowSize;
+        }
+        iter->rowOffset += take;
+        if (iter->rowOffset >= n) {
+            iter->allocationIndex++;
+            iter->rowOffset = 0;
+        }
     }
 
     if (iter->allocationIndex >= numAllocations) {
@@ -128,83 +149,74 @@ static void SveExtractColumnImpl(char** rows, int32_t totalRows, int32_t offset,
     uint64_t* outNulls = reinterpret_cast<uint64_t*>(vec::unsafe::UnsafeBaseVector::GetNulls(vec));
     bool hasNull = false;
 
-    // nullptr row check: LEFT/ANTI unmatch probe rows have null build pointers
-    bool hasNullPtr = false;
-    for (int32_t ri = 0; ri < totalRows; ++ri) {
-        if (rows[ri] == nullptr) { hasNullPtr = true; break; }
-    }
-    if (hasNullPtr) {
-        for (int32_t i = 0; i < totalRows; ++i) {
-            if (rows[i] == nullptr || RowContainer::IsNullAt(rows[i], nullByte, nullMask)) {
-                outValues[i] = T{};
-                BitUtil::SetBit(outNulls, i);
-                hasNull = true;
-            } else {
-                outValues[i] = RowContainer::ReadValue<T>(rows[i], offset);
-            }
-        }
-        if (hasNull) vec->SetNullFlag(true);
-        return;
-    }
-
     svbool_t pgAll = svptrue_b64();
-    int64_t tmpBuf[32];
 
     for (int32_t i = 0; i < totalRows;) {
         svbool_t pg = svwhilelt_b64_s64((int64_t)i, (int64_t)totalRows);
         int32_t activeCount = svcntp_b64(pgAll, pg);
 
+        // Row pointer gather + nullptr detection (LEFT/ANTI unmatch probe rows).
         svuint64_t vIdx = svindex_u64(i, 1);
         svuint64_t vPtrOffsets = svlsl_n_u64_x(pg, vIdx, 3);
         svuint64_t vRowPtrs = svld1_gather_offset_u64(pg, vPtrOffsets, (uint64_t)rows);
+        svbool_t vNullPtr = svcmpeq_n_u64(pg, vRowPtrs, 0);
+        svbool_t vNonNullPtr = svnot_b_z(pg, vNullPtr);
 
+        // Build-null read: predicated gather so null-pointer rows are not
+        // dereferenced (avoids gather at 0+nullByte garbage address).
         svuint64_t vNullAddr = svadd_n_u64_x(pg, vRowPtrs, (uint64_t)nullByte);
-        svuint64_t vRowNullByte = svld1ub_gather_u64(pg, vNullAddr);
-        svbool_t vRowIsNull = svcmpne_n_u64(pg, svand_n_u64_x(pg, vRowNullByte, (uint64_t)nullMask), 0);
+        svuint64_t vRowNullByte = svld1ub_gather_u64(vNonNullPtr, vNullAddr);
+        svbool_t vBuildNull = svcmpne_n_u64(pg, svand_n_u64_x(pg, vRowNullByte, (uint64_t)nullMask), 0);
 
-        if (svptest_any(pgAll, vRowIsNull)) {
+        svbool_t vNullRow = svorr_b_z(pg, vNullPtr, vBuildNull);
+        if (svptest_any(pgAll, vNullRow)) {
             hasNull = true;
         }
 
+        // Value gather (predicated on non-null pointers) + null select + store.
         svuint64_t vValueAddr = svadd_n_u64_x(pg, vRowPtrs, (uint64_t)offset);
-        svint64_t vZero = svdup_n_s64(0);
-
         if constexpr (std::is_same_v<T, int64_t>) {
-            svint64_t vRowValues = svld1_gather_s64(pg, vValueAddr);
-            svst1_s64(pg, outValues + i, svsel_s64(vRowIsNull, vZero, vRowValues));
+            svint64_t v = svld1_gather_s64(vNonNullPtr, vValueAddr);
+            svst1_s64(pg, outValues + i, svsel_s64(vNullRow, svdup_n_s64(0), v));
         } else if constexpr (std::is_same_v<T, double>) {
-            svfloat64_t vRowValues = svld1_gather_f64(pg, vValueAddr);
-            svfloat64_t vZeroF = svdup_n_f64(0.0);
-            svst1_f64(pg, outValues + i, svsel_f64(vRowIsNull, vZeroF, vRowValues));
+            svfloat64_t v = svld1_gather_f64(vNonNullPtr, vValueAddr);
+            svst1_f64(pg, outValues + i, svsel_f64(vNullRow, svdup_n_f64(0.0), v));
+        } else if constexpr (std::is_same_v<T, int32_t>) {
+            svint64_t v = svld1sw_gather_s64(vNonNullPtr, vValueAddr);
+            int64_t tmp[32];
+            svst1_s64(pg, tmp, svsel_s64(vNullRow, svdup_n_s64(0), v));
+            for (int32_t j = 0; j < activeCount; j++) outValues[i + j] = static_cast<T>(tmp[j]);
+        } else if constexpr (std::is_same_v<T, int16_t>) {
+            svint64_t v = svld1sh_gather_s64(vNonNullPtr, vValueAddr);
+            int64_t tmp[32];
+            svst1_s64(pg, tmp, svsel_s64(vNullRow, svdup_n_s64(0), v));
+            for (int32_t j = 0; j < activeCount; j++) outValues[i + j] = static_cast<T>(tmp[j]);
+        } else if constexpr (std::is_same_v<T, int8_t>) {
+            svint64_t v = svld1sb_gather_s64(vNonNullPtr, vValueAddr);
+            int64_t tmp[32];
+            svst1_s64(pg, tmp, svsel_s64(vNullRow, svdup_n_s64(0), v));
+            for (int32_t j = 0; j < activeCount; j++) outValues[i + j] = static_cast<T>(tmp[j]);
         } else {
-            // int32类型测试有问题，先注释掉sve实现，统一回退到普通实现
-            // svint64_t vRowValues;
-            // if constexpr (std::is_same_v<T, int32_t>) {
-            //     vRowValues = svld1sw_gather_s64(pg, vValueAddr);
-            // } else if constexpr (std::is_same_v<T, int16_t>) {
-            //     vRowValues = svld1sh_gather_s64(pg, vValueAddr);
-            // } else if constexpr (std::is_same_v<T, int8_t>) {
-            //     vRowValues = svld1sb_gather_s64(pg, vValueAddr);
-            // } else {
-                for (int32_t j = 0; j < activeCount; j++) {
-                    if (rows[i + j] == nullptr || RowContainer::IsNullAt(rows[i + j], nullByte, nullMask)) {
-                        outValues[i + j] = T{};
-                    } else {
-                        outValues[i + j] = RowContainer::ReadValue<T>(rows[i + j], offset);
-                    }
-                }
-            // }
-
-            // svint64_t vSelected = svsel_s64(vRowIsNull, vZero, vRowValues);
-            // svst1_s64(pg, tmpBuf, vSelected);
-            // for (int32_t j = 0; j < activeCount; j++) {
-            //     outValues[i + j] = static_cast<T>(tmpBuf[j]);
-            // }
-        }
-
-        if (hasNull) {
+            // bool and other exotic types: scalar fallback (handles null bitmap).
             for (int32_t j = 0; j < activeCount; j++) {
                 if (rows[i + j] == nullptr || RowContainer::IsNullAt(rows[i + j], nullByte, nullMask)) {
+                    outValues[i + j] = T{};
+                    BitUtil::SetBit(outNulls, i + j);
+                    hasNull = true;
+                } else {
+                    outValues[i + j] = RowContainer::ReadValue<T>(rows[i + j], offset);
+                }
+            }
+            i += activeCount;
+            continue;
+        }
+
+        // Null bitmap set: scalar SetBit (vectorized scatter of multiple lanes
+        // targeting the same word would overwrite each other, losing null bits).
+        if (hasNull) {
+            for (int32_t j = 0; j < activeCount; j++) {
+                char* r = rows[i + j];
+                if (r == nullptr || RowContainer::IsNullAt(r, nullByte, nullMask)) {
                     BitUtil::SetBit(outNulls, i + j);
                 }
             }
@@ -219,25 +231,6 @@ static void SveExtractColumnImpl(char** rows, int32_t totalRows, int32_t offset,
 }
 #endif
 
-namespace
-{
-    static constexpr int32_t kPrefetchDistance = 32;
-    // Prefetch helpers for ExtractColumn — 预取行数据和可选字符串内容
-    static inline void PrefetchRow(const char *row, int32_t offset, int32_t nullByte)
-    {
-        __builtin_prefetch(row + offset, 0, 2);
-        __builtin_prefetch(row + nullByte, 0, 2);
-    }
-    static inline void PrefetchRowString(const char *row, int32_t offset, int32_t nullByte)
-    {
-        PrefetchRow(row, offset, nullByte);
-        auto *dataPtr = RowContainer::ReadValue<char *>(row, offset);
-        if (dataPtr != nullptr)
-        {
-            __builtin_prefetch(dataPtr, 0, 2);
-        }
-    }
-}
 
 // 提取固定宽度列到输出向量（非SVE路径）
 template <typename T>
@@ -245,8 +238,9 @@ static inline void ExtractFixedWidthColumnImpl(char** rows, int32_t totalRows, i
     int32_t nullByte, int32_t nullMask, Vector<T>* vec)
 {
     for (int32_t i = 0; i < totalRows; ++i) {
-        if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-            PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
+        if (LIKELY(i + PrefetchHelper::kPrefetchDistance < totalRows &&
+                   rows[i + PrefetchHelper::kPrefetchDistance] != nullptr)) {
+            PrefetchHelper::PrefetchRow(rows[i + PrefetchHelper::kPrefetchDistance], offset, nullByte);
         }
         if (rows[i] == nullptr || RowContainer::IsNullAt(rows[i], nullByte, nullMask)) {
             vec->SetNull(i);
@@ -352,17 +346,15 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
         case type::OMNI_VARBINARY: {
             auto* vec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(outputVector);
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-                    PrefetchRowString(rows[i + kPrefetchDistance], offset, nullByte);
+                if (LIKELY(i + PrefetchHelper::kPrefetchDistance < totalRows &&
+                           rows[i + PrefetchHelper::kPrefetchDistance] != nullptr)) {
+                    PrefetchHelper::PrefetchRow(rows[i + PrefetchHelper::kPrefetchDistance], offset, nullByte);
                 }
                 if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     vec->SetNull(i);
                 } else {
-                    auto* dataPtr = ReadValue<char*>(rows[i], offset);
-                    uint8_t lenSize = static_cast<uint8_t>(dataPtr[0]);
-                    uint32_t strLen = 0;
-                    memcpy(&strLen, dataPtr + 1, lenSize);
-                    vec->SetValue(i, std::string_view(dataPtr + 1 + lenSize, strLen));
+                    auto storage = RowContainer::ReadValue<RowContainer::StringViewStorage>(rows[i], offset);
+                    vec->SetValue(i, std::string_view(storage.data, storage.size));
                 }
             }
             break;
@@ -375,8 +367,9 @@ void RowContainer::ExtractColumn(char** rows, int32_t totalRows, int32_t colIdx,
             auto* mapVec = (typeId == type::OMNI_MAP) ? static_cast<vec::MapVector*>(outputVector) : nullptr;
             auto deser = complexVectorDeSerializerCenter[static_cast<DataTypeId>(typeId)];
             for (int32_t i = 0; i < totalRows; ++i) {
-                if (LIKELY(i + kPrefetchDistance < totalRows && rows[i + kPrefetchDistance] != nullptr)) {
-                    PrefetchRow(rows[i + kPrefetchDistance], offset, nullByte);
+                if (LIKELY(i + PrefetchHelper::kPrefetchDistance < totalRows &&
+                   rows[i + PrefetchHelper::kPrefetchDistance] != nullptr)) {
+                    PrefetchHelper::PrefetchRow(rows[i + PrefetchHelper::kPrefetchDistance], offset, nullByte);
                 }
                 if (rows[i] == nullptr || IsNullAt(rows[i], nullByte, nullMask)) {
                     if (rowVec) rowVec->SetNull(static_cast<int64_t>(i));

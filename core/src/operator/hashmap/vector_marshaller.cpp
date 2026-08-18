@@ -260,8 +260,9 @@ void ALWAYS_INLINE MapVectorSerializer(MapVector &mapVector, int32_t rowIdx, mem
     int64_t size = mapVector.GetSize(rowIdx);
 
     uint8_t sizeLenSize = GetCompactLengthSize(size);
-    auto *&dataRef = result.data;
-    auto pos = arenaAllocator.AllocateContinue(sizeof(uint8_t) + sizeLenSize, reinterpret_cast<const uint8_t *&>(dataRef));
+    auto*& dataRef = result.data;
+    auto pos = arenaAllocator.AllocateContinue(
+        sizeof(uint8_t) + sizeLenSize, reinterpret_cast<const uint8_t*&>(dataRef));
     *pos = sizeLenSize;
     memcpy(pos + 1, &size, sizeLenSize);
     result.size += sizeof(uint8_t) + sizeLenSize;

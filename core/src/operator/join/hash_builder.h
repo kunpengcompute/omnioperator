@@ -141,10 +141,15 @@ HashTableVariants* HashBuilderOperatorFactory::InitTaperVariant(int32_t buildHas
             }
             case OMNI_ARRAY:
             case OMNI_MAP:
-            case OMNI_ROW:
+            case OMNI_ROW: {
+                auto* var = new HashTableVariants{std::in_place_type<TaperJoinHashTableVariants<int64_t, NeedVisited>>,
+                    operatorCount, &buildTypes, buildHashCols, joinType, buildSide};
+                std::visit([&](auto&& v) { v.SetSerMode(); }, *var);
+                return var;
+            }
             default:
-                throw omniruntime::exception::OmniException("TAPER_NOT_SUPPORTED",	 
-                    "TAPER join does not support single-column key type "	 
+                throw omniruntime::exception::OmniException("TAPER_NOT_SUPPORTED",
+                    "TAPER join does not support single-column key type "
                     + std::to_string(static_cast<int>(type)));
         }
     }
@@ -164,7 +169,6 @@ HashTableVariants* HashBuilderOperatorFactory::InitTaperVariant(int32_t buildHas
             }
             totalBits += bits;
         }
-        totalBits += buildHashColsCount; // +1 null-bit per column
         if (totalBits > 0 && totalBits <= 32) {
             return new HashTableVariants{std::in_place_type<TaperJoinHashTableVariants<int32_t, NeedVisited>>,
                 operatorCount, &buildTypes, buildHashCols, joinType, buildSide};
