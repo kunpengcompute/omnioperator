@@ -428,6 +428,32 @@ BinaryExpr::BinaryExpr()
     dataType = BooleanType();
 }
 
+namespace {
+std::pair<ArithmeticOp, ArithmeticEvalMode> NormalizeArithmeticOperator(Operator op)
+{
+    switch (op) {
+        case Operator::ADD:
+            return {ArithmeticOp::ADD, ArithmeticEvalMode::LEGACY};
+        case Operator::SUB:
+            return {ArithmeticOp::SUBTRACT, ArithmeticEvalMode::LEGACY};
+        case Operator::MUL:
+            return {ArithmeticOp::MULTIPLY, ArithmeticEvalMode::LEGACY};
+        case Operator::DIV:
+            return {ArithmeticOp::DIVIDE, ArithmeticEvalMode::LEGACY};
+        case Operator::TRY_ADD:
+            return {ArithmeticOp::ADD, ArithmeticEvalMode::TRY};
+        case Operator::TRY_SUB:
+            return {ArithmeticOp::SUBTRACT, ArithmeticEvalMode::TRY};
+        case Operator::TRY_MUL:
+            return {ArithmeticOp::MULTIPLY, ArithmeticEvalMode::TRY};
+        case Operator::TRY_DIV:
+            return {ArithmeticOp::DIVIDE, ArithmeticEvalMode::TRY};
+        default:
+            return {ArithmeticOp::INVALID, ArithmeticEvalMode::LEGACY};
+    }
+}
+} // namespace
+
 std::string GetStringOp(Operator op)
 {
     switch (op) {
@@ -474,9 +500,28 @@ BinaryExpr::BinaryExpr(Operator bop, Expr *leftExpr, Expr *rightExpr, DataTypePt
     left = leftExpr;
     right = rightExpr;
     dataType = std::move(dt);
+    const auto arithmeticSpec = NormalizeArithmeticOperator(bop);
+    arithmeticOp = arithmeticSpec.first;
+    evalMode = arithmeticSpec.second;
     std::vector<omniruntime::type::DataTypeId> args = {left->dataType->GetId(), right->dataType->GetId()};
     auto signature = std::make_shared<FunctionSignature>(GetStringOp(bop), args, dataType->GetId());
     vectorFunction = VectorFunction::Find(signature);
+}
+
+bool BinaryExpr::SupportsCheckedArithmeticVectorization() const
+{
+    if (arithmeticOp == ArithmeticOp::INVALID || left == nullptr || right == nullptr ||
+        left->dataType == nullptr || right->dataType == nullptr || dataType == nullptr ||
+        evalMode == ArithmeticEvalMode::LEGACY) {
+        return false;
+    }
+    const auto leftType = left->dataType->GetId();
+    const auto rightType = right->dataType->GetId();
+    const auto resultType = dataType->GetId();
+    const bool allDecimal = left->dataType->isDecimal() && right->dataType->isDecimal() && dataType->isDecimal();
+    const bool primitive = leftType == OMNI_BYTE || leftType == OMNI_SHORT || leftType == OMNI_INT ||
+        leftType == OMNI_LONG || leftType == OMNI_FLOAT || leftType == OMNI_DOUBLE;
+    return allDecimal || (primitive && leftType == rightType && leftType == resultType);
 }
 
 BinaryExpr::~BinaryExpr()

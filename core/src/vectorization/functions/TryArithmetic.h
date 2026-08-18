@@ -1,36 +1,34 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * Description: TRY arithmetic vector functions
+ * Description: Binary arithmetic vector function
  */
 
 #pragma once
 
-#include <string>
-
+#include "expression/arithmetic_spec.h"
 #include "vectorization/VectorFunction.h"
 
 namespace omniruntime::vectorization {
 
-enum class TryArithmeticOp {
-    ADD,
-    SUBTRACT,
-    MULTIPLY,
-    DIVIDE,
-};
-
-// The wrapper owns TRY's row-level error policy. Type-specific kernels only
-// report arithmetic errors and are shared by all four public functions.
-class TryArithmeticFunction final : public VectorFunction {
+class BinaryArithmeticFunction final : public VectorFunction {
 public:
-    explicit TryArithmeticFunction(TryArithmeticOp operation) : operation_(operation) {}
+    BinaryArithmeticFunction(expressions::ArithmeticOp operation, expressions::ArithmeticEvalMode evalMode,
+        const type::DataTypePtr &leftType, const type::DataTypePtr &rightType,
+        const type::DataTypePtr &resultType);
 
     void Apply(std::stack<vec::BaseVector *> &args, const type::DataTypePtr &outputType,
         vec::BaseVector *&result, op::ExecutionContext *context) const override;
 
 private:
-    TryArithmeticOp operation_;
+    expressions::ArithmeticOp operation_;
+    expressions::ArithmeticEvalMode evalMode_;
+    type::DataTypePtr leftType_;
+    type::DataTypePtr rightType_;
+    type::DataTypePtr resultType_;
 };
 
-void RegisterTryArithmeticFunctions(const std::string &prefix);
+std::shared_ptr<VectorFunction> CreateBinaryArithmeticFunction(expressions::ArithmeticOp operation,
+    expressions::ArithmeticEvalMode evalMode, const type::DataTypePtr &leftType,
+    const type::DataTypePtr &rightType, const type::DataTypePtr &resultType);
 
 } // namespace omniruntime::vectorization
