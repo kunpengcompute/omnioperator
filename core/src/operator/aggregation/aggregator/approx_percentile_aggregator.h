@@ -2,12 +2,15 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
  * Description: ApproxPercentile aggregate (KLL sketch). Reference: approx_count_distinct (HyperLogLog).
  *
- * Two-phase semantics:
- * - Partial: inputRaw=true, outputPartial=true; input is (value [, weight], percentile [, accuracy]), output is
+ * Four-phase semantics (selected by inputRaw/outputPartial):
+ * - Partial:      inputRaw=true,  outputPartial=true;  input is (value [, weight], percentile [, accuracy]), output is
  *   serialized KLL sketch (VARBINARY), one aggregate.
- * - Final:   inputRaw=false, outputPartial=false; input is VARBINARY partial, output is scalar or ARRAY of
+ * - PartialMerge: inputRaw=false, outputPartial=true;  input is VARBINARY partial(s), output is VARBINARY (merged sketch).
+ *   Used as the shuffle-merge stage between Partial and Final for grouped PERCENTILE_APPROX.
+ * - Final:        inputRaw=false, outputPartial=false; input is VARBINARY partial, output is scalar or ARRAY of
  *   percentile values (same type as value column), another aggregate.
- * - Single-stage (initial-to-result) is not supported; use Partial then Final.
+ * - Complete:     inputRaw=true,  outputPartial=false; input is raw values, output is scalar/ARRAY (single-stage, no
+ *   shuffle). Output type equals value type.
  *
  * State: one ApproxPercentileAggState per group (accumulator pointer); serialization only on ExtractValues/Spill.
  */

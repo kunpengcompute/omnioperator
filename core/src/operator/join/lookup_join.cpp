@@ -7,6 +7,11 @@
 #include "operator/util/operator_util.h"
 #include "vector/vector_helper.h"
 #include "simd/simd.h"
+#ifdef SVEHT
+#include <cstdio>
+#include "simd/sve.h"
+#include "vector/unsafe_vector.h"
+#endif
 #include "hash_builder.h"
 #include "lookup_join.h"
 
@@ -950,6 +955,171 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
             using KeyType = decltype(arg.keyType);
             KeyType cacheKeyValue;
             if constexpr (singleHT && std::remove_reference<decltype(arg)>::type::IS_SIMPLE_KEY) {
+#ifdef SVEHT
+                if constexpr (std::is_same_v<KeyType, int32_t> || std::is_same_v<KeyType, uint32_t>) {
+                    if (arg.IsSve32HashTable(partition)) {
+                        const int32_t numProbeRows = inputRowCount - curProbePosition;
+                        if (numProbeRows <= 0) {
+                            curProbePosition = inputRowCount;
+                            return;
+                        }
+
+                        std::vector<uint32_t> gatheredProbeKeys;
+                        const uint32_t *probeKeysForSve = nullptr;
+                        const uint32_t *probePayloadsForSve = nullptr;
+                        std::vector<uint32_t> probeRowIdx;
+                        std::vector<uint32_t> compactedProbeKey(static_cast<size_t>(numProbeRows));
+                        std::vector<uint32_t> compactedProbeRowIdx(static_cast<size_t>(numProbeRows));
+                        int32_t compactedCount = 0;
+                        auto fillProbeRowIdx = [&](int32_t count) {
+                            probeRowIdx.resize(static_cast<size_t>(count));
+                            for (int32_t i = 0; i < count; ++i) {
+                                probeRowIdx[static_cast<size_t>(i)] = static_cast<uint32_t>(curProbePosition + i);
+                            }
+                            probePayloadsForSve = probeRowIdx.data();
+                        };
+
+                        if (probeHashColumns[0]->GetEncoding() == OMNI_ENCODING_CONST) {
+                            if (!probeHashColumns[0]->IsNull(0)) {
+                                compactedCount = numProbeRows;
+                                gatheredProbeKeys.assign(static_cast<size_t>(numProbeRows),
+                                    static_cast<uint32_t>(
+                                        static_cast<ConstVector<KeyType> *>(probeHashColumns[0])->GetConstValue()));
+                                probeKeysForSve = gatheredProbeKeys.data();
+                                fillProbeRowIdx(numProbeRows);
+                            }
+                        } else if (probeHashColumns[0]->GetEncoding() != OMNI_DICTIONARY) {
+                            auto *probeKeyPtr = omniruntime::vec::unsafe::UnsafeVector::GetRawValues(
+                                reinterpret_cast<Vector<KeyType> *>(probeHashColumns[0]));
+                            if (!probeHashColumns[0]->HasNull()) {
+                                compactedCount = numProbeRows;
+                                probeKeysForSve = reinterpret_cast<const uint32_t *>(probeKeyPtr + curProbePosition);
+                                fillProbeRowIdx(numProbeRows);
+                            } else {
+                                auto *probeNulls =
+                                    omniruntime::vec::unsafe::UnsafeBaseVector::GetNulls(probeHashColumns[0]);
+                                const bool isNullsByteAligned = ((curProbePosition & 7) == 0);
+                                const uint8_t *alignedNulls =
+                                    probeNulls + (static_cast<size_t>(curProbePosition) >> 3);
+                                if (isNullsByteAligned &&
+                                    is_null_bitmap_all_zero_chunk256(alignedNulls, static_cast<size_t>(numProbeRows))) {
+                                    compactedCount = numProbeRows;
+                                    probeKeysForSve =
+                                        reinterpret_cast<const uint32_t *>(probeKeyPtr + curProbePosition);
+                                    fillProbeRowIdx(numProbeRows);
+                                } else if (isNullsByteAligned) {
+                                    compactedCount = compact_u32_array_using_null_bitmap_sve_gen_payload(
+                                        alignedNulls,
+                                        reinterpret_cast<const uint32_t *>(probeKeyPtr + curProbePosition),
+                                        compactedProbeKey.data(),
+                                        numProbeRows,
+                                        static_cast<uint32_t>(curProbePosition),
+                                        compactedProbeRowIdx.data());
+                                    probeKeysForSve = compactedProbeKey.data();
+                                    probePayloadsForSve = compactedProbeRowIdx.data();
+                                } else {
+                                    compactedCount = compact_probe_keys_scalar_with_nulls_u32_payload<uint32_t>(
+                                        probeNulls,
+                                        curProbePosition,
+                                        numProbeRows,
+                                        compactedProbeKey.data(),
+                                        compactedProbeRowIdx.data(),
+                                        [&](const int32_t row) { return probeKeyPtr[row]; });
+                                    probeKeysForSve = compactedProbeKey.data();
+                                    probePayloadsForSve = compactedProbeRowIdx.data();
+                                }
+                            }
+                        } else {
+                            auto *dictVector =
+                                reinterpret_cast<Vector<DictionaryContainer<KeyType>> *>(probeHashColumns[0]);
+                            auto *dictSrc = reinterpret_cast<const uint32_t *>(
+                                omniruntime::vec::unsafe::UnsafeDictionaryVector::GetDictionary(dictVector));
+                            auto *dictIndices = reinterpret_cast<const uint32_t *>(
+                                omniruntime::vec::unsafe::UnsafeDictionaryVector::GetIds(dictVector));
+                            auto *probeNulls =
+                                omniruntime::vec::unsafe::UnsafeBaseVector::GetNulls(probeHashColumns[0]);
+                            const bool isNullsByteAligned = ((curProbePosition & 7) == 0);
+                            const uint8_t *alignedNulls =
+                                probeNulls + (static_cast<size_t>(curProbePosition) >> 3);
+                            if (!probeHashColumns[0]->HasNull() ||
+                                (isNullsByteAligned &&
+                                    is_null_bitmap_all_zero_chunk256(alignedNulls, static_cast<size_t>(numProbeRows)))) {
+                                compactedCount = numProbeRows;
+                                gatheredProbeKeys.resize(static_cast<size_t>(numProbeRows));
+                                gather_u32_dict_values_sve(
+                                    dictSrc,
+                                    dictIndices + curProbePosition,
+                                    gatheredProbeKeys.data(),
+                                    numProbeRows);
+                                probeKeysForSve = gatheredProbeKeys.data();
+                                fillProbeRowIdx(numProbeRows);
+                            } else if (isNullsByteAligned) {
+                                compactedCount = compact_u32_dict_using_null_bitmap_sve_gen_payload(
+                                    alignedNulls,
+                                    dictSrc,
+                                    dictIndices + curProbePosition,
+                                    compactedProbeKey.data(),
+                                    numProbeRows,
+                                    static_cast<uint32_t>(curProbePosition),
+                                    compactedProbeRowIdx.data());
+                                probeKeysForSve = compactedProbeKey.data();
+                                probePayloadsForSve = compactedProbeRowIdx.data();
+                            } else {
+                                compactedCount = compact_probe_keys_scalar_with_nulls_u32_payload<uint32_t>(
+                                    probeNulls,
+                                    curProbePosition,
+                                    numProbeRows,
+                                    compactedProbeKey.data(),
+                                    compactedProbeRowIdx.data(),
+                                    [&](const int32_t row) { return dictSrc[dictIndices[row]]; });
+                                probeKeysForSve = compactedProbeKey.data();
+                                probePayloadsForSve = compactedProbeRowIdx.data();
+                            }
+                        }
+
+                        std::vector<uint32_t> outputHandles(static_cast<size_t>(compactedCount));
+                        std::vector<uint32_t> outputProbeRowIdx(static_cast<size_t>(compactedCount));
+
+                        auto foundCount = arg.ProbeBatchSVE32(
+                            probeKeysForSve,
+                            probePayloadsForSve,
+                            compactedCount,
+                            partition,
+                            outputHandles.data(),
+                            outputProbeRowIdx.data());
+
+                        for (int32_t idx = 0; idx < foundCount; ++idx) {
+                            const int32_t matchedProbePosition =
+                                static_cast<int32_t>(outputProbeRowIdx[static_cast<size_t>(idx)]);
+                            auto *matchedRowRefList =
+                                arg.GetSve32RowRefList(partition, outputHandles[static_cast<size_t>(idx)]);
+
+                            auto it = matchedRowRefList->Begin();
+                            ProbeJoinPosition<hasJoinFilter>(matchedProbePosition);
+                            while (it.IsOk()) {
+                                auto address = LookupJoinOutputBuilder::EncodeAddress(it->rowIdx, it->vecBatchIdx);
+                                if constexpr (hasJoinFilter) {
+                                    auto filterResult =
+                                        BuildJoinPosition(partition, it->rowIdx, it->vecBatchIdx, contextPtr);
+                                    if (filterResult) {
+                                        outputBuilder->AppendRow(matchedProbePosition, buildColumns, address);
+                                    }
+                                } else {
+                                    outputBuilder->AppendRow(matchedProbePosition, buildColumns, address);
+                                }
+                                ++it;
+                            }
+                            // if (outputBuilder->IsFull()) {
+                            //     curProbePosition = matchedProbePosition + 1;
+                            //     return;
+                            // }
+                        }
+
+                        curProbePosition = inputRowCount;
+                        return;
+                    }
+                }
+#endif
                 if (probeSimd) {
                     if (probeHashColumns[0]->HasNull()) {
                         ArrayJoinProbeSIMDNeon<decltype(arg), hasJoinFilter, OMNI_JOIN_TYPE_INNER, true>(
@@ -1854,12 +2024,13 @@ static NO_INLINE BaseVector *ConstructBuildColumn(
                 }
             }
             parallelNum = 0;
+            preVecBatchIdx = vecBatchIdx;
             preVector = array == nullptr ? nullptr : array[outputCol][vecBatchIdx];
             continue;
         }
 
         BaseVector *buildVector = array[outputCol][vecBatchIdx];
-        if (vecBatchIdx == preVecBatchIdx) {
+        if (vecBatchIdx == preVecBatchIdx && buildVector == preVector) {
             rowIdxes[parallelNum] = rowIdx;
             parallelNum++;
             if (parallelNum == parallelism) {

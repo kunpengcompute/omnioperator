@@ -701,3 +701,71 @@ TEST(LeastTest, Decimal64Basic) {
     delete arg2Vec;
     delete resultVec;
 }
+
+// ==================== Variadic Arity Tests ====================
+
+// A three argument call must consider all three operands in a single Apply, not just the
+// two on top of the stack.
+TEST(GreatestTest, ThreeArgsSingleCall) {
+    std::vector<int64_t> vals1 = {100, 9999999999L, std::numeric_limits<int64_t>::max()};
+    std::vector<int64_t> vals2 = {5, 1, std::numeric_limits<int64_t>::min()};
+    std::vector<int64_t> vals3 = {50, 5000000000L, 0};
+    std::vector<bool> noNulls = {false, false, false};
+
+    BaseVector* arg1Vec = CreateNumericVector<int64_t>(OMNI_LONG, vals1, noNulls);
+    BaseVector* arg2Vec = CreateNumericVector<int64_t>(OMNI_LONG, vals2, noNulls);
+    BaseVector* arg3Vec = CreateNumericVector<int64_t>(OMNI_LONG, vals3, noNulls);
+
+    BaseVector* resultVec = nullptr;
+    ExecuteLeastGreatest("Greatest", {arg1Vec, arg2Vec, arg3Vec}, OMNI_LONG, resultVec);
+
+    ValidateNumericResult<int64_t>(resultVec,
+        {100, 9999999999L, std::numeric_limits<int64_t>::max()}, noNulls);
+
+    delete arg1Vec;
+    delete arg2Vec;
+    delete arg3Vec;
+    delete resultVec;
+}
+
+TEST(LeastTest, ThreeArgsSingleCall) {
+    std::vector<int64_t> vals1 = {5, 1, -9999999999L};
+    std::vector<int64_t> vals2 = {100, 9999999999L, 9999999999L};
+    std::vector<int64_t> vals3 = {50, 9999999998L, 0};
+    std::vector<bool> noNulls = {false, false, false};
+
+    BaseVector* arg1Vec = CreateNumericVector<int64_t>(OMNI_LONG, vals1, noNulls);
+    BaseVector* arg2Vec = CreateNumericVector<int64_t>(OMNI_LONG, vals2, noNulls);
+    BaseVector* arg3Vec = CreateNumericVector<int64_t>(OMNI_LONG, vals3, noNulls);
+
+    BaseVector* resultVec = nullptr;
+    ExecuteLeastGreatest("Least", {arg1Vec, arg2Vec, arg3Vec}, OMNI_LONG, resultVec);
+
+    ValidateNumericResult<int64_t>(resultVec, {5, 1, -9999999999L}, noNulls);
+
+    delete arg1Vec;
+    delete arg2Vec;
+    delete arg3Vec;
+    delete resultVec;
+}
+
+// Spark's "Greatest"/"Least" must keep ignoring NULL arguments; the propagating Flink
+// variants are covered in FlinkLeastGreatestTest.cpp.
+TEST(GreatestTest, SparkNullStillSkipped) {
+    std::vector<int64_t> vals1 = {0, 0};
+    std::vector<int64_t> vals2 = {5, 0};
+    std::vector<bool> nulls1 = {true, true};
+    std::vector<bool> nulls2 = {false, true};
+
+    BaseVector* arg1Vec = CreateNumericVector<int64_t>(OMNI_LONG, vals1, nulls1);
+    BaseVector* arg2Vec = CreateNumericVector<int64_t>(OMNI_LONG, vals2, nulls2);
+
+    BaseVector* resultVec = nullptr;
+    ExecuteLeastGreatest("Greatest", {arg1Vec, arg2Vec}, OMNI_LONG, resultVec);
+
+    ValidateNumericResult<int64_t>(resultVec, {5, 0}, {false, true});
+
+    delete arg1Vec;
+    delete arg2Vec;
+    delete resultVec;
+}

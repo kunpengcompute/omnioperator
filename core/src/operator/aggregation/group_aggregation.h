@@ -16,6 +16,10 @@
 #include "operator/hashmap/column_marshaller.h"
 #include "operator/hashmap/array_map.h"
 #include "operator/hashmap/vector_analyzer.h"
+#ifdef OMNI_SVEHT32_HASH_AGG
+#include "operator/hashmap/sve_agg_aos_hash_table32.h"
+#include "operator/hashmap/sve_agg_aos_hash_table32_pair.h"
+#endif
 #include "operator/aggregation/aggregator/aggregator_factory.h"
 #include "operator/config/operator_config.h"
 #include "operator/filter/filter_and_project.h"
@@ -80,6 +84,12 @@ public:
     void InsertValueToArrayMap(GroupMap &arrayMap, BaseVector *groupVector,
                                int32_t rowIdx);
 
+#ifdef OMNI_SVEHT32_HASH_AGG
+    int32_t OutputFixedInt32SveAos(VectorBatch **outputVecBatch);
+
+    int32_t OutputFixedInt32PairSveAos(VectorBatch **outputVecBatch);
+#endif
+
     uint64_t GetSpilledBytes() override;
 
     uint64_t GetUsedMemBytes() override;
@@ -134,6 +144,32 @@ private:
 
     void ProcessStates(VectorBatch *vecBatch);
 
+#ifdef OMNI_SVEHT32_HASH_AGG
+    void EmplaceFixedInt32SveAos(VectorBatch *vecBatch, BaseVector *groupVector);
+
+    void EmplaceFixedInt32PairSveAos(VectorBatch *vecBatch, BaseVector *groupVector0, BaseVector *groupVector1);
+
+    AggregateState *AllocateAggState();
+
+    AggregateState *GetOrCreateNullGroupState32(std::vector<AggregateState *> &newGroupStates);
+
+    uint32_t RegisterSveAggState(AggregateState *state);
+
+    uint32_t RegisterSvePairAggState(AggregateState *state);
+
+    bool HasSveAggData() const;
+
+    bool HasSvePairAggData() const;
+
+    bool IsActiveSveHandle() const;
+
+    void FallbackSveAggToFixedInt32();
+
+    void FallbackSvePairAggToSerializeIfEmpty();
+
+    void ProcessStatesWithNewGroups(VectorBatch *vecBatch, std::vector<AggregateState *> &newGroupStates);
+#endif
+
     template<typename T>
     inline void InsertAggStatesToArrayMap(T *hashes, int32_t vecLanes, bool *isAssigned,
                                     int64_t *slots, mem::SimpleArenaAllocator &arenaAllocator,
@@ -187,6 +223,17 @@ private:
 
     std::unique_ptr<TaperGroupbySingleFixHandler<int16_t>> fixedInt16 = nullptr;
     std::unique_ptr<TaperGroupbySingleFixHandler<int32_t>> fixedInt32 = nullptr;
+#ifdef OMNI_SVEHT32_HASH_AGG
+    std::unique_ptr<hashmap::SveAggAosHashTable32> fixedInt32SveAos = nullptr;
+    std::vector<AggregateState *> fixedInt32SveAosStates;
+    AggregateState *nullGroupState32 = nullptr;
+    bool hasNullGroupState32 = false;
+    bool sveAosNullGroupOutput = false;
+    bool sveAosFallbackToFixedInt32 = false;
+    std::unique_ptr<hashmap::SveAggAosHashTable32Pair> fixedInt32PairSveAos = nullptr;
+    std::vector<AggregateState *> fixedInt32PairSveAosStates;
+    bool svePairFallbackToSerialize = false;
+#endif
     std::unique_ptr<TaperGroupbySingleFixHandler<int64_t>> fixedInt64 = nullptr;
     std::unique_ptr<TaperGroupbySingleFixHandler<int32_t, true>> packedInt32 = nullptr;
     std::unique_ptr<TaperGroupbySingleFixHandler<int64_t, true>> packedInt64 = nullptr;

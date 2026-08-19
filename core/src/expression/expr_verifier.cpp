@@ -122,7 +122,7 @@ void ExprVerifier::Visit(const UnaryExpr &unaryExpr)
 
 void ExprVerifier::Visit(const BinaryExpr &binaryExpr)
 {
-    if (binaryExpr.vectorFunction == nullptr) {
+    if (binaryExpr.vectorFunction == nullptr && !binaryExpr.SupportsCheckedArithmeticVectorization()) {
         this->isSupportVectorization_ = false;
     }
     const type::DataType &leftType = *(binaryExpr.left->GetReturnType());

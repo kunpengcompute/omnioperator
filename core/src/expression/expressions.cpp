@@ -12,6 +12,8 @@
 #include "vectorization/functions/NamedStruct.h"
 #include "vectorization/functions/MapFunction.h"
 #include "vectorization/functions/MathDecimalFunctions.h"
+#include "vectorization/functions/JsonObject.h"
+#include "vectorization/functions/JsonArray.h"
 #include "type/data_type.h"
 #include "vector/vector.h"
 #include "codegen/func_registry.h"
@@ -427,6 +429,32 @@ BinaryExpr::BinaryExpr()
     dataType = BooleanType();
 }
 
+namespace {
+std::pair<ArithmeticOp, ArithmeticEvalMode> NormalizeArithmeticOperator(Operator op)
+{
+    switch (op) {
+        case Operator::ADD:
+            return {ArithmeticOp::ADD, ArithmeticEvalMode::LEGACY};
+        case Operator::SUB:
+            return {ArithmeticOp::SUBTRACT, ArithmeticEvalMode::LEGACY};
+        case Operator::MUL:
+            return {ArithmeticOp::MULTIPLY, ArithmeticEvalMode::LEGACY};
+        case Operator::DIV:
+            return {ArithmeticOp::DIVIDE, ArithmeticEvalMode::LEGACY};
+        case Operator::TRY_ADD:
+            return {ArithmeticOp::ADD, ArithmeticEvalMode::TRY};
+        case Operator::TRY_SUB:
+            return {ArithmeticOp::SUBTRACT, ArithmeticEvalMode::TRY};
+        case Operator::TRY_MUL:
+            return {ArithmeticOp::MULTIPLY, ArithmeticEvalMode::TRY};
+        case Operator::TRY_DIV:
+            return {ArithmeticOp::DIVIDE, ArithmeticEvalMode::TRY};
+        default:
+            return {ArithmeticOp::INVALID, ArithmeticEvalMode::LEGACY};
+    }
+}
+} // namespace
+
 std::string GetStringOp(Operator op)
 {
     switch (op) {
@@ -473,9 +501,28 @@ BinaryExpr::BinaryExpr(Operator bop, Expr *leftExpr, Expr *rightExpr, DataTypePt
     left = leftExpr;
     right = rightExpr;
     dataType = std::move(dt);
+    const auto arithmeticSpec = NormalizeArithmeticOperator(bop);
+    arithmeticOp = arithmeticSpec.first;
+    evalMode = arithmeticSpec.second;
     std::vector<omniruntime::type::DataTypeId> args = {left->dataType->GetId(), right->dataType->GetId()};
     auto signature = std::make_shared<FunctionSignature>(GetStringOp(bop), args, dataType->GetId());
     vectorFunction = VectorFunction::Find(signature);
+}
+
+bool BinaryExpr::SupportsCheckedArithmeticVectorization() const
+{
+    if (arithmeticOp == ArithmeticOp::INVALID || left == nullptr || right == nullptr ||
+        left->dataType == nullptr || right->dataType == nullptr || dataType == nullptr ||
+        evalMode == ArithmeticEvalMode::LEGACY) {
+        return false;
+    }
+    const auto leftType = left->dataType->GetId();
+    const auto rightType = right->dataType->GetId();
+    const auto resultType = dataType->GetId();
+    const bool allDecimal = left->dataType->isDecimal() && right->dataType->isDecimal() && dataType->isDecimal();
+    const bool primitive = leftType == OMNI_BYTE || leftType == OMNI_SHORT || leftType == OMNI_INT ||
+        leftType == OMNI_LONG || leftType == OMNI_FLOAT || leftType == OMNI_DOUBLE;
+    return allDecimal || (primitive && leftType == rightType && leftType == resultType);
 }
 
 BinaryExpr::~BinaryExpr()
@@ -1018,6 +1065,42 @@ FuncExpr::~FuncExpr()
     constantInputs.clear();
 }
 
+namespace {
+// A value operand is a "raw" JSON node iff it is itself a JSON_OBJECT / JSON_ARRAY constructor
+// call (mirrors Flink JsonGenerateUtils.isJsonFunctionOperand at the RexNode level). Its
+// already-serialized JSON text is inserted verbatim by json_object / json_array instead of being
+// re-quoted as a string, so JSON_ARRAY(JSON_ARRAY(1)) -> [[1]] and
+// JSON_OBJECT(KEY 'k' VALUE JSON_OBJECT(...)) -> {"k":{...}}.
+inline bool IsJsonConstructorExpr(const Expr *e)
+{
+    if (e == nullptr || e->GetType() != ExprType::FUNC_E) {
+        return false;
+    }
+    const auto *fe = static_cast<const FuncExpr *>(e);
+    return fe->funcName == "json_array" || fe->funcName == "json_object";
+}
+
+// json_array layout: [flag, v0, v1, ...] -> one raw flag per value (args[1 + i]).
+inline std::vector<bool> JsonArrayValueRawFlags(const std::vector<Expr *> &args)
+{
+    std::vector<bool> flags;
+    for (size_t i = 1; i < args.size(); ++i) {
+        flags.push_back(IsJsonConstructorExpr(args[i]));
+    }
+    return flags;
+}
+
+// json_object layout: [flag, k0, v0, k1, v1, ...] -> one raw flag per pair value (args[2 + 2*p]).
+inline std::vector<bool> JsonObjectValueRawFlags(const std::vector<Expr *> &args)
+{
+    std::vector<bool> flags;
+    for (size_t i = 2; i < args.size(); i += 2) {
+        flags.push_back(IsJsonConstructorExpr(args[i]));
+    }
+    return flags;
+}
+}  // namespace
+
 FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, DataTypePtr returnType)
     : funcName(fnName), arguments(args), functionType(BUILTIN)
 {
@@ -1041,6 +1124,14 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     }
     if (funcName == "concat_ws") {
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
+    }
+    if (funcName == "json_object") {
+        vectorFunction = std::make_shared<JsonObjectFunction>(GetInputDataTypes(),
+            JsonObjectValueRawFlags(arguments));
+    }
+    if (funcName == "json_array") {
+        vectorFunction = std::make_shared<JsonArrayFunction>(GetInputDataTypes(),
+            JsonArrayValueRawFlags(arguments));
     }
     if (funcName == "CAST") {
         vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
@@ -1084,6 +1175,14 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     if (funcName == "concat_ws") {
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
     }
+    if (funcName == "json_object") {
+        vectorFunction = std::make_shared<JsonObjectFunction>(GetInputDataTypes(),
+            JsonObjectValueRawFlags(arguments));
+    }
+    if (funcName == "json_array") {
+        vectorFunction = std::make_shared<JsonArrayFunction>(GetInputDataTypes(),
+            JsonArrayValueRawFlags(arguments));
+    }
     if (funcName == "CAST") {
         vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
     }
@@ -1123,6 +1222,14 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
     }
     if (funcName == "concat_ws") {
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
+    }
+    if (funcName == "json_object") {
+        vectorFunction = std::make_shared<JsonObjectFunction>(GetInputDataTypes(),
+            JsonObjectValueRawFlags(arguments));
+    }
+    if (funcName == "json_array") {
+        vectorFunction = std::make_shared<JsonArrayFunction>(GetInputDataTypes(),
+            JsonArrayValueRawFlags(arguments));
     }
     if (funcName == "CAST") {
         vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);

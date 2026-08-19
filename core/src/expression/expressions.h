@@ -18,6 +18,7 @@
 #include <vector>
 #include "type/data_type.h"
 #include "type/decimal128.h"
+#include "expression/arithmetic_spec.h"
 #include <locale>
 #include <regex>
 #include <codecvt>
@@ -285,6 +286,9 @@ public:
 class BinaryExpr : public Expr {
 public:
     Operator op = Operator::EQ;
+    ArithmeticOp arithmeticOp = ArithmeticOp::INVALID;
+    ArithmeticEvalMode evalMode = ArithmeticEvalMode::LEGACY;
+    mutable std::shared_ptr<VectorFunction> checkedArithmeticVectorFunction;
     Expr *left = nullptr;
     Expr *right = nullptr;
 
@@ -293,6 +297,7 @@ public:
     BinaryExpr(Operator bop, Expr *leftExpr, Expr *rightExpr, DataTypePtr dt);
     void Accept(ExprVisitor &visitor) const override;
     ExprType GetType() const override;
+    bool SupportsCheckedArithmeticVectorization() const;
 
     uint8_t* computeEQ(omniruntime::vec::VectorBatch *vecBatch, uint8_t *bitMark);
     uint8_t* computeAND(omniruntime::vec::VectorBatch *vecBatch, uint8_t *bitMark);
@@ -302,7 +307,8 @@ public:
 
     bool supportVectorized() const override
     {
-        return vectorFunction != nullptr && left->supportVectorized() && right->supportVectorized();
+        return (vectorFunction != nullptr || SupportsCheckedArithmeticVectorization()) &&
+            left->supportVectorized() && right->supportVectorized();
     }
 
     std::string toString() const override;

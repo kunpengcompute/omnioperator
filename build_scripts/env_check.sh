@@ -31,6 +31,7 @@ print_help() {
     --disable-cpuchecker               = Disable CPU checker
     --enable-dt                        = Enable DT checker
     --exclude-test                     = Exclude Test Source
+    --enable-sveht                     = Enable SVE vectorized hash tables
   "
 }
 

@@ -7,12 +7,23 @@
 #include <string>
 #include "codegen/expr_evaluator.h"
 #include "type/data_type.h"
+#include "vectorization/functions/TryArithmetic.h"
+#include "vectorization/functions/Md5ConcatWsFusion.h"
 
 namespace omniruntime::vectorization {
 using namespace omniruntime::expressions;
 using namespace omniruntime::mem;
 using namespace omniruntime::vec;
 using namespace omniruntime::op;
+
+BaseVector *PreserveDecimalType(BaseVector *source, BaseVector *projected)
+{
+    if (source->GetDataType() != nullptr &&
+        (source->GetTypeId() == OMNI_DECIMAL64 || source->GetTypeId() == OMNI_DECIMAL128)) {
+        VectorHelper::SetVectorDataType(projected, source->GetDataType().get());
+    }
+    return projected;
+}
 
 template <typename T>
 BaseVector *ColumnProjectionHelper(BaseVector *colVec, int32_t numSelectedRows)
@@ -24,12 +35,13 @@ BaseVector *ColumnProjectionHelper(BaseVector *colVec, int32_t numSelectedRows)
         if (constVec->HasNull() && constVec->IsNull(0)) {
             newConst->SetNulls(0, true, numSelectedRows);
         }
-        return newConst;
+        return PreserveDecimalType(colVec, newConst);
     }
     if (colVec->GetEncoding() == OMNI_DICTIONARY) {
-        return reinterpret_cast<Vector<DictionaryContainer<T>> *>(colVec)->Slice(0, numSelectedRows);
+        return PreserveDecimalType(
+            colVec, reinterpret_cast<Vector<DictionaryContainer<T>> *>(colVec)->Slice(0, numSelectedRows));
     }
-    return reinterpret_cast<Vector<T> *>(colVec)->Slice(0, numSelectedRows);
+    return PreserveDecimalType(colVec, reinterpret_cast<Vector<T> *>(colVec)->Slice(0, numSelectedRows));
 }
 
 template <typename T>
@@ -42,13 +54,15 @@ BaseVector *ColumnProjectionCopyPositionsHelper(BaseVector *colVec, int32_t *sel
         if (constVec->HasNull() && constVec->IsNull(0)) {
             newConst->SetNulls(0, true, numSelectedRows);
         }
-        return newConst;
+        return PreserveDecimalType(colVec, newConst);
     }
     if (colVec->GetEncoding() == OMNI_DICTIONARY) {
-        return reinterpret_cast<Vector<DictionaryContainer<T>> *>(colVec)->CopyPositions(selectedRows, 0,
-            numSelectedRows);
+        return PreserveDecimalType(colVec,
+            reinterpret_cast<Vector<DictionaryContainer<T>> *>(colVec)->CopyPositions(
+                selectedRows, 0, numSelectedRows));
     }
-    return reinterpret_cast<Vector<T> *>(colVec)->CopyPositions(selectedRows, 0, numSelectedRows);
+    return PreserveDecimalType(
+        colVec, reinterpret_cast<Vector<T> *>(colVec)->CopyPositions(selectedRows, 0, numSelectedRows));
 }
 
 template <typename T>
@@ -177,7 +191,8 @@ ExprEval::ExprEval(VectorBatch *vectorBatch, ExecutionContext *context): context
         vecBatch_.push_back(vectorBatch->Get(i));
         typeIds.push_back(vectorBatch->Get(i)->GetTypeId());
     }
-    rowSize = vectorBatch->GetRowCount();
+    inputRowSize = vectorBatch->GetRowCount();
+    rowSize = context->hasFilter ? context->GetResultRowSize() : inputRowSize;
 }
 
 ExprEval::ExprEval(ExecutionContext *context): context(context)
@@ -265,6 +280,9 @@ void ExprEval::Visit(const LiteralExpr &e)
         if (constVec != nullptr && e.isNull) {
             constVec->SetNulls(0, true, constVec->GetSize());
         }
+        if (constVec != nullptr && (typeId == OMNI_DECIMAL64 || typeId == OMNI_DECIMAL128)) {
+            VectorHelper::SetVectorDataType(constVec, e.dataType.get());
+        }
         inputValues_.push(constVec);
         return;
     }
@@ -340,9 +358,9 @@ void ExprEval::Visit(const FieldExpr &e)
     }
     if (context->hasFilter) {
         auto isSelect = context->GetIsSelectRow();
-        int selectRow[context->GetResultRowSize()] = {-1};
+        int selectRow[inputRowSize] = {-1};
         int selectSize = 0;
-        for (int i = 0; i < context->GetResultRowSize(); i++) {
+        for (int i = 0; i < inputRowSize; i++) {
             if (isSelect[i]) {
                 selectRow[selectSize] = i;
                 ++selectSize;
@@ -456,12 +474,21 @@ void ExprEval::Visit(const BinaryExpr &e)
 {
     e.left->Accept(*this);
     e.right->Accept(*this);
-    if (e.vectorFunction == nullptr) {
+
+    auto vectorFunction = e.vectorFunction;
+    if (e.arithmeticOp != ArithmeticOp::INVALID && e.evalMode != ArithmeticEvalMode::LEGACY) {
+        if (e.checkedArithmeticVectorFunction == nullptr) {
+            e.checkedArithmeticVectorFunction = CreateBinaryArithmeticFunction(
+                e.arithmeticOp, e.evalMode, e.left->dataType, e.right->dataType, e.dataType);
+        }
+        vectorFunction = e.checkedArithmeticVectorFunction;
+    }
+    if (vectorFunction == nullptr) {
         OMNI_THROW("Vectorization Error:", "Vector function not found for binary expression");
     }
 
     BaseVector *result = nullptr;
-    e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
+    vectorFunction->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
 }
 
@@ -524,8 +551,35 @@ void ExprEval::Visit(const IsNullExpr &e)
     inputValues_.push(result);
 }
 
+bool ExprEval::TryEvaluateMd5ConcatWsFusion(const FuncExpr &e)
+{
+    const auto fusionPlan = Md5ConcatWsFusion::Match(e);
+    if (fusionPlan.has_value()) {
+        std::vector<DataTypeId> fusedArgTypes(fusionPlan->concatWs->arguments.size());
+        std::transform(fusionPlan->concatWs->arguments.begin(), fusionPlan->concatWs->arguments.end(),
+            fusedArgTypes.begin(), [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
+        auto fusedSignature = std::make_shared<codegen::FunctionSignature>(
+            fusionPlan->fusedFunctionName, fusedArgTypes, e.dataType->GetId());
+        auto fusedFunction = VectorFunction::Find(fusedSignature, context->queryConfigRef());
+        if (fusedFunction != nullptr) {
+            for (Expr *argument : fusionPlan->concatWs->arguments) {
+                argument->Accept(*this);
+            }
+            BaseVector *fusedResult = nullptr;
+            fusedFunction->Apply(inputValues_, e.dataType, fusedResult, context);
+            inputValues_.push(fusedResult);
+            return true;
+        }
+    }
+    return false;
+}
+
 void ExprEval::Visit(const FuncExpr &e)
 {
+    if (TryEvaluateMd5ConcatWsFusion(e)) {
+        return;
+    }
+
     for (auto arg : e.arguments) {
         arg->Accept(*this);
     }
@@ -557,6 +611,10 @@ void ExprEval::Visit(const FuncExpr &e)
     // emit real field names instead of field0/field1. The Apply interface only passes the
     // output type, so stash the input type on the context for ToJson to read.
     if (e.funcName == "to_json" && !e.arguments.empty()) {
+        context->SetToJsonInputType(e.arguments[0]->dataType.get());
+    }
+    // json_string (Flink JSON_STRING) needs the same input DataType for ROW field names.
+    if (e.funcName == "json_string" && !e.arguments.empty()) {
         context->SetToJsonInputType(e.arguments[0]->dataType.get());
     }
 

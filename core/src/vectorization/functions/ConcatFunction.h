@@ -17,12 +17,18 @@ namespace omniruntime::vectorization {
 
     class ConcatFunction final : public VectorFunction {
     public:
-        explicit ConcatFunction() {}
+        /// numArgs is the arity of the registered signature. One instance is registered per
+        /// arity because Apply() must pop exactly that many vectors off the shared argument
+        /// stack; popping fewer leaves stale vectors behind and shifts the operands of the
+        /// enclosing expression.
+        explicit ConcatFunction(size_t numArgs = 2) : numArgs_(numArgs) {}
 
         void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
             ExecutionContext *context) const override;
 
     private:
+        size_t numArgs_;
+
         // Helper: Get string value from vector with different encodings
         std::string_view GetStringValueFromVector(BaseVector *vec, int32_t row) const;
 

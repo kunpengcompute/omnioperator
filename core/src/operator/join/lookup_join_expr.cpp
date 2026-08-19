@@ -7,6 +7,9 @@
 
 #include <utility>
 #include "hash_builder_expr.h"
+#ifdef OMNI_SVEHT32_JOIN_KEY_REWRITE
+#include "operator/join/join_key_rewrite_utils.h"
+#endif
 #include "operator/util/operator_util.h"
 #include "vector/vector_helper.h"
 
@@ -137,6 +140,11 @@ LookupJoinWithExprOperatorFactory *LookupJoinWithExprOperatorFactory::CreateLook
 
     auto probeHashCols = planNode->LeftKeys();
     auto probeHashColsCount = (int32_t) probeHashCols.size();
+#ifdef OMNI_SVEHT32_JOIN_KEY_REWRITE
+    const bool enableInt32KeyRewrite = ShouldRewriteJoinKeysToInt32(probeHashCols, planNode->RightKeys());
+#else
+    const bool enableInt32KeyRewrite = false;
+#endif
 
     auto filter = planNode->Filter();
     auto isShuffle = planNode->IsShuffle();
@@ -147,7 +155,8 @@ LookupJoinWithExprOperatorFactory *LookupJoinWithExprOperatorFactory::CreateLook
 
     auto pLookupJoinWithExprOperatorFactory = new LookupJoinWithExprOperatorFactory(*probeTypes, probeOutputCols.data(), probeOutputCols.size(),
         probeHashCols, probeHashColsCount, buildOutputCols.data(), buildOutputCols.size(), *buildTypes,
-    reinterpret_cast<int64_t>(hashBuilderOperatorFactory), filter, isShuffle, overflowConfig, queryConfig, outputList.data());
+    reinterpret_cast<int64_t>(hashBuilderOperatorFactory), filter, isShuffle, overflowConfig, queryConfig, outputList.data(),
+    enableInt32KeyRewrite);
 
     delete overflowConfig;
     overflowConfig = nullptr;
@@ -159,11 +168,21 @@ LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(const DataT
     const std::vector<omniruntime::expressions::Expr *> &probeHashKeys, int32_t probeHashKeysCount,
     int32_t *buildOutputCols, int32_t buildOutputColsCount, const DataTypes &buildOutputTypes,
     int64_t hashBuilderFactoryAddr, Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig,
-    int32_t *outputList)
+    int32_t *outputList, bool enableInt32KeyRewrite)
 {
     std::vector<DataTypePtr> newProbeTypes;
-    OperatorUtil::CreateProjections(probeTypes, probeHashKeys, newProbeTypes, this->projections, this->probeHashCols,
-        overflowConfig);
+#ifdef OMNI_SVEHT32_JOIN_KEY_REWRITE
+    if (enableInt32KeyRewrite) {
+        effectiveProbeHashKeys = RewriteJoinKeyExprsToInt32(probeHashKeys, rewrittenProbeHashKeyOwners);
+    } else {
+        effectiveProbeHashKeys.assign(probeHashKeys.begin(), probeHashKeys.end());
+    }
+#else
+    (void)enableInt32KeyRewrite;
+    effectiveProbeHashKeys.assign(probeHashKeys.begin(), probeHashKeys.end());
+#endif
+    OperatorUtil::CreateProjections(probeTypes, effectiveProbeHashKeys, newProbeTypes, this->projections,
+        this->probeHashCols, overflowConfig);
     this->probeTypes = std::make_unique<DataTypes>(newProbeTypes);
     auto hashBuilderOperatorFactory =
         reinterpret_cast<HashBuilderOperatorFactory *>(hashBuilderFactoryAddr);
@@ -179,10 +198,10 @@ LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(const DataT
     const std::vector<omniruntime::expressions::Expr *> &probeHashKeys, int32_t probeHashKeysCount,
     int32_t *buildOutputCols, int32_t buildOutputColsCount, const DataTypes &buildOutputTypes,
     int64_t hashBuilderFactoryAddr, Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig,
-    const config::QueryConfig &queryConfig, int32_t *outputList)
+    const config::QueryConfig &queryConfig, int32_t *outputList, bool enableInt32KeyRewrite)
     : LookupJoinWithExprOperatorFactory(probeTypes, probeOutputCols, probeOutputColsCount, probeHashKeys, probeHashKeysCount,
     buildOutputCols, buildOutputColsCount, buildOutputTypes, hashBuilderFactoryAddr, filterExpr, isShuffleExchangeBuildPlan,
-    overflowConfig, outputList)
+    overflowConfig, outputList, enableInt32KeyRewrite)
 {
     this->queryConfig_ = queryConfig;
 }

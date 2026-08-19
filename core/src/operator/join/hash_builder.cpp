@@ -200,14 +200,23 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
         *hashTablesVariants);
     if (UNLIKELY(IsDebugEnable())) {
         int32_t hashTableSize = 0;
-        auto hasgTableType =
+        auto hashTableType =
             std::visit([&](auto &&arg) { return arg.GetHashTableTypes(partitionIndex); }, *hashTablesVariants);
-        if (hasgTableType == HashTableImplementationType::NORMAL_HASH_TABLE) {
+        if (hashTableType == HashTableImplementationType::NORMAL_HASH_TABLE) {
             hashTableSize = std::visit([&](auto &&arg) { return arg.GetHashTable(partitionIndex)->GetElementsSize(); },
                 *hashTablesVariants);
-        } else {
+        } else if (hashTableType == HashTableImplementationType::ARRAY_HASH_TABLE) {
             hashTableSize = std::visit([&](auto &&arg) { return arg.GetArrayTable(partitionIndex)->GetElementsSize(); },
                 *hashTablesVariants);
+#ifdef SVEHT
+        } else if (hashTableType == HashTableImplementationType::SVE_HASH_TABLE32) {
+            hashTableSize = std::visit(
+                [&](auto &&arg) {
+                    auto &sveHashTable = arg.GetSve32HashTable(partitionIndex);
+                    return sveHashTable == nullptr ? 0 : sveHashTable->GetElementsSize();
+                },
+                *hashTablesVariants);
+#endif
         }
         UpdateGetOutputInfo(hashTableSize);
     }

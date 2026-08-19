@@ -47,13 +47,31 @@ static bool shouldReplace(const T &newVal, const T &currentVal) {
 template<CompareMode Mode>
 void LeastGreatestFunction<Mode>::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, 
     BaseVector *&result, ExecutionContext *context) const {
+    if (numArgs_ < 2 || args.size() < numArgs_) {
+        OMNI_THROW("LeastGreatest function Error", "Least/Greatest requires at least 2 arguments");
+    }
     std::vector<BaseVector *> argVectors;
-    argVectors.push_back(args.top());
-    args.pop();
-    argVectors.push_back(args.top());
-    args.pop();
+    argVectors.reserve(numArgs_);
+    for (size_t i = 0; i < numArgs_; ++i) {
+        argVectors.push_back(args.top());
+        args.pop();
+    }
     std::reverse(argVectors.begin(), argVectors.end());
     DispatchCompare(argVectors, outputType, result, context);
+}
+
+template<CompareMode Mode>
+bool LeastGreatestFunction<Mode>::HasNullArg(const std::vector<BaseVector *> &argVectors, int32_t row) const {
+    if (!propagateNull_) {
+        return false;
+    }
+    for (auto *argVec : argVectors) {
+        int32_t nullCheckIdx = (argVec->GetEncoding() == OMNI_ENCODING_CONST) ? 0 : row;
+        if (argVec->IsNull(nullCheckIdx)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 template<CompareMode Mode>
@@ -112,6 +130,10 @@ void LeastGreatestFunction<Mode>::CompareNumeric(const std::vector<BaseVector *>
     result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
     
     for (int32_t row = 0; row < size; ++row) {
+        if (HasNullArg(argVectors, row)) {
+            result->SetNull(row);
+            continue;
+        }
         bool hasNonNull = false;
         T bestValue{};
         
@@ -143,6 +165,10 @@ void LeastGreatestFunction<Mode>::CompareString(const std::vector<BaseVector *> 
     result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
     
     for (int32_t row = 0; row < size; ++row) {
+        if (HasNullArg(argVectors, row)) {
+            result->SetNull(row);
+            continue;
+        }
         bool hasNonNull = false;
         std::string_view bestValue;
         
@@ -177,6 +203,10 @@ void LeastGreatestFunction<Mode>::CompareBoolean(const std::vector<BaseVector *>
     result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
     
     for (int32_t row = 0; row < size; ++row) {
+        if (HasNullArg(argVectors, row)) {
+            result->SetNull(row);
+            continue;
+        }
         bool hasNonNull = false;
         bool bestValue = false;
         
@@ -332,14 +362,25 @@ void LeastGreatestFunction<Mode>::SetStringValueToVector(BaseVector *vec, int32_
 }
 
 // Factory functions
+// inputArgs carries the call site argument types, so its size is the real arity of the call.
 std::shared_ptr<VectorFunction> makeGreatest(const std::string &name, 
     const std::vector<DataTypeId> &inputArgs, const config::QueryConfig &) {
-    return std::make_shared<GreatestFunction>();
+    return std::make_shared<GreatestFunction>(inputArgs.size(), false);
 }
 
 std::shared_ptr<VectorFunction> makeLeast(const std::string &name, 
     const std::vector<DataTypeId> &inputArgs, const config::QueryConfig &) {
-    return std::make_shared<LeastFunction>();
+    return std::make_shared<LeastFunction>(inputArgs.size(), false);
+}
+
+std::shared_ptr<VectorFunction> makeFlinkGreatest(const std::string &name,
+    const std::vector<DataTypeId> &inputArgs, const config::QueryConfig &) {
+    return std::make_shared<GreatestFunction>(inputArgs.size(), true);
+}
+
+std::shared_ptr<VectorFunction> makeFlinkLeast(const std::string &name,
+    const std::vector<DataTypeId> &inputArgs, const config::QueryConfig &) {
+    return std::make_shared<LeastFunction>(inputArgs.size(), true);
 }
 
 // Helper function to generate signatures for both least and greatest
@@ -377,6 +418,14 @@ std::vector<std::shared_ptr<codegen::FunctionSignature>> GreatestSignatures() {
 
 std::vector<std::shared_ptr<codegen::FunctionSignature>> LeastSignatures() {
     return GenerateSignatures("Least");
+}
+
+std::vector<std::shared_ptr<codegen::FunctionSignature>> FlinkGreatestSignatures() {
+    return GenerateSignatures("flink_greatest");
+}
+
+std::vector<std::shared_ptr<codegen::FunctionSignature>> FlinkLeastSignatures() {
+    return GenerateSignatures("flink_least");
 }
 
 // Explicit template instantiations for GREATEST
