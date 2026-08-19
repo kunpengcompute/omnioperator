@@ -73,9 +73,21 @@ public:
         const auto dateTypeId = dateArg->GetTypeId();
         
         if (dateTypeId == OMNI_DATE32 || dateTypeId == OMNI_INT) {
-            // Extract date values
-            auto *dateVector = reinterpret_cast<Vector<int32_t> *>(dateArg);
-            const auto *dateRaw = unsafe::UnsafeVector::GetRawValues(dateVector);
+            // Extract date values. DATE literals are represented as ConstVector,
+            // so they cannot be read through the flat Vector layout.
+            bool dateIsConst = (dateArg->GetEncoding() == OMNI_ENCODING_CONST);
+            bool dateConstIsNull = dateIsConst && dateArg->IsNull(0);
+            int32_t constDate = 0;
+            const int32_t *dateRaw = nullptr;
+            if (dateIsConst) {
+                auto *constDateVector = reinterpret_cast<ConstVector<int32_t> *>(dateArg);
+                if (!dateConstIsNull) {
+                    constDate = constDateVector->GetConstValue();
+                }
+            } else {
+                auto *dateVector = reinterpret_cast<Vector<int32_t> *>(dateArg);
+                dateRaw = unsafe::UnsafeVector::GetRawValues(dateVector);
+            }
             const auto *dateNulls = reinterpret_cast<uint64_t *>(unsafe::UnsafeBaseVector::GetNulls(dateArg));
             
             // Check if numDays is constant
@@ -91,9 +103,9 @@ public:
                 // For const vector, check if it's null
                 if (numDaysArg->IsNull(0)) {
                     // If constant is NULL, set all results to NULL
-                    auto *resultNulls = unsafe::UnsafeBaseVector::GetNulls(result);
-                    auto nullsSize = BitUtil::Nbytes(size);
-                    memset(resultNulls, 0xFF, nullsSize);
+                    result->SetNulls(0, true, size);
+                    delete numDaysArg;
+                    delete dateArg;
                     return;
                 }
             } else {
@@ -103,14 +115,29 @@ public:
                 numDaysNulls = reinterpret_cast<uint64_t *>(unsafe::UnsafeBaseVector::GetNulls(numDaysArg));
             }
             
-            // Copy NULL bits from date input to result (so NULL rows are already set to NULL)
             auto *resultNulls = reinterpret_cast<uint64_t *>(unsafe::UnsafeBaseVector::GetNulls(result));
             auto nullsSize = BitUtil::Nbytes(size);
-            memcpy(resultNulls, dateNulls, nullsSize);
+            if (dateIsConst) {
+                if (dateConstIsNull) {
+                    result->SetNulls(0, true, size);
+                    delete numDaysArg;
+                    delete dateArg;
+                    return;
+                }
+                memset(resultNulls, 0, nullsSize);
+                result->SetNullFlag(false);
+            } else {
+                // Copy NULL bits from date input to result (so NULL rows are already set to NULL)
+                memcpy(resultNulls, dateNulls, nullsSize);
+            }
             
             // Process only non-NULL rows using SelectivityVector
             SelectivityVector rows(size);
-            rows.setFromBitsNegate(dateNulls, size);
+            if (dateIsConst) {
+                rows.setAll();
+            } else {
+                rows.setFromBitsNegate(dateNulls, size);
+            }
             
             rows.applyToSelected([&](vector_size_t i) {
                 // Check if numDays is NULL (for non-const case)
@@ -122,7 +149,7 @@ public:
                 }
                 
                 // Perform date arithmetic operation
-                int32_t daysSinceEpoch = dateRaw[i];
+                int32_t daysSinceEpoch = dateIsConst ? constDate : dateRaw[i];
                 TNumDays numDays = numDaysIsConst ? constNumDays : numDaysRaw[i];
                 int32_t resultDays = 0;
                 
