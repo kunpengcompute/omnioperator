@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <memory>
 #include <utility>
+#include <vector>
 #include <set>
 #include <arm_neon.h>
 #include "vector/vector_common.h"
@@ -259,6 +260,25 @@ namespace common {
             return isAllNotNullColumns;
         }
 
+        // File-absolute row positions of rows that survive the vec-predicate filter
+        // inside the native reader (ORC/Parquet). Stored here so the connector layer
+        // (SplitReader::createRowIndexVec) can produce correct __paimon_row_index /
+        // row_index values when filter pushdown compacts the batch. Using the existing
+        // shared_ptr channel of RowReader avoids changing RowReader's ABI.
+        void SetSurvivingPositions(std::vector<int64_t> &&positions) {
+            survivingPositions_ = std::move(positions);
+            hasSurvivingPositions_ = !survivingPositions_.empty();
+        }
+
+        void ClearSurvivingPositions() {
+            survivingPositions_.clear();
+            hasSurvivingPositions_ = false;
+        }
+
+        const std::vector<int64_t> *GetSurvivingPositions() const {
+            return hasSurvivingPositions_ ? &survivingPositions_ : nullptr;
+        }
+
         std::unique_ptr<common::TimeRebaseInfo> timeRebaseInfo;
 
     protected:
@@ -268,6 +288,8 @@ namespace common {
         uint8_t *bitMark = nullptr;
         std::set<int32_t> isAllNullColumns;
         std::set<int32_t> isAllNotNullColumns;
+        std::vector<int64_t> survivingPositions_;
+        bool hasSurvivingPositions_ = false;
     };
 
     template<typename T>

@@ -39,6 +39,7 @@ std::vector<BaseVector*> *recordBatch, uint64_t &batchRowSize, int *omniTypeId, 
     if (batchRowSize == 0 || predicateCondition == nullptr) {
         return false;
     }
+    predicateCondition->ClearSurvivingPositions();
     try {
         uint8_t *bitMark = predicateCondition->compute(*recordBatch);
         int32_t vectorSize = (*recordBatch)[0]->GetSize();
@@ -46,8 +47,19 @@ std::vector<BaseVector*> *recordBatch, uint64_t &batchRowSize, int *omniTypeId, 
             ClearRecordBatch(*recordBatch);
             return true;
         }
+        // Capture file-absolute positions of surviving rows before FilterData compacts
+        // the batch, so the connector can build a correct row_index vector afterwards.
+        uint64_t batchStart = rowReaderPtr.LastReadRowPosition();
+        std::vector<int64_t> positions;
+        positions.reserve(vectorSize);
+        for (int32_t i = 0; i < vectorSize; ++i) {
+            if (omniruntime::BitUtil::IsBitSet(reinterpret_cast<const uint64_t *>(bitMark), i)) {
+                positions.push_back(static_cast<int64_t>(batchStart) + i);
+            }
+        }
         batchRowSize = FilterData(bitMark, recordBatch, vectorSize, predicateCondition->getIsAllNullColumns(),
             predicateCondition->getIsAllNotNullColumns());
+        predicateCondition->SetSurvivingPositions(std::move(positions));
     } catch (const std::exception &e) {
         ClearRecordBatch(*recordBatch);
         LogError("filterData fail: %s", e.what());
@@ -121,7 +133,8 @@ void OrcRowReader::StartNextStripe()
                                                *contents_->stream, writerTimezone,
                                                readerTimezone);
         reader = omniruntime::reader::omniBuildReader(getSelectedType(), stripeStreams,
-            (julianPtr == nullptr) ? nullptr : julianPtr.get());
+            (julianPtr == nullptr) ? nullptr : julianPtr.get(),
+            options_->GetTimezoneRawOffsetMicros());
 
         if (sargsApplier) {
             // move to the 1st selected row group when PPD is enabled.

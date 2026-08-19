@@ -20,6 +20,7 @@ namespace omniruntime::writer {
         orc::OutputStream *outStream;
         orc::WriterOptions options;
         std::unique_ptr<common::JulianGregorianRebase> timestampRebase;
+        int64_t rawOffsetMicros;
         const orc::Type &type;
         uint64_t stripeRows, totalRows, indexRows;
         uint64_t currentOffset;
@@ -36,7 +37,8 @@ namespace omniruntime::writer {
                 const orc::Type &type,
                 orc::OutputStream *stream,
                 const orc::WriterOptions &options,
-                std::unique_ptr<common::JulianGregorianRebase> timestampRebase);
+                std::unique_ptr<common::JulianGregorianRebase> timestampRebase,
+                int64_t rawOffsetMicros);
 
 
         void add(omniruntime::vec::BaseVector *rowsToAdd, uint64_t startPos, uint64_t endPos) override;
@@ -72,13 +74,15 @@ namespace omniruntime::writer {
             const orc::Type &t,
             orc::OutputStream *stream,
             const orc::WriterOptions &opts,
-            std::unique_ptr<common::JulianGregorianRebase> rebase) :
+            std::unique_ptr<common::JulianGregorianRebase> rebase,
+            int64_t rawOffsetMicros) :
             outStream(stream),
             options(opts),
             timestampRebase(std::move(rebase)),
+            rawOffsetMicros(rawOffsetMicros),
             type(t) {
         streamsFactory = createStreamsFactory(options, outStream);
-        columnWriter = buildOmniWriter(type, *streamsFactory, options, timestampRebase.get());
+        columnWriter = buildOmniWriter(type, *streamsFactory, options, timestampRebase.get(), rawOffsetMicros);
         stripeRows = totalRows = indexRows = 0;
         currentOffset = 0;
 
@@ -423,20 +427,22 @@ namespace omniruntime::writer {
             const orc::Type &type,
             orc::OutputStream *stream,
             const orc::WriterOptions &options) {
-        return createOmniWriterWithTimestampRebase(type, stream, options, nullptr);
+        return createOmniWriterWithTimestampRebase(type, stream, options, nullptr, 0);
     }
 
     std::unique_ptr <OmniWriter> createOmniWriterWithTimestampRebase(
             const orc::Type &type,
             orc::OutputStream *stream,
             const orc::WriterOptions &options,
-            std::unique_ptr<common::JulianGregorianRebase> timestampRebase) {
+            std::unique_ptr<common::JulianGregorianRebase> timestampRebase,
+            int64_t rawOffsetMicros) {
         return std::unique_ptr<OmniWriter>(
                 new OmniWriterImpl(
                         type,
                         stream,
                         options,
-                        std::move(timestampRebase)));
+                        std::move(timestampRebase),
+                        rawOffsetMicros));
     }
 
 }

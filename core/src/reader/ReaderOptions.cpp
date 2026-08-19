@@ -447,6 +447,12 @@ void ReaderOptions::ParseEnhanceJson(const std::string &enhancementJson, FileFor
                     allColumnsList_.push_back(col);
                 }
             }
+
+            if (enhancementJson_->contains("timezone raw offset millis") &&
+                enhancementJson_->at("timezone raw offset millis").is_number()) {
+                timezoneRawOffsetMicros_ =
+                    enhancementJson_->at("timezone raw offset millis").get<int64_t>() * 1000L;
+            }
             break;
         }
         case FileFormat::PARQUET: {

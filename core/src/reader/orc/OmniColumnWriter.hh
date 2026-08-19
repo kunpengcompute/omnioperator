@@ -187,7 +187,8 @@ namespace omniruntime::writer {
             const ::orc::Type &type,
             const ::orc::StreamsFactory &factory,
             const ::orc::WriterOptions &options,
-            const common::JulianGregorianRebase *timestampRebase = nullptr);
+            const common::JulianGregorianRebase *timestampRebase = nullptr,
+            int64_t rawOffsetMicros = 0);
 }
 
 #endif

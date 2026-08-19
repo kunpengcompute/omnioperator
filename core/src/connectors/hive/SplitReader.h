@@ -88,6 +88,10 @@ protected:
 
     void createRowReader(omniruntime::type::RowTypePtr &rowType, uint64_t batchLen);
 
+    bool isRowIndexColumn(const std::string &name) const;
+
+    vec::BaseVector* createRowIndexVec(int32_t batchRowSize);
+
     void initIcebergPositionDeleteReaders(uint64_t batchLen);
 
     uint64_t applyIcebergPositionDeletes(vec::VectorBatch **output, uint64_t batchRowSize);

@@ -42,6 +42,11 @@ public:
         columnType_ = value;
     }
 
+    ColumnType columnType() const
+    {
+        return columnType_;
+    }
+
     // Name of the value in its container, i.e. field name in struct or
     // string key in map. Not all fields of 'this' apply in list/map
     // value cases but the overhead is manageable, the space taken is
