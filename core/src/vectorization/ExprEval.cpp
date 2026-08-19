@@ -7,6 +7,7 @@
 #include <string>
 #include "codegen/expr_evaluator.h"
 #include "type/data_type.h"
+#include "vectorization/functions/TryArithmetic.h"
 #include "vectorization/functions/Md5ConcatWsFusion.h"
 
 namespace omniruntime::vectorization {
@@ -473,12 +474,21 @@ void ExprEval::Visit(const BinaryExpr &e)
 {
     e.left->Accept(*this);
     e.right->Accept(*this);
-    if (e.vectorFunction == nullptr) {
+
+    auto vectorFunction = e.vectorFunction;
+    if (e.arithmeticOp != ArithmeticOp::INVALID && e.evalMode != ArithmeticEvalMode::LEGACY) {
+        if (e.checkedArithmeticVectorFunction == nullptr) {
+            e.checkedArithmeticVectorFunction = CreateBinaryArithmeticFunction(
+                e.arithmeticOp, e.evalMode, e.left->dataType, e.right->dataType, e.dataType);
+        }
+        vectorFunction = e.checkedArithmeticVectorFunction;
+    }
+    if (vectorFunction == nullptr) {
         OMNI_THROW("Vectorization Error:", "Vector function not found for binary expression");
     }
 
     BaseVector *result = nullptr;
-    e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
+    vectorFunction->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
 }
 

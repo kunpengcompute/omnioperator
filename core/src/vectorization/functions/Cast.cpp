@@ -32,6 +32,10 @@ void CastFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outp
     auto input = args.top();
     args.pop();
     DispatchCast(input, result, context);
+    if (result != nullptr &&
+        (toType_->GetId() == OMNI_DECIMAL64 || toType_->GetId() == OMNI_DECIMAL128)) {
+        VectorHelper::SetVectorDataType(result, toType_.get());
+    }
     // Clean up input argument if it's not being used as the result
     // (same type cast or string-to-binary sets result = inputArg)
     if (input != result) {
