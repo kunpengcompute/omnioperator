@@ -41,7 +41,9 @@ std::vector<BaseVector*> *recordBatch, uint64_t &batchRowSize, int *omniTypeId, 
     }
     predicateCondition->ClearSurvivingPositions();
     try {
-        uint8_t *bitMark = predicateCondition->compute(*recordBatch);
+        auto predicateResult = predicateCondition->compute(*recordBatch);
+        // WHERE keeps TRUE only; FALSE and UNKNOWN are both rejected.
+        uint8_t *bitMark = predicateResult.trueBits;
         int32_t vectorSize = (*recordBatch)[0]->GetSize();
         if (omniruntime::BitUtil::CountBits(reinterpret_cast<const uint64_t *>(bitMark), 0, vectorSize) == 0) {
             ClearRecordBatch(*recordBatch);

@@ -41,6 +41,33 @@ using omniruntime::exception::OmniException;
 
 namespace common {
     constexpr int32_t NEON_BYTE_SIZE = 16;
+
+    // SQL predicate state for one batch. FALSE is represented by a row being
+    // absent from both bitmaps: validBits & ~(trueBits | unknownBits).
+    struct PredicateResult {
+        uint8_t *trueBits;
+        uint8_t *unknownBits;
+    };
+
+    inline uint8_t validBitsMask(int32_t vectorSize, int32_t byteIndex) {
+        int32_t remainingBits = vectorSize - byteIndex * 8;
+        if (remainingBits >= 8) {
+            return 0xff;
+        }
+        if (remainingBits <= 0) {
+            return 0;
+        }
+        return static_cast<uint8_t>((1U << remainingBits) - 1);
+    }
+
+    inline void clearUnusedTailBits(uint8_t *bits, int32_t vectorSize) {
+        int32_t remainingBits = vectorSize & 7;
+        if (remainingBits == 0 || vectorSize == 0) {
+            return;
+        }
+        bits[BitUtil::Nbytes(vectorSize) - 1] &= static_cast<uint8_t>((1U << remainingBits) - 1);
+    }
+
     namespace vector_type {
         template<size_t S>
         struct neon_vector_type_impl;
@@ -225,12 +252,14 @@ namespace common {
 
         virtual ~PredicateCondition() = default;
 
-        virtual uint8_t *compute(std::vector<BaseVector *> &vecBatch) = 0;
+        virtual PredicateResult compute(std::vector<BaseVector *> &vecBatch) = 0;
 
         virtual void init(const int32_t size) {
             bitSize = size;
-            bitMarkBuf = std::make_unique<AlignedBuffer<uint8_t>>(BitUtil::Nbytes(size) + 8);
+            bitMarkBuf = std::make_unique<AlignedBuffer<uint8_t>>(BitUtil::Nbytes(size) + 8, true);
             bitMark = bitMarkBuf->GetBuffer();
+            unknownMarkBuf = std::make_unique<AlignedBuffer<uint8_t>>(BitUtil::Nbytes(size) + 8, true);
+            unknownMark = unknownMarkBuf->GetBuffer();
         }
 
         virtual bool isAllNull(int32_t columnIndex) {
@@ -286,6 +315,8 @@ namespace common {
         int32_t bitSize = 0;
         std::unique_ptr<AlignedBuffer<uint8_t>> bitMarkBuf;
         uint8_t *bitMark = nullptr;
+        std::unique_ptr<AlignedBuffer<uint8_t>> unknownMarkBuf;
+        uint8_t *unknownMark = nullptr;
         std::set<int32_t> isAllNullColumns;
         std::set<int32_t> isAllNotNullColumns;
         std::vector<int64_t> survivingPositions_;
@@ -322,16 +353,19 @@ namespace common {
             }
         }
 
-        uint8_t *compute(std::vector<BaseVector *> &vecBatch) override {
+        PredicateResult compute(std::vector<BaseVector *> &vecBatch) override {
             auto vector = vecBatch[index];
             auto vectorSize = vector->GetSize();
+            int32_t byteLen = BitUtil::Nbytes(vectorSize);
             switch (op) {
                 case TRUE: {
-                    memset(bitMark, -1, BitUtil::Nbytes(bitSize));
+                    memset(bitMark, -1, byteLen);
+                    memset(unknownMark, 0, byteLen);
                     break;
                 }
                 case FALSE: {
-                    memset(bitMark, 0, BitUtil::Nbytes(bitSize));
+                    memset(bitMark, 0, byteLen);
+                    memset(unknownMark, 0, byteLen);
                     break;
                 }
                 case EQUAL_TO: {
@@ -357,7 +391,6 @@ namespace common {
                 case IS_NOT_NULL: {
                     uint8_t *nulls = reinterpret_cast<uint8_t *>(UnsafeBaseVector::GetNulls(vector));
                     int32_t step = static_cast<int32_t>(NEON_BYTE_SIZE / sizeof(uint8_t));
-                    int32_t byteLen = BitUtil::Nbytes(vectorSize);
                     int32_t idx = 0;
                     for (; idx + step <= byteLen; idx += step) {
                         uint8x16_t valuesBatch = vld1q_u8(nulls + idx);
@@ -367,17 +400,38 @@ namespace common {
                     for (; idx < byteLen; idx++) {
                         bitMark[idx] = ~nulls[idx];
                     }
+                    memset(unknownMark, 0, byteLen);
                     break;
                 }
                 case IS_NULL: {
-                    memcpy(bitMark, UnsafeBaseVector::GetNulls(vector), BitUtil::Nbytes(vectorSize));
+                    memcpy(bitMark, UnsafeBaseVector::GetNulls(vector), byteLen);
+                    memset(unknownMark, 0, byteLen);
                     break;
                 }
                 default:
                     throw OmniException("OPERATOR_RUNTIME_ERROR", 
                         "LeafPredicateCondition UnSupport OperatorType: " + std::to_string(op));
             }
-            return bitMark;
+
+            if (op == EQUAL_TO || op == GREATER_THAN || op == GREATER_THAN_OR_EQUAL ||
+                op == LESS_THAN || op == LESS_THAN_OR_EQUAL) {
+                // ORC does not write values for NULL rows. Move null-bitmap handling into
+                // predicate evaluation so those indeterminate value slots are never treated
+                // as ordinary comparison results.
+                if (vector->HasNull()) {
+                    auto *nulls = reinterpret_cast<uint8_t *>(UnsafeBaseVector::GetNulls(vector));
+                    for (int32_t i = 0; i < byteLen; ++i) {
+                        unknownMark[i] = nulls[i] & validBitsMask(vectorSize, i);
+                        bitMark[i] &= static_cast<uint8_t>(~nulls[i]);
+                    }
+                } else {
+                    memset(unknownMark, 0, byteLen);
+                }
+            }
+
+            clearUnusedTailBits(bitMark, vectorSize);
+            clearUnusedTailBits(unknownMark, vectorSize);
+            return {bitMark, unknownMark};
         }
 
         bool isAllNull(int32_t columnIndex) override {
@@ -404,21 +458,27 @@ namespace common {
             child->init(size);
         }
 
-        uint8_t *compute(std::vector<BaseVector *> &vecBatch) override {
+        PredicateResult compute(std::vector<BaseVector *> &vecBatch) override {
             auto vectorSize = vecBatch[0]->GetSize();
-            uint8_t *childResult = child->compute(vecBatch);
-            int32_t step = static_cast<int32_t>(NEON_BYTE_SIZE / sizeof(uint8_t));
+            PredicateResult childResult = child->compute(vecBatch);
             int32_t byteLen = BitUtil::Nbytes(vectorSize);
+            int32_t step = static_cast<int32_t>(NEON_BYTE_SIZE / sizeof(uint8_t));
             int32_t index = 0;
             for (; index + step <= byteLen; index += step) {
-                uint8x16_t valuesBatch = vld1q_u8(childResult + index);
-                uint8x16_t result = ~valuesBatch;
-                vst1q_u8(bitMark + index, result);
+                uint8x16_t childTrue = vld1q_u8(childResult.trueBits + index);
+                uint8x16_t childUnknown = vld1q_u8(childResult.unknownBits + index);
+                vst1q_u8(bitMark + index, ~(childTrue | childUnknown));
+                vst1q_u8(unknownMark + index, childUnknown);
             }
-            for (; index < byteLen; index++) {
-                bitMark[index] = ~childResult[index];
+            for (; index < byteLen; ++index) {
+                uint8_t validBits = validBitsMask(vectorSize, index);
+                bitMark[index] = validBits & static_cast<uint8_t>(
+                    ~(childResult.trueBits[index] | childResult.unknownBits[index]));
+                unknownMark[index] = validBits & childResult.unknownBits[index];
             }
-            return bitMark;
+            clearUnusedTailBits(bitMark, vectorSize);
+            clearUnusedTailBits(unknownMark, vectorSize);
+            return {bitMark, unknownMark};
         }
 
     private:
@@ -437,31 +497,44 @@ namespace common {
             right->init(size);
         }
 
-        uint8_t *compute(std::vector<BaseVector *> &vecBatch) override {
+        PredicateResult compute(std::vector<BaseVector *> &vecBatch) override {
             auto vectorSize = vecBatch[0]->GetSize();
-            uint8_t *leftResult = left->compute(vecBatch);
-            uint8_t *rightResult = right->compute(vecBatch);
-            int32_t step = static_cast<int32_t>(NEON_BYTE_SIZE / sizeof(uint8_t));
+            PredicateResult leftResult = left->compute(vecBatch);
+            PredicateResult rightResult = right->compute(vecBatch);
             int32_t byteLen = BitUtil::Nbytes(vectorSize);
+            int32_t step = static_cast<int32_t>(NEON_BYTE_SIZE / sizeof(uint8_t));
             int32_t index = 0;
             for (; index + step <= byteLen; index += step) {
-                uint8x16_t leftBatch = vld1q_u8(leftResult + index);
-                uint8x16_t rightBatch = vld1q_u8(rightResult + index);
-                uint8x16_t result = leftBatch & rightBatch;
-                vst1q_u8(bitMark + index, result);
+                uint8x16_t leftTrue = vld1q_u8(leftResult.trueBits + index);
+                uint8x16_t leftUnknown = vld1q_u8(leftResult.unknownBits + index);
+                uint8x16_t rightTrue = vld1q_u8(rightResult.trueBits + index);
+                uint8x16_t rightUnknown = vld1q_u8(rightResult.unknownBits + index);
+                uint8x16_t trueBits = leftTrue & rightTrue;
+                uint8x16_t falseBits = (~(leftTrue | leftUnknown)) | (~(rightTrue | rightUnknown));
+                vst1q_u8(bitMark + index, trueBits);
+                vst1q_u8(unknownMark + index, ~(trueBits | falseBits));
             }
-            for (; index < byteLen; index++) {
-                bitMark[index] = leftResult[index] & rightResult[index];
+            for (; index < byteLen; ++index) {
+                uint8_t validBits = validBitsMask(vectorSize, index);
+                uint8_t leftFalse = validBits & static_cast<uint8_t>(
+                    ~(leftResult.trueBits[index] | leftResult.unknownBits[index]));
+                uint8_t rightFalse = validBits & static_cast<uint8_t>(
+                    ~(rightResult.trueBits[index] | rightResult.unknownBits[index]));
+                bitMark[index] = leftResult.trueBits[index] & rightResult.trueBits[index];
+                uint8_t falseBits = leftFalse | rightFalse;
+                unknownMark[index] = validBits & static_cast<uint8_t>(~(bitMark[index] | falseBits));
             }
-            return bitMark;
+            clearUnusedTailBits(bitMark, vectorSize);
+            clearUnusedTailBits(unknownMark, vectorSize);
+            return {bitMark, unknownMark};
         }
 
         bool isAllNull(int32_t columnIndex) override {
-            return left->isAllNull(columnIndex) | right->isAllNull(columnIndex);
+            return left->isAllNull(columnIndex) || right->isAllNull(columnIndex);
         }
 
         bool isAllNotNull(int32_t columnIndex) override {
-            return left->isAllNotNull(columnIndex) | right->isAllNotNull(columnIndex);
+            return left->isAllNotNull(columnIndex) || right->isAllNotNull(columnIndex);
         }
 
     private:
@@ -481,23 +554,36 @@ namespace common {
             right->init(size);
         }
 
-        uint8_t *compute(std::vector<BaseVector *> &vecBatch) override {
+        PredicateResult compute(std::vector<BaseVector *> &vecBatch) override {
             auto vectorSize = vecBatch[0]->GetSize();
-            uint8_t *leftResult = left->compute(vecBatch);
-            uint8_t *rightResult = right->compute(vecBatch);
-            int32_t step = static_cast<int32_t>(NEON_BYTE_SIZE / sizeof(uint8_t));
+            PredicateResult leftResult = left->compute(vecBatch);
+            PredicateResult rightResult = right->compute(vecBatch);
             int32_t byteLen = BitUtil::Nbytes(vectorSize);
+            int32_t step = static_cast<int32_t>(NEON_BYTE_SIZE / sizeof(uint8_t));
             int32_t index = 0;
             for (; index + step <= byteLen; index += step) {
-                uint8x16_t leftBatch = vld1q_u8(leftResult + index);
-                uint8x16_t rightBatch = vld1q_u8(rightResult + index);
-                uint8x16_t result = leftBatch | rightBatch;
-                vst1q_u8(bitMark + index, result);
+                uint8x16_t leftTrue = vld1q_u8(leftResult.trueBits + index);
+                uint8x16_t leftUnknown = vld1q_u8(leftResult.unknownBits + index);
+                uint8x16_t rightTrue = vld1q_u8(rightResult.trueBits + index);
+                uint8x16_t rightUnknown = vld1q_u8(rightResult.unknownBits + index);
+                uint8x16_t trueBits = leftTrue | rightTrue;
+                uint8x16_t falseBits = (~(leftTrue | leftUnknown)) & (~(rightTrue | rightUnknown));
+                vst1q_u8(bitMark + index, trueBits);
+                vst1q_u8(unknownMark + index, ~(trueBits | falseBits));
             }
-            for (; index < byteLen; index++) {
-                bitMark[index] = leftResult[index] | rightResult[index];
+            for (; index < byteLen; ++index) {
+                uint8_t validBits = validBitsMask(vectorSize, index);
+                uint8_t leftFalse = validBits & static_cast<uint8_t>(
+                    ~(leftResult.trueBits[index] | leftResult.unknownBits[index]));
+                uint8_t rightFalse = validBits & static_cast<uint8_t>(
+                    ~(rightResult.trueBits[index] | rightResult.unknownBits[index]));
+                bitMark[index] = leftResult.trueBits[index] | rightResult.trueBits[index];
+                uint8_t falseBits = leftFalse & rightFalse;
+                unknownMark[index] = validBits & static_cast<uint8_t>(~(bitMark[index] | falseBits));
             }
-            return bitMark;
+            clearUnusedTailBits(bitMark, vectorSize);
+            clearUnusedTailBits(unknownMark, vectorSize);
+            return {bitMark, unknownMark};
         }
 
     private:
