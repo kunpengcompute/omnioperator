@@ -4,6 +4,7 @@
 #ifndef EXECUTION_CONTEXT_H
 #define EXECUTION_CONTEXT_H
 
+#include <cstdint>
 #include <memory>
 #include "memory/aligned_buffer.h"
 #include "memory/simple_arena_allocator.h"
@@ -320,6 +321,16 @@ public:
         ExecutionContext::inputParamsNUms = inputParamsNUms;
     }
 
+    void SetCurrentWatermark(int64_t currentWatermark)
+    {
+        currentWatermark_ = currentWatermark;
+    }
+
+    int64_t GetCurrentWatermark() const
+    {
+        return currentWatermark_;
+    }
+
     // Input argument DataType (with struct field names) for to_json. The vectorized
     // function interface only receives the output type, so the caller stashes the
     // input type here so ToJson can emit real struct field names instead of field{i}.
@@ -335,6 +346,7 @@ private:
     const omniruntime::expressions::LambdaExpr *currentLambda_ = nullptr;
     config::QueryConfig queryConfig_;
     int32_t inputParamsNUms = 0;
+    int64_t currentWatermark_ = INT64_MIN;
     const type::DataType *toJsonInputType_ = nullptr;
 
     // True if nulls in the input vectors were pruned (removed from the current

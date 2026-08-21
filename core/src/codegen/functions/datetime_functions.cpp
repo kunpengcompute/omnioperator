@@ -400,4 +400,11 @@ extern "C" DLLEXPORT int64_t CurrentTimestamp()
     int64_t epochMillis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
     return epochMillis;
 }
+
+extern "C" DLLEXPORT int64_t CurrentWatermark(int64_t contextPtr, bool* retIsNull)
+{
+    int64_t currentWatermark = GetExecutionContext(contextPtr)->GetCurrentWatermark();
+    *retIsNull = currentWatermark == INT64_MIN;
+    return currentWatermark;
+}
 }

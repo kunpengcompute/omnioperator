@@ -47,6 +47,9 @@ std::vector<Function> DateTimeFunctionRegistry::GetFunctions()
         Function(reinterpret_cast<void*>(CurrentTimestamp), "current_timestamp", {},
             {}, OMNI_LONG,
             INPUT_DATA),
+        Function(reinterpret_cast<void*>(CurrentWatermark), "current_watermark", {},
+            {}, OMNI_LONG,
+            INPUT_DATA_AND_NULL_AND_RETURN_NULL, true),
         Function(reinterpret_cast<void*>(DateAddDays), "date_add_days", {},
             {OMNI_LONG, OMNI_INT}, OMNI_LONG,
             INPUT_DATA_AND_NULL_AND_RETURN_NULL)
