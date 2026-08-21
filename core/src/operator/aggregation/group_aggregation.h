@@ -26,6 +26,7 @@
 #include "operator/pages_index.h"
 #include "operator/spill/spiller.h"
 #include "group_aggregation_sort.h"
+#include "vector/mixed_vector.h"
 
 namespace omniruntime::op {
 using namespace vec;
@@ -40,7 +41,8 @@ public:
         uint32_t aggInputColsSize, std::vector<DataTypes> &aggInputTypes, std::vector<DataTypes> &aggOutputTypes,
         std::vector<std::unique_ptr<Aggregator>> &&aggs, std::vector<bool> &inputRaws,
         std::vector<bool> &outputPartials, const std::vector<int8_t> &hasAggFilters,
-        const OperatorConfig &operatorConfig, std::vector<uint32_t> aggFuncTypesVector, AggregationNode::Step step)
+        const OperatorConfig &operatorConfig, std::vector<uint32_t> aggFuncTypesVector, AggregationNode::Step step,
+        bool mixedInputExpected = false, bool mixedOutputEnabled = false)
         : AggregationCommonOperator(std::move(aggs), inputRaws, outputPartials),
           groupByCols(groupByCols),
           aggInputCols(aggInputCols),
@@ -48,7 +50,10 @@ public:
           aggInputTypes(aggInputTypes),
           aggOutputTypes(aggOutputTypes),
           hasAggFilters(hasAggFilters),
-          operatorConfig(operatorConfig)
+          operatorConfig(operatorConfig),
+          aggregationStep(step),
+          mixedInputExpected(mixedInputExpected),
+          mixedOutputEnabled(mixedOutputEnabled)
     {
         isStepPartials = isPartialOutput(step) && !groupByCols.empty();
         for (auto i : aggFuncTypesVector) {
@@ -207,6 +212,22 @@ private:
 
     void CalcAndSetStatesSize();
 
+    void PrepareSerializeHandlers(BaseVector **groupVectors, int32_t groupColNum);
+
+    int32_t AddMixedInput(MixedVectorBatch *mixedBatch);
+
+    int32_t OutputMixed(VectorBatch **outputVecBatch);
+
+    int32_t OutputMixedFromDisk(VectorBatch **outputVecBatch);
+
+    VectorBatch *BuildMixedBatchFromDiskGroups(int32_t rowCount,
+        const std::vector<std::string> &groupKeys,
+        const std::vector<AggregateState *> &groupStates);
+
+    VectorBatch *AlignSchemaMixed(VectorBatch *inputVecBatch);
+
+    bool CanUseMixedStateSerde() const;
+
     ALWAYS_INLINE size_t GetElementsSize();
 
     ALWAYS_INLINE void ResetHashmap();
@@ -257,6 +278,10 @@ private:
     // for spill
     bool isStepPartials = true;
     OperatorConfig operatorConfig;
+    AggregationNode::Step aggregationStep;
+    bool mixedInputExpected = false;
+    bool mixedOutputEnabled = false;
+    bool mixedStateSerdeSupported = false;
     SpillMerger *spillMerger = nullptr;
     Spiller *spiller = nullptr;
     std::vector<SortOrder> sortOrders;
@@ -272,6 +297,7 @@ private:
     std::vector<type::DataTypePtr> spillTypes;
     OutputState spillOutputState;
     bool hasSpill = false;
+    bool canOutputMixed_ = false;
     std::unique_ptr<AggregationSort> aggregationSort = nullptr;
     int32_t totalAggStatesSize = 0;
     VectorAnalyzer *vectorAnalyzer = nullptr;
@@ -279,6 +305,11 @@ private:
     std::vector<AggregateState *> currentRowStates;
     std::vector<AggregateState *> newGroupStates;
     int8_t resizeArrayMapCnt = 0;
+
+    // 缓存 agg merge ops/sizes，跨批次复用
+    std::vector<const MixedStateSerdeOps*> cachedMergeOps_;
+    std::vector<int32_t> cachedMergeStateSizes_;
+    bool mergeOpsCached_ = false;
 };
 
 class HashAggregationOperatorFactory : public AggregationCommonOperatorFactory {
@@ -343,7 +374,8 @@ public:
         std::vector<std::vector<uint32_t>> &aggsCols, std::vector<DataTypes> &aggInputTypes,
         std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes,
         std::vector<uint32_t> &maskColsVector, std::vector<bool> inputRaws, std::vector<bool> outputPartials,
-        const std::vector<int8_t> &hasAggFilters, const OperatorConfig &operatorConfig, AggregationNode::Step step)
+        const std::vector<int8_t> &hasAggFilters, const OperatorConfig &operatorConfig, AggregationNode::Step step,
+        bool mixedInputExpected = false, bool mixedOutputEnabled = false)
         : AggregationCommonOperatorFactory(inputRaws, outputPartials, maskColsVector,
         operatorConfig.GetOverflowConfig()->IsOverflowAsNull(), operatorConfig.IsStatisticalAggregate()),
           groupByColsVector(groupByCol),
@@ -354,7 +386,9 @@ public:
           aggFuncTypesVector(aggFuncTypes),
           hasAggFilters(hasAggFilters),
           operatorConfig(operatorConfig),
-          step(step)
+          step(step),
+          mixedInputExpected(mixedInputExpected),
+          mixedOutputEnabled(mixedOutputEnabled)
     {}
 
     ~HashAggregationOperatorFactory() override = default;
@@ -386,6 +420,8 @@ private:
     OperatorConfig operatorConfig;
     AggregationNode::Step step;
     bool normalizedKeyEnabled = false;
+    bool mixedInputExpected = false;
+    bool mixedOutputEnabled = false;
     void ChooseGroupByType();
 };
 } // end of namespace omniruntime::op

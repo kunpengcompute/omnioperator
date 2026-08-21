@@ -3,6 +3,7 @@
  * Description: Hash Aggregation Source File
  */
 #include "group_aggregation.h"
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include "vector/vector_helper.h"
@@ -11,8 +12,11 @@
 #include "util/type_util.h"
 #include "util/debug.h"
 #include "operator/aggregation/aggregator/aggregator_factory.h"
+#include "operator/aggregation/aggregator/state_flag_operation.h"
 #include "type/data_type.h"
 #include "vector/unsafe_vector.h"
+#include "vector/mixed_vector.h"
+#include "util/null_bits.h"
 
 #if defined(DEBUG_OPERATOR) && defined(TRACE)
 #include <sstream>
@@ -295,7 +299,7 @@ Operator *HashAggregationOperatorFactory::CreateOperator()
 
     auto groupByOperator = new HashAggregationOperator(groupByIndex, aggsInputCols, aggInputColsSize, aggInputTypes,
         aggOutputTypes, std::move(aggs), inputRaws, outputPartials, hasAggFilters, operatorConfig, aggFuncTypesVector,
-        step);
+        step, mixedInputExpected, mixedOutputEnabled);
     groupByOperator->SetGroupByColumnsHandleType(handleType);
     groupByOperator->Init();
     return groupByOperator;
@@ -393,6 +397,7 @@ OmniStatus HashAggregationOperator::Init()
 
     // 6 calculate every aggregator's size and set offset of aggregator
     CalcAndSetStatesSize();
+    mixedStateSerdeSupported = CanUseMixedStateSerde();
 
     auto initSerializeHandler = [&]() {
         serialize = std::make_unique<TaperColumnSerializeHandler>(*executionContext->GetArena(), totalAggStatesSize);
@@ -410,6 +415,7 @@ OmniStatus HashAggregationOperator::Init()
         std::vector<bool> isVariableLen(groupByCols.size(), false);
         std::vector<int32_t> typeIds(groupByCols.size());
         std::vector<int32_t> varcharColIndices;
+        bool hasComplexTypes = false;
         for (size_t i = 0; i < groupByCols.size(); ++i) {
             auto typeId = groupByCols[i].input->GetId();
             typeIds[i] = typeId;
@@ -420,15 +426,24 @@ OmniStatus HashAggregationOperator::Init()
             } else if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
                 keySizes[i] = sizeof(char*) + sizeof(size_t);
                 isVariableLen[i] = true;
+                if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_ROW) {
+                    hasComplexTypes = true;
+                }
             }
         }
-        // Merge multiple VARCHAR columns into a single slot to reduce fixed row size
-        if (varcharColIndices.size() > 1) {
+        // Merge multiple VARCHAR columns into a single slot to reduce fixed row size.
+        // 有复杂类型时禁止合并：行段复杂列以长度前缀内联（非合并布局），
+        // StoreKeyFromRow 的 fallback 逐列循环按每列独立 char* slot 写入，合并会破坏列 offset。
+        // 关键：跳过合并时必须清空 varcharColIndices，保证 hasMergedVarchar (size>1) 全局为 false。
+        if (varcharColIndices.size() > 1 && !hasComplexTypes) {
             int32_t firstVarcharIdx = varcharColIndices[0];
             keySizes[firstVarcharIdx] = sizeof(char*);
             for (size_t i = 1; i < varcharColIndices.size(); ++i) {
                 keySizes[varcharColIndices[i]] = 0;
             }
+        } else if (varcharColIndices.size() > 1) {
+            // hasComplexTypes：每列 VARCHAR 独立 slot（不合并）。
+            varcharColIndices.clear();
         }
         serialize->InitRowContainer(keySizes, isVariableLen, typeIds, varcharColIndices, *executionContext->GetArena());
     };
@@ -539,6 +554,10 @@ OmniStatus HashAggregationOperator::Init()
 
     // 7 vector analyzer
     vectorAnalyzer = new VectorAnalyzer(groupByCols);
+
+    // 8 pre-compute canOutputMixed (static conditions only; hasSpill is checked at runtime)
+    canOutputMixed_ = mixedOutputEnabled && mixedStateSerdeSupported && aggFiltersCount == 0 &&
+        groupByColumnsHandleType == HandleType::serialize;
 
     return OMNI_STATUS_NORMAL;
 }
@@ -787,6 +806,41 @@ bool HashAggregationOperator::TryEmplaceNormalizeKey(
     return true;
 }
 
+void HashAggregationOperator::PrepareSerializeHandlers(BaseVector **groupVectors, int32_t groupColNum)
+{
+    serialize->ResetSerializer();
+    for (int32_t i = 0; i < groupColNum; ++i) {
+        auto curVector = groupVectors[i];
+        auto omniId = groupByCols[i].input->GetId();
+        if (curVector->GetEncoding() == Encoding::OMNI_DICTIONARY) {
+            if (dicVectorSerializerCenter[omniId] != nullptr) {
+                serialize->PushBackSerializer(dicVectorSerializerCenter[omniId]);
+                serialize->PushBackComparator(dicVectorComparatorCenter[omniId]);
+            } else {
+                serialize->PushBackSerializer(complexVectorSerializerCenter[omniId]);
+            }
+        } else if (curVector->GetEncoding() == Encoding::OMNI_ENCODING_CONST) {
+            if (constVectorSerializerCenter[omniId] != nullptr) {
+                serialize->PushBackSerializer(constVectorSerializerCenter[omniId]);
+                serialize->PushBackComparator(constVectorComparatorCenter[omniId]);
+            } else {
+                serialize->PushBackSerializer(complexVectorSerializerCenter[omniId]);
+            }
+        } else if (omniId == type::OMNI_ARRAY || omniId == type::OMNI_ROW) {
+            serialize->PushBackSerializer(complexVectorSerializerCenter[omniId]);
+            serialize->PushBackComparator(vectorComparatorCenter[omniId]);
+        } else {
+            serialize->PushBackSerializer(vectorSerializerCenter[omniId]);
+            serialize->PushBackComparator(vectorComparatorCenter[omniId]);
+        }
+        if (omniId == type::OMNI_ARRAY || omniId == type::OMNI_ROW) {
+            serialize->PushBackDeSerializer(complexVectorDeSerializerCenter[omniId]);
+        } else {
+            serialize->PushBackDeSerializer(vectorDeSerializerCenter[omniId]);
+        }
+    }
+}
+
 int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
 {
     setInputedData(true);
@@ -798,6 +852,14 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
     }
 
     UpdateAddInputInfo(rowCount);
+    if (vecBatch->MixType() == 1) {
+        if (!mixedStateSerdeSupported || aggFiltersCount != 0 || serialize == nullptr) {
+            VectorHelper::FreeVecBatch(vecBatch);
+            ResetInputVecBatch();
+            throw OmniException("UNSUPPORTED_ERROR", "HashAgg cannot consume this mixed row batch");
+        }
+        return AddMixedInput(static_cast<MixedVectorBatch *>(vecBatch));
+    }
     // do decide hash table mode
     auto oldMin = vectorAnalyzer->MinValue();
     auto preIsArrayMap = vectorAnalyzer->IsArrayHashTableType();
@@ -918,6 +980,105 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
         throw OmniException("no t supported operation", "groupByColumnsHandleType error");
     }
     VectorHelper::FreeVecBatch(vecBatch);
+    ResetInputVecBatch();
+    if (operatorConfig.GetSpillConfig()->NeedSpill(GetElementsSize())) {
+        auto result = SpillHashMap();
+        executionContext->GetArena()->Reset();
+        ResetHashmap();
+        if (UNLIKELY(result != ErrorCode::SUCCESS)) {
+            throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
+        }
+    }
+    return 0;
+}
+
+bool HashAggregationOperator::CanUseMixedStateSerde() const
+{
+    if (groupByCols.empty()) {
+        return false;
+    }
+    if (aggregators.empty()) {
+        return true;
+    }
+    if (aggFiltersCount != 0) {
+        return false;
+    }
+    for (const auto &aggregator : aggregators) {
+        if (!aggregator->SupportsMixedStateSerde()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// for final agg consume mixed VectorBatch
+int32_t HashAggregationOperator::AddMixedInput(MixedVectorBatch *mixedBatch)
+{
+    auto rowCount = mixedBatch->GetRowCount();
+    auto groupColNum = static_cast<int32_t>(groupByCols.size());
+
+    // EmplaceTableFromRow: compute hashes directly from row segments
+    // without deserializing to intermediate column vectors.
+    // Must initialize serializers/comparators for spill path (Bug-001:
+    // when only mixed+spill runs, serializers.size()==0 causes crash).
+    // Mixed path has no groupVectors, so use non-dictionary serializers
+    // built from groupByCols type IDs (same as AddInput's non-dic branch).
+    if (serialize != nullptr) {
+        serialize->ResetSerializer();
+        for (int32_t i = 0; i < groupColNum; ++i) {
+            auto omniId = groupByCols[i].input->GetId();
+            if (omniId == type::OMNI_ARRAY || omniId == type::OMNI_ROW) {
+                serialize->PushBackSerializer(complexVectorSerializerCenter[omniId]);
+                serialize->PushBackComparator(vectorComparatorCenter[omniId]);
+                serialize->PushBackDeSerializer(complexVectorDeSerializerCenter[omniId]);
+            } else {
+                serialize->PushBackSerializer(vectorSerializerCenter[omniId]);
+                serialize->PushBackComparator(vectorComparatorCenter[omniId]);
+                serialize->PushBackDeSerializer(vectorDeSerializerCenter[omniId]);
+            }
+        }
+    }
+    vectorAnalyzer->SetNormalHashTable();
+    currentRowStates.resize(rowCount);
+    newGroupStates.clear();
+    newGroupStates.reserve(rowCount);
+    serialize->EmplaceTableFromRow(mixedBatch, rowCount, currentRowStates, newGroupStates);
+
+    // EmplaceTable returns RowContainer row-start pointers. Convert them to
+    // AggState pointers before passing them to aggregator init/merge routines.
+    auto aggStateOffset = serialize->AggStateOffset();
+    for (auto &rowState : currentRowStates) {
+        rowState += aggStateOffset;
+    }
+    for (auto &rowState : newGroupStates) {
+        rowState += aggStateOffset;
+    }
+    for (auto &aggregator : aggregators) {
+        if (!newGroupStates.empty()) {
+            aggregator->InitStates(newGroupStates);
+        }
+    }
+    // 缓存 ops + sizes（首次计算，跨批次复用）
+    if (!mergeOpsCached_) {
+        cachedMergeOps_.resize(aggregators.size());
+        cachedMergeStateSizes_.resize(aggregators.size());
+        for (size_t i = 0; i < aggregators.size(); ++i) {
+            cachedMergeOps_[i] = aggregators[i]->GetMixedStateSerdeOps();
+            cachedMergeStateSizes_[i] = static_cast<int32_t>(aggregators[i]->GetStateSize());
+        }
+        mergeOpsCached_ = true;
+    }
+    // batchMerge: O(aggs) 次间接调用替代 O(rows×aggs) 次，MergeFn 编译期内联
+    int32_t mergeStateOffset = 0;
+    for (size_t i = 0; i < aggregators.size(); ++i) {
+        cachedMergeOps_[i]->batchMerge(
+            aggregators[i].get(), currentRowStates.data(),
+            mixedBatch, mergeStateOffset, rowCount);
+        mergeStateOffset += cachedMergeStateSizes_[i];
+    }
+    newGroupStates.clear();
+
+    VectorHelper::FreeVecBatch(mixedBatch);
     ResetInputVecBatch();
     if (operatorConfig.GetSpillConfig()->NeedSpill(GetElementsSize())) {
         auto result = SpillHashMap();
@@ -1071,10 +1232,330 @@ void HashAggregationOperator::SetVectors(VectorBatch *output, const std::vector<
     }
 }
 
+int32_t HashAggregationOperator::OutputMixed(VectorBatch **outputVecBatch)
+{
+    usedMemBytes = executionContext->GetArena()->UsedBytes();
+    totalMemBytes = executionContext->GetArena()->TotalBytes();
+    auto totalRowCount = static_cast<int32_t>(serialize->GetElementsSize());
+    if (totalRowCount == 0) {
+        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+        return 0;
+    }
+
+    auto remaining = totalRowCount - static_cast<int32_t>(outputState.hasBeenOutputNum);
+    auto rowCount = std::min(rowsPerBatch, remaining);
+    std::vector<DataTypeId> keyTypeIds;
+    keyTypeIds.reserve(groupByCols.size());
+    for (const auto &groupByCol : groupByCols) {
+        keyTypeIds.push_back(groupByCol.input->GetId());
+    }
+    auto output = std::make_unique<MixedVectorBatch>(rowCount, keyTypeIds);
+    output->SetMode(COMPLETE_ROW_ONLY);
+    output->PrepareRowArena(static_cast<int64_t>(rowCount) * (totalAggStatesSize + 64));
+
+    auto aggStateOffset = serialize->AggStateOffset();
+
+    // === 缓存列元数据（typeId/offset/nullBits/fixedKeySizes），消除每行重复查找 ===
+    int32_t groupColNum = static_cast<int32_t>(groupByCols.size());
+    int32_t numNullBytes = util::NullBits::NumBytes(groupColNum);
+    bool hasMergedVarchar = (serialize->varcharColIndices.size() > 1);
+    bool hasComplexTypes = false;
+    std::vector<type::DataTypeId> colTypeIds(groupColNum);
+    std::vector<int32_t> colOffsets(groupColNum);
+    std::vector<int32_t> colNullBytes(groupColNum);
+    std::vector<uint8_t> colNullMasks(groupColNum);
+    std::vector<bool> isMergedVarcharCol(groupColNum, false);
+    std::vector<int32_t> fixedKeySizes(groupColNum, 0);
+    for (int32_t i = 0; i < groupColNum; ++i) {
+        auto typeId = groupByCols[i].input->GetId();
+        colTypeIds[i] = typeId;
+        if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_ROW) {
+            hasComplexTypes = true;
+        }
+        auto col = serialize->aggRows->ColumnAt(i);
+        colOffsets[i] = col.Offset();
+        colNullBytes[i] = col.NullByte();
+        colNullMasks[i] = col.NullMask();
+        if (hasMergedVarchar) {
+            for (int32_t vcIdx : serialize->varcharColIndices) {
+                if (vcIdx == i) { isMergedVarcharCol[i] = true; break; }
+            }
+        }
+        if (!isMergedVarcharCol[i]) {
+            switch (typeId) {
+                case type::OMNI_BYTE: case type::OMNI_BOOLEAN: fixedKeySizes[i] = 1; break;
+                case type::OMNI_SHORT: fixedKeySizes[i] = 2; break;
+                case type::OMNI_INT: case type::OMNI_DATE32: case type::OMNI_TIME32: fixedKeySizes[i] = 4; break;
+                case type::OMNI_LONG: case type::OMNI_TIMESTAMP: case type::OMNI_DECIMAL64:
+                case type::OMNI_DATE64: case type::OMNI_TIME64: fixedKeySizes[i] = 8; break;
+                case type::OMNI_DOUBLE: fixedKeySizes[i] = 8; break;
+                case type::OMNI_FLOAT: fixedKeySizes[i] = 4; break;
+                case type::OMNI_DECIMAL128: fixedKeySizes[i] = 16; break;
+                default: break;
+            }
+        }
+    }
+    int32_t sumFixedKeySizes = 0;
+    for (int32_t i = 0; i < groupColNum; ++i) {
+        sumFixedKeySizes += fixedKeySizes[i];
+    }
+    // === 优化2: 预缓存 state ops + sizes（消除每行虚函数 + GetMixedStateSerializeSize） ===
+    int32_t totalAggStateSize = 0;
+    std::vector<const MixedStateSerdeOps*> aggOps(aggregators.size());
+    std::vector<int32_t> aggStateSizes(aggregators.size());
+    for (size_t i = 0; i < aggregators.size(); ++i) {
+        aggOps[i] = aggregators[i]->GetMixedStateSerdeOps();
+        aggStateSizes[i] = static_cast<int32_t>(aggregators[i]->GetStateSize());
+        totalAggStateSize += aggStateSizes[i];
+    }
+    int32_t varcharSlotOffset = 0;
+    if (hasMergedVarchar) {
+        varcharSlotOffset = serialize->aggRows->ColumnAt(serialize->varcharSlotColIdx).Offset();
+    }
+    output->SetVarcharSlotOffset(hasMergedVarchar ? varcharSlotOffset : -1);
+
+    auto copyRow = [&](uint8_t *rowPtr, uint8_t *, int32_t rowIdx) {
+        auto* row = reinterpret_cast<char*>(rowPtr);
+
+        // 方案G: 预取 state 数据（给后续整体 memcpy 用）
+        __builtin_prefetch(rowPtr + aggStateOffset, 0, 0);
+
+        // 方案 B：merged VARCHAR 走 fixRowSize memcpy + VARCHAR 追加行末
+        if (hasMergedVarchar && !hasComplexTypes) {
+            const char* slotPtr = *reinterpret_cast<char**>(row + varcharSlotOffset);
+            int32_t varcharCount = static_cast<int32_t>(serialize->varcharColIndices.size());
+            int32_t headerSize = varcharCount * static_cast<int32_t>(sizeof(int32_t));
+            int32_t varcharTotalSize = 0;
+            const char* varcharData = nullptr;
+            if (slotPtr != nullptr) {
+                const int32_t* header = reinterpret_cast<const int32_t*>(slotPtr);
+                varcharData = slotPtr + headerSize;
+                for (int32_t v = 0; v < varcharCount; ++v) {
+                    varcharTotalSize += header[v];
+                }
+            }
+            int32_t fixRowSize = serialize->aggRows->FixedRowSize();
+            int32_t length = fixRowSize + varcharTotalSize;
+            auto *rowData = static_cast<uint8_t *>(output->GetRowArena()->Allocate(length));
+            memcpy(rowData, rowPtr, fixRowSize);
+            if (varcharTotalSize > 0 && varcharData != nullptr) {
+                memcpy(rowData + fixRowSize, varcharData, varcharTotalSize);
+            }
+            if (slotPtr != nullptr) {
+                *reinterpret_cast<int32_t*>(rowData + varcharSlotOffset) = varcharTotalSize;
+                *reinterpret_cast<int32_t*>(rowData + varcharSlotOffset + sizeof(int32_t)) = fixRowSize;
+            }
+            int32_t keyLength = aggStateOffset - numNullBytes;
+            output->SetArenaRow(rowIdx, rowData, keyLength, aggStateOffset, length);
+            return;
+        }
+
+        // P2 fast path: all fixed-width, no nulls — single memcpy (skip two-pass scan)
+        if (!hasComplexTypes && serialize->varcharColIndices.empty() &&
+            sumFixedKeySizes >= static_cast<int32_t>(sizeof(void*))) {
+            const uint8_t* nullBitsInRow = rowPtr + (aggStateOffset - numNullBytes);
+            bool hasNulls = false;
+            for (int32_t i = 0; i < numNullBytes; ++i) {
+                if (nullBitsInRow[i] != 0) { hasNulls = true; break; }
+            }
+            if (!hasNulls) {
+                int32_t keyLength = sumFixedKeySizes;
+                int32_t stateOffset = (sumFixedKeySizes + numNullBytes + 7) & ~7;
+                int32_t totalLength = (stateOffset + totalAggStateSize + 7) & ~7;
+                auto *rowData = static_cast<uint8_t *>(output->GetRowArena()->Allocate(totalLength));
+                memcpy(rowData, rowPtr, aggStateOffset);
+                if (stateOffset > aggStateOffset) {
+                    memset(rowData + aggStateOffset, 0, stateOffset - aggStateOffset);
+                }
+                auto *states = reinterpret_cast<uint8_t *>(rowPtr) + aggStateOffset;
+                memcpy(rowData + stateOffset, states, totalAggStateSize);
+                int32_t trailingPad = totalLength - (stateOffset + totalAggStateSize);
+                if (trailingPad > 0) {
+                    memset(rowData + stateOffset + totalAggStateSize, 0, trailingPad);
+                }
+                output->SetArenaRow(rowIdx, rowData, keyLength, stateOffset, totalLength);
+                return;
+            }
+        }
+
+        // 非 merged：原路径（nullBits 行首 + VARCHAR 内联）
+        // 第一遍：解析 + 缓存 (ptr, sz, isNull) + 算 keySerializedSize
+        // 消除 keyTmpBuf 中转：第二遍直接写 arena，VARCHAR 零重复解析
+        // Assumes groupColNum <= 128 (group-by column counts are far below this).
+        struct ColEntry { const uint8_t* ptr; int32_t sz; bool isNull; bool isComplex; };
+        constexpr int32_t kMaxStackCols = 128;
+        ColEntry entries[kMaxStackCols];
+
+        int32_t keySerializedSize = 0;
+        const int32_t* mergedVarcharHeader = nullptr;
+        const char* mergedVarcharDataPos = nullptr;
+        int32_t mergedVarcharIdx = 0;
+        if (hasMergedVarchar) {
+            const char* slotPtr = *reinterpret_cast<char**>(row + varcharSlotOffset);
+            if (slotPtr != nullptr) {
+                int32_t headerSize = static_cast<int32_t>(serialize->varcharColIndices.size())
+                    * static_cast<int32_t>(sizeof(int32_t));
+                mergedVarcharHeader = reinterpret_cast<const int32_t*>(slotPtr);
+                mergedVarcharDataPos = slotPtr + headerSize;
+            }
+        }
+
+        for (int32_t i = 0; i < groupColNum; ++i) {
+            bool isNull = RowContainer::IsNullAt(row, colNullBytes[i], colNullMasks[i]);
+            entries[i].isNull = isNull;
+            entries[i].ptr = nullptr;
+            entries[i].sz = 0;
+            entries[i].isComplex = false;
+            if (isNull) {
+                if (isMergedVarcharCol[i] && mergedVarcharDataPos != nullptr) {
+                    mergedVarcharDataPos += mergedVarcharHeader[mergedVarcharIdx];
+                    mergedVarcharIdx++;
+                }
+                continue;
+            }
+            if (isMergedVarcharCol[i]) {
+                if (mergedVarcharDataPos == nullptr) {
+                    throw OmniException("INVALID_DATA", "mergedVarcharDataPos is null for non-null VARCHAR column");
+                }
+                int32_t sz = mergedVarcharHeader[mergedVarcharIdx];
+                if (sz <= 1) {
+                    throw OmniException("INVALID_DATA", "Found null marker or invalid size in merged block for non-null VARCHAR column");
+                }
+                entries[i].ptr = reinterpret_cast<const uint8_t*>(mergedVarcharDataPos);
+                entries[i].sz = sz;
+                keySerializedSize += sz;
+                mergedVarcharDataPos += sz;
+                mergedVarcharIdx++;
+            } else if (colTypeIds[i] == type::OMNI_VARCHAR || colTypeIds[i] == type::OMNI_CHAR
+                       || colTypeIds[i] == type::OMNI_VARBINARY) {
+                char* dataPtr = *reinterpret_cast<char**>(row + colOffsets[i]);
+                if (dataPtr == nullptr) {
+                    entries[i].sz = 1;
+                    keySerializedSize += 1;
+                } else {
+                    uint8_t rowLenSize = *reinterpret_cast<const uint8_t*>(dataPtr);
+                    if (rowLenSize == 0) {
+                        entries[i].sz = 1;
+                        keySerializedSize += 1;
+                    } else {
+                        size_t stringLen = 0;
+                        switch (rowLenSize) {
+                            case 1: stringLen = *reinterpret_cast<const uint8_t*>(dataPtr + 1); break;
+                            case 2: stringLen = *reinterpret_cast<const uint16_t*>(dataPtr + 1); break;
+                            case 4: stringLen = *reinterpret_cast<const uint32_t*>(dataPtr + 1); break;
+                        }
+                        int32_t written = sizeof(uint8_t) + rowLenSize + stringLen;
+                        entries[i].ptr = reinterpret_cast<const uint8_t*>(dataPtr);
+                        entries[i].sz = written;
+                        keySerializedSize += written;
+                    }
+                }
+            } else if (colTypeIds[i] == type::OMNI_ARRAY || colTypeIds[i] == type::OMNI_ROW) {
+                // 复杂类型：StringRef (char* + size_t) 指向 pool 中 canonical 序列化字节。
+                // 内联进行段：数据前加 [rowLenSize][size] 长度前缀（与 VARCHAR 同格式，无指针）。
+                char* dataPtr = *reinterpret_cast<char**>(row + colOffsets[i]);
+                size_t dataSize = *reinterpret_cast<size_t*>(row + colOffsets[i] + sizeof(char*));
+                if (dataPtr == nullptr || dataSize == 0) {
+                    entries[i].sz = 1;  // 防御：非 null 但无数据 → 1 字节 0 标记（与 varchar 一致）
+                    keySerializedSize += 1;
+                } else {
+                    uint8_t rowLenSize = (dataSize <= 0xFF) ? 1 : (dataSize <= 0xFFFF) ? 2 : 4;
+                    entries[i].ptr = reinterpret_cast<const uint8_t*>(dataPtr);
+                    entries[i].sz = static_cast<int32_t>(dataSize);
+                    entries[i].isComplex = true;
+                    keySerializedSize += 1 + rowLenSize + static_cast<int32_t>(dataSize);
+                }
+            } else {
+                int32_t needed = fixedKeySizes[i];
+                entries[i].ptr = reinterpret_cast<const uint8_t*>(row + colOffsets[i]);
+                entries[i].sz = needed;
+                keySerializedSize += needed;
+            }
+        }
+
+        // 方案C: 统一非 merged 布局为 [key data][null bits][AggState]（与 RowContainer 一致）
+        auto *states = reinterpret_cast<uint8_t *>(rowPtr) + aggStateOffset;
+        int32_t keyLength = keySerializedSize;
+        int32_t stateOffset = keySerializedSize + numNullBytes;
+        int32_t totalLength = (stateOffset + totalAggStateSize + 7) & ~7;
+
+        auto *rowData = static_cast<uint8_t *>(output->GetRowArena()->Allocate(totalLength));
+
+        // 第二遍：key data 写入 rowData[0..keySerializedSize)，合并连续列段 memcpy
+        uint8_t* current = rowData;
+        int32_t i = 0;
+        while (i < groupColNum) {
+            const auto& e = entries[i];
+            if (e.isNull) {
+                i++;
+                continue;
+            }
+            if (e.ptr == nullptr) {
+                *current = 0;
+                current += 1;
+                i++;
+                continue;
+            }
+            if (e.isComplex) {
+                // 复杂列：写 [rowLenSize][size][data]，单独处理（不参与连续段合并，
+                // 因其数据前有长度前缀，与 pool 中原始数据布局不一致）。
+                size_t dataSize = static_cast<size_t>(e.sz);
+                uint8_t rowLenSize = (dataSize <= 0xFF) ? 1 : (dataSize <= 0xFFFF) ? 2 : 4;
+                *current = rowLenSize; current += 1;
+                memcpy(current, &dataSize, rowLenSize); current += rowLenSize;
+                memcpy(current, e.ptr, dataSize); current += dataSize;
+                i++;
+                continue;
+            }
+            const uint8_t* segSrc = e.ptr;
+            int32_t segTotal = e.sz;
+            int32_t segEnd = i;
+            while (segEnd + 1 < groupColNum
+                   && !entries[segEnd + 1].isNull
+                   && entries[segEnd + 1].ptr != nullptr
+                   && !entries[segEnd + 1].isComplex
+                   && entries[segEnd + 1].ptr == entries[segEnd].ptr + entries[segEnd].sz) {
+                segTotal += entries[segEnd + 1].sz;
+                segEnd++;
+            }
+            memcpy(current, segSrc, segTotal);
+            current += segTotal;
+            i = segEnd + 1;
+        }
+
+        // null bits 写在 key data 之后
+        memset(rowData + keySerializedSize, 0, numNullBytes);
+        for (int32_t col = 0; col < groupColNum; ++col) {
+            if (entries[col].isNull) {
+                util::NullBits::SetNull(rowData + keySerializedSize, col);
+            }
+        }
+        // 方案L: state 整体 memcpy（一次 memcpy 替代逐 agg ops->serialize 函数指针）
+        memcpy(rowData + stateOffset, states, totalAggStateSize);
+
+        output->SetArenaRow(rowIdx, rowData, keyLength, stateOffset, totalLength);
+    };
+    serialize->Extract(rowCount, outputState, copyRow, copyRow);
+
+    *outputVecBatch = output.release();
+    UpdateGetOutputInfo(rowCount);
+    if (static_cast<int32_t>(outputState.hasBeenOutputNum) == totalRowCount) {
+        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+    }
+    return 1;
+}
+
 int32_t HashAggregationOperator::GetOutput(VectorBatch **outputVecBatch)
 {
     if (!hasInputedData()) {
         return 0;
+    }
+    if (canOutputMixed_) {
+        if (!hasSpill) {
+            return OutputMixed(outputVecBatch);
+        } else {
+            return OutputMixedFromDisk(outputVecBatch);
+        }
     }
     int32_t expectedBatchSize = 0;
     if (groupByColumnsHandleType == HandleType::NormalizeKey && normalizeKeyWithoutAgg != nullptr) {
@@ -2422,6 +2903,12 @@ uint64_t HashAggregationOperator::GetHashMapUniqueKeys()
 
 VectorBatch *HashAggregationOperator::AlignSchema(VectorBatch *inputVecBatch)
 {
+    // 混存路径：列存 → MixedVectorBatch（COMPLETE_ROW_ONLY）
+    // 条件与 GetOutput 中 OutputMixed 的调用条件保持一致
+    if (canOutputMixed_) {
+        return AlignSchemaMixed(inputVecBatch);
+    }
+
     // release hashmap memory
     executionContext->GetArena()->Reset();
 
@@ -2456,6 +2943,366 @@ VectorBatch *HashAggregationOperator::AlignSchema(VectorBatch *inputVecBatch)
     }
     VectorHelper::FreeVecBatch(inputVecBatch);
     return result;
+}
+
+VectorBatch *HashAggregationOperator::AlignSchemaMixed(VectorBatch *inputVecBatch)
+{
+    executionContext->GetArena()->Reset();
+
+    int32_t rowCount = inputVecBatch->GetRowCount();
+    int32_t groupColNum = static_cast<int32_t>(groupByCols.size());
+    int32_t numNullBytes = util::NullBits::NumBytes(groupColNum);
+
+    // === Step 1: 解码 group-by 列 ===
+    std::vector<BaseVector *> groupVectors(groupColNum);
+    for (int32_t i = 0; i < groupColNum; ++i) {
+        groupVectors[i] = inputVecBatch->Get(groupByCols[i].idx);
+    }
+    serialize->DecodeGroupByColumns(groupVectors.data(), groupColNum, rowCount);
+
+    // 预计算列信息
+    std::vector<DataTypeId> keyTypeIds;
+    keyTypeIds.reserve(groupColNum);
+    std::vector<int32_t> fixedKeySizes(groupColNum, 0);
+    std::vector<bool> isVarcharCol(groupColNum, false);
+    std::vector<bool> isComplexCol(groupColNum, false);
+    bool hasComplexTypes = false;
+    for (int32_t i = 0; i < groupColNum; ++i) {
+        auto typeId = groupByCols[i].input->GetId();
+        keyTypeIds.push_back(typeId);
+        if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR || typeId == type::OMNI_VARBINARY) {
+            isVarcharCol[i] = true;
+        } else if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_ROW) {
+            isComplexCol[i] = true;
+            hasComplexTypes = true;
+        } else {
+            fixedKeySizes[i] = OperatorUtil::GetTypeSize(groupByCols[i].input);
+        }
+    }
+    int32_t sumFixedKeySizes = 0;
+    for (int32_t i = 0; i < groupColNum; ++i) {
+        sumFixedKeySizes += fixedKeySizes[i];
+    }
+    // 复杂列序列化需要 serializers（ARRAY/ROW 用 complexVectorSerializerCenter）。
+    // AddInput 每次调用都会 ResetSerializer，这里确保 AlignSchemaMixed 时已压入。
+    if (hasComplexTypes) {
+        PrepareSerializeHandlers(groupVectors.data(), groupColNum);
+    }
+
+    // === Step 2: 批量计算 agg state ===
+    // rowStates[i] 指向第 i 行的 state 区基址。stateBuffer 不含 key/nullBits 前缀，
+    // buffer 开头即 state 区，故不再加任何偏移；InitState/ProcessGroupInternal 内部
+    // 会各自加 aggregator->aggStateOffset 定位本 aggregator 的 state
+    // （见 sum_aggregator.cpp:120/184，collect_list_aggregator.cpp:102/204）。
+    // 这与 Emplace 路径不同：Emplace 的行指针指向 RowContainer 行首，需先加
+    // serialize->AggStateOffset() 跳过 key/nullBits 前缀才到 state 区基址。
+    std::vector<uint8_t> stateBuffer(static_cast<size_t>(rowCount) * totalAggStatesSize);
+    std::vector<AggregateState *> rowStates(rowCount);
+    for (int32_t i = 0; i < rowCount; ++i) {
+        rowStates[i] = stateBuffer.data() + static_cast<size_t>(i) * totalAggStatesSize;
+    }
+    for (auto &aggregator : aggregators) {
+        aggregator->InitStates(rowStates);
+    }
+    for (auto &aggregator : aggregators) {
+        aggregator->ProcessGroup(rowStates, inputVecBatch, 0);
+    }
+
+    // === Step 3: 创建 MixedVectorBatch ===
+    bool hasMergedVarchar = (serialize->varcharColIndices.size() > 1);
+    int32_t mergedSlotOff = 0;
+    int32_t fixRowSize = 0;
+    int32_t mergedAggStateOffset = 0;
+    int32_t mergedKeyLength = 0;
+    if (hasMergedVarchar) {
+        mergedSlotOff = serialize->aggRows->ColumnAt(serialize->varcharSlotColIdx).Offset();
+        fixRowSize = serialize->aggRows->FixedRowSize();
+        mergedAggStateOffset = serialize->AggStateOffset();
+        mergedKeyLength = mergedAggStateOffset - numNullBytes;
+    }
+    auto output = std::make_unique<vec::MixedVectorBatch>(rowCount, keyTypeIds);
+    output->SetMode(vec::COMPLETE_ROW_ONLY);
+    output->SetVarcharSlotOffset(hasMergedVarchar ? mergedSlotOff : -1);
+    output->PrepareRowArena(static_cast<int64_t>(rowCount) * (fixRowSize + totalAggStatesSize + 256));
+
+    // === Step 4: 逐行序列化到 RowSegment ===
+    if (hasMergedVarchar) {
+        // merged varchar 路径：[fixed(含slot元数据/nullBits/AggState)][varchar块]
+        // 与 OutputMixed merged path 一致（group_aggregation.cpp:866-893）
+        int32_t varcharCount = static_cast<int32_t>(serialize->varcharColIndices.size());
+        for (int32_t rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
+            // 第一遍：计算 varcharTotalSize
+            int32_t varcharTotalSize = 0;
+            for (int32_t v = 0; v < varcharCount; ++v) {
+                int32_t vcIdx = serialize->varcharColIndices[v];
+                auto &decoded = serialize->decodedCols[vcIdx];
+                if (decoded.IsNull(rowIdx)) {
+                    varcharTotalSize += 1;
+                } else {
+                    auto sv = serialize->GetVarcharFromDecoded(decoded, rowIdx);
+                    uint8_t rowLenSize = (sv.size() <= 0xFF) ? 1 : (sv.size() <= 0xFFFF) ? 2 : 4;
+                    varcharTotalSize += 1 + rowLenSize + static_cast<int32_t>(sv.size());
+                }
+            }
+            int32_t length = fixRowSize + varcharTotalSize;
+            auto *rowData = static_cast<uint8_t *>(output->GetRowArena()->Allocate(length));
+            memset(rowData, 0, fixRowSize);
+
+            // 写固定列（非 varchar，按 RowContainer offset）
+            for (int32_t col = 0; col < groupColNum; ++col) {
+                if (isVarcharCol[col]) continue;
+                auto &decoded = serialize->decodedCols[col];
+                int32_t off = serialize->aggRows->ColumnAt(col).Offset();
+                switch (keyTypeIds[col]) {
+                    case type::OMNI_BYTE: case type::OMNI_BOOLEAN: {
+                        auto val = decoded.GetValue<int8_t>(rowIdx);
+                        memcpy(rowData + off, &val, sizeof(int8_t)); break;
+                    }
+                    case type::OMNI_SHORT: {
+                        auto val = decoded.GetValue<int16_t>(rowIdx);
+                        memcpy(rowData + off, &val, sizeof(int16_t)); break;
+                    }
+                    case type::OMNI_INT: case type::OMNI_DATE32: case type::OMNI_TIME32: {
+                        auto val = decoded.GetValue<int32_t>(rowIdx);
+                        memcpy(rowData + off, &val, sizeof(int32_t)); break;
+                    }
+                    case type::OMNI_LONG: case type::OMNI_TIMESTAMP: case type::OMNI_DECIMAL64:
+                    case type::OMNI_DATE64: case type::OMNI_TIME64: {
+                        auto val = decoded.GetValue<int64_t>(rowIdx);
+                        memcpy(rowData + off, &val, sizeof(int64_t)); break;
+                    }
+                    case type::OMNI_DOUBLE: {
+                        auto val = decoded.GetValue<double>(rowIdx);
+                        memcpy(rowData + off, &val, sizeof(double)); break;
+                    }
+                    case type::OMNI_FLOAT: {
+                        auto val = decoded.GetValue<float>(rowIdx);
+                        memcpy(rowData + off, &val, sizeof(float)); break;
+                    }
+                    case type::OMNI_DECIMAL128: {
+                        auto val = decoded.GetValue<Decimal128>(rowIdx);
+                        memcpy(rowData + off, &val, sizeof(Decimal128)); break;
+                    }
+                    default: break;
+                }
+            }
+
+            // slot 列位置写 [varcharTotalSize][fixRowSize](slotDataOff=fixRowSize)
+            *reinterpret_cast<int32_t *>(rowData + mergedSlotOff) = varcharTotalSize;
+            *reinterpret_cast<int32_t *>(rowData + mergedSlotOff + sizeof(int32_t)) = fixRowSize;
+
+            // nullBits
+            for (int32_t col = 0; col < groupColNum; ++col) {
+                auto &decoded = serialize->decodedCols[col];
+                if (decoded.IsNull(rowIdx)) {
+                    util::NullBits::SetNull(rowData + mergedKeyLength, col);
+                }
+            }
+
+            // AggState
+            if (totalAggStatesSize > 0) {
+                memcpy(rowData + mergedAggStateOffset, rowStates[rowIdx], totalAggStatesSize);
+            }
+
+            // varchar 块（各 varchar 连续拼接：null=1字节0，非null=[rowLenSize][len][data]）
+            uint8_t *vptr = rowData + fixRowSize;
+            for (int32_t v = 0; v < varcharCount; ++v) {
+                int32_t vcIdx = serialize->varcharColIndices[v];
+                auto &decoded = serialize->decodedCols[vcIdx];
+                if (decoded.IsNull(rowIdx)) {
+                    *vptr = 0; vptr += 1;
+                } else {
+                    auto sv = serialize->GetVarcharFromDecoded(decoded, rowIdx);
+                    uint8_t rowLenSize = (sv.size() <= 0xFF) ? 1 : (sv.size() <= 0xFFFF) ? 2 : 4;
+                    *vptr = rowLenSize;
+                    size_t strLen = sv.size();
+                    memcpy(vptr + 1, &strLen, rowLenSize);
+                    memcpy(vptr + 1 + rowLenSize, sv.data(), sv.size());
+                    vptr += 1 + rowLenSize + sv.size();
+                }
+            }
+
+            output->SetArenaRow(rowIdx, rowData, mergedKeyLength, mergedAggStateOffset, length);
+        }
+    } else {
+        // 非 merged 路径：[keyData][nullBits][AggState]，尾部对齐到 8 字节
+        // 与 OutputMixed non-merged 一致
+        bool canUseP2 = !hasComplexTypes && serialize->varcharColIndices.empty() &&
+            sumFixedKeySizes >= static_cast<int32_t>(sizeof(void*));
+        for (int32_t rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
+        // P2 fast path: all fixed-width, no nulls — aligned stateOffset (与 OutputMixed P2 一致)
+        if (canUseP2) {
+            bool hasNulls = false;
+            for (int32_t col = 0; col < groupColNum; ++col) {
+                if (serialize->decodedCols[col].IsNull(rowIdx)) { hasNulls = true; break; }
+            }
+            if (!hasNulls) {
+                int32_t keyLength = sumFixedKeySizes;
+                int32_t stateOffset = (sumFixedKeySizes + numNullBytes + 7) & ~7;
+                int32_t totalLength = (stateOffset + totalAggStatesSize + 7) & ~7;
+                auto *rowData = static_cast<uint8_t *>(output->GetRowArena()->Allocate(totalLength));
+                memset(rowData, 0, totalLength);
+                uint8_t *current = rowData;
+                for (int32_t col = 0; col < groupColNum; ++col) {
+                    auto &decoded = serialize->decodedCols[col];
+                    auto typeId = keyTypeIds[col];
+                    switch (typeId) {
+                        case type::OMNI_BYTE: case type::OMNI_BOOLEAN: {
+                            auto val = decoded.GetValue<int8_t>(rowIdx);
+                            memcpy(current, &val, sizeof(int8_t)); current += sizeof(int8_t); break;
+                        }
+                        case type::OMNI_SHORT: {
+                            auto val = decoded.GetValue<int16_t>(rowIdx);
+                            memcpy(current, &val, sizeof(int16_t)); current += sizeof(int16_t); break;
+                        }
+                        case type::OMNI_INT: case type::OMNI_DATE32: case type::OMNI_TIME32: {
+                            auto val = decoded.GetValue<int32_t>(rowIdx);
+                            memcpy(current, &val, sizeof(int32_t)); current += sizeof(int32_t); break;
+                        }
+                        case type::OMNI_LONG: case type::OMNI_TIMESTAMP: case type::OMNI_DECIMAL64:
+                        case type::OMNI_DATE64: case type::OMNI_TIME64: {
+                            auto val = decoded.GetValue<int64_t>(rowIdx);
+                            memcpy(current, &val, sizeof(int64_t)); current += sizeof(int64_t); break;
+                        }
+                        case type::OMNI_DOUBLE: {
+                            auto val = decoded.GetValue<double>(rowIdx);
+                            memcpy(current, &val, sizeof(double)); current += sizeof(double); break;
+                        }
+                        case type::OMNI_FLOAT: {
+                            auto val = decoded.GetValue<float>(rowIdx);
+                            memcpy(current, &val, sizeof(float)); current += sizeof(float); break;
+                        }
+                        case type::OMNI_DECIMAL128: {
+                            auto val = decoded.GetValue<Decimal128>(rowIdx);
+                            memcpy(current, &val, sizeof(Decimal128)); current += sizeof(Decimal128); break;
+                        }
+                        default: break;
+                    }
+                }
+                if (totalAggStatesSize > 0) {
+                    memcpy(rowData + stateOffset, rowStates[rowIdx], totalAggStatesSize);
+                }
+                output->SetArenaRow(rowIdx, rowData, keyLength, stateOffset, totalLength);
+                continue;
+            }
+        }
+        // 第一遍: 计算 keySerializedSize
+        // 复杂列缓存（串行化到 pool 的临时 StringRef，供第二遍 memcpy）
+        constexpr int32_t kMaxStackCols = 128;
+        const uint8_t* complexData[kMaxStackCols] = {};
+        int32_t complexSize[kMaxStackCols] = {};
+        int32_t keySerializedSize = 0;
+        for (int32_t col = 0; col < groupColNum; ++col) {
+            auto &decoded = serialize->decodedCols[col];
+            bool isNull = decoded.IsNull(rowIdx);
+            if (isNull) {
+                continue;
+            }
+            if (isVarcharCol[col]) {
+                auto sv = serialize->GetVarcharFromDecoded(decoded, rowIdx);
+                uint8_t rowLenSize = (sv.size() <= 0xFF) ? 1 : (sv.size() <= 0xFFFF) ? 2 : 4;
+                keySerializedSize += 1 + rowLenSize + static_cast<int32_t>(sv.size());
+            } else if (isComplexCol[col]) {
+                // 复杂类型：序列化到 pool 缓存，段内写 [rowLenSize][size][data]（无指针）
+                type::StringRef key = serialize->SerializeComplexCol(col, rowIdx);
+                complexData[col] = reinterpret_cast<const uint8_t*>(key.data);
+                complexSize[col] = static_cast<int32_t>(key.size);
+                uint8_t rowLenSize = (key.size <= 0xFF) ? 1 : (key.size <= 0xFFFF) ? 2 : 4;
+                keySerializedSize += 1 + rowLenSize + static_cast<int32_t>(key.size);
+            } else {
+                keySerializedSize += fixedKeySizes[col];
+            }
+        }
+
+        int32_t keyLength = keySerializedSize;
+        int32_t stateOffset = keySerializedSize + numNullBytes;
+        int32_t totalLength = (stateOffset + totalAggStatesSize + 7) & ~7;
+
+        auto *rowData = static_cast<uint8_t *>(output->GetRowArena()->Allocate(totalLength));
+
+        // 写 keyData (rowData[0..keySerializedSize))
+        uint8_t *current = rowData;
+        for (int32_t col = 0; col < groupColNum; ++col) {
+            auto &decoded = serialize->decodedCols[col];
+            bool isNull = decoded.IsNull(rowIdx);
+            if (isNull) {
+                continue;
+            }
+            if (isVarcharCol[col]) {
+                auto sv = serialize->GetVarcharFromDecoded(decoded, rowIdx);
+                uint8_t rowLenSize = (sv.size() <= 0xFF) ? 1 : (sv.size() <= 0xFFFF) ? 2 : 4;
+                *current = rowLenSize;
+                size_t strLen = sv.size();
+                memcpy(current + 1, &strLen, rowLenSize);
+                memcpy(current + 1 + rowLenSize, sv.data(), sv.size());
+                current += 1 + rowLenSize + sv.size();
+            } else if (isComplexCol[col]) {
+                // 写 [rowLenSize][size][data]，数据来自第一遍缓存的 pool StringRef
+                size_t dataSize = static_cast<size_t>(complexSize[col]);
+                uint8_t rowLenSize = (dataSize <= 0xFF) ? 1 : (dataSize <= 0xFFFF) ? 2 : 4;
+                *current = rowLenSize; current += 1;
+                memcpy(current, &dataSize, rowLenSize); current += rowLenSize;
+                if (dataSize > 0) {
+                    memcpy(current, complexData[col], dataSize);
+                    current += dataSize;
+                }
+            } else {
+                auto typeId = keyTypeIds[col];
+                switch (typeId) {
+                    case type::OMNI_BYTE: case type::OMNI_BOOLEAN: {
+                        auto val = decoded.GetValue<int8_t>(rowIdx);
+                        memcpy(current, &val, sizeof(int8_t)); current += sizeof(int8_t); break;
+                    }
+                    case type::OMNI_SHORT: {
+                        auto val = decoded.GetValue<int16_t>(rowIdx);
+                        memcpy(current, &val, sizeof(int16_t)); current += sizeof(int16_t); break;
+                    }
+                    case type::OMNI_INT: case type::OMNI_DATE32: case type::OMNI_TIME32: {
+                        auto val = decoded.GetValue<int32_t>(rowIdx);
+                        memcpy(current, &val, sizeof(int32_t)); current += sizeof(int32_t); break;
+                    }
+                    case type::OMNI_LONG: case type::OMNI_TIMESTAMP: case type::OMNI_DECIMAL64:
+                    case type::OMNI_DATE64: case type::OMNI_TIME64: {
+                        auto val = decoded.GetValue<int64_t>(rowIdx);
+                        memcpy(current, &val, sizeof(int64_t)); current += sizeof(int64_t); break;
+                    }
+                    case type::OMNI_DOUBLE: {
+                        auto val = decoded.GetValue<double>(rowIdx);
+                        memcpy(current, &val, sizeof(double)); current += sizeof(double); break;
+                    }
+                    case type::OMNI_FLOAT: {
+                        auto val = decoded.GetValue<float>(rowIdx);
+                        memcpy(current, &val, sizeof(float)); current += sizeof(float); break;
+                    }
+                    case type::OMNI_DECIMAL128: {
+                        auto val = decoded.GetValue<Decimal128>(rowIdx);
+                        memcpy(current, &val, sizeof(Decimal128)); current += sizeof(Decimal128); break;
+                    }
+                    default: break;
+                }
+            }
+        }
+
+        // 写 nullBits (rowData + keySerializedSize)
+        memset(rowData + keySerializedSize, 0, numNullBytes);
+        for (int32_t col = 0; col < groupColNum; ++col) {
+            auto &decoded = serialize->decodedCols[col];
+            if (decoded.IsNull(rowIdx)) {
+                util::NullBits::SetNull(rowData + keySerializedSize, col);
+            }
+        }
+
+        // AggState
+        if (totalAggStatesSize > 0) {
+            memcpy(rowData + stateOffset, rowStates[rowIdx], totalAggStatesSize);
+        }
+
+        output->SetArenaRow(rowIdx, rowData, keyLength, stateOffset, totalLength);
+    }
+    }  // 非 merged 路径
+
+    VectorHelper::FreeVecBatch(inputVecBatch);
+    return output.release();
 }
 
 void HashAggregationOperator::SetStateOutputVecBatch(VectorBatch *outputVecBatch, int32_t rowCount, int32_t groupColNum,
@@ -2775,6 +3622,427 @@ void HashAggregationOperator::GetOutputFromDisk(VectorBatch **outputVecBatch)
         result = output.release();
     }
     *outputVecBatch = result;
+}
+
+/// 按 canonical 自描述格式计算复杂类型(ARRAY/ROW)序列化字节总长，并推进 pos。
+/// ARRAY = [sizeLenSize(1B)][元素数(sizeLenSize 字节)][各元素...]
+/// ROW   = [countLenSize(1B)][字段数(countLenSize 字节)][各字段...]
+/// 复杂值为 null 时序列化为单字节 0（1 字节）。元素/字段按各自类型递归
+/// （定长=裸字节，VARCHAR=[rls][len][data]，复杂=递归），格式与
+/// ArrayVectorSerializer/RowVectorSerializer 一致。
+static size_t ComputeComplexSerializedSize(const char *&pos, const type::DataTypePtr &dataType)
+{
+    switch (dataType->GetId()) {
+        case type::OMNI_ARRAY: {
+            const uint8_t sizeLenSize = *reinterpret_cast<const uint8_t *>(pos);
+            pos += sizeof(uint8_t);
+            if (sizeLenSize == 0) {
+                return sizeof(uint8_t);
+            }
+            uint64_t count = 0;
+            memcpy(&count, pos, sizeLenSize);
+            pos += sizeLenSize;
+            auto arrayType = std::dynamic_pointer_cast<type::ArrayType>(dataType);
+            const auto &elementType = arrayType->ElementType();
+            size_t total = sizeof(uint8_t) + sizeLenSize;
+            for (uint64_t i = 0; i < count; ++i) {
+                total += ComputeComplexSerializedSize(pos, elementType);
+            }
+            return total;
+        }
+        case type::OMNI_ROW: {
+            const uint8_t countLenSize = *reinterpret_cast<const uint8_t *>(pos);
+            pos += sizeof(uint8_t);
+            if (countLenSize == 0) {
+                return sizeof(uint8_t);
+            }
+            uint64_t childCount = 0;
+            memcpy(&childCount, pos, countLenSize);
+            pos += countLenSize;
+            auto rowType = std::dynamic_pointer_cast<type::RowType>(dataType);
+            size_t total = sizeof(uint8_t) + countLenSize;
+            for (uint64_t i = 0; i < childCount; ++i) {
+                total += ComputeComplexSerializedSize(pos, rowType->Type(static_cast<int32_t>(i)));
+            }
+            return total;
+        }
+        case type::OMNI_VARCHAR:
+        case type::OMNI_CHAR:
+        case type::OMNI_VARBINARY: {
+            const uint8_t rowLenSize = *reinterpret_cast<const uint8_t *>(pos);
+            pos += sizeof(uint8_t);
+            if (rowLenSize == 0) {
+                return sizeof(uint8_t);
+            }
+            size_t stringLen = 0;
+            memcpy(&stringLen, pos, rowLenSize);
+            pos += rowLenSize + stringLen;
+            return sizeof(uint8_t) + rowLenSize + stringLen;
+        }
+        case type::OMNI_DECIMAL128: {
+            pos += 16;
+            return 16;
+        }
+        default: {
+            const size_t colSize = OperatorUtil::GetTypeSize(dataType);
+            pos += colSize;
+            return colSize;
+        }
+    }
+}
+
+int32_t HashAggregationOperator::OutputMixedFromDisk(VectorBatch **outputVecBatch)
+{
+    if (spillMerger == nullptr) {
+        if (GetElementsSize() > 0) {
+            auto result = SpillHashMap();
+            executionContext->GetArena()->Reset();
+            ResetHashmap();
+            if (UNLIKELY(result != ErrorCode::SUCCESS)) {
+                throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
+            }
+        }
+        spilledBytes = spiller->GetSpilledBytes();
+        auto spillFiles = spiller->FinishSpill();
+        UpdateSpillFileInfo(spillFiles.size());
+        spillMerger = spiller->CreateSpillMerger(spillFiles, spiller->isSpillCompressEnable(), serialize != nullptr);
+        delete spiller;
+        spiller = nullptr;
+        if (spillMerger == nullptr) {
+            throw omniruntime::exception::OmniException("SPILL_FAILED", "Create spill merger failed.");
+        }
+        spillTotalRowCount = spillMerger->GetTotalRowCount();
+        if (!aggregators.empty()) {
+            groupStates = std::make_unique<AggregateState[]>(totalAggStatesSize * rowsPerBatch);
+        }
+    }
+
+    auto rowCount = std::min(rowsPerBatch, static_cast<int32_t>(spillTotalRowCount - spillRowOffset));
+    if (rowCount <= 0) {
+        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+        return 0;
+    }
+
+    // 归并 + 合并（参考 GetOutputFromDiskWithAgg，但收集 key 字节流而非解析到列存向量）
+    auto aggNum = static_cast<int32_t>(aggregators.size());
+    auto groupStatesPtr = groupStates.get();
+    rowStates.resize(rowCount);
+
+    std::vector<UnspillRowInfo> unspillRows(UNSPILL_ROW_COUNT_ONE_BATCH);
+    std::vector<AggregateState *> newGroupStates;
+    std::vector<std::string> groupKeys;
+    int32_t offset = 0;
+    int32_t rowIdx = 0;
+
+    bool isEqual = false;
+    bool nextKeyIsNew = true;
+    AggregateState *currentGroupStates = nullptr;
+
+    auto flushAndBuild = [&]() {
+        if (!newGroupStates.empty()) {
+            for (int32_t aggIdx = 0; aggIdx < aggNum; aggIdx++) {
+                aggregators[aggIdx]->InitStates(newGroupStates);
+            }
+            newGroupStates.clear();
+        }
+        if (offset > 0) {
+            int32_t vectorIndex = serialize != nullptr ? 2 : 1;
+            for (int32_t aggIdx = 0; aggIdx < aggNum; aggIdx++) {
+                aggregators[aggIdx]->ProcessGroupUnspill(unspillRows, offset, vectorIndex);
+            }
+        }
+    };
+
+    for (;;) {
+        auto currentVecBatch = spillMerger->CurrentBatchWithEqual(isEqual);
+        if (currentVecBatch == nullptr) {
+            flushAndBuild();
+            if (rowIdx > 0) {
+                groupKeys.resize(rowIdx);
+                std::vector<AggregateState *> states(rowIdx);
+                for (int32_t i = 0; i < rowIdx; ++i) {
+                    states[i] = rowStates[i];
+                }
+                *outputVecBatch = BuildMixedBatchFromDiskGroups(rowIdx, groupKeys, states);
+                UpdateGetOutputInfo(rowIdx);
+                if (spillTotalRowCount == spillRowOffset) {
+                    SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+                }
+                return 1;
+            }
+            SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+            return 0;
+        }
+
+        bool isLastRow = false;
+        auto currentRowIndex = spillMerger->CurrentRowIndex(isLastRow);
+        if (nextKeyIsNew) {
+            auto keyIndex = serialize != nullptr ? 1 : 0;
+            auto keyVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(currentVecBatch->Get(keyIndex));
+            auto key = keyVector->GetValue(currentRowIndex);
+            groupKeys.push_back(std::string(key.data(), key.size()));
+
+            currentGroupStates = groupStatesPtr + rowIdx * totalAggStatesSize;
+            newGroupStates.emplace_back(currentGroupStates);
+            rowStates[rowIdx] = currentGroupStates;
+            rowIdx++;
+        }
+
+        auto &unspillRow = unspillRows[offset];
+        unspillRow.state = currentGroupStates;
+        unspillRow.batch = currentVecBatch;
+        unspillRow.rowIdx = currentRowIndex;
+        offset++;
+        if (offset >= UNSPILL_ROW_COUNT_ONE_BATCH || isLastRow) {
+            flushAndBuild();
+            offset = 0;
+        }
+
+        nextKeyIsNew = !isEqual;
+        spillMerger->Pop();
+        spillRowOffset++;
+        if (nextKeyIsNew && rowIdx >= rowCount) {
+            flushAndBuild();
+            groupKeys.resize(rowIdx);
+            std::vector<AggregateState *> states(rowIdx);
+            for (int32_t i = 0; i < rowIdx; ++i) {
+                states[i] = rowStates[i];
+            }
+            *outputVecBatch = BuildMixedBatchFromDiskGroups(rowIdx, groupKeys, states);
+            UpdateGetOutputInfo(rowIdx);
+            return 1;
+        }
+    }
+}
+
+VectorBatch *HashAggregationOperator::BuildMixedBatchFromDiskGroups(int32_t rowCount,
+    const std::vector<std::string> &groupKeys,
+    const std::vector<AggregateState *> &groupStates)
+{
+    int32_t groupColNum = static_cast<int32_t>(groupByCols.size());
+    int32_t numNullBytes = util::NullBits::NumBytes(groupColNum);
+    auto aggStateOffset = serialize->AggStateOffset();
+    bool hasMergedVarchar = (serialize->varcharColIndices.size() > 1);
+    bool hasComplexTypes = false;
+
+    std::vector<DataTypeId> keyTypeIds(groupColNum);
+    std::vector<bool> isVarcharCol(groupColNum, false);
+    std::vector<bool> isComplexCol(groupColNum, false);
+    std::vector<int32_t> colOffsets(groupColNum, 0);
+    for (int32_t i = 0; i < groupColNum; ++i) {
+        auto typeId = groupByCols[i].input->GetId();
+        keyTypeIds[i] = typeId;
+        colOffsets[i] = serialize->aggRows->ColumnAt(i).Offset();
+        if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR || typeId == type::OMNI_VARBINARY) {
+            isVarcharCol[i] = true;
+        } else if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_ROW) {
+            isComplexCol[i] = true;
+            hasComplexTypes = true;
+        }
+    }
+
+    int32_t sumFixedKeySizes = 0;
+    for (int32_t i = 0; i < groupColNum; ++i) {
+        if (!isVarcharCol[i] && !isComplexCol[i]) {
+            sumFixedKeySizes += OperatorUtil::GetTypeSize(groupByCols[i].input);
+        }
+    }
+
+    auto output = std::make_unique<MixedVectorBatch>(rowCount, keyTypeIds);
+    output->SetMode(COMPLETE_ROW_ONLY);
+    output->PrepareRowArena(static_cast<int64_t>(rowCount) * (totalAggStatesSize + 256));
+
+    struct ParsedCol { bool isNull; const char *data; size_t dataLen; };
+
+    if (hasMergedVarchar && !hasComplexTypes) {
+        // merged varchar 布局：[fixed 区][varchar 块]，与 OutputMixed 一致
+        int32_t fixRowSize = serialize->aggRows->FixedRowSize();
+        int32_t varcharSlotOffset = serialize->aggRows->ColumnAt(serialize->varcharSlotColIdx).Offset();
+        output->SetVarcharSlotOffset(varcharSlotOffset);
+        int32_t keyLength = aggStateOffset - numNullBytes;
+
+        for (int32_t rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
+            const auto &key = groupKeys[rowIdx];
+            const char *pos = key.data();
+            int32_t varcharTotalSize = 0;
+            std::vector<ParsedCol> parsed(groupColNum);
+
+            for (int32_t col = 0; col < groupColNum; ++col) {
+                uint8_t firstByte = static_cast<uint8_t>(*pos);
+                if (firstByte == 0) {
+                    parsed[col] = {true, nullptr, 0};
+                    pos += 1;
+                } else if (isVarcharCol[col]) {
+                    uint8_t rowLenSize = firstByte;
+                    pos += 1;
+                    size_t stringLen = 0;
+                    memcpy(&stringLen, pos, rowLenSize);
+                    pos += rowLenSize;
+                    parsed[col] = {false, pos - rowLenSize - 1, sizeof(uint8_t) + rowLenSize + stringLen};
+                    pos += stringLen;
+                } else {
+                    int32_t colSize = firstByte;
+                    pos += 1;
+                    parsed[col] = {false, pos, static_cast<size_t>(colSize)};
+                    pos += colSize;
+                }
+                if (isVarcharCol[col]) {
+                    varcharTotalSize += parsed[col].isNull ? 1 : static_cast<int32_t>(parsed[col].dataLen);
+                }
+            }
+
+            int32_t length = fixRowSize + varcharTotalSize;
+            auto *rowData = static_cast<uint8_t *>(output->GetRowArena()->Allocate(length));
+            memset(rowData, 0, fixRowSize);
+
+            for (int32_t col = 0; col < groupColNum; ++col) {
+                if (isVarcharCol[col]) {
+                    continue;
+                }
+                if (parsed[col].isNull) {
+                    util::NullBits::SetNull(rowData + keyLength, col);
+                } else {
+                    memcpy(rowData + colOffsets[col], parsed[col].data, parsed[col].dataLen);
+                }
+            }
+
+            if (totalAggStatesSize > 0) {
+                memcpy(rowData + aggStateOffset, groupStates[rowIdx], totalAggStatesSize);
+            }
+
+            int32_t varcharOffset = fixRowSize;
+            for (int32_t col = 0; col < groupColNum; ++col) {
+                if (!isVarcharCol[col]) {
+                    continue;
+                }
+                if (parsed[col].isNull) {
+                    rowData[varcharOffset++] = 0;
+                } else {
+                    memcpy(rowData + varcharOffset, parsed[col].data, parsed[col].dataLen);
+                    varcharOffset += static_cast<int32_t>(parsed[col].dataLen);
+                }
+            }
+
+            // varchar slot header: [varcharTotalSize][dataOffset]，与 OutputMixed 一致
+            *reinterpret_cast<int32_t *>(rowData + varcharSlotOffset) = varcharTotalSize;
+            *reinterpret_cast<int32_t *>(rowData + varcharSlotOffset + sizeof(int32_t)) = fixRowSize;
+
+            output->SetArenaRow(rowIdx, rowData, keyLength, aggStateOffset, length);
+        }
+    } else {
+        // non-merged 布局（含复杂类型）：[key data][null bits][AggState]，与 OutputMixed 一致
+        output->SetVarcharSlotOffset(-1);
+
+        for (int32_t rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
+            const auto &key = groupKeys[rowIdx];
+            const char *pos = key.data();
+            int32_t keySerializedSize = 0;
+            std::vector<ParsedCol> parsed(groupColNum);
+
+            for (int32_t col = 0; col < groupColNum; ++col) {
+                uint8_t firstByte = static_cast<uint8_t>(*pos);
+                if (firstByte == 0) {
+                    parsed[col] = {true, nullptr, 0};
+                    pos += 1;
+                } else if (isVarcharCol[col]) {
+                    uint8_t rowLenSize = firstByte;
+                    pos += 1;
+                    size_t stringLen = 0;
+                    memcpy(&stringLen, pos, rowLenSize);
+                    pos += rowLenSize;
+                    parsed[col] = {false, pos - rowLenSize - 1, sizeof(uint8_t) + rowLenSize + stringLen};
+                    pos += stringLen;
+                    keySerializedSize += static_cast<int32_t>(parsed[col].dataLen);
+                } else if (isComplexCol[col]) {
+                    // 复杂列 spill key 为 canonical 自描述字节，需尺寸遍历确定边界
+                    const char *dataPtr = pos;
+                    size_t dataSize = ComputeComplexSerializedSize(pos, groupByCols[col].input);
+                    uint8_t rowLenSize = (dataSize <= 0xFF) ? 1 : (dataSize <= 0xFFFF) ? 2 : 4;
+                    parsed[col] = {false, dataPtr, dataSize};
+                    keySerializedSize += static_cast<int32_t>(sizeof(uint8_t) + rowLenSize + dataSize);
+                } else {
+                    int32_t colSize = firstByte;
+                    pos += 1;
+                    parsed[col] = {false, pos, static_cast<size_t>(colSize)};
+                    pos += colSize;
+                    keySerializedSize += colSize;
+                }
+            }
+
+            // P2 fast path: all fixed-width, no nulls — aligned stateOffset (与 OutputMixed P2 一致)
+            bool canUseP2 = !hasComplexTypes && serialize->varcharColIndices.empty() &&
+                sumFixedKeySizes >= static_cast<int32_t>(sizeof(void*)) &&
+                keySerializedSize == sumFixedKeySizes;
+            if (canUseP2) {
+                bool hasNulls = false;
+                for (int32_t col = 0; col < groupColNum; ++col) {
+                    if (parsed[col].isNull) { hasNulls = true; break; }
+                }
+                if (!hasNulls) {
+                    int32_t keyLength = sumFixedKeySizes;
+                    int32_t stateOffset = (sumFixedKeySizes + numNullBytes + 7) & ~7;
+                    int32_t totalLength = (stateOffset + totalAggStatesSize + 7) & ~7;
+                    auto *rowData = static_cast<uint8_t *>(output->GetRowArena()->Allocate(totalLength));
+                    memset(rowData, 0, totalLength);
+                    int32_t keyOffset = 0;
+                    for (int32_t col = 0; col < groupColNum; ++col) {
+                        memcpy(rowData + keyOffset, parsed[col].data, parsed[col].dataLen);
+                        keyOffset += static_cast<int32_t>(parsed[col].dataLen);
+                    }
+                    if (totalAggStatesSize > 0) {
+                        memcpy(rowData + stateOffset, groupStates[rowIdx], totalAggStatesSize);
+                    }
+                    output->SetArenaRow(rowIdx, rowData, keyLength, stateOffset, totalLength);
+                    continue;
+                }
+            }
+
+            int32_t keyLength = keySerializedSize;
+            int32_t stateOffset = keySerializedSize + numNullBytes;
+            int32_t totalLength = (stateOffset + totalAggStatesSize + 7) & ~7;
+
+            auto *rowData = static_cast<uint8_t *>(output->GetRowArena()->Allocate(totalLength));
+            memset(rowData, 0, totalLength);
+
+            int32_t keyOffset = 0;
+            for (int32_t col = 0; col < groupColNum; ++col) {
+                const auto &parsedCol = parsed[col];
+                if (parsedCol.isNull) {
+                    util::NullBits::SetNull(rowData + keySerializedSize, col);
+                    continue;
+                }
+                if (isComplexCol[col]) {
+                    // 复杂列：写 [rls][size][data]（与 OutputMixed 一致）
+                    size_t dataSize = parsedCol.dataLen;
+                    uint8_t rowLenSize = (dataSize <= 0xFF) ? 1 : (dataSize <= 0xFFFF) ? 2 : 4;
+                    rowData[keyOffset++] = rowLenSize;
+                    if (rowLenSize == 1) {
+                        rowData[keyOffset++] = static_cast<uint8_t>(dataSize);
+                    } else if (rowLenSize == 2) {
+                        int16_t sz = static_cast<int16_t>(dataSize);
+                        memcpy(rowData + keyOffset, &sz, sizeof(sz));
+                        keyOffset += 2;
+                    } else {
+                        int32_t sz = static_cast<int32_t>(dataSize);
+                        memcpy(rowData + keyOffset, &sz, sizeof(sz));
+                        keyOffset += 4;
+                    }
+                    memcpy(rowData + keyOffset, parsedCol.data, dataSize);
+                    keyOffset += static_cast<int32_t>(dataSize);
+                } else {
+                    memcpy(rowData + keyOffset, parsedCol.data, parsedCol.dataLen);
+                    keyOffset += static_cast<int32_t>(parsedCol.dataLen);
+                }
+            }
+
+            if (totalAggStatesSize > 0) {
+                memcpy(rowData + stateOffset, groupStates[rowIdx], totalAggStatesSize);
+            }
+            output->SetArenaRow(rowIdx, rowData, keyLength, stateOffset, totalLength);
+        }
+    }
+
+    return output.release();
 }
 
 void HashAggregationOperator::CalcAndSetStatesSize()

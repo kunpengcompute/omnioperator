@@ -21,7 +21,8 @@ public:
         std::vector<omniruntime::expressions::Expr *> &aggFilters, DataTypes &sourceDataTypes,
         std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes, std::vector<uint32_t> &maskColumns,
         std::vector<bool> &inputRaws, std::vector<bool> &outputPartial, const OperatorConfig &operatorConfig,
-        config::QueryConfig queryConfig = config::QueryConfig(), AggregationNode::Step step = AggregationNode::Step::K_SINGLE);
+        config::QueryConfig queryConfig = config::QueryConfig(), AggregationNode::Step step = AggregationNode::Step::K_SINGLE,
+        bool mixedInputExpected = false, bool mixedOutputEnabled = false);
 
     ~HashAggregationWithExprOperatorFactory() override;
 

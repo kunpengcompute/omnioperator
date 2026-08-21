@@ -6,6 +6,7 @@
 #ifndef OMNI_RUNTIME_SUM_SPARK_DECIMAL_AGGREGATOR_H
 #define OMNI_RUNTIME_SUM_SPARK_DECIMAL_AGGREGATOR_H
 
+#include <cstring>
 #include "aggregator.h"
 #include "type/decimal_operations.h"
 #include "type/decimal128.h"
@@ -132,6 +133,23 @@ public:
     size_t GetStateSize() override
     {
         return sizeof(SumSparkDecimalState);
+    }
+
+    static void MergeMixedStateImpl(SumSparkDecimalAggregator<InDecimalId, OutDecimalId> *,
+        SumSparkDecimalState *targetState, const SumSparkDecimalState *sourceState)
+    {
+        if (sourceState->IsOverFlowed()) {
+            targetState->SetOverFlow();
+        } else if (!sourceState->IsEmpty()) {
+            SumOp<ResultType, ResultType, AggValueState, StateValueHandler, false>(&targetState->value,
+                targetState->valueState, sourceState->value, 1LL);
+        }
+    }
+
+    const MixedStateSerdeOps *GetMixedStateSerdeOps() const override
+    {
+        return RawMixedStateSerde<SumSparkDecimalState, SumSparkDecimalAggregator<InDecimalId, OutDecimalId>,
+            &SumSparkDecimalAggregator::MergeMixedStateImpl>::Ops();
     }
 
     template <bool isOutputPartial>

@@ -30,6 +30,8 @@ public class VecBatch implements Closeable {
 
     private final long nativeVectorBatch;
 
+    private int mixType = 0;
+
     private AtomicBoolean isClosed = new AtomicBoolean(false);
 
     /**
@@ -46,6 +48,24 @@ public class VecBatch implements Closeable {
             nativeVectors[i] = vectors[i].getNativeVector();
         }
         this.nativeVectorBatch = newVectorBatchNative(nativeVectors, rowCount);
+    }
+
+    public VecBatch(Vec[] vectors, int rowCount, boolean enableMixed) {
+        this.vectors = vectors;
+        this.rowCount = rowCount;
+        long[] nativeVectors = new long[vectors.length];
+        for (int i = 0; i < vectors.length; i++) {
+            nativeVectors[i] = vectors[i].getNativeVector();
+        }
+
+        if (!enableMixed) {
+            this.nativeVectorBatch = newVectorBatchNative(nativeVectors, rowCount);
+        } else if (vectors[vectors.length - 1] instanceof MixedVec) {
+            this.nativeVectorBatch = newMixedBatchNative(nativeVectors, rowCount);
+            this.mixType = nativeMixType(this.nativeVectorBatch);
+        } else {
+            this.nativeVectorBatch = newVectorBatchNative(nativeVectors, rowCount);
+        }
     }
 
     /**
@@ -102,6 +122,37 @@ public class VecBatch implements Closeable {
     }
 
     /**
+     * This constructor is for native to call.
+     *
+     * @param nativeVecBatch native vector batch address
+     * @param nativeVectors native vector array
+     * @param nativeVectorValueBufAddresses valueBuf address of native vector
+     * @param nativeVectorNullBufAddresses nullBuf address of native vector
+     * @param nativeVectorOffsetBufAddresses offsetBuf address of native vector
+     * @param encodings the encoding type array of vector batch
+     * @param dataTypeIds the type array of this vector batch
+     * @param rowCount the row count of vector batch
+     * @param mixType the type of batch mix type
+     */
+    public VecBatch(long nativeVecBatch, long[] nativeVectors, long[] nativeVectorValueBufAddresses,
+                    long[] nativeVectorNullBufAddresses, long[] nativeVectorOffsetBufAddresses, int[] encodings,
+                    int[] dataTypeIds, int rowCount, int mixType) {
+        int vecCount = nativeVectors.length;
+        Vec[] newVectors = new Vec[vecCount];
+        for (int idx = 0; idx < vecCount; idx++) {
+            long nativeVector = nativeVectors[idx];
+            DataType dataType = DataType.create(dataTypeIds[idx]);
+            newVectors[idx] = VecFactory.create(nativeVector, nativeVectorValueBufAddresses[idx],
+                    nativeVectorNullBufAddresses[idx], nativeVectorOffsetBufAddresses[idx], rowCount,
+                    VecEncoding.values()[encodings[idx]], dataType);
+        }
+        this.rowCount = rowCount;
+        this.nativeVectorBatch = nativeVecBatch;
+        this.vectors = newVectors;
+        this.mixType = mixType;
+    }
+
+    /**
      * create vector batch based on the number of vectors.
      *
      * @param nativeVectors native vector array
@@ -111,11 +162,28 @@ public class VecBatch implements Closeable {
     public static native long newVectorBatchNative(long[] nativeVectors, int rowCount);
 
     /**
+     * create vector batch based on the number of vectors for mix mode.
+     *
+     * @param nativeVectors native vector array
+     * @param rowCount the row count of vector batch
+     * @return vector batch address
+     */
+    public static native long newMixedBatchNative(long[] nativeVectors, int rowCount);
+
+    /**
      * release vector batch.
      *
      * @param nativeVectorBatch vector batch address
      */
     public static native void freeVectorBatchNative(long nativeVectorBatch);
+
+    /**
+     * mix type in the vecBatch.
+     *
+     * @param nativeVectorBatch vector batch address
+     * @return mix type
+     */
+    private static native int nativeMixType(long nativeVectorBatch);
 
     /**
      * row count in the vecBatch.
@@ -151,6 +219,10 @@ public class VecBatch implements Closeable {
 
     public long getNativeVectorBatch() {
         return nativeVectorBatch;
+    }
+
+    public int getMixType() {
+        return mixType;
     }
 
     /**

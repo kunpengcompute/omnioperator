@@ -179,10 +179,25 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_VecBatch_newVectorBatc
 
 /*
  * Class:     nova_hetu_omniruntime_vector_VecBatch
+ * Method:    newMixedBatchNative
+ * Signature: ([JI)J
+ */
+JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_VecBatch_newMixedBatchNative(JNIEnv *, jclass, jlongArray,
+    jint);
+
+/*
+ * Class:     nova_hetu_omniruntime_vector_VecBatch
  * Method:    freeVectorBatchNative
  * Signature: (J)V
  */
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_VecBatch_freeVectorBatchNative(JNIEnv *, jclass, jlong);
+
+/*
+ * Class:     nova_hetu_omniruntime_vector_VecBatch
+ * Method:    nativeMixType
+ * Signature: (J)I
+ */
+JNIEXPORT jint JNICALL Java_nova_hetu_omniruntime_vector_VecBatch_nativeMixType(JNIEnv *, jclass, jlong);
 
 /*
  * Class:     nova_hetu_omniruntime_vector_DictionaryVec
@@ -356,6 +371,8 @@ JNIEXPORT jbyteArray JNICALL Java_nova_hetu_omniruntime_vector_ConstVec_getConst
  */
 JNIEXPORT jbyteArray JNICALL Java_nova_hetu_omniruntime_vector_ConstVec_getConstDecimal128BytesNative(JNIEnv *, jclass,
     jlong);
+
+JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_MixedVec_freeMixedVectorBatchNative(JNIEnv *, jclass, jlong);
 
 #ifdef __cplusplus
 }

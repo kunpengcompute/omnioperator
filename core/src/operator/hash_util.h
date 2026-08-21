@@ -12,6 +12,7 @@
 #include "codegen/functions/mathfunctions.h"
 #include "vector/vector.h"
 #include "vector/vector_batch.h"
+#include "vector/mixed_vector.h"
 
 namespace omniruntime {
 namespace op {
@@ -65,6 +66,9 @@ class HashUtil {
 public:
     static std::unique_ptr<omniruntime::vec::Vector<int32_t>> ComputePartitionIds(
         std::vector<omniruntime::vec::BaseVector *> &vecs, int32_t partitionNum, int32_t rowCount);
+
+    static std::unique_ptr<omniruntime::vec::Vector<int32_t>> ComputePartitionIdsMixed(
+            omniruntime::vec::MixedVectorBatch &mixedBatch, int32_t partitionNum, int32_t rowCount);
 
     static uint64_t NextPowerOfTwo(uint64_t x);
 

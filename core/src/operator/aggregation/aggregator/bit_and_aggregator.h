@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cfloat>
+#include <cstring>
 
 #include "typed_aggregator.h"
 
@@ -50,6 +51,8 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID> class BitAndAggregator : public T
     using OutVector = typename AggNativeAndVectorType<OUT_ID>::vector;
     using OutType = typename AggNativeAndVectorType<OUT_ID>::type;
     using ResultType = typename AggNativeAndVectorType<OUT_ID>::type;
+    static constexpr bool kMixedStateSerdeSupported =
+        IN_ID == OUT_ID && IsMixedSerdeIntegralType<IN_ID>() && IsMixedSerdeIntegralType<OUT_ID>();
 
 #pragma pack(push, 1)
     struct BitAndState : BaseState<ResultType> {
@@ -84,6 +87,31 @@ public:
     size_t GetStateSize() override
     {
         return sizeof(BitAndState);
+    }
+
+    static void MergeMixedStateImpl(BitAndAggregator<IN_ID, OUT_ID> *, BitAndState *targetState,
+        const BitAndState *sourceState)
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            if (sourceState->IsOverFlowed()) {
+                targetState->SetOverFlow();
+            } else if (!sourceState->IsEmpty()) {
+                BitAndOp<ResultType, ResultType>(&targetState->value, targetState->valueState, sourceState->value, 1LL);
+            }
+        } else {
+            (void)targetState;
+            (void)sourceState;
+        }
+    }
+
+    const MixedStateSerdeOps *GetMixedStateSerdeOps() const override
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            return RawMixedStateSerde<BitAndState, BitAndAggregator<IN_ID, OUT_ID>,
+                &BitAndAggregator::MergeMixedStateImpl>::Ops();
+        } else {
+            return nullptr;
+        }
     }
 
     void ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors, int32_t rowIndex) override;

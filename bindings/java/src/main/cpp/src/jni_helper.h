@@ -21,6 +21,9 @@ extern "C" {
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_utils_ShuffleHashHelper_computePartitionIds(JNIEnv *env,
     jclass jClass, jlongArray vecAddrArray, jint partitionNum, jint rowCount);
 
+JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_utils_ShuffleHashHelper_computeMixedPartitionIds(JNIEnv *env,
+    jclass jClass, jlong jVecBatchAddress, jint partitionNum, jint rowCount);
+
 #ifdef __cplusplus
 }
 #endif

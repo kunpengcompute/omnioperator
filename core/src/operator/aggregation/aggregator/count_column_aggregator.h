@@ -5,6 +5,7 @@
 #ifndef OMNI_RUNTIME_COUNT_COLUMN_AGGREGATOR_H
 #define OMNI_RUNTIME_COUNT_COLUMN_AGGREGATOR_H
 
+#include <cstring>
 #include "typed_aggregator.h"
 #include "operator/aggregation/definitions.h"
 
@@ -59,6 +60,18 @@ public:
     size_t GetStateSize() override
     {
         return sizeof(CountState);
+    }
+
+    static void MergeMixedStateImpl(CountColumnAggregator<IN_ID, OUT_ID> *, CountState *targetState,
+        const CountState *sourceState)
+    {
+        targetState->count += sourceState->count;
+    }
+
+    const MixedStateSerdeOps *GetMixedStateSerdeOps() const override
+    {
+        return RawMixedStateSerde<CountState, CountColumnAggregator<IN_ID, OUT_ID>,
+            &CountColumnAggregator::MergeMixedStateImpl>::Ops();
     }
 
     static std::unique_ptr<Aggregator> Create(const DataTypes &inputTypes, const DataTypes &outputTypes,

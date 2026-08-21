@@ -5,6 +5,7 @@
 #ifndef OMNI_RUNTIME_SUM_FLAT_IM_AGGREGATOR_H
 #define OMNI_RUNTIME_SUM_FLAT_IM_AGGREGATOR_H
 
+#include <cstring>
 #include "aggregator.h"
 #include "simd/func/reduce.h"
 #include "sum_int64_sve_hash_agg.h"
@@ -49,6 +50,8 @@ inline bool TrySveHashAggSumInt64(std::vector<AggregateState *> &rowStates, size
 template <DataTypeId IN_ID, DataTypeId OUT_ID> class SumFlatIMAggregator : public TypedAggregator {
     using InType = typename AggNativeAndVectorType<IN_ID>::type;
     using ResultType = typename AggNativeAndVectorType<OUT_ID>::type;
+    static constexpr bool kMixedStateSerdeSupported =
+        IsMixedSerdeArithmeticType<IN_ID>() && IsMixedSerdeArithmeticType<OUT_ID>();
 
     // inner class for aggregate state, the member depends on ResultType of Aggregator
 #pragma pack(push, 1)
@@ -263,6 +266,32 @@ public:
     size_t GetStateSize() override
     {
         return sizeof(SumFlatState);
+    }
+
+    static void MergeMixedStateImpl(SumFlatIMAggregator<IN_ID, OUT_ID> *, SumFlatState *targetState,
+        const SumFlatState *sourceState)
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            if (sourceState->IsOverFlowed()) {
+                targetState->SetOverFlow();
+            } else if (!sourceState->IsEmpty()) {
+                SumOp<ResultType, ResultType, AggValueState, StateValueHandler, false>(&targetState->value,
+                    targetState->valueState, sourceState->value, 1LL);
+            }
+        } else {
+            (void)targetState;
+            (void)sourceState;
+        }
+    }
+
+    const MixedStateSerdeOps *GetMixedStateSerdeOps() const override
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            return RawMixedStateSerde<SumFlatState, SumFlatIMAggregator<IN_ID, OUT_ID>,
+                &SumFlatIMAggregator::MergeMixedStateImpl>::Ops();
+        } else {
+            return nullptr;
+        }
     }
 
     void InitState(AggregateState *state) override

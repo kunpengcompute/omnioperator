@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cfloat>
+#include <cstring>
 
 #include "typed_aggregator.h"
 
@@ -50,6 +51,8 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID> class BitXorAggregator : public T
     using OutVector = typename AggNativeAndVectorType<OUT_ID>::vector;
     using OutType = typename AggNativeAndVectorType<OUT_ID>::type;
     using ResultType = typename AggNativeAndVectorType<OUT_ID>::type;
+    static constexpr bool kMixedStateSerdeSupported =
+        IN_ID == OUT_ID && IsMixedSerdeIntegralType<IN_ID>() && IsMixedSerdeIntegralType<OUT_ID>();
 
 #pragma pack(push, 1)
     struct BitXorState : BaseState<ResultType> {
@@ -84,6 +87,31 @@ public:
     size_t GetStateSize() override
     {
         return sizeof(BitXorState);
+    }
+
+    static void MergeMixedStateImpl(BitXorAggregator<IN_ID, OUT_ID> *, BitXorState *targetState,
+        const BitXorState *sourceState)
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            if (sourceState->IsOverFlowed()) {
+                targetState->SetOverFlow();
+            } else if (!sourceState->IsEmpty()) {
+                BitXorOp<ResultType, ResultType>(&targetState->value, targetState->valueState, sourceState->value, 1LL);
+            }
+        } else {
+            (void)targetState;
+            (void)sourceState;
+        }
+    }
+
+    const MixedStateSerdeOps *GetMixedStateSerdeOps() const override
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            return RawMixedStateSerde<BitXorState, BitXorAggregator<IN_ID, OUT_ID>,
+                &BitXorAggregator::MergeMixedStateImpl>::Ops();
+        } else {
+            return nullptr;
+        }
     }
 
     void ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors, int32_t rowIndex) override;
