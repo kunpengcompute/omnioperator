@@ -43,6 +43,7 @@
 #include "../functions/Floor.h"
 #include "../functions/Ceil.h"
 #include "../functions/Time.h"
+#include "../functions/TimestampAdd.h"
 #include "../functions/TimestampDiff.h"
 #include "RegistrationHelpers.h"
 
@@ -112,6 +113,7 @@ void RegisterDatetimeFunctions(const std::string &prefix)
 
     RegisterTimeFunction(prefix + "time");
 
+    RegisterTimestampAddFunction(prefix + "timestampadd");
     RegisterTimestampDiffFunction(prefix + "timestampdiff");
 }
 }
