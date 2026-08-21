@@ -101,4 +101,35 @@ private:
     std::mt19937 generator_;
 };
 
+/// uuid function (no-argument overload)
+/// uuid() -> varchar
+/// Generates an RFC 4122 version 4 (pseudo-randomly generated) UUID string, e.g.
+///   xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx   (y in {8, 9, a, b})
+///
+/// This matches Flink SQL's UUID(), which returns java.util.UUID.randomUUID().toString().
+/// It is non-deterministic: each call generates a new random UUID and the generator
+/// is seeded from std::random_device (no partition awareness, aligning with Flink).
+///
+/// Edge cases:
+/// - No inputs, result is never NULL.
+/// - Different rows in the same batch get different UUID values.
+template <typename T>
+struct UuidNoArgFunction {
+    void initialize(const std::vector<omniruntime::type::DataTypeId>& /*inputTypes*/,
+                    const config::QueryConfig& /*config*/)
+    {
+        std::random_device rd;
+        generator_.seed(rd());
+    }
+
+    ALWAYS_INLINE Status call(std::string& result)
+    {
+        result = GenerateUuidV4(generator_);
+        return Status::OK();
+    }
+
+private:
+    std::mt19937 generator_;
+};
+
 } // namespace omniruntime::vectorization

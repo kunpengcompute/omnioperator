@@ -74,13 +74,19 @@ class SimpleFunction final : public VectorFunction {
         if constexpr (POSITION == FUNC::num_args) {
             return (*fn_).initialize(inputTypes, config, values...);
         } else {
-            if (packed.at(POSITION) != nullptr) {
+            // POSITION may exceed packed.size() when the caller used the no-constantInputs
+            // overload of VectorFunction::Find (which passes an empty vector, e.g. during
+            // signature probing in jsonparser/FuncExpr construction). Treat an out-of-range
+            // position the same as a missing (nullptr) constant input: the UDF's initialize()
+            // is expected to handle a nullptr seed/bound pointer (e.g. `seed != nullptr ? ... : 0`).
+            // This avoids std::out_of_range from packed.at(POSITION) on an empty vector.
+            if (POSITION < static_cast<int32_t>(packed.size()) && packed[POSITION] != nullptr) {
                 if constexpr (is_array_view_v<arg_at<POSITION>>) {
-                    auto oneReader = VectorReader<Array<typename arg_at<POSITION>::element_t>>(packed.at(POSITION));
+                    auto oneReader = VectorReader<Array<typename arg_at<POSITION>::element_t>>(packed[POSITION]);
                     auto oneValue = oneReader[0];
                     UnpackInitialize<POSITION + 1>(inputTypes, config, packed, values..., &oneValue);
                 } else {
-                    auto constVector = dynamic_cast<const ConstVector<arg_at<POSITION>> *>(packed.at(POSITION));
+                    auto constVector = dynamic_cast<const ConstVector<arg_at<POSITION>> *>(packed[POSITION]);
                     if (constVector == nullptr) {
                         OMNI_THROW("Runtime Error:", "Initialize vector must be const!");
                     }
