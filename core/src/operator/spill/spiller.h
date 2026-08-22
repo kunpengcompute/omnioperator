@@ -115,10 +115,7 @@ public:
 
     ~Spiller()
     {
-        for (auto writer : writers) {
-            delete writer;
-        }
-        writers.clear();
+        spillFiles.clear();
     }
 
     ErrorCode Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRadixSort, Operator* op);
@@ -127,10 +124,6 @@ public:
 
     std::vector<SpillFileInfo> FinishSpill()
     {
-        std::vector<SpillFileInfo> spillFiles;
-        for (auto writer : writers) {
-            spillFiles.emplace_back(writer->GetSpillFileInfo());
-        }
         return spillFiles;
     }
 
@@ -159,9 +152,10 @@ public:
     // the spill files should be deleted if there is exception
     void RemoveSpillFiles()
     {
-        for (auto writer : writers) {
-            auto spillFile = writer->GetSpillFileInfo();
-            remove(spillFile.filePath.c_str());
+        for (const auto &spillFile : spillFiles) {
+            if (!spillFile.filePath.empty()) {
+                remove(spillFile.filePath.c_str());
+            }
         }
     }
 
@@ -187,7 +181,8 @@ private:
     std::vector<int32_t> outputCols;
     int32_t maxRowCountPerBatch;
     std::unique_ptr<vec::VectorBatch> spillVecBatch = nullptr;
-    std::vector<SpillWriter *> writers;
+    // Writers own sizeable buffers and compression streams. Keep only file metadata after Close().
+    std::vector<SpillFileInfo> spillFiles;
     SpillTracker *spillTracker = nullptr;
     uint64_t writeBufferSize = 0;
     bool isSpillCompressEnabled = false;
