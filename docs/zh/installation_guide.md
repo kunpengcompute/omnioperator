@@ -435,7 +435,7 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 1. <a name="li17569353267"></a>在管理节点上下载ABSL源码。
 
     ```
-    git clone https://szv-open.codehub.huawei.com/OpenSourceCenter/abseil/abseil-cpp.git
+    git clone https://github.com/abseil/abseil-cpp.git
     cd abseil-cpp/
     git checkout tags/20250127.0
     ```
