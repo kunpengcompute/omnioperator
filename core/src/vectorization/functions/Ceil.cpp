@@ -142,11 +142,11 @@ public:
                     return;
                 }
 
-                int64_t micros = valueRaw[i];
-                Timestamp ts = Timestamp::fromMicros(micros);
+                int64_t millis = valueRaw[i];
+                Timestamp ts = Timestamp::fromMillis(millis);
                 Timestamp truncated;
                 if (Timestamp::CeilTime(ts, level, truncated) == CONVERT_SUCCESS) {
-                    resultRaw[i] = truncated.toMicros();
+                    resultRaw[i] = truncated.toMillis();
 
                     result->SetNotNull(i);
                 } else {

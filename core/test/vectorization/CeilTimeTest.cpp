@@ -97,8 +97,8 @@ public:
     }
     
     static void ExecuteCeilTime(BaseVector* valueVec, BaseVector* formatVec, BaseVector*& result, DataTypeId valueTypeId) {
-        DataTypeId outputTypeId = (valueTypeId == OMNI_INT) ? OMNI_INT : OMNI_LONG;
-        auto signature = std::make_shared<FunctionSignature>("ceil_time", 
+        DataTypeId outputTypeId = valueTypeId;
+        auto signature = std::make_shared<FunctionSignature>("flink_ceil_time", 
             std::vector<DataTypeId>{valueTypeId, OMNI_VARCHAR}, outputTypeId);
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "Ceil_time function not found for signature";
@@ -120,13 +120,13 @@ public:
         return date.ToDays();
     }
 
-    static int64_t DateTimeToMicros(int year, int month, int day, int hour, int minute, int second, int micros) {
+    static int64_t DateTimeToMillis(int year, int month, int day, int hour, int minute, int second, int millis) {
         int32_t days = DateToDays(year, month, day);
-        return static_cast<int64_t>(days) * 86400LL * 1000000LL
-             + static_cast<int64_t>(hour) * 3600LL * 1000000LL
-             + static_cast<int64_t>(minute) * 60LL * 1000000LL
-             + static_cast<int64_t>(second) * 1000000LL
-             + static_cast<int64_t>(micros);
+        return static_cast<int64_t>(days) * 86400LL * 1000LL
+             + static_cast<int64_t>(hour) * 3600LL * 1000LL
+             + static_cast<int64_t>(minute) * 60LL * 1000LL
+             + static_cast<int64_t>(second) * 1000LL
+             + static_cast<int64_t>(millis);
     }
 };
 
@@ -269,15 +269,15 @@ TEST(CeilTimeTest, CeilTimestampToHour) {
     std::cout << "=== Test: Ceil TIMESTAMP to HOUR ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 15, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2025, 1, 1, 0, 0, 0, 0)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 15, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2025, 1, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"HOUR", "HOUR", "HOUR"};
@@ -296,15 +296,15 @@ TEST(CeilTimeTest, CeilTimestampToMinute) {
     std::cout << "=== Test: Ceil TIMESTAMP to MINUTE ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 31, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2025, 1, 1, 0, 0, 0, 0)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 31, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2025, 1, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"MINUTE", "MINUTE", "MINUTE"};
@@ -323,15 +323,15 @@ TEST(CeilTimeTest, CeilTimestampToSecond) {
     std::cout << "=== Test: Ceil TIMESTAMP to SECOND ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 46, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2025, 1, 1, 0, 0, 0, 0)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 46, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2025, 1, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"SECOND", "SECOND", "SECOND"};
@@ -350,15 +350,15 @@ TEST(CeilTimeTest, CeilTimestampToDay) {
     std::cout << "=== Test: Ceil TIMESTAMP to DAY ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 16, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2025, 1, 1, 0, 0, 0, 0)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 16, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2025, 1, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"DAY", "DAY", "DAY"};
@@ -373,19 +373,46 @@ TEST(CeilTimeTest, CeilTimestampToDay) {
     delete resultVec;
 }
 
+TEST(CeilTimeTest, CeilTimestampToWeek) {
+    std::cout << "=== Test: Ceil TIMESTAMP to WEEK ===" << std::endl;
+
+    std::vector<int64_t> tsValues = {
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 16, 1, 1, 1, 1),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 16, 10, 20, 30, 456)
+    };
+
+    std::vector<int64_t> expected = {
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 16, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 16, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 16, 0, 0, 0, 0)
+    };
+
+    std::vector<std::string> formatValues = {"WEEK", "WEEK", "WEEK"};
+
+    BaseVector* tsVec = CeilTimeFunctionTestHelper::CreateLongVector(tsValues);
+    BaseVector* formatVec = CeilTimeFunctionTestHelper::CreateStringVector(formatValues);
+    BaseVector* resultVec = nullptr;
+
+    CeilTimeFunctionTestHelper::ExecuteCeilTime(tsVec, formatVec, resultVec, OMNI_LONG);
+    CeilTimeFunctionTestHelper::ValidateLongResult(resultVec, expected, tsValues.size());
+
+    delete resultVec;
+}
+
 TEST(CeilTimeTest, CeilTimestampToMonth) {
     std::cout << "=== Test: Ceil TIMESTAMP to MONTH ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 1, 1, 1, 1, 1),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 7, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2025, 1, 1, 0, 0, 0, 0)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 7, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2025, 1, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"MONTH", "MONTH", "MONTH"};
@@ -404,15 +431,15 @@ TEST(CeilTimeTest, CeilTimestampToQuarter) {
     std::cout << "=== Test: Ceil TIMESTAMP to QUARTER ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 1, 1, 1, 1),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 7, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2025, 1, 1, 0, 0, 0, 0)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 7, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2025, 1, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"QUARTER", "QUARTER", "QUARTER"};
@@ -431,15 +458,15 @@ TEST(CeilTimeTest, CeilTimestampToYear) {
     std::cout << "=== Test: Ceil TIMESTAMP to YEAR ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 1, 1, 1, 1),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2025, 1, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2025, 1, 1, 0, 0, 0, 0)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2025, 1, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2025, 1, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"YEAR", "YEAR", "YEAR"};
@@ -510,9 +537,9 @@ TEST(CeilTimeTest, CeilTimestampWithNullValue) {
     std::cout << "=== Test: Ceil TIMESTAMP with NULL value ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 10, 20, 30, 456),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 10, 20, 30, 456),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<std::string> formatValues = {"HOUR", "HOUR", "HOUR"};
@@ -537,9 +564,9 @@ TEST(CeilTimeTest, CeilTimestampWithNullFormat) {
     std::cout << "=== Test: Ceil TIMESTAMP with NULL format ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 10, 20, 30, 456),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 10, 20, 30, 456),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<std::string> formatValues = {"HOUR", "HOUR", "HOUR"};
@@ -666,15 +693,15 @@ TEST(CeilTimeTest, CeilTimestampBoundaryExactHour) {
     std::cout << "=== Test: Ceil TIMESTAMP boundary - exact hour ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 1),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 59, 59, 999)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 1),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 15, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 15, 0, 0, 0)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 15, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 15, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"HOUR", "HOUR", "HOUR"};
@@ -692,13 +719,13 @@ TEST(CeilTimeTest, CeilTimestampBoundaryExactHour) {
 TEST(CeilTimeTest, CeilTimestampWithDifferentFormats) {
     std::cout << "=== Test: Ceil TIMESTAMP with different format strings ===" << std::endl;
     
-    int64_t ts = CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123);
+    int64_t ts = CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123);
     std::vector<int64_t> tsValues = {ts, ts, ts};
     
     std::vector<int64_t> expected = {
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2025, 1, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 7, 1, 0, 0, 0, 0),
-        CeilTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 16, 0, 0, 0, 0)
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2025, 1, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 7, 1, 0, 0, 0, 0),
+        CeilTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 16, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"YEAR", "MONTH", "DAY"};

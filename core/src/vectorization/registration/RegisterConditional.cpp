@@ -9,6 +9,7 @@
 #include "../functions/IsAlpha.h"
 #include "../functions/IsDecimal.h"
 #include "../functions/Nanvl.h"
+#include "../functions/NullIf.h"
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -80,6 +81,23 @@ void RegisterConditionalFunctions(const std::string &prefix)
      VectorFunction::RegisterVectorFunction("nanvl", {OMNI_FLOAT, OMNI_FLOAT}, OMNI_FLOAT, nanvlFunction);	 
      VectorFunction::RegisterVectorFunction("nanvl", {OMNI_DOUBLE, OMNI_DOUBLE}, OMNI_DOUBLE, nanvlFunction);
 
+    // Register nullif - returns NULL if expr1 equals expr2, otherwise returns expr1
+    auto nullIfFunction = std::make_shared<NullIfFunction>();
+    // 如果入参是bool类型，flink原生会重写成(((A=C) IS TRUE AND null) OR (A AND (A=C) IS NOT TRUE))，不会走下面这条路径
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_BOOLEAN, OMNI_BOOLEAN}, OMNI_BOOLEAN, nullIfFunction); 
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_BYTE, OMNI_BYTE}, OMNI_BYTE, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_SHORT, OMNI_SHORT}, OMNI_SHORT, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_INT, OMNI_INT}, OMNI_INT, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_LONG, OMNI_LONG}, OMNI_LONG, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_FLOAT, OMNI_FLOAT}, OMNI_FLOAT, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_DOUBLE, OMNI_DOUBLE}, OMNI_DOUBLE, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_VARBINARY, OMNI_VARBINARY}, OMNI_VARBINARY, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_DATE32, OMNI_DATE32}, OMNI_DATE32, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_DATE64, OMNI_DATE64}, OMNI_DATE64, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_TIMESTAMP, OMNI_TIMESTAMP}, OMNI_TIMESTAMP, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_DECIMAL64, OMNI_DECIMAL64}, OMNI_DECIMAL64, nullIfFunction);
+    VectorFunction::RegisterVectorFunction("nullif", {OMNI_DECIMAL128, OMNI_DECIMAL128}, OMNI_DECIMAL128, nullIfFunction);
     // Register is_alpha: IS_ALPHA(string) -> boolean.
     // Returns true if the string is non-empty and every character is a Unicode letter;
     // NULL/empty input -> false (output NOT null). Numeric input -> false.

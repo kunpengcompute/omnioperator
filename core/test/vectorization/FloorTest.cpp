@@ -351,3 +351,51 @@ TEST_F(FloorTest, FloorNegativeDecimalsCloseToInteger) {
     delete funcExpr;
     delete context;
 }
+
+// Test floor(double) -> double (Flink semantics)
+TEST_F(FloorTest, FloorDoubleReturnDouble) {
+
+    int32_t rowSize = 5;
+
+    // Create input vector
+    BaseVector* rawInput = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    auto* inputVector = static_cast<Vector<double>*>(rawInput);
+    std::vector<double> inputData = {2.5, -2.5, 0.0, 100.999, -100.001};
+    for (int32_t i = 0; i < rowSize; ++i) {
+        inputVector->SetValue(i, inputData[i]);
+        inputVector->SetNotNull(i);
+    }
+
+    // Create function signature: floor(double) -> double (Flink semantics)
+    std::vector<DataTypeId> argTypes = {OMNI_DOUBLE};
+    auto signature = std::make_shared<FunctionSignature>("floor", argTypes, OMNI_DOUBLE);
+    auto vectorFunction = VectorFunction::Find(signature);
+    ASSERT_NE(vectorFunction, nullptr) << "Function floor(double)->double not found";
+
+    ExecutionContext context;
+    context.SetResultRowSize(rowSize);
+
+    std::stack<BaseVector*> args;
+    args.push(rawInput);
+
+    BaseVector* rawResult = nullptr;
+    auto resultType = std::make_shared<DataType>(OMNI_DOUBLE);
+    vectorFunction->Apply(args, resultType, rawResult, &context);
+    ASSERT_NE(rawResult, nullptr);
+
+    auto* resultVector = static_cast<Vector<double>*>(rawResult);
+    ASSERT_NE(resultVector, nullptr);
+
+    std::vector<double> expectedResults = {2.0, -3.0, 0.0, 100.0, -101.0};
+
+    for (int32_t i = 0; i < rowSize; ++i) {
+        EXPECT_FALSE(rawResult->IsNull(i)) << "Result should not be NULL at index " << i;
+        double actual = resultVector->GetValue(i);
+        double expected = expectedResults[i];
+        EXPECT_EQ(actual, expected)
+            << "Value mismatch at index " << i << " for floor(" << inputData[i] << ")"
+            << ", expected=" << expected << ", actual=" << actual;
+    }
+
+    delete rawResult;
+}

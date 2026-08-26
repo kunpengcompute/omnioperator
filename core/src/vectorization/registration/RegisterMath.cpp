@@ -49,6 +49,7 @@ void RegisterMathFunctions(const std::string &prefix)
 	RegisterFunction<CbrtFunction, double, double>(prefix + "cbrt", {OMNI_DOUBLE}, OMNI_DOUBLE);
 	RegisterFunction<CeilFunction, int64_t, int64_t>(prefix + "ceil", {OMNI_LONG}, OMNI_LONG);
 	RegisterFunction<CeilFunction, int64_t, double>(prefix + "ceil", {OMNI_DOUBLE}, OMNI_LONG);
+	RegisterFunction<CeilFunction, double, double>(prefix + "ceil", {OMNI_DOUBLE}, OMNI_DOUBLE);
     RegisterFunction<SignFunction, double, double>(prefix + "sign", {OMNI_DOUBLE}, OMNI_DOUBLE);
     RegisterFunction<SinhFunction, double, double>(prefix + "sinh", {OMNI_DOUBLE}, OMNI_DOUBLE);
     RegisterFunction<TanhFunction, double, double>(prefix + "tanh", {OMNI_DOUBLE}, OMNI_DOUBLE);
@@ -116,10 +117,11 @@ void RegisterMathFunctions(const std::string &prefix)
     RegisterFunction<HexVarcharFunction, std::string, std::string_view>(prefix + "hex", {OMNI_CHAR}, OMNI_VARCHAR);
     RegisterFunction<HexVarbinaryFunction, std::string, std::string_view>(prefix + "hex", {OMNI_VARBINARY}, OMNI_VARCHAR);
 
-    // Register floor: floor(long) -> long, floor(double) -> long
-    // In Spark, floor must return Long type
+    // Register floor: floor(long) -> long, floor(double) -> long (Spark), floor(double) -> double (Flink)
+    // In Spark, floor must return Long type; in Flink, floor(DOUBLE) returns DOUBLE
     RegisterFunction<FloorFunction, int64_t, int64_t>(prefix + "floor", {OMNI_LONG}, OMNI_LONG);
     RegisterFunction<FloorFunction, int64_t, double>(prefix + "floor", {OMNI_DOUBLE}, OMNI_LONG);
+    RegisterFunction<FloorFunction, double, double>(prefix + "floor", {OMNI_DOUBLE}, OMNI_DOUBLE);
 
     // Register factorial: factorial(int) -> bigint
     // Input: int32 (OMNI_INT), Output: int64 (OMNI_LONG)

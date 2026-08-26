@@ -299,6 +299,9 @@ public:
         Encoding encoding = vec->GetEncoding();
         if (encoding == OMNI_ENCODING_CONST) {
             auto *constVec = static_cast<ConstVector<T> *>(vec);
+            if (constVec->IsNull(row)) {
+                return false;
+            }
             result = constVec->GetConstValue();
             return true;
         }

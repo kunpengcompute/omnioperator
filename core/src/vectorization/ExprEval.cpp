@@ -588,7 +588,8 @@ void ExprEval::Visit(const FuncExpr &e)
     }
     BaseVector *result = nullptr;
     auto resolved = e.vectorFunction;
-    bool needQueryConfig = (e.funcName == "spark_partition_id" || e.funcName == "uuid" || e.funcName == "rand");
+    bool needQueryConfig = (e.funcName == "spark_partition_id" || e.funcName == "uuid" || e.funcName == "rand"
+        || e.funcName == "flink_localtime" || e.funcName == "flink_localtimestamp" || e.funcName == "flink_current_date");
     if (resolved == nullptr || needQueryConfig) {
         std::vector<DataTypeId> argTypes(e.arguments.size());
         std::transform(e.arguments.begin(), e.arguments.end(), argTypes.begin(),
@@ -622,7 +623,50 @@ void ExprEval::Visit(const FuncExpr &e)
     inputValues_.push(result);
 }
 
-void ExprEval::Visit(const SwitchExpr &e) {}
+void ExprEval::Visit(const SwitchExpr &e)
+{
+    std::vector<std::pair<BaseVector *, BaseVector *>> whenVecs;
+    whenVecs.reserve(e.whenClause.size());
+    for (const auto &when : e.whenClause) {
+        when.first->Accept(*this);
+        auto *condVec = inputValues_.top();
+        inputValues_.pop();
+        when.second->Accept(*this);
+        auto *resultVec = inputValues_.top();
+        inputValues_.pop();
+        whenVecs.emplace_back(condVec, resultVec);
+    }
+    BaseVector *elseVec = nullptr;
+    if (e.falseExpr != nullptr) {
+        e.falseExpr->Accept(*this);
+        elseVec = inputValues_.top();
+        inputValues_.pop();
+    }
+
+    auto *result = VectorHelper::CreateFlatVector(e.dataType->GetId(), rowSize);
+    for (int32_t row = 0; row < rowSize; ++row) {
+        BaseVector *selected = elseVec;
+        for (const auto &when : whenVecs) {
+            if (!when.first->IsNull(row) &&
+                VectorHelper::GetValueFromVector<bool>(when.first, row)) {
+                selected = when.second;
+                break;
+            }
+        }
+        if (selected == nullptr || selected->IsNull(row)) {
+            VectorHelper::SetNull(result, row);
+        } else {
+            VectorHelper::CopyValue(selected, row, result, row);
+        }
+    }
+
+    for (auto &when : whenVecs) {
+        delete when.first;
+        delete when.second;
+    }
+    delete elseVec;
+    inputValues_.push(result);
+}
 
 void ExprEval::Visit(const ParamRefExpr &e) {
     int32_t paramIdx = paramNameToIdxMap[e.paramName_];

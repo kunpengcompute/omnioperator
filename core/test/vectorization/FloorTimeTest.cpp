@@ -97,8 +97,8 @@ public:
     }
     
     static void ExecuteFloorTime(BaseVector* valueVec, BaseVector* formatVec, BaseVector*& result, DataTypeId valueTypeId) {
-        DataTypeId outputTypeId = (valueTypeId == OMNI_INT) ? OMNI_INT : OMNI_LONG;
-        auto signature = std::make_shared<FunctionSignature>("floor_time", 
+        DataTypeId outputTypeId = valueTypeId;
+        auto signature = std::make_shared<FunctionSignature>("flink_floor_time", 
             std::vector<DataTypeId>{valueTypeId, OMNI_VARCHAR}, outputTypeId);
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "Floor_time function not found for signature";
@@ -120,13 +120,13 @@ public:
         return date.ToDays();
     }
 
-    static int64_t DateTimeToMicros(int year, int month, int day, int hour, int minute, int second, int micros) {
+    static int64_t DateTimeToMillis(int year, int month, int day, int hour, int minute, int second, int millis) {
         int32_t days = DateToDays(year, month, day);
-        return static_cast<int64_t>(days) * 86400LL * 1000000LL
-             + static_cast<int64_t>(hour) * 3600LL * 1000000LL
-             + static_cast<int64_t>(minute) * 60LL * 1000000LL
-             + static_cast<int64_t>(second) * 1000000LL
-             + static_cast<int64_t>(micros);
+        return static_cast<int64_t>(days) * 86400LL * 1000LL
+             + static_cast<int64_t>(hour) * 3600LL * 1000LL
+             + static_cast<int64_t>(minute) * 60LL * 1000LL
+             + static_cast<int64_t>(second) * 1000LL
+             + static_cast<int64_t>(millis);
     }
 };
 
@@ -269,15 +269,15 @@ TEST(FloorTimeTest, FloorTimestampToHour) {
     std::cout << "=== Test: Floor TIMESTAMP to HOUR ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 0, 0, 0)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"HOUR", "HOUR", "HOUR"};
@@ -296,15 +296,15 @@ TEST(FloorTimeTest, FloorTimestampToMinute) {
     std::cout << "=== Test: Floor TIMESTAMP to MINUTE ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 0, 0)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"MINUTE", "MINUTE", "MINUTE"};
@@ -323,15 +323,15 @@ TEST(FloorTimeTest, FloorTimestampToSecond) {
     std::cout << "=== Test: Floor TIMESTAMP to SECOND ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 0)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 0)
     };
     
     std::vector<std::string> formatValues = {"SECOND", "SECOND", "SECOND"};
@@ -350,15 +350,15 @@ TEST(FloorTimeTest, FloorTimestampToDay) {
     std::cout << "=== Test: Floor TIMESTAMP to DAY ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 0, 0, 0, 0)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"DAY", "DAY", "DAY"};
@@ -377,15 +377,15 @@ TEST(FloorTimeTest, FloorTimestampToMonth) {
     std::cout << "=== Test: Floor TIMESTAMP to MONTH ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 1, 0, 0, 0, 0)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"MONTH", "MONTH", "MONTH"};
@@ -404,15 +404,15 @@ TEST(FloorTimeTest, FloorTimestampToQuarter) {
     std::cout << "=== Test: Floor TIMESTAMP to QUARTER ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 4, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 10, 1, 0, 0, 0, 0)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 4, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 10, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"QUARTER", "QUARTER", "QUARTER"};
@@ -431,15 +431,15 @@ TEST(FloorTimeTest, FloorTimestampToYear) {
     std::cout << "=== Test: Floor TIMESTAMP to YEAR ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"YEAR", "YEAR", "YEAR"};
@@ -510,9 +510,9 @@ TEST(FloorTimeTest, FloorTimestampWithNullValue) {
     std::cout << "=== Test: Floor TIMESTAMP with NULL value ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 10, 20, 30, 456),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 12, 31, 23, 59, 59, 999)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 10, 20, 30, 456),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 12, 31, 23, 59, 59, 999)
     };
     
     std::vector<std::string> formatValues = {"HOUR", "HOUR", "HOUR"};
@@ -640,15 +640,15 @@ TEST(FloorTimeTest, FloorTimestampBoundaryExactHour) {
     std::cout << "=== Test: Floor TIMESTAMP boundary - exact hour ===" << std::endl;
     
     std::vector<int64_t> tsValues = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 1),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 59, 59, 999)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 1),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 59, 59, 999)
     };
     
     std::vector<int64_t> expected = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 0, 0, 0)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"HOUR", "HOUR", "HOUR"};
@@ -666,13 +666,13 @@ TEST(FloorTimeTest, FloorTimestampBoundaryExactHour) {
 TEST(FloorTimeTest, FloorTimestampWithDifferentFormats) {
     std::cout << "=== Test: Floor TIMESTAMP with different format strings ===" << std::endl;
     
-    int64_t ts = FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 14, 30, 45, 123);
+    int64_t ts = FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 14, 30, 45, 123);
     std::vector<int64_t> tsValues = {ts, ts, ts};
     
     std::vector<int64_t> expected = {
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 1, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 1, 0, 0, 0, 0),
-        FloorTimeFunctionTestHelper::DateTimeToMicros(2024, 6, 15, 0, 0, 0, 0)
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 1, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 1, 0, 0, 0, 0),
+        FloorTimeFunctionTestHelper::DateTimeToMillis(2024, 6, 15, 0, 0, 0, 0)
     };
     
     std::vector<std::string> formatValues = {"YEAR", "MONTH", "DAY"};
