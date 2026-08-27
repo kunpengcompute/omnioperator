@@ -15,6 +15,7 @@
 #include "type/data_types.h"
 #include "vector_batch.h"
 #include "util/debug.h"
+#include <type_traits>
 /*
  * row format:
  * 
@@ -63,6 +64,22 @@ public:
     static constexpr int8_t FIX_BIT = 0;
     static constexpr int8_t NULL_POS = 5;
     static constexpr int8_t NEG_POS = 4;
+
+    // Compact integer payload width in bytes. Never call clzll(0) (UB); never
+    // exceed sizeof(T) so WriteBuffer cannot memcpy past a 1-byte int8_t.
+    template <typename T>
+    static uint8_t CompactNonNegLen(T nonNeg)
+    {
+        using U = typename std::make_unsigned<T>::type;
+        const U u = static_cast<U>(nonNeg);
+        if (u == 0) {
+            return 1;
+        }
+        const unsigned long long ull = static_cast<unsigned long long>(u);
+        uint8_t n = static_cast<uint8_t>((BIT_64 - __builtin_clzll(ull) + BIT_8) / BIT_8);
+        const uint8_t maxN = static_cast<uint8_t>(sizeof(T));
+        return n > maxN ? maxN : n;
+    }
 
     /* *
      * @brief Translates the specified row from the given BaseVector into a local storage.
@@ -211,7 +228,7 @@ public:
             return PrefixLen;
         }
         int32_t arraySize = bv->GetSize();
-        uint8_t arrayMetaSize = (BIT_64 - __builtin_clzll(arraySize) + BIT_8) / BIT_8;
+        uint8_t arrayMetaSize = CompactNonNegLen(arraySize);
         return PrefixLen + arrayMetaSize + CompactBaseVectorLength(bv);
     }
 
@@ -231,7 +248,7 @@ public:
         if (isNull) {
             return PrefixLen;
         }
-        uint8_t structMetaSize = (BIT_64 - __builtin_clzll(value.size()) + BIT_8) / BIT_8;
+        uint8_t structMetaSize = CompactNonNegLen(value.size());
         int32_t total_length = PrefixLen + structMetaSize;
         for (auto i = 0; i < value.size(); i++) {
             total_length += CompactArrayLength(value[i]);
@@ -290,8 +307,9 @@ public:
         }
     }
 
+    // Payload byte count. Must be int32_t: uint8_t truncated ARRAY encodings >255 bytes.
     template <DataTypeId id>
-    uint8_t CalElementSize(BaseVector* bv)
+    int32_t CalElementSize(BaseVector* bv)
     {
         int32_t elementSize = 0;
         int32_t arraySize = bv->GetSize();
@@ -334,7 +352,7 @@ public:
     {
         if constexpr (std::is_same_v<T, std::string_view>) {
             // for varchar
-            return (BIT_64 - __builtin_clzll(value.length()) + BIT_8) / BIT_8;
+            return CompactNonNegLen(value.length());
         } else if constexpr (std::is_same_v<T, double>) {
             return BIT_8;
         } else if constexpr (std::is_same_v<T, type::Decimal128>) {
@@ -348,8 +366,7 @@ public:
             if (value < 0) {
                 tmp = ~value;
             }
-            uint8_t rowLenSize = (BIT_64 - __builtin_clzll(tmp) + BIT_8) / BIT_8;
-            return rowLenSize;
+            return CompactNonNegLen(tmp);
         }
     }
 
@@ -410,7 +427,7 @@ private:
             tmp = ~value;
             neg = true;
         }
-        uint8_t rowLenSize = (BIT_64 - __builtin_clzll(tmp) + BIT_8) / BIT_8;
+        uint8_t rowLenSize = CompactNonNegLen(tmp);
         *writeBuffer = (FIX_BIT | (isNull << NULL_POS) | (neg << NEG_POS) | rowLenSize);
         ++writeBuffer;
         std::copy(reinterpret_cast<uint8_t *>(&tmp), reinterpret_cast<uint8_t *>(&tmp) + rowLenSize, writeBuffer);
@@ -455,7 +472,7 @@ private:
         }
 
         int32_t arraySize = bv->GetSize();
-        uint8_t rowArraySize = (BIT_64 - __builtin_clzll(arraySize) + BIT_8) / BIT_8;
+        uint8_t rowArraySize = CompactNonNegLen(arraySize);
         *writeBuffer = (FIX_BIT | (isNull << NULL_POS) | rowArraySize);
         ++writeBuffer;
         std::copy(reinterpret_cast<uint8_t *>(&arraySize), reinterpret_cast<uint8_t *>(&arraySize) + rowArraySize, writeBuffer);
@@ -567,7 +584,7 @@ private:
         }
 
         int32_t structSize = value.size();
-        uint8_t rowStructSize = (BIT_64 - __builtin_clzll(structSize) + BIT_8) / BIT_8;
+        uint8_t rowStructSize = CompactNonNegLen(structSize);
         *writeBuffer = (FIX_BIT | rowStructSize);
         ++writeBuffer;
         std::copy(reinterpret_cast<uint8_t *>(&structSize), reinterpret_cast<uint8_t *>(&structSize) + rowStructSize, writeBuffer);

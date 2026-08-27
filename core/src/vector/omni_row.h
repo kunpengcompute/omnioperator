@@ -17,11 +17,30 @@
  */
 #include "omni_row_value.h"
 #include "memory/simple_arena_allocator.h"
+#include <algorithm>
+#include <cstdint>
 
 namespace omniruntime {
 namespace vec {
 // Last four bit is encoding for meta size.
 inline constexpr uint8_t ENCODING_META_SIZE = 0b00001111;
+
+// Little-endian compact int: copy at most sizeof(T) bytes so a corrupt/oversize
+// length prefix cannot smash a stack slot (BYTE is 1 byte, prefix low-4-bits is 0..15).
+// Always consume `nBytes` from the stream to stay aligned with the writer.
+template <typename T>
+ALWAYS_INLINE static void ReadCompactLeInt(const uint8_t *src, uint8_t nBytes, T *out)
+{
+    T value = 0;
+    uint8_t n = nBytes;
+    if (n > static_cast<uint8_t>(sizeof(T))) {
+        n = static_cast<uint8_t>(sizeof(T));
+    }
+    if (n > 0) {
+        std::copy(src, src + n, reinterpret_cast<uint8_t *>(&value));
+    }
+    *out = value;
+}
 
 template <type::DataTypeId id, Encoding encoding>
 void TransToValue(BaseVector *vec, int32_t rowIndex, BaseSerialize *value)
@@ -216,7 +235,7 @@ static uint8_t *FixedRowSetVecValue(uint8_t *row, Vector<IntLikeType> *vec, int3
     auto valueLen = (*row) & (0x0F);
     // point to real value
     ++row;
-    std::copy(row, row + valueLen, reinterpret_cast<uint8_t *>(&value));
+    ReadCompactLeInt(row, valueLen, &value);
     if (UNLIKELY(negValue)) {
         value = ~value;
     }
@@ -230,7 +249,6 @@ static uint8_t *FixedRowSetVecValue(uint8_t *row, Vector<IntLikeType> *vec, int3
 
 template <typename IntLikeType> static uint8_t *FixedRowGetValue(uint8_t *row)
 {
-    IntLikeType value = 0;
     bool negValue = false;
     if (*row & (1 << BaseSerialize::NEG_POS)) {
         negValue = true;
@@ -239,7 +257,8 @@ template <typename IntLikeType> static uint8_t *FixedRowGetValue(uint8_t *row)
     // point to real value
     ++row;
 #ifdef DEBUG
-    std::copy(row, row + valueLen, reinterpret_cast<uint8_t *>(&value));
+    IntLikeType value = 0;
+    ReadCompactLeInt(row, valueLen, &value);
     std::string out = "fix value parse value is " + std::to_string(negValue ? -value : value) + ".";
     LogDebug("Row Handle:%s\n", out.c_str());
 #endif
@@ -312,7 +331,7 @@ static uint8_t *StringRowSetVecValue(uint8_t *row, Vector<LargeStringContainer<s
     // point to strLen value
     ++row;
     int32_t strLen = 0;
-    std::copy(row, row + valueLen, reinterpret_cast<uint8_t*>(&strLen));
+    ReadCompactLeInt(row, valueLen, &strLen);
     // point to str
     row += valueLen;
     // row will be copied to value 's string buffer
@@ -333,7 +352,7 @@ static uint8_t *StringRowGetValue(uint8_t *row)
     // point to strLen value
     ++row;
     int32_t strLen = 0;
-    std::copy(row, row + valueLen, reinterpret_cast<uint8_t*>(&strLen));
+    ReadCompactLeInt(row, valueLen, &strLen);
     // point to str
     row += valueLen;
 #ifdef DEBUG
@@ -352,7 +371,7 @@ static uint8_t *ArrayRowSetVecValue(uint8_t *row, ArrayVector *vec, int32_t rowI
     auto rowArraySize = (*row) & ENCODING_META_SIZE;
     ++row;
     int32_t arraySize = 0;
-    std::copy(row, row + rowArraySize, reinterpret_cast<uint8_t*>(&arraySize));
+    ReadCompactLeInt(row, rowArraySize, &arraySize);
     row += rowArraySize;
     vec->SetOffset(rowIndex + 1, vec->GetOffset(rowIndex) + arraySize);
     auto elementVector = vec->GetElementVector();
@@ -370,7 +389,7 @@ static uint8_t *ArrayRowGetValue(uint8_t *row)
     auto rowArraySize = (*row) & ENCODING_META_SIZE;
     ++row;
     int32_t arraySize = 0;
-    std::copy(row, row + rowArraySize, reinterpret_cast<uint8_t*>(&arraySize));
+    ReadCompactLeInt(row, rowArraySize, &arraySize);
     row += rowArraySize;
     return row + arraySize;
 }
@@ -380,13 +399,13 @@ static uint8_t *MapRowSetVecValue(uint8_t *row, MapVector *vec, int32_t rowIndex
     auto rowMapSize = (*row) & ENCODING_META_SIZE;
     ++row;
     int32_t mapSize = 0;
-    std::copy(row, row + rowMapSize, reinterpret_cast<uint8_t*>(&mapSize));
+    ReadCompactLeInt(row, rowMapSize, &mapSize);
     row += rowMapSize;
 
     auto rowKeySize = (*row) & ENCODING_META_SIZE;
     ++row;
     int32_t keySize = 0;
-    std::copy(row, row + rowKeySize, reinterpret_cast<uint8_t*>(&keySize));
+    ReadCompactLeInt(row, rowKeySize, &keySize);
     row += rowKeySize;
     vec->SetOffset(rowIndex + 1, vec->GetOffset(rowIndex) + keySize);
     auto keyVector = vec->GetKeyVector();
@@ -400,7 +419,7 @@ static uint8_t *MapRowSetVecValue(uint8_t *row, MapVector *vec, int32_t rowIndex
     auto rowValueSize = (*row) & ENCODING_META_SIZE;
     ++row;
     int32_t valueSize = 0;
-    std::copy(row, row + rowValueSize, reinterpret_cast<uint8_t*>(&valueSize));
+    ReadCompactLeInt(row, rowValueSize, &valueSize);
     row += rowValueSize;
     auto valueVector = vec->GetValueVector();
     valueVector->Expand(vec->GetOffset(rowIndex + 1));
@@ -417,7 +436,7 @@ static uint8_t *MapRowGetValue(uint8_t *row)
     auto rowMapSize = (*row) & ENCODING_META_SIZE;
     ++row;
     int32_t mapSize = 0;
-    std::copy(row, row + rowMapSize, reinterpret_cast<uint8_t*>(&mapSize));
+    ReadCompactLeInt(row, rowMapSize, &mapSize);
     row += rowMapSize;
     return row + mapSize;
 }
@@ -427,14 +446,14 @@ static uint8_t *StructRowSetVecValue(uint8_t *row, RowVector *vec, int32_t rowIn
     auto rowStructSize = (*row) & ENCODING_META_SIZE;
     ++row;
     int32_t structSize = 0;
-    std::copy(row, row + rowStructSize, reinterpret_cast<uint8_t*>(&structSize));
+    ReadCompactLeInt(row, rowStructSize, &structSize);
     row += rowStructSize;
 
     for (int32_t i = 0; i < structSize; i++) {
         auto childArraySize = (*row) & ENCODING_META_SIZE;
         ++row;
         int32_t arraySize = 0;
-        std::copy(row, row + childArraySize, reinterpret_cast<uint8_t*>(&arraySize));
+        ReadCompactLeInt(row, childArraySize, &arraySize);
         row += childArraySize;
 
         auto childVector = vec->ChildAt(i);
@@ -451,7 +470,7 @@ static uint8_t *StructRowGetValue(uint8_t *row)
     auto rowStructSize = (*row) & ENCODING_META_SIZE;
     ++row;
     int32_t structSize = 0;
-    std::copy(row, row + rowStructSize, reinterpret_cast<uint8_t*>(&structSize));
+    ReadCompactLeInt(row, rowStructSize, &structSize);
     row += rowStructSize;
     return row + structSize;
 }
