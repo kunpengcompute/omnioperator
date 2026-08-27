@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cfloat>
+#include <cstring>
 
 #include "typed_aggregator.h"
 #include "max_varchar_aggregator.h"
@@ -64,6 +65,8 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID> class MaxAggregator : public Type
     // evaluate min value for int16_t, so for that type intermediate result is promoted to int32
     // once we figure out how to resolve this issue in g++m we can set ResultType = InType
     using ResultType = std::conditional_t<IN_ID == OMNI_SHORT, int32_t, InType>;
+    static constexpr bool kMixedStateSerdeSupported =
+        IsMixedSerdeArithmeticType<IN_ID>() && IsMixedSerdeArithmeticType<OUT_ID>();
 
     // inner class for aggregate state, the member depends on ResultType of Aggregator
 #pragma pack(push, 1)
@@ -99,6 +102,30 @@ public:
     size_t GetStateSize() override
     {
         return sizeof(MaxState);
+    }
+
+    static void MergeMixedStateImpl(MaxAggregator<IN_ID, OUT_ID> *, MaxState *targetState,
+        const MaxState *sourceState)
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            if (sourceState->IsOverFlowed()) {
+                targetState->SetOverFlow();
+            } else if (!sourceState->IsEmpty()) {
+                MaxOp<ResultType, ResultType>(&targetState->value, targetState->valueState, sourceState->value, 1LL);
+            }
+        } else {
+            (void)targetState;
+            (void)sourceState;
+        }
+    }
+
+    const MixedStateSerdeOps *GetMixedStateSerdeOps() const override
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            return RawMixedStateSerde<MaxState, MaxAggregator<IN_ID, OUT_ID>, &MaxAggregator::MergeMixedStateImpl>::Ops();
+        } else {
+            return nullptr;
+        }
     }
 
     void ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors, int32_t rowIndex) override;

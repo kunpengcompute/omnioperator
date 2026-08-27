@@ -5,6 +5,7 @@
 #ifndef OMNI_RUNTIME_AVERAGE_AGGREGATOR_H
 #define OMNI_RUNTIME_AVERAGE_AGGREGATOR_H
 
+#include <cstring>
 #include "sum_aggregator.h"
 
 namespace omniruntime {
@@ -65,6 +66,63 @@ public:
     void ExtractValuesForSpill(std::vector<AggregateState *> &groupStates, std::vector<BaseVector *> &vectors) override;
     template <bool PARTIAL_OUT, bool DECIMAL_PRECISION_IMPROVEMENT>
     void ExtractValuesFunction(const AggregateState *state, std::vector<BaseVector *> &vectors, int32_t rowIndex);
+
+    bool SupportsMixedStateSerde() override
+    {
+        return (OUT_ID == OMNI_CONTAINER && IsMixedSerdeAvgDoubleType<IN_ID>()) || IN_ID == OMNI_CONTAINER;
+    }
+
+    int32_t GetMixedStateSerializeSize(const AggregateState *state) override
+    {
+        (void)state;
+        if constexpr ((OUT_ID == OMNI_CONTAINER && IsMixedSerdeAvgDoubleType<IN_ID>()) || IN_ID == OMNI_CONTAINER) {
+            return sizeof(double) + sizeof(int64_t);
+        } else {
+            throw OmniException("UNSUPPORTED_ERROR", "average mixed state serde only supports container layout");
+        }
+    }
+
+    uint8_t *SerializeMixedState(const AggregateState *state, uint8_t *dst) override
+    {
+        if constexpr (OUT_ID == OMNI_CONTAINER && IsMixedSerdeAvgDoubleType<IN_ID>()) {
+            const auto *avgState = AvgState::ConstCastState(state);
+            double sum = 0;
+            int64_t count = avgState->count;
+            if (count < 0) {
+                if (!this->IsOverflowAsNull()) {
+                    throw OmniException("OPERATOR_RUNTIME_ERROR", "average_aggregator overflow.");
+                }
+                count = 0;
+            } else if (count > 0) {
+                sum = static_cast<double>(avgState->value);
+            }
+            std::memcpy(dst, &sum, sizeof(double));
+            std::memcpy(dst + sizeof(double), &count, sizeof(int64_t));
+            return dst + sizeof(double) + sizeof(int64_t);
+        } else {
+            throw OmniException("UNSUPPORTED_ERROR", "average mixed state serialize only supports partial output");
+        }
+    }
+
+    const uint8_t *MergeMixedState(AggregateState *target, const uint8_t *src) override
+    {
+        if constexpr (IN_ID == OMNI_CONTAINER) {
+            auto *targetState = AvgState::CastState(target);
+            double sum = 0;
+            int64_t count = 0;
+            std::memcpy(&sum, src, sizeof(double));
+            std::memcpy(&count, src + sizeof(double), sizeof(int64_t));
+            if (count < 0) {
+                targetState->SetOverFlow();
+            } else if (count > 0) {
+                SumOp<double, ResultType, int64_t, StateCountHandler>(&targetState->value, targetState->count, sum,
+                    count);
+            }
+            return src + sizeof(double) + sizeof(int64_t);
+        } else {
+            throw OmniException("UNSUPPORTED_ERROR", "average mixed state merge only supports partial input");
+        }
+    }
 
     static std::unique_ptr<Aggregator> Create(const DataTypes &inputTypes, const DataTypes &outputTypes,
         std::vector<int32_t> &channels, bool inRaw, bool outPartial, bool isOverflowAsNull)

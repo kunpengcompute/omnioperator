@@ -5,6 +5,7 @@
 #ifndef OMNI_RUNTIME_SUM_AGGREGATOR_H
 #define OMNI_RUNTIME_SUM_AGGREGATOR_H
 
+#include <cstring>
 #include "typed_aggregator.h"
 
 namespace omniruntime {
@@ -161,6 +162,9 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID> class SumAggregator : public Type
     using OutType = typename AggNativeAndVectorType<OUT_ID>::type;
     using ResultType = typename std::conditional_t<IN_ID == OMNI_SHORT || IN_ID == OMNI_INT || IN_ID == OMNI_LONG,
         int64_t, std::conditional_t<IN_ID == OMNI_DOUBLE || IN_ID == OMNI_FLOAT || IN_ID == OMNI_CONTAINER, double, Decimal128>>;
+    static constexpr bool kMixedStateSerdeSupported =
+        (IsMixedSerdeArithmeticType<IN_ID>() || IN_ID == OMNI_CONTAINER) &&
+        (IsMixedSerdeArithmeticType<OUT_ID>() || OUT_ID == OMNI_CONTAINER);
 
 public:
 #pragma pack(push, 1)
@@ -203,6 +207,31 @@ public:
     size_t GetStateSize() override
     {
         return sizeof(SumState);
+    }
+
+    static void MergeMixedStateImpl(SumAggregator<IN_ID, OUT_ID> *, SumState *targetState,
+        const SumState *sourceState)
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            if (sourceState->IsOverFlowed()) {
+                targetState->SetOverFlow();
+            } else if (!sourceState->IsEmpty()) {
+                SumOp<ResultType, ResultType, int64_t, StateCountHandler>(&targetState->value, targetState->count,
+                    sourceState->value, sourceState->count);
+            }
+        } else {
+            (void)targetState;
+            (void)sourceState;
+        }
+    }
+
+    const MixedStateSerdeOps *GetMixedStateSerdeOps() const override
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            return RawMixedStateSerde<SumState, SumAggregator<IN_ID, OUT_ID>, &SumAggregator::MergeMixedStateImpl>::Ops();
+        } else {
+            return nullptr;
+        }
     }
 
     static std::unique_ptr<Aggregator> Create(const DataTypes &inputTypes, const DataTypes &outputTypes,

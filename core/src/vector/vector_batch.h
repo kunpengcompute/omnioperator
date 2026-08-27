@@ -14,7 +14,7 @@ public:
      */
     explicit VectorBatch(size_t rowCnt);
 
-    ~VectorBatch();
+    virtual ~VectorBatch();
 
     /* *
      * Set the vector at the indicated index, need ResizeVectorCount before SetVector
@@ -58,6 +58,10 @@ public:
 
     uint64_t CalculateTotalSize() const;
 
+    virtual size_t MixType()
+    {
+        return 0;
+    }
 protected:
     void Pop()
     {

@@ -5,6 +5,8 @@
 #ifndef AGGREGATOR_H
 #define AGGREGATOR_H
 
+#include <cstring>
+#include <cstdint>
 #include "operator/aggregation/definitions.h"
 #include "type/data_types.h"
 #include "type/data_type.h"
@@ -18,6 +20,7 @@
 #include "util/type_util.h"
 #include "util/config_util.h"
 #include "state_flag_operation.h"
+#include "vector/mixed_vector.h"
 
 namespace omniruntime {
 namespace op {
@@ -31,6 +34,37 @@ struct ColumnIndex {
 };
 
 using AggregateState = uint8_t;
+
+class Aggregator;
+
+struct MixedStateSerdeOps {
+    int32_t (*size)(const AggregateState *state);
+    uint8_t *(*serialize)(const AggregateState *state, uint8_t *dst);
+    const uint8_t *(*merge)(Aggregator *aggregator, AggregateState *target, const uint8_t *src);
+    void (*batchMerge)(Aggregator *aggregator, AggregateState **targets,
+                       omniruntime::vec::MixedVectorBatch *batch, int32_t mergeStateOffset, int32_t count);
+};
+
+template <DataTypeId TYPE_ID>
+constexpr bool IsMixedSerdeArithmeticType()
+{
+    return TYPE_ID == OMNI_BYTE || TYPE_ID == OMNI_SHORT || TYPE_ID == OMNI_INT || TYPE_ID == OMNI_LONG ||
+        TYPE_ID == OMNI_FLOAT || TYPE_ID == OMNI_DOUBLE || TYPE_ID == OMNI_DECIMAL64 ||
+        TYPE_ID == OMNI_DECIMAL128;
+}
+
+template <DataTypeId TYPE_ID>
+constexpr bool IsMixedSerdeIntegralType()
+{
+    return TYPE_ID == OMNI_BYTE || TYPE_ID == OMNI_SHORT || TYPE_ID == OMNI_INT || TYPE_ID == OMNI_LONG;
+}
+
+template <DataTypeId TYPE_ID>
+constexpr bool IsMixedSerdeAvgDoubleType()
+{
+    return TYPE_ID == OMNI_SHORT || TYPE_ID == OMNI_INT || TYPE_ID == OMNI_LONG ||
+        TYPE_ID == OMNI_FLOAT || TYPE_ID == OMNI_DOUBLE;
+}
 
 struct DecimalAverageState {
     int64_t count;
@@ -241,7 +275,55 @@ public:
         aggStateOffset = offset;
     }
 
+    int32_t GetAggStateOffset() const
+    {
+        return aggStateOffset;
+    }
+
     virtual size_t GetStateSize() = 0;
+
+    // Mixed row transport contract. Aggregators own the binary format of their
+    // partial state; HashAgg only concatenates these payloads and asks the
+    // aggregator to merge them on the final side.
+    virtual const MixedStateSerdeOps *GetMixedStateSerdeOps() const
+    {
+        return nullptr;
+    }
+
+    virtual bool SupportsMixedStateSerde()
+    {
+        return GetMixedStateSerdeOps() != nullptr;
+    }
+
+    virtual int32_t GetMixedStateSerializeSize(const AggregateState *state)
+    {
+        auto ops = GetMixedStateSerdeOps();
+        if (ops != nullptr) {
+            return ops->size(state);
+        }
+        throw OmniException("UNSUPPORTED_ERROR",
+            "GetMixedStateSerializeSize not implemented for " + std::to_string(as_integer(type)));
+    }
+
+    virtual uint8_t *SerializeMixedState(const AggregateState *state, uint8_t *dst)
+    {
+        auto ops = GetMixedStateSerdeOps();
+        if (ops != nullptr) {
+            return ops->serialize(state, dst);
+        }
+        throw OmniException("UNSUPPORTED_ERROR",
+            "SerializeMixedState not implemented for " + std::to_string(as_integer(type)));
+    }
+
+    virtual const uint8_t *MergeMixedState(AggregateState *target, const uint8_t *src)
+    {
+        auto ops = GetMixedStateSerdeOps();
+        if (ops != nullptr) {
+            return ops->merge(this, target, src);
+        }
+        throw OmniException("UNSUPPORTED_ERROR",
+            "MergeMixedState not implemented for " + std::to_string(as_integer(type)));
+    }
 
     virtual void InitStates(std::vector<AggregateState *> &groupStates)
     {
@@ -331,6 +413,69 @@ protected:
     ExecutionContext *executionContext = nullptr;
     SimpleArenaAllocator *arenaAllocator = nullptr;
     int32_t aggStateOffset;
+};
+
+template <typename State, typename AggregatorT, void (*MergeFn)(AggregatorT *, State *, const State *)>
+struct RawMixedStateSerde {
+    static int32_t Size(const AggregateState *state)
+    {
+        (void)state;
+        return sizeof(State);
+    }
+
+    static uint8_t *Serialize(const AggregateState *state, uint8_t *dst)
+    {
+        const auto *typedState = State::ConstCastState(state);
+        std::memcpy(dst, typedState, sizeof(State));
+        return dst + sizeof(State);
+    }
+
+    static const uint8_t *Merge(Aggregator *aggregator, AggregateState *target, const uint8_t *src)
+    {
+        auto *typedAggregator = static_cast<AggregatorT *>(aggregator);
+        auto *targetState = State::CastState(target);
+        if (reinterpret_cast<std::uintptr_t>(src) % alignof(State) == 0) {
+            const auto *sourceState = reinterpret_cast<const State *>(src);
+            MergeFn(typedAggregator, targetState, sourceState);
+        } else {
+            alignas(State) uint8_t sourceBuffer[sizeof(State)];
+            std::memcpy(sourceBuffer, src, sizeof(State));
+            const auto *sourceState = reinterpret_cast<const State *>(sourceBuffer);
+            MergeFn(typedAggregator, targetState, sourceState);
+        }
+        return src + sizeof(State);
+    }
+
+    static void BatchMerge(Aggregator *aggregator, AggregateState **targets,
+                          omniruntime::vec::MixedVectorBatch *batch, int32_t mergeStateOffset, int32_t count)
+    {
+        auto *typedAggregator = static_cast<AggregatorT *>(aggregator);
+        constexpr int32_t kPrefetchDist = 8;
+        for (int32_t i = 0; i < count; ++i) {
+            int32_t p = i + kPrefetchDist;
+            if (p < count) {
+                auto* segP = batch->GetRow(p);
+                __builtin_prefetch(segP->data + segP->stateOffset + mergeStateOffset, 0, 1);
+                __builtin_prefetch(targets[p] + mergeStateOffset, 1, 1);
+            }
+            auto *seg = batch->GetRow(i);
+            const uint8_t *src = seg->data + seg->stateOffset + mergeStateOffset;
+            auto *targetState = State::CastState(targets[i] + mergeStateOffset);
+            if (reinterpret_cast<std::uintptr_t>(src) % alignof(State) == 0) {
+                MergeFn(typedAggregator, targetState, reinterpret_cast<const State *>(src));
+            } else {
+                alignas(State) uint8_t sourceBuffer[sizeof(State)];
+                std::memcpy(sourceBuffer, src, sizeof(State));
+                MergeFn(typedAggregator, targetState, reinterpret_cast<const State *>(sourceBuffer));
+            }
+        }
+    }
+
+    static const MixedStateSerdeOps *Ops()
+    {
+        static const MixedStateSerdeOps ops = {Size, Serialize, Merge, BatchMerge};
+        return &ops;
+    }
 };
 } // end of namespace op
 } // end of namespace omniruntime

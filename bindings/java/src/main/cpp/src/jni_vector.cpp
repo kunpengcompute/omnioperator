@@ -9,6 +9,7 @@
 #include "vector/unsafe_vector.h"
 #include "vector/vector_helper.h"
 #include "vector/vector.h"
+#include "vector/mixed_vector.h"
 #include "vector/array_vector.h"
 #include "jni_common_def.h"
 #include "operator/aggregation/container_vector.h"
@@ -281,12 +282,39 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_VecBatch_newVectorBatc
     return reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(vecBatch));
 }
 
+JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_VecBatch_newMixedBatchNative(JNIEnv *env, jclass jcls,
+    jlongArray jVectorAddresses, jint rRowCount)
+{
+    jlong *vecAddresses = env->GetLongArrayElements(jVectorAddresses, JNI_FALSE);
+    jsize vecCount = env->GetArrayLength(jVectorAddresses);
+    auto batch = reinterpret_cast<MixedVectorBatch *>(vecAddresses[vecCount - 1]);
+    if (batch->GetVectorCount() < vecCount) {
+        batch->ResizeVectorCount(vecCount - 1);
+        for (int i = 0; i < vecCount - 1; ++i) {
+            batch->SetVector(i, reinterpret_cast<BaseVector *>(vecAddresses[i]));
+        }
+    }
+    jlong batchHandle = reinterpret_cast<jlong>(batch);
+    env->ReleaseLongArrayElements(jVectorAddresses, vecAddresses, JNI_ABORT);
+    return batchHandle;
+}
+
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_VecBatch_freeVectorBatchNative(JNIEnv *env, jclass jcls,
     jlong jVecBatchAddress)
 {
     VectorBatch *vecBatch = reinterpret_cast<VectorBatch *>(jVecBatchAddress);
     vecBatch->ClearVectors();
     delete vecBatch;
+}
+
+JNIEXPORT jint JNICALL Java_nova_hetu_omniruntime_vector_VecBatch_nativeMixType(JNIEnv *env, jclass jcls,
+    jlong jVecBatchAddress)
+{
+    if (jVecBatchAddress == 0) {
+        return 0;
+    }
+    auto batch = reinterpret_cast<MixedVectorBatch *>(jVecBatchAddress);
+    return batch->MixType();
 }
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_DictionaryVec_getDictionaryNative(JNIEnv *env, jclass jcls,
@@ -737,4 +765,19 @@ JNIEXPORT jbyteArray JNICALL Java_nova_hetu_omniruntime_vector_ConstVec_getConst
     jbyteArray result = env->NewByteArray(16);
     env->SetByteArrayRegion(result, 0, 16, reinterpret_cast<const jbyte *>(&val));
     return result;
+}
+
+JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_MixedVec_freeMixedVectorBatchNative(JNIEnv *env,
+    jclass jcls, jlong jBatchHandle)
+{
+    if (jBatchHandle == 0) {
+        return;
+    }
+    
+    MixedVectorBatch *mixedBatch = reinterpret_cast<MixedVectorBatch *>(jBatchHandle);
+    // MixedVec is exposed together with the column vectors in a ColumnarBatch.
+    // Java column vectors own those BaseVector instances; MixedVec only owns
+    // the row payload holder.
+    mixedBatch->ClearVectors();
+    delete mixedBatch;
 }

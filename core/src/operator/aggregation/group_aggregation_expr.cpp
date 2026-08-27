@@ -19,7 +19,7 @@ HashAggregationWithExprOperatorFactory::HashAggregationWithExprOperatorFactory(
     std::vector<omniruntime::expressions::Expr *> &aggFilters, DataTypes &sourceDataTypes,
     std::vector<DataTypes> &aggOutputTypes, std::vector<uint32_t> &aggFuncTypes, std::vector<uint32_t> &maskColumns,
     std::vector<bool> &inputRaws, std::vector<bool> &outputPartial, const OperatorConfig &operatorConfig,
-    config::QueryConfig queryConfig, AggregationNode::Step step)
+    config::QueryConfig queryConfig, AggregationNode::Step step, bool mixedInputExpected, bool mixedOutputEnabled)
 {
     this->queryConfig_ = queryConfig;
     uint32_t aggColNum = 0;
@@ -108,7 +108,8 @@ HashAggregationWithExprOperatorFactory::HashAggregationWithExprOperatorFactory(
     this->sourceTypes = std::make_unique<DataTypes>(newSourceTypes);
     this->hashAggOperatorFactory =
         new HashAggregationOperatorFactory(groupByCol, *groupByTypes, aggColIdx, aggInputDataTypes, aggOutputTypes,
-        aggFuncTypes, maskColumns, inputRaws, outputPartial, hasAggFilters, operatorConfig, step);
+        aggFuncTypes, maskColumns, inputRaws, outputPartial, hasAggFilters, operatorConfig, step,
+        mixedInputExpected, mixedOutputEnabled);
     this->hashAggOperatorFactory->SetNormalizedKeyEnabledForFactory(
         queryConfig.HashAggNormalizedKeyEnabled());
     this->hashAggOperatorFactory->Init();
@@ -147,7 +148,8 @@ HashAggregationWithExprOperatorFactory *HashAggregationWithExprOperatorFactory::
     return new HashAggregationWithExprOperatorFactory(groupByKeys, groupByNum, aggsKeys, aggFilters, *sourceDataTypes,
                                                       aggsOutputTypes,
                                                       aggFuncTypes, maskColsVector, inputRaws, outputPartial,
-                                                      *operatorConfig, queryConfig, planNode->GetStep());
+                                                      *operatorConfig, queryConfig, planNode->GetStep(),
+                                                      planNode->IsMixedInputExpected(), planNode->IsMixedOutputEnabled());
 }
 
 Operator *HashAggregationWithExprOperatorFactory::CreateOperator()
@@ -208,8 +210,14 @@ int32_t HashAggregationWithExprOperator::AddInput(VectorBatch *inputVecBatch)
         abandonedInputVecBatch = inputVecBatch;
         return 0;
     }
-    VectorBatch *newInputVecBatch = AggUtil::AggFilterRequiredVectors(inputVecBatch, originTypes, sourceTypes,
-        projections, executionContext.get());
+
+    VectorBatch *newInputVecBatch = inputVecBatch;
+    if (inputVecBatch->MixType() == 1) {
+        newInputVecBatch = inputVecBatch;
+    } else {
+        newInputVecBatch = AggUtil::AggFilterRequiredVectors(inputVecBatch, originTypes, sourceTypes,
+                                                              projections, executionContext.get());
+    }
 
     // if hasAggFilter is false, then skip AddFilterColumn
     if (hasAggFilter) {
@@ -224,7 +232,9 @@ int32_t HashAggregationWithExprOperator::AddInput(VectorBatch *inputVecBatch)
             throw e;
         }
     }
-    VectorHelper::FreeVecBatch(inputVecBatch);
+    if (inputVecBatch->MixType() == 0) {
+        VectorHelper::FreeVecBatch(inputVecBatch);
+    }
     ResetInputVecBatch();
     hashAggOperator->AddInput(newInputVecBatch);
 

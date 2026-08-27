@@ -239,11 +239,13 @@ public:
         const std::vector<DataTypes> aggsOutputTypes, const std::vector<uint32_t> &aggFuncTypes,
         const std::vector<ExprPtr> &aggFilters, const std::vector<uint32_t> &maskColumns,
         const std::vector<bool> &inputRaws, const std::vector<bool> &outputPartials, const bool isStatisticalAggregate,
-        const DataTypesPtr outputType, PlanNodePtr source, Step step)
+        const DataTypesPtr outputType, PlanNodePtr source, Step step, bool mixedInputExpected = false,
+        bool mixedOutputEnabled = false)
         : PlanNode(id), groupByKeys(groupByKeys), groupByNum(groupByNum), aggKeys(aggKeys),
           sourceDataTypes(sourceDataTypes), aggsOutputTypes(aggsOutputTypes), aggFuncTypes(aggFuncTypes),
           aggFilters(aggFilters), maskColumns(maskColumns), inputRaws(inputRaws), outputPartials(outputPartials),
-        isStatisticalAggregate(isStatisticalAggregate), outputType(outputType), sources({source}), step(step) {}
+        isStatisticalAggregate(isStatisticalAggregate), outputType(outputType), sources({source}), step(step),
+        mixedInputExpected(mixedInputExpected), mixedOutputEnabled(mixedOutputEnabled) {}
 
     ~AggregationNode() override = default;
 
@@ -277,6 +279,10 @@ public:
 
     Step GetStep() const { return step;}
 
+    bool IsMixedInputExpected() const { return mixedInputExpected; }
+
+    bool IsMixedOutputEnabled() const { return mixedOutputEnabled; }
+
 private:
     const std::vector<ExprPtr> groupByKeys;
     const uint32_t groupByNum;
@@ -292,6 +298,8 @@ private:
     const DataTypesPtr outputType;
     const std::vector<PlanNodePtr> sources;
     const Step step;
+    const bool mixedInputExpected;
+    const bool mixedOutputEnabled;
 };
 
 class WindowNode : public PlanNode {

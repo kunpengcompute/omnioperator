@@ -5,6 +5,7 @@
 #ifndef OMNI_RUNTIME_AVERAGE_SPARK_DECIMAL_AGGREGATOR_H
 #define OMNI_RUNTIME_AVERAGE_SPARK_DECIMAL_AGGREGATOR_H
 
+#include <cstring>
 #include "sum_spark_decimal_aggregator.h"
 #include "type/decimal_operations.h"
 #include "operations_aggregator.h"
@@ -78,6 +79,24 @@ public:
     size_t GetStateSize() override
     {
         return sizeof(AvgSparkDecimalState);
+    }
+
+    static void MergeMixedStateImpl(AverageSparkDecimalAggregator<InDecimalId, OutDecimalId> *,
+        AvgSparkDecimalState *targetState, const AvgSparkDecimalState *sourceState)
+    {
+        if (sourceState->IsOverFlowed()) {
+            targetState->SetOverFlow();
+        } else if (!sourceState->IsEmpty()) {
+            SumOp<ResultType, ResultType, int64_t, StateCountHandler>(&targetState->value, targetState->count,
+                sourceState->value, sourceState->count);
+        }
+    }
+
+    const MixedStateSerdeOps *GetMixedStateSerdeOps() const override
+    {
+        return RawMixedStateSerde<AvgSparkDecimalState,
+            AverageSparkDecimalAggregator<InDecimalId, OutDecimalId>,
+            &AverageSparkDecimalAggregator::MergeMixedStateImpl>::Ops();
     }
 
     void ProcessGroupInternal(std::vector<AggregateState *> &rowStates, BaseVector *vector, const int32_t rowOffset,

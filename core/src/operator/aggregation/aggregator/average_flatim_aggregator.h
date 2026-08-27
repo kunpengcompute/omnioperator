@@ -7,6 +7,7 @@
 #ifndef OMNI_RUNTIME_AVERAGE_FLAT_IM_AGGREGATOR_H
 #define OMNI_RUNTIME_AVERAGE_FLAT_IM_AGGREGATOR_H
 
+#include <cstring>
 #include "sum_flatim_aggregator.h"
 
 namespace omniruntime {
@@ -15,6 +16,8 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID = OMNI_DOUBLE> class AverageFlatIM
     using RawInputType = typename AggNativeAndVectorType<IN_ID>::type;
     using ResultType = typename AggNativeAndVectorType<OUT_ID>::type;
     using RawInputVectorType = Vector<RawInputType>;
+    static constexpr bool kMixedStateSerdeSupported =
+        IsMixedSerdeArithmeticType<IN_ID>() && IsMixedSerdeArithmeticType<OUT_ID>();
 
 #pragma pack(push, 1)
     struct AvgFlatState : BaseCountState<ResultType> {
@@ -56,6 +59,32 @@ public:
     size_t GetStateSize() override
     {
         return sizeof(AvgFlatState);
+    }
+
+    static void MergeMixedStateImpl(AverageFlatIMAggregator<IN_ID, OUT_ID> *, AvgFlatState *targetState,
+        const AvgFlatState *sourceState)
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            if (sourceState->IsOverFlowed()) {
+                targetState->SetOverFlow();
+            } else if (!sourceState->IsEmpty()) {
+                SumOp<ResultType, ResultType, int64_t, StateCountHandler, false>(&targetState->value, targetState->count,
+                    sourceState->value, sourceState->count);
+            }
+        } else {
+            (void)targetState;
+            (void)sourceState;
+        }
+    }
+
+    const MixedStateSerdeOps *GetMixedStateSerdeOps() const override
+    {
+        if constexpr (kMixedStateSerdeSupported) {
+            return RawMixedStateSerde<AvgFlatState, AverageFlatIMAggregator<IN_ID, OUT_ID>,
+                &AverageFlatIMAggregator::MergeMixedStateImpl>::Ops();
+        } else {
+            return nullptr;
+        }
     }
 
     void InitState(AggregateState *state) override

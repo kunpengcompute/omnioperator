@@ -19,4 +19,6 @@ public class ShuffleHashHelper {
      * @return the partitionIds of vec
      */
     public static native long computePartitionIds(long[] vecAddrArray, int partitionNum, int rowCount);
+
+    public static native long computeMixedPartitionIds(long handler, int partitionNum, int rowCount);
 }
