@@ -144,6 +144,37 @@ TEST(BloomFilterTest, TestBloomFilterMerge)
     delete[] serialized;
 }
 
+TEST(BloomFilterTest, TestBloomFilterSerializeSparkBigEndian)
+{
+    BloomFilter bf(4, BloomFilter::VERSION);
+    EXPECT_TRUE(bf.PutLong(42));
+
+    auto serializedSize = bf.GetSerializedSize();
+    EXPECT_GE(serializedSize, static_cast<uint64_t>(12));
+    char *serialized = new char[serializedSize];
+    bf.Serialize(serialized);
+
+    // Spark DataInputStream.readInt() reads big-endian version=1: 00 00 00 01
+    EXPECT_EQ(static_cast<unsigned char>(serialized[0]), 0);
+    EXPECT_EQ(static_cast<unsigned char>(serialized[1]), 0);
+    EXPECT_EQ(static_cast<unsigned char>(serialized[2]), 0);
+    EXPECT_EQ(static_cast<unsigned char>(serialized[3]), 1);
+    // numHashFunctions placeholder is 0
+    EXPECT_EQ(static_cast<unsigned char>(serialized[4]), 0);
+    EXPECT_EQ(static_cast<unsigned char>(serialized[5]), 0);
+    EXPECT_EQ(static_cast<unsigned char>(serialized[6]), 0);
+    EXPECT_EQ(static_cast<unsigned char>(serialized[7]), 0);
+    // wordsNum = 4, big-endian
+    EXPECT_EQ(static_cast<unsigned char>(serialized[8]), 0);
+    EXPECT_EQ(static_cast<unsigned char>(serialized[9]), 0);
+    EXPECT_EQ(static_cast<unsigned char>(serialized[10]), 0);
+    EXPECT_EQ(static_cast<unsigned char>(serialized[11]), 4);
+
+    BloomFilter deserialized(serialized);
+    EXPECT_TRUE(deserialized.MightContainLong(42));
+    delete[] serialized;
+}
+
 TEST(BloomFilterTest, TestBloomFilterAggregator)
 {
     const int32_t rowNum = 10;
