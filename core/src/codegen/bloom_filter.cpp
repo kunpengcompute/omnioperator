@@ -5,6 +5,7 @@
 
 #include "bloom_filter.h"
 #include "util/type_util.h"
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
@@ -33,7 +34,12 @@ using namespace std;
 using namespace omniruntime::type;
 
 namespace {
-constexpr int32_t SERIALIZED_HEADER_SIZE = 8;
+// Spark BloomFilterImpl wire: version(int32 BE) + numHashFunctions(int32 BE) + numWords(int32 BE) + words(long BE[]).
+// Omni SIMD algorithm does not use numHashFunctions; write 0 so Driver-side Java mightContain
+// is a no-op (always true) and cannot false-negative partition pruning.
+constexpr int32_t SPARK_WIRE_HEADER_SIZE = 12;
+constexpr int32_t LEGACY_NATIVE_HEADER_SIZE = 8;
+constexpr int32_t SPARK_WIRE_NUM_HASH_FUNCTIONS = 0;
 
 int32_t ReadNativeInt32(const char *data, int32_t offset)
 {
@@ -42,24 +48,94 @@ int32_t ReadNativeInt32(const char *data, int32_t offset)
     return value;
 }
 
-void WriteNativeInt32(char *data, int32_t offset, int32_t value)
+int32_t ReadInt32BE(const char *data, int32_t offset)
 {
-    std::memcpy(data + offset, &value, sizeof(value));
+    const auto *buf = reinterpret_cast<const uint8_t *>(data + offset);
+    return (static_cast<int32_t>(buf[0]) << 24) | (static_cast<int32_t>(buf[1]) << 16) |
+        (static_cast<int32_t>(buf[2]) << 8) | static_cast<int32_t>(buf[3]);
 }
 
-void CopyWordsFromSerialized(BitArray *bits, const char *serialized, int32_t wordsNum)
+void WriteInt32BE(char *data, int32_t offset, int32_t value)
 {
-    std::memcpy(bits->GetData(), serialized + SERIALIZED_HEADER_SIZE, sizeof(uint64_t) * wordsNum);
+    auto *buf = reinterpret_cast<uint8_t *>(data + offset);
+    buf[0] = static_cast<uint8_t>((value >> 24) & 0xff);
+    buf[1] = static_cast<uint8_t>((value >> 16) & 0xff);
+    buf[2] = static_cast<uint8_t>((value >> 8) & 0xff);
+    buf[3] = static_cast<uint8_t>(value & 0xff);
 }
 
-void CopyWordsToSerialized(BitArray *bits, char *serialized)
+uint64_t ReadInt64BE(const char *data, int32_t offset)
 {
-    std::memcpy(serialized + SERIALIZED_HEADER_SIZE, bits->GetData(), sizeof(uint64_t) * bits->GetWordsNum());
+    const auto *buf = reinterpret_cast<const uint8_t *>(data + offset);
+    uint64_t value = 0;
+    for (int32_t i = 0; i < 8; i++) {
+        value = (value << 8) | buf[i];
+    }
+    return value;
+}
+
+void WriteInt64BE(char *data, int32_t offset, uint64_t value)
+{
+    auto *buf = reinterpret_cast<uint8_t *>(data + offset);
+    buf[0] = static_cast<uint8_t>((value >> 56) & 0xff);
+    buf[1] = static_cast<uint8_t>((value >> 48) & 0xff);
+    buf[2] = static_cast<uint8_t>((value >> 40) & 0xff);
+    buf[3] = static_cast<uint8_t>((value >> 32) & 0xff);
+    buf[4] = static_cast<uint8_t>((value >> 24) & 0xff);
+    buf[5] = static_cast<uint8_t>((value >> 16) & 0xff);
+    buf[6] = static_cast<uint8_t>((value >> 8) & 0xff);
+    buf[7] = static_cast<uint8_t>(value & 0xff);
 }
 
 bool IsValidWordsNum(int32_t wordsNum)
 {
     return wordsNum >= 4 && (wordsNum & (wordsNum - 1)) == 0;
+}
+
+struct SerializedLayout {
+    int32_t version;
+    int32_t wordsNum;
+    int32_t bitsOffset;
+    bool bigEndian;
+};
+
+SerializedLayout ParseSerializedHeader(const char *serialized)
+{
+    SerializedLayout layout{};
+    int32_t versionBE = ReadInt32BE(serialized, 0);
+    int32_t versionNative = ReadNativeInt32(serialized, 0);
+    if (versionBE == BloomFilter::VERSION) {
+        // Spark DataInputStream / old Omni WriteInt layout.
+        layout.version = versionBE;
+        layout.wordsNum = ReadInt32BE(serialized, 8);
+        layout.bitsOffset = SPARK_WIRE_HEADER_SIZE;
+        layout.bigEndian = true;
+    } else if (versionNative == BloomFilter::VERSION) {
+        // Legacy Omni native-endian 8-byte header (pre-endian restore).
+        layout.version = versionNative;
+        layout.wordsNum = ReadNativeInt32(serialized, 4);
+        layout.bitsOffset = LEGACY_NATIVE_HEADER_SIZE;
+        layout.bigEndian = false;
+    } else {
+        throw omniruntime::exception::OmniException("ILLEGAL_INPUT", "BloomFilter version is invalid.");
+    }
+    if (!IsValidWordsNum(layout.wordsNum)) {
+        throw omniruntime::exception::OmniException("ILLEGAL_INPUT",
+            "BloomFilter requires wordsNum to be a power of two and at least 4.");
+    }
+    return layout;
+}
+
+void CopyWordsFromSerialized(BitArray *bits, const char *serialized, const SerializedLayout &layout)
+{
+    auto *dst = reinterpret_cast<uint64_t *>(bits->GetData());
+    if (layout.bigEndian) {
+        for (int32_t i = 0; i < layout.wordsNum; i++) {
+            dst[i] = ReadInt64BE(serialized, layout.bitsOffset + i * static_cast<int32_t>(sizeof(uint64_t)));
+        }
+    } else {
+        std::memcpy(dst, serialized + layout.bitsOffset, sizeof(uint64_t) * layout.wordsNum);
+    }
 }
 }
 
@@ -97,14 +173,12 @@ BloomFilter::BloomFilter(int32_t size, int32_t version)
 }
 
 /**
- * Build a BloomFilter object and initialize its internal BitArray based on the serialized data.
- * VERSION uses Omni native endian for performance.
- *
- * @param serialized: Pointer to the input serialized data, The structure of the data should be:
-                      version(4 bytes) + BitArray length(4 bytes) + BitArray content(length determined by the BitArray length).
- * @param isRelease: Release serialized or not.
+ * Build a BloomFilter object from serialized bytes.
+ * Preferred wire format matches Spark BloomFilterImpl / DataOutputStream (big-endian):
+ *   version(4) + numHashFunctions(4) + numWords(4) + words(long[]).
+ * Also accepts the legacy Omni native-endian 8-byte header for compatibility.
  */
-BloomFilter::BloomFilter(char *serialized, bool isRelease)
+BloomFilter::BloomFilter(char *serialized, bool isRelease) : bits(nullptr), version(0)
 {
     auto releaseSerialized = [&]() {
         if (isRelease && serialized != nullptr) {
@@ -113,71 +187,66 @@ BloomFilter::BloomFilter(char *serialized, bool isRelease)
         }
     };
 
-    version = ReadNativeInt32(serialized, 0);
-    if (version != VERSION) {
+    try {
+        SerializedLayout layout = ParseSerializedHeader(serialized);
+        version = layout.version;
+        bits = new BitArray(layout.wordsNum);
+        CopyWordsFromSerialized(bits, serialized, layout);
+    } catch (...) {
         releaseSerialized();
-        throw omniruntime::exception::OmniException("ILLEGAL_INPUT", "BloomFilter version is invalid.");
+        throw;
     }
-
-    int32_t size = ReadNativeInt32(serialized, sizeof(int32_t));
-    if (!IsValidWordsNum(size)) {
-        releaseSerialized();
-        throw omniruntime::exception::OmniException("ILLEGAL_INPUT",
-            "BloomFilter requires wordsNum to be a power of two and at least 4.");
-    }
-    bits = new BitArray(size);
-    CopyWordsFromSerialized(bits, serialized, size);
     releaseSerialized();
     ValidateVersion();
 }
 
 /**
- * Serialize the BloomFilter object into a byte stream.
- * version(4 bytes) + BitArray length(4 bytes) + BitArray content(length determined by the BitArray length).
- * VERSION uses Omni native endian for performance.
- *
- * @param serialized: Pointer to the input serialized data.
+ * Serialize for Spark Java BloomFilterImpl.readFrom (big-endian WriteInt/WriteLong).
+ * numHashFunctions is unused by Omni SIMD MightContain; written as 0 so Driver Java
+ * mightContain cannot drop partitions with a mismatched hash algorithm.
  */
 void BloomFilter::Serialize(char *serialized)
 {
-    WriteNativeInt32(serialized, 0, version);
-    WriteNativeInt32(serialized, sizeof(int32_t), bits->GetWordsNum());
-    CopyWordsToSerialized(bits, serialized);
+    WriteInt32BE(serialized, 0, version);
+    WriteInt32BE(serialized, sizeof(int32_t), SPARK_WIRE_NUM_HASH_FUNCTIONS);
+    WriteInt32BE(serialized, 2 * static_cast<int32_t>(sizeof(int32_t)), bits->GetWordsNum());
+    auto *src = reinterpret_cast<const uint64_t *>(bits->GetData());
+    int32_t wordsNum = bits->GetWordsNum();
+    for (int32_t i = 0; i < wordsNum; i++) {
+        WriteInt64BE(serialized, SPARK_WIRE_HEADER_SIZE + i * static_cast<int32_t>(sizeof(uint64_t)), src[i]);
+    }
 }
 
 /**
- * Merge the serialized data of another BloomFIlter object into the current BloomFilter object.
- *
- * @param serialized: Pointer to the input serialized data.
- * @exception: If the version or BitArray length of the input BloomFIlter object does not match that of the current object, an OmniException will be thrown.
+ * Merge another serialized BloomFilter into this one.
  */
 void BloomFilter::Merge(char *serialized)
 {
-    const int8_t *data = reinterpret_cast<const int8_t *>(serialized);
-    int32_t offset = 0;
-    if (*(reinterpret_cast<const int32_t *>(data + offset)) != version) {
+    SerializedLayout layout = ParseSerializedHeader(serialized);
+    if (layout.version != version) {
         throw omniruntime::exception::OmniException("ILLEGAL_INPUT", "BloomFilter version must be the same");
     }
-    offset += sizeof(int32_t);
-
-    if (*(reinterpret_cast<const int32_t *>(data + offset)) != bits->GetWordsNum()) {
+    if (layout.wordsNum != bits->GetWordsNum()) {
         throw omniruntime::exception::OmniException("ILLEGAL_INPUT", "BloomFilter wordsNum must be the same");
     }
-    offset += sizeof(int32_t);
-
-    auto bitsdata = reinterpret_cast<const uint64_t *>(data + offset);
-    bits->Merge(bitsdata);
+    if (layout.bigEndian) {
+        std::vector<uint64_t> words(static_cast<size_t>(layout.wordsNum));
+        for (int32_t i = 0; i < layout.wordsNum; i++) {
+            words[static_cast<size_t>(i)] =
+                ReadInt64BE(serialized, layout.bitsOffset + i * static_cast<int32_t>(sizeof(uint64_t)));
+        }
+        bits->Merge(words.data());
+    } else {
+        bits->Merge(reinterpret_cast<const uint64_t *>(serialized + layout.bitsOffset));
+    }
 }
 
 /**
- * Calculate the size of the BloomFilter object after serialization.
-   version(4 bytes) + BitArray length(4 bytes) + BitArray content(length determined by the BitArray length).
- *
- * @return: Return the total number of bytes after the BloomFilter object is serialized.
+ * Spark wire size: 12-byte header + 8 bytes per word.
  */
 uint64_t BloomFilter::GetSerializedSize()
 {
-    return SERIALIZED_HEADER_SIZE + bits->GetWordsNum() * 8;
+    return SPARK_WIRE_HEADER_SIZE + bits->GetWordsNum() * 8;
 }
 
 BloomFilter::~BloomFilter()
