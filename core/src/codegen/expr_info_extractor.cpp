@@ -41,6 +41,12 @@ void ExprInfoExtractor::Visit(const InExpr &e)
     }
 }
 
+void ExprInfoExtractor::Visit(const InSubqueryExpr &e)
+{
+    e.value->Accept(*this);
+    e.subqueryResult->Accept(*this);
+}
+
 void ExprInfoExtractor::Visit(const BetweenExpr &e)
 {
     e.value->Accept(*this);

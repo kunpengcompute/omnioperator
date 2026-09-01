@@ -18,7 +18,8 @@ public:
           rowIdx(nullptr),
           executionContext(nullptr),
           dictionaryVectors(nullptr),
-          print(nullptr)
+          print(nullptr),
+          subqueryRowCount(nullptr)
     {}
 
     explicit CodegenContext(llvm::Value *data, llvm::Value *nullBitmap, llvm::Value *offsets, llvm::Value *rowIdx,
@@ -29,7 +30,20 @@ public:
           rowIdx(rowIdx),
           executionContext(executionContext),
           dictionaryVectors(dictionaryVectors),
-          print(nullptr)
+          print(nullptr),
+          subqueryRowCount(nullptr)
+    {}
+
+    explicit CodegenContext(llvm::Value *data, llvm::Value *nullBitmap, llvm::Value *offsets, llvm::Value *rowIdx,
+        llvm::Value *executionContext, llvm::Value *dictionaryVectors, llvm::Value *subqueryRowCnt)
+        : data(data),
+          nullBitmap(nullBitmap),
+          offsets(offsets),
+          rowIdx(rowIdx),
+          executionContext(executionContext),
+          dictionaryVectors(dictionaryVectors),
+          print(nullptr),
+          subqueryRowCount(subqueryRowCnt)
     {}
 
     ~CodegenContext() = default;
@@ -48,6 +62,7 @@ private:
     llvm::Value *executionContext;
     llvm::Value *dictionaryVectors;
     llvm::FunctionCallee print;
+    llvm::Value *subqueryRowCount;  // Row count of subquery result for IN (subquery) expressions
 };
 }
 

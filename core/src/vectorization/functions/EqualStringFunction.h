@@ -127,8 +127,8 @@ class EqualStringFunction final : public VectorFunction {
         } else if (leftArg->GetEncoding() == OMNI_DICTIONARY && rightArg->GetEncoding() == OMNI_DICTIONARY) {
             // Fast path for (dict, dict).
             handleDictColumnComparison(leftArg, rightArg, flatResult, rowSize);
-        } else if (leftArg->GetEncoding() == OMNI_DICTIONARY && rightArg->GetEncoding() == OMNI_FLAT
-            || leftArg->GetEncoding() == OMNI_FLAT && rightArg->GetEncoding() == OMNI_DICTIONARY) {
+        } else if ((leftArg->GetEncoding() == OMNI_DICTIONARY && rightArg->GetEncoding() == OMNI_FLAT)
+            || (leftArg->GetEncoding() == OMNI_FLAT && rightArg->GetEncoding() == OMNI_DICTIONARY)) {
             // Fast path for (dict, flat) or (flat, dict)
             handleColumnWithDiffEncodingComparison(leftArg, rightArg, flatResult, rowSize);
         } else {

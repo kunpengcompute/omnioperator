@@ -25,6 +25,8 @@ public:
 
     void Visit(const expressions::InExpr &e) override;
 
+    void Visit(const expressions::InSubqueryExpr &e) override;
+
     void Visit(const expressions::BetweenExpr &e) override;
 
     void Visit(const expressions::IfExpr &e) override;

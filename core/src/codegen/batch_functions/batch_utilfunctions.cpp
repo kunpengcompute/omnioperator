@@ -292,6 +292,7 @@ extern "C" DLLEXPORT void InExprString(int32_t cmpCnt, int64_t *cmpValues, int64
     for (int32_t i = 0; i < rowCnt; ++i) {
         finalResult[i] = false;
         finalNull[i] = false;
+        bool hasNull = false;
         for (int32_t j = 0; j < cmpCnt; ++j) {
             if (!toCmpBool[i] && !cmpNullsList[j][i]) {
                 if (StrCompare(reinterpret_cast<char *>(toCmpValue[i]), toCmpLength[i],
@@ -300,6 +301,56 @@ extern "C" DLLEXPORT void InExprString(int32_t cmpCnt, int64_t *cmpValues, int64
                     break;
                 }
             }
+            if (cmpNullsList[j][i]) {
+                hasNull = true;
+            }
+        }
+        // Three-valued NULL logic: if no match and (value is NULL or any comparison value is NULL), result is NULL
+        if (!finalResult[i]) {
+            finalNull[i] = toCmpBool[i] || hasNull;
+        }
+    }
+}
+
+extern "C" DLLEXPORT void InSubqueryExprString(const uint8_t **subqueryValues, const bool *subqueryNulls,
+    const int32_t *subqueryLengths, int32_t subqueryRowCount, uint8_t **probeValue, const bool *probeNull,
+    const int32_t *probeLength, bool *finalResult, bool *finalNull, int32_t rowCnt)
+{
+    // Check if subquery contains any NULL values
+    bool subqueryHasNull = false;
+    for (int32_t i = 0; i < subqueryRowCount; ++i) {
+        if (subqueryNulls[i]) {
+            subqueryHasNull = true;
+            break;
+        }
+    }
+
+    for (int32_t i = 0; i < rowCnt; ++i) {
+        finalResult[i] = false;
+        finalNull[i] = false;
+
+        // If probe value is NULL, result is NULL
+        if (probeNull[i]) {
+            finalNull[i] = true;
+            continue;
+        }
+
+        // Linear scan through subquery results
+        bool matched = false;
+        for (int32_t j = 0; j < subqueryRowCount; ++j) {
+            if (!subqueryNulls[j]) {
+                if (StrCompare(reinterpret_cast<char *>(probeValue[i]), probeLength[i],
+                    reinterpret_cast<char *>(subqueryValues[j]), subqueryLengths[j]) == 0) {
+                    finalResult[i] = true;
+                    matched = true;
+                    break;
+                }
+            }
+        }
+
+        // Three-valued NULL logic: no match + subquery has NULL -> NULL
+        if (!matched && subqueryHasNull) {
+            finalNull[i] = true;
         }
     }
 }

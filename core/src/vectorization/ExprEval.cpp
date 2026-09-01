@@ -510,6 +510,24 @@ void ExprEval::Visit(const InExpr &e)
     inputValues_.push(result);
 }
 
+void ExprEval::Visit(const InSubqueryExpr &e)
+{
+    // Evaluate the probe value
+    e.value->Accept(*this);
+
+    // Evaluate the subquery result
+    e.subqueryResult->Accept(*this);
+
+    // Get the vector function for in_subquery
+    if (e.vectorFunction == nullptr) {
+        OMNI_THROW("Vectorization Error:", "Vector function not found for in_subquery expression");
+    }
+
+    BaseVector *result = nullptr;
+    e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
+    inputValues_.push(result);
+}
+
 void ExprEval::Visit(const BetweenExpr &e) {}
 
 void ExprEval::Visit(const IfExpr &e)

@@ -129,6 +129,18 @@ std::vector<Function> BatchUtilFunctionRegistry::GetFunctions()
             INPUT_DATA),
         Function(reinterpret_cast<void *>(InExpr<Decimal128>), "batch_in", {}, { OMNI_DECIMAL128 }, OMNI_BOOLEAN,
             INPUT_DATA),
+
+        // InSubqueryExpr registrations for value IN (subquery) semantics
+        Function(reinterpret_cast<void *>(InSubqueryExpr<bool>), "batch_in_subquery", {}, { OMNI_BOOLEAN }, OMNI_BOOLEAN, INPUT_DATA),
+        Function(reinterpret_cast<void *>(InSubqueryExpr<int32_t>), "batch_in_subquery", {}, { OMNI_INT }, OMNI_BOOLEAN, INPUT_DATA),
+        Function(reinterpret_cast<void *>(InSubqueryExpr<int32_t>), "batch_in_subquery", {}, { OMNI_DATE32 }, OMNI_BOOLEAN, INPUT_DATA),
+        Function(reinterpret_cast<void *>(InSubqueryExpr<int64_t>), "batch_in_subquery", {}, { OMNI_LONG }, OMNI_BOOLEAN, INPUT_DATA),
+        Function(reinterpret_cast<void *>(InSubqueryExpr<int64_t>), "batch_in_subquery", {}, { OMNI_TIMESTAMP }, OMNI_BOOLEAN, INPUT_DATA),
+        Function(reinterpret_cast<void *>(InSubqueryExpr<double>), "batch_in_subquery", {}, { OMNI_DOUBLE }, OMNI_BOOLEAN, INPUT_DATA),
+        Function(reinterpret_cast<void *>(InSubqueryExprString), "batch_in_subquery", {}, { OMNI_CHAR }, OMNI_BOOLEAN, INPUT_DATA),
+        Function(reinterpret_cast<void *>(InSubqueryExprString), "batch_in_subquery", {}, { OMNI_VARCHAR }, OMNI_BOOLEAN, INPUT_DATA),
+        Function(reinterpret_cast<void *>(InSubqueryExpr<int64_t>), "batch_in_subquery", {}, { OMNI_DECIMAL64 }, OMNI_BOOLEAN, INPUT_DATA),
+        Function(reinterpret_cast<void *>(InSubqueryExpr<Decimal128>), "batch_in_subquery", {}, { OMNI_DECIMAL128 }, OMNI_BOOLEAN, INPUT_DATA),
     };
 
     return utilFnRegistry;
