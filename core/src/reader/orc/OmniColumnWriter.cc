@@ -25,6 +25,8 @@
 #include "orc/Writer.hh"
 #include "OmniRLE.hh"
 #include "reader/common/RebaseDate.h"
+#include "type/Timestamp.h"
+#include "type/tz/TimeZoneMap.h"
 
 namespace omniruntime::writer {
 
@@ -2408,9 +2410,10 @@ namespace omniruntime::writer {
         // session-timezone offset so the stored instant matches Spark's own ORC writer.
         const bool useSparkInstantConvention;
         const int64_t gmtEpochSecs;
-        // Session-timezone modern raw offset in micros (passed from JVM via JNI), used to match
-        // Spark's stored bytes (ORC's bundled tz data exposes LMT, not the modern offset).
+        // Session-timezone modern raw offset in micros (passed from JVM via JNI), used as
+        // a fallback when a per-value DST offset is unavailable.
         const int64_t tzOffsetMicros;
+        const omniruntime::tz::TimeZone *sessionZone;
     };
 
     static const orc::Timezone &resolveWriterTimezone(const orc::WriterOptions &options) {
@@ -2422,6 +2425,23 @@ namespace omniruntime::writer {
             }
         }
         return options.getTimezone();
+    }
+
+    static const omniruntime::tz::TimeZone *locateSessionZone(
+            const orc::WriterOptions &options,
+            bool enabled) {
+        if (!enabled) {
+            return nullptr;
+        }
+        try {
+            const std::string tzName = options.getTimezoneName();
+            if (tzName.empty()) {
+                return nullptr;
+            }
+            return omniruntime::tz::locateZone(tzName, false);
+        } catch (...) {
+            return nullptr;
+        }
     }
 
     OmniTimestampColumnWriter::OmniTimestampColumnWriter(
@@ -2445,7 +2465,8 @@ namespace omniruntime::writer {
                     options.getTimezoneName() != "UTC" &&
                     rawOffsetMicros != 0),
             gmtEpochSecs(orc::getTimezoneByName("GMT").getEpoch()),
-            tzOffsetMicros(useSparkInstantConvention ? rawOffsetMicros : 0L) {
+            tzOffsetMicros(useSparkInstantConvention ? rawOffsetMicros : 0L),
+            sessionZone(locateSessionZone(options, useSparkInstantConvention)) {
         std::unique_ptr <orc::BufferedOutputStream> dataStream =
                 factory.createStream(orc::proto::Stream_Kind_DATA);
         std::unique_ptr <orc::BufferedOutputStream> secondaryStream =
@@ -2512,6 +2533,26 @@ namespace omniruntime::writer {
         return static_cast<int64_t>(rebasedDays) * MICROS_PER_DAY + microsInDay;
     }
 
+    // Match Spark's TimeZone.getOffset behavior for historical values with DST.
+    // Keep the raw-offset fallback before 1900 because Omni tzdb exposes LMT for
+    // ancient dates while Spark's Java TimeZone path uses the modern raw offset.
+    static int64_t DstAwareOffsetMicros(const omniruntime::tz::TimeZone *zone,
+                                        int64_t utcSeconds,
+                                        int64_t fallbackOffsetMicros) {
+        static constexpr int64_t SECONDS_AT_1900_01_01 = -2208988800L;
+        if (zone == nullptr || utcSeconds < SECONDS_AT_1900_01_01) {
+            return fallbackOffsetMicros;
+        }
+        try {
+            omniruntime::Timestamp utc(utcSeconds);
+            omniruntime::Timestamp local = utc;
+            local.toTimezone(*zone);
+            return (local.getSeconds() - utcSeconds) * 1000000L;
+        } catch (...) {
+            return fallbackOffsetMicros;
+        }
+    }
+
     void OmniTimestampColumnWriter::processSingleValue(
             int64_t micros,
             int64_t &outSec,
@@ -2519,11 +2560,12 @@ namespace omniruntime::writer {
             orc::TimestampColumnStatisticsImpl *tsStats) {
         int64_t rebasedMicros;
         if (useSparkInstantConvention) {
-            // Spark ORC instant stores rebaseGregorianToJulian(micros) - tzOffset, i.e. the
-            // legacy Gregorian->Julian shift plus the session-timezone modern raw offset, so
-            // that Omni written files are byte-compatible with Spark's own ORC writer. The
-            // reader reverses this with the matching Julian->Gregorian rebase (same day table).
-            rebasedMicros = rebaseGregorianToJulianMicros(micros) - tzOffsetMicros;
+            // Spark ORC instant stores rebaseGregorianToJulian(micros) minus
+            // TimeZone.getOffset(instant). Use a per-value DST-aware offset so
+            // Omni-written files round-trip the same historical timestamps as Spark.
+            const int64_t rebased = rebaseGregorianToJulianMicros(micros);
+            const int64_t utcSeconds = floorDiv(rebased, 1000000L);
+            rebasedMicros = rebased - DstAwareOffsetMicros(sessionZone, utcSeconds, tzOffsetMicros);
         } else {
             rebasedMicros =
                     timestampRebase == nullptr ? rebaseGregorianToJulianMicros(micros) :
