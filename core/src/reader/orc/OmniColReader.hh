@@ -28,6 +28,10 @@
 #include "OmniByteRLE.hh"
 #include "reader/common/JulianGregorianRebase.h"
 
+namespace omniruntime::tz {
+    class TimeZone;
+}
+
 namespace omniruntime::reader {
 
     class OmniColumnReader: public ::orc::ColumnReader {
@@ -255,11 +259,11 @@ namespace omniruntime::reader {
         const int64_t epochOffset;
         const bool sameTimezone;
         common::JulianGregorianRebase *julianPtr;
-        // Paimon ORC instant: reverse the writer's session-tz shift by adding the modern raw
-        // offset back (Spark's own ORC reader does the same). No Julian/Gregorian rebase
-        // reverse is applied, so Omni reads match Spark's reads across all four combos.
+        // Paimon ORC instant: reverse Spark's session-tz shift. tzOffsetMicros is the
+        // modern raw-offset fallback; sessionZone supplies the per-value DST offset.
         const bool useSparkInstantConvention;
         const int64_t tzOffsetMicros;
+        const omniruntime::tz::TimeZone *sessionZone;
 
     public:
         OmniTimestampColumnReader(const ::orc::Type& type,

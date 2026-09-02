@@ -25,6 +25,8 @@
 #include "util/omni_exception.h"
 #include "OrcDecodeUtils.hh"
 #include "vector/dictionary_container.h"
+#include "type/Timestamp.h"
+#include "type/tz/TimeZoneMap.h"
 
 using omniruntime::vec::VectorBatch;
 using omniruntime::vec::BaseVector;
@@ -41,6 +43,27 @@ using ::orc::MemoryPool;
 using ::orc::PositionProvider;
 
 namespace omniruntime::reader {
+    // Spark's TimeZone.getOffset is DST-aware, while the JVM-provided fallback is the
+    // modern raw offset. Use tzdb for post-1900 values, but retain the raw offset for
+    // ancient values where Omni tzdb exposes LMT and Java TimeZone uses its raw offset.
+    static int64_t DstAwareOffsetMicros(const omniruntime::tz::TimeZone *zone,
+                                        int64_t utcGuessSeconds,
+                                        int64_t fallbackOffsetMicros)
+    {
+        static constexpr int64_t SECONDS_AT_1900_01_01 = -2208988800L;
+        if (zone == nullptr || utcGuessSeconds < SECONDS_AT_1900_01_01) {
+            return fallbackOffsetMicros;
+        }
+        try {
+            omniruntime::Timestamp utc(utcGuessSeconds);
+            omniruntime::Timestamp local = utc;
+            local.toTimezone(*zone);
+            return (local.getSeconds() - utcGuessSeconds) * 1000000L;
+        } catch (...) {
+            return fallbackOffsetMicros;
+        }
+    }
+
     /**
     * Global funcs To inline
     */
@@ -742,11 +765,12 @@ namespace omniruntime::reader {
 
                 if (useSparkInstantConvention) {
                     // Reverse the writer's session-tz shift: stored instant was
-                    // rebaseGregorianToJulian(micros) - tzOffset, so add tzOffset back. No
-                    // Julian->Gregorian rebase reverse (Spark's reader doesn't either), keeping
-                    // Omni reads byte-compatible with Spark's reads.
+                    // rebaseGregorianToJulian(micros) - TimeZone.getOffset(utc). Add the
+                    // DST-aware offset back so historical summer dates match Spark.
+                    const int64_t micros = secsBuffer[i] * 1000000L + nanoBuffer[i] / 1000L;
+                    const int64_t guessUtcSec = secsBuffer[i] + tzOffsetMicros / 1000000L;
                     data[i] = static_cast<T>(
-                            secsBuffer[i] * 1000000L + nanoBuffer[i] / 1000L + tzOffsetMicros);
+                            micros + DstAwareOffsetMicros(sessionZone, guessUtcSec, tzOffsetMicros));
                 } else if (julianPtr != nullptr) {
                     data[i] = static_cast<T>(
                             julianPtr->RebaseJulianToGregorianMicros(secsBuffer[i] * 1000000L + nanoBuffer[i] / 1000L));
@@ -1309,7 +1333,9 @@ namespace omniruntime::reader {
         sameTimezone(writerTimezone.getEpoch() == readerTimezone.getEpoch()),
         julianPtr(julianPtr),
         useSparkInstantConvention(isInstantType && rawOffsetMicros != 0),
-        tzOffsetMicros(useSparkInstantConvention ? rawOffsetMicros : 0L) {
+        tzOffsetMicros(useSparkInstantConvention ? rawOffsetMicros : 0L),
+        sessionZone(julianPtr == nullptr ? nullptr :
+                    omniruntime::tz::locateZone(julianPtr->GetTz(), false)) {
         RleVersion vers = omniConvertRleVersion(stripe.getEncoding(columnId).kind());
         std::unique_ptr<SeekableInputStream> stream =
                 stripe.getStream(columnId, ::orc::proto::Stream_Kind_DATA, true);
