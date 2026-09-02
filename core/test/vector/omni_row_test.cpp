@@ -8,10 +8,12 @@
 #include "vector/vector.h"
 #include "test/util/test_util.h"
 #include "operator/hash_util.h"
+#include "util/type_util.h"
 
 namespace omniruntime::vec::test {
 using namespace omniruntime::vec;
 using namespace omniruntime::TestUtil;
+using omniruntime::type::ByteType;
 using OmniArrayType = omniruntime::type::ArrayType;
 using OmniMapType = omniruntime::type::MapType;
 TEST(omni_row, compact_value_test)
@@ -100,6 +102,34 @@ TEST(omni_row, short_write_buffer)
     // truncate value
     int8_t ret = value;
     EXPECT_EQ(*(reinterpret_cast<int8_t *>(buffer + 1)), ret);
+}
+
+TEST(omni_row, byte_zero_compact_and_roundtrip)
+{
+    SerializedValue<int8_t> ser;
+    ser.SetValue(0);
+    EXPECT_EQ(ser.CompactLength(), 2);
+    uint8_t buffer[8] = {};
+    uint8_t *end = ser.WriteBuffer(buffer);
+    EXPECT_EQ(end, buffer + 2);
+    EXPECT_EQ(buffer[0] & 0x0F, 1);
+
+    Vector<int8_t> vec(1);
+    uint8_t *rest = RowToVec<type::OMNI_BYTE>(buffer, &vec, 0);
+    EXPECT_EQ(rest, buffer + 2);
+    EXPECT_EQ(vec.GetValue(0), static_cast<int8_t>(0));
+}
+
+TEST(omni_row, byte_oversize_prefix_does_not_overflow_stack)
+{
+    // Corrupt length=15 (max 4-bit prefix) must not memcpy past a 1-byte int8_t.
+    uint8_t buffer[16] = {};
+    buffer[0] = 0x0F;
+    buffer[1] = 0x7F;
+    Vector<int8_t> vec(1);
+    uint8_t *rest = RowToVec<type::OMNI_BYTE>(buffer, &vec, 0);
+    EXPECT_EQ(rest, buffer + 1 + 15);
+    EXPECT_EQ(vec.GetValue(0), static_cast<int8_t>(0x7F));
 }
 
 TEST(omni_row, double_write_buffer)
@@ -481,6 +511,114 @@ TEST(omni_row, fill_buffer_and_deserial_to_map_vector)
 
     // after parse, result should be the same as vecbatch
     EXPECT_TRUE(VecBatchMatch(result, vecBatch));
+    VectorHelper::FreeVecBatch(vecBatch);
+    VectorHelper::FreeVecBatch(result);
+}
+
+TEST(omni_row, array_byte_compact_length_not_uint8_truncated)
+{
+    // 200 TINYINT encodings * 2 bytes = 400 > 255. Returning uint8_t from CalElementSize
+    // wrapped the payload length, so FillBuffer under-allocated shuffle rows.
+    // ARRAY wire: 1-byte header + CompactNonNegLen(nElem) count bytes + element payload.
+    // nElem=200 needs 2 count bytes (not 1): PrefixLen + 2 + 400 = 403.
+    const int32_t nElem = 200;
+    auto elementVector = std::make_shared<vec::Vector<int8_t>>(nElem);
+    for (int32_t i = 0; i < nElem; i++) {
+        elementVector->SetValue(i, static_cast<int8_t>(i - 100));
+    }
+    auto *arrayVector = new vec::ArrayVector(1, elementVector);
+    arrayVector->SetOffset(0, 0);
+    arrayVector->SetOffset(1, nElem);
+
+    SerializedValue<BaseVector *, OMNI_ENCODING_ARRAY> ser;
+    ser.TransValue(arrayVector, 0);
+    const int32_t expected =
+        BaseSerialize::PrefixLen + BaseSerialize::CompactNonNegLen(nElem) + nElem * 2;
+    EXPECT_EQ(ser.CompactLength(), expected);
+
+    uint8_t buffer[1024];
+    uint8_t *end = ser.WriteBuffer(buffer);
+    EXPECT_EQ(static_cast<int32_t>(end - buffer), expected);
+
+    delete arrayVector;
+}
+
+TEST(omni_row, array_byte_yarn_missing_tinyints_roundtrip_wide_row)
+{
+    // Values Omni collect_set dropped on the full YARN table (COUNT DISTINCT still 47).
+    const int8_t dropped[] = {-19, -15, -13, -12, -5, 5, 7, 8, 9, 11, 25};
+    const int32_t nElem = static_cast<int32_t>(sizeof(dropped) / sizeof(dropped[0]));
+    const int32_t rowNumber = 1;
+
+    std::vector<DataTypePtr> types({LongDataType::Instance(), DoubleDataType::Instance()});
+    int64_t data1[] = {-49996};
+    double data2[] = {1.0};
+    DataTypes dataTypes(types);
+    VectorBatch *vecBatch = CreateVectorBatch(dataTypes, rowNumber, data1, data2);
+
+    auto setElems = std::make_shared<vec::Vector<int8_t>>(nElem);
+    auto listElems = std::make_shared<vec::Vector<int8_t>>(nElem);
+    for (int32_t i = 0; i < nElem; i++) {
+        setElems->SetValue(i, dropped[i]);
+        listElems->SetValue(i, dropped[i]);
+    }
+    auto *setArr = new vec::ArrayVector(rowNumber, setElems);
+    setArr->SetOffset(0, 0);
+    setArr->SetOffset(1, nElem);
+    auto *listArr = new vec::ArrayVector(rowNumber, listElems);
+    listArr->SetOffset(0, 0);
+    listArr->SetOffset(1, nElem);
+    vecBatch->Append(setArr);
+    vecBatch->Append(listArr);
+
+    int64_t fake1[] = {0};
+    double fake2[] = {0.0};
+    VectorBatch *result = CreateVectorBatch(dataTypes, rowNumber, fake1, fake2);
+    auto fakeSetElems = std::make_shared<vec::Vector<int8_t>>(nElem);
+    auto fakeListElems = std::make_shared<vec::Vector<int8_t>>(nElem);
+    for (int32_t i = 0; i < nElem; i++) {
+        fakeSetElems->SetValue(i, 0);
+        fakeListElems->SetValue(i, 0);
+    }
+    auto *fakeSet = new vec::ArrayVector(rowNumber, fakeSetElems);
+    fakeSet->SetOffset(0, 0);
+    fakeSet->SetOffset(1, nElem);
+    auto *fakeList = new vec::ArrayVector(rowNumber, fakeListElems);
+    fakeList->SetOffset(0, 0);
+    fakeList->SetOffset(1, nElem);
+    result->Append(fakeSet);
+    result->Append(fakeList);
+
+    types.push_back(std::make_shared<OmniArrayType>(ByteType()));
+    types.push_back(std::make_shared<OmniArrayType>(ByteType()));
+    std::vector<Encoding> encodings(
+        {OMNI_FLAT, OMNI_FLAT, OMNI_ENCODING_ARRAY, OMNI_ENCODING_ARRAY});
+    std::vector<type::DataTypeId> typeIds({type::DataTypeId::OMNI_LONG, type::DataTypeId::OMNI_DOUBLE,
+        type::DataTypeId::OMNI_ARRAY, type::DataTypeId::OMNI_ARRAY});
+
+    RowBuffer rowBuffer(typeIds, encodings);
+    std::vector<RowInfo> rows;
+    rows.reserve(rowNumber);
+    rowBuffer.TransValueFromVectorBatch(vecBatch, 0);
+    auto len = rowBuffer.FillBuffer();
+    rows.emplace_back(rowBuffer.TakeRowBuffer(), len);
+
+    auto parser = std::make_unique<RowParser>(types);
+    BaseVector *vecs[4];
+    for (int32_t i = 0; i < 4; ++i) {
+        vecs[i] = result->Get(i);
+    }
+    parser->ParseOneRow(rows[0].row, vecs, 0);
+
+    EXPECT_TRUE(VecBatchMatch(result, vecBatch));
+    auto *outSet = static_cast<vec::ArrayVector *>(result->Get(2));
+    EXPECT_EQ(outSet->GetSize(0), nElem);
+    auto outElems = outSet->GetArrayAt(0, false);
+    auto *outFlat = static_cast<vec::Vector<int8_t> *>(outElems.get());
+    for (int32_t i = 0; i < nElem; i++) {
+        EXPECT_EQ(outFlat->GetValue(i), dropped[i]) << "idx=" << i;
+    }
+
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(result);
 }
