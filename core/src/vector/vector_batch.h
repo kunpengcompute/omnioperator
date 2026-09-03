@@ -45,6 +45,8 @@ public:
 
     void Resize(size_t rowCount);
 
+    void Expand(size_t rowCount);
+
     /* *
      * @param vectorCnt
      */

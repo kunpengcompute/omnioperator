@@ -17,6 +17,8 @@
  */
 
 #include "OrcFileOverride.hh"
+#include <cerrno>
+#include <cstring>
 #include <sys/types.h>
 #include <memory>
 
@@ -87,7 +89,13 @@ class HdfsFileInputStreamOverride : public ::orc::InputStream {
             do {
                 last_bytes_read = hdfs_file_->ReadAt(buf_ptr, length - total_bytes_read,offset + total_bytes_read);
                 if (last_bytes_read < 0) {
-                    throw IOException(Status::IOError("Error reading bytes the file").ToString());
+                    const int errorCode = errno;
+                    throw IOException(Status::IOError(
+                        "Error reading bytes from HDFS file, path=" + filename_ +
+                        ", offset=" + std::to_string(offset + total_bytes_read) +
+                        ", length=" + std::to_string(length - total_bytes_read) +
+                        ", errno=" + std::to_string(errorCode) +
+                        ", error=" + std::strerror(errorCode)).ToString());
                 }
                 if (last_bytes_read == 0) {
                    break;

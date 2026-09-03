@@ -982,6 +982,7 @@ VectorBatch *ExpressionEvaluator::ProcessFilterAndProject(VectorBatch *vecBatch,
     e.VisitExpr(*filterExpr);
 
     auto selectVector = e.GetResult();
+    std::unique_ptr<BaseVector> selectVectorHolder(selectVector);
     bool *selectAddr = nullptr;
     std::unique_ptr<bool[]> selectMaskBuffer;
     if (selectVector->GetEncoding() == OMNI_ENCODING_CONST) {

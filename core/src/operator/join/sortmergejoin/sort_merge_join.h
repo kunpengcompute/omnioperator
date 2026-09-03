@@ -21,8 +21,10 @@ namespace op {
 constexpr uint32_t SHIFT_SIZE_16 = 16;
 class SortMergeJoinOperator : public Operator {
 public:
-    SortMergeJoinOperator(JoinType joinType, std::string &filter);
-    SortMergeJoinOperator(JoinType joinType, Expr* filter);
+    SortMergeJoinOperator(JoinType joinType, std::string &filter,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
+    SortMergeJoinOperator(JoinType joinType, Expr* filter,
+        const config::QueryConfig &queryConfig = config::QueryConfig{});
 
     ~SortMergeJoinOperator() override;
 
@@ -103,6 +105,7 @@ private:
 
     SortMergeJoinScanner *smjScanner;
     JoinResultBuilder *joinResultBuilder;
+    config::QueryConfig queryConfig_;
 
     VectorBatch *returnVectorBatch = nullptr;
 };

@@ -31,10 +31,18 @@ public:
         const std::vector<omniruntime::expressions::Expr *> &streamedKeyExprCols, int32_t streamedKeyExprColsCnt,
         int32_t *streamedOutputCols, int32_t streamedOutputColsCnt, JoinType joinType, std::string &filter,
         OverflowConfig *overflowConfig);
+    StreamedTableWithExprOperatorFactoryV2(const type::DataTypes &streamedTypes,
+        const std::vector<omniruntime::expressions::Expr *> &streamedKeyExprCols, int32_t streamedKeyExprColsCnt,
+        int32_t *streamedOutputCols, int32_t streamedOutputColsCnt, JoinType joinType, std::string &filter,
+        OverflowConfig *overflowConfig, const config::QueryConfig &queryConfig);
     StreamedTableWithExprOperatorFactoryV2(const type::DataTypes& streamedTypes,
         const std::vector<omniruntime::expressions::Expr*>& streamedKeyExprCols, int32_t streamedKeyExprColsCnt,
         int32_t* streamedOutputCols, int32_t streamedOutputColsCnt, JoinType joinType, Expr* filter,
         OverflowConfig* overflowConfig);
+    StreamedTableWithExprOperatorFactoryV2(const type::DataTypes& streamedTypes,
+        const std::vector<omniruntime::expressions::Expr*>& streamedKeyExprCols, int32_t streamedKeyExprColsCnt,
+        int32_t* streamedOutputCols, int32_t streamedOutputColsCnt, JoinType joinType, Expr* filter,
+        OverflowConfig* overflowConfig, const config::QueryConfig &queryConfig);
 
     ~StreamedTableWithExprOperatorFactoryV2() override;
 

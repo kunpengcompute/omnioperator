@@ -4,9 +4,30 @@
  */
 
 #include "group_aggregation_sort.h"
+#include "operator/hashmap/column_marshaller.h"
 #include "vector/vector_helper.h"
 
 using namespace omniruntime::op;
+
+void AggregationSort::SortKvVector(bool compareWithHashVal)
+{
+    if (compareWithHashVal && serializeHandler != nullptr) {
+        std::string leftKey;
+        std::string rightKey;
+        std::sort(kvVec.begin(), kvVec.end(), [this, &leftKey, &rightKey](const KeyValue& a, const KeyValue& b) {
+            if (a.hashValue != b.hashValue) {
+                return a.hashValue < b.hashValue;
+            }
+
+            serializeHandler->SerializeSpillKey(a.rowAddr, leftKey);
+            serializeHandler->SerializeSpillKey(b.rowAddr, rightKey);
+            return memcmp(leftKey.data(), rightKey.data(), std::min(leftKey.size(), rightKey.size())) < 0;
+        });
+        return;
+    }
+
+    std::sort(kvVec.begin(), kvVec.end(), compareWithHashVal ? HashKeyCompareWithHashVal : HashKeyCompare);
+}
 
 void AggregationSort::SetSpillVectorBatch(vec::VectorBatch *spillVecBatch, uint64_t rowOffset, bool compareWithHashVal)
 {
@@ -24,9 +45,16 @@ void AggregationSort::SetSpillVectorBatch(vec::VectorBatch *spillVecBatch, uint6
     auto kvPtr = kvVec.data() + rowOffset;
     auto rowCount = spillVecBatch->GetRowCount();
     groupStates.resize(rowCount);
+    std::string serializedKey;
     for (int32_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         auto &kv = kvPtr[rowIndex];
-        std::string_view keyStr(kv.keyAddr, kv.keyLen);
+        std::string_view keyStr;
+        if (compareWithHashVal && serializeHandler != nullptr) {
+            serializeHandler->SerializeSpillKey(kv.rowAddr, serializedKey);
+            keyStr = std::string_view(serializedKey.data(), serializedKey.size());
+        } else {
+            keyStr = std::string_view(kv.keyAddr, kv.keyLen);
+        }
         if (compareWithHashVal) {
             hashVector->SetValue(rowIndex, static_cast<int64_t>(kv.hashValue));
         }

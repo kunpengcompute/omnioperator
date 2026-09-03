@@ -19,7 +19,7 @@ WindowOperatorFactory::WindowOperatorFactory(const DataTypes &sourceTypes, int32
     const DataTypes &allTypes, int32_t *argumentChannels, int32_t argumentChannelsCount, int32_t *windowFrameTypesField,
     int32_t *windowFrameStartTypesField, int32_t *windowFrameStartChannelsField, int32_t *windowFrameEndTypesField,
     int32_t *windowFrameEndChannelsField, const OperatorConfig &operatorConfig,
-    WindowFunctionOptions *windowFunctionOptionsField)
+    WindowFunctionOptions *windowFunctionOptionsField, const config::QueryConfig &queryConfig)
     : sourceTypes(sourceTypes),
       outputColsCount(outputColsCount),
       windowFunctionCount(windowFunctionCount),
@@ -32,6 +32,7 @@ WindowOperatorFactory::WindowOperatorFactory(const DataTypes &sourceTypes, int32
       argumentChannelsCount(argumentChannelsCount),
       operatorConfig(operatorConfig)
 {
+    this->queryConfig_ = queryConfig;
     this->outputCols.insert(this->outputCols.begin(), outputCols, outputCols + outputColsCount);
     this->windowFunctionTypes.insert(this->windowFunctionTypes.begin(), windowFunctionTypes,
         windowFunctionTypes + windowFunctionCount);
@@ -101,14 +102,16 @@ WindowOperatorFactory *WindowOperatorFactory::CreateWindowOperatorFactory(const 
     int32_t expectedPositionsField, const DataTypes &allTypesField, int32_t *argumentChannelsField,
     int32_t argumentChannelsCountField, int32_t *windowFrameTypesField, int32_t *windowFrameStartTypesField,
     int32_t *windowFrameStartChannelsField, int32_t *windowFrameEndTypesField, int32_t *windowFrameEndChannelsField,
-    const OperatorConfig &operatorConfig, WindowFunctionOptions *windowFunctionOptionsField)
+    const OperatorConfig &operatorConfig, WindowFunctionOptions *windowFunctionOptionsField,
+    const config::QueryConfig &queryConfig)
 {
     auto operatorFactory = new WindowOperatorFactory(sourceTypesField, outputColsField, outputColsCountField,
         windowFunctionTypesField, windowFunctionCountField, partitionColsField, partitionCountField,
         preGroupedColsField, preGroupedCountField, sortColsField, sortAscendingsField, sortNullFirstsField,
         sortColCountField, preSortedChannelPrefixField, expectedPositionsField, allTypesField, argumentChannelsField,
         argumentChannelsCountField, windowFrameTypesField, windowFrameStartTypesField, windowFrameStartChannelsField,
-        windowFrameEndTypesField, windowFrameEndChannelsField, operatorConfig, windowFunctionOptionsField);
+        windowFrameEndTypesField, windowFrameEndChannelsField, operatorConfig, windowFunctionOptionsField,
+        queryConfig);
     operatorFactory->Init();
     return operatorFactory;
 }
@@ -119,7 +122,7 @@ Operator *WindowOperatorFactory::CreateOperator()
         windowFunctionCount, partitionCols, partitionCount, preGroupedCols, preGroupedCount, sortCols, sortAscendings,
         sortNullFirsts, sortColCount, preSortedChannelPrefix, expectedPositions, allTypes, argumentChannels,
         argumentChannelsCount, windowFrameTypes, windowFrameStartTypes, windowFrameStartChannels, windowFrameEndTypes,
-        windowFrameEndChannels, windowFunctionOptions, operatorConfig);
+        windowFrameEndChannels, windowFunctionOptions, operatorConfig, queryConfig_);
     windowOperator->Init();
     return windowOperator;
 }
@@ -133,7 +136,8 @@ WindowOperator::WindowOperator(const type::DataTypes &sourceTypes, std::vector<i
     int32_t argumentChannelsCount, const std::vector<int32_t> &windowFrameTypes,
     const std::vector<int32_t> &windowFrameStartTypes, const std::vector<int32_t> &windowFrameStartChannels,
     const std::vector<int32_t> &windowFrameEndTypes, const std::vector<int32_t> &windowFrameEndChannels,
-    const std::vector<WindowFunctionOptions> &windowFunctionOptions, const OperatorConfig &operatorConfig)
+    const std::vector<WindowFunctionOptions> &windowFunctionOptions, const OperatorConfig &operatorConfig,
+    const config::QueryConfig &queryConfig)
     : sourceTypes(sourceTypes),
       typesCount(sourceTypes.GetSize()),
       outputCols(outputCols),
@@ -162,6 +166,7 @@ WindowOperator::WindowOperator(const type::DataTypes &sourceTypes, std::vector<i
       windowFunctionOptions(windowFunctionOptions),
       operatorConfig(operatorConfig)
 {
+    executionContext->SetConfig(queryConfig);
     for (int32_t i = 0; i < partitionCount; i++) {
         this->sortCols.push_back(partitionCols[i]);
         this->sortAscendings.push_back(true);
@@ -325,7 +330,8 @@ void WindowOperator::PrepareOutput()
     }
 
     // next, get output
-    maxRowCount = OperatorUtil::GetMaxRowCount(allTypes.Get(), finalOutputCols, finalOutputColsCount);
+    maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        allTypes.Get(), finalOutputCols, finalOutputColsCount, &executionContext->queryConfigRef());
 
     outputTypes.reserve(finalOutputColsCount);
     for (int colIdx = 0; colIdx < finalOutputColsCount; ++colIdx) {
@@ -339,7 +345,8 @@ void WindowOperator::PrepareOutput()
         }
         FinishPagesIndex();
     } else {
-        maxRowCountPerVecBatch = OperatorUtil::GetMaxRowCount(sourceTypes.GetSize());
+        maxRowCountPerVecBatch =
+            OperatorUtil::GetConfiguredMaxRowCount(sourceTypes.GetSize(), &executionContext->queryConfigRef());
     }
     inputVecBatchForAgg = make_unique<VectorBatch>(totalRowCount);
     inputVecBatchForAgg->ResizeVectorCount(1);

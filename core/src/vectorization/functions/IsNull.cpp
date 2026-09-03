@@ -16,7 +16,7 @@ public:
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
         op::ExecutionContext *context) const override
     {
-        const auto arg = args.top();
+        auto *arg = args.top();
         args.pop();
         const auto raw = unsafe::UnsafeVector::GetRawValues(reinterpret_cast<Vector<bool> *>(result));
         const auto size = arg->GetSize();
@@ -27,6 +27,9 @@ public:
         SelectivityVector rows(size);
         rows.setFromBits(nullBits, size);
         rows.applyToSelected([&](vector_size_t i) { raw[i] = true; });
+        if (arg != nullptr && !arg->GetIsField()) {
+            delete arg;
+        }
     }
 };
 }

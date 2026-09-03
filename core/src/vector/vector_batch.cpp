@@ -97,6 +97,26 @@ void VectorBatch::Resize(size_t rowCount)
     rowCnt = rowCount;
 }
 
+void VectorBatch::Expand(size_t rowCount)
+{
+    if (rowCount <= rowCnt) {
+        return;
+    }
+
+    if (rowCount > static_cast<size_t>(INT32_MAX)) {
+        throw OmniException("UNSUPPORTED_ERROR", "Vector batch row count exceeds int32 limit.");
+    }
+
+    for (auto *vector : vectors) {
+        vector->Expand(static_cast<int32_t>(rowCount));
+    }
+
+    if (rowCount > capacity) {
+        capacity = rowCount;
+    }
+    rowCnt = rowCount;
+}
+
 void VectorBatch::ClearVectors()
 {
     vectors.clear();

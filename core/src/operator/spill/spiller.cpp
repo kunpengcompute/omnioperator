@@ -31,9 +31,9 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
     auto lockedStats = op != nullptr ? &op->stats() : nullptr;
 
     // create spill writer object
-    auto writer = new SpillWriter(dataTypes, dirPaths[0], writeBufferSize, isSpillCompressEnabled);
-    writers.emplace_back(writer);
+    auto writer = std::make_unique<SpillWriter>(dataTypes, dirPaths[0], writeBufferSize, isSpillCompressEnabled);
 
+    try {
     int64_t totalRowOffset = 0;
     int32_t vecBatchCount = OperatorUtil::GetVecBatchCount(totalRowCount, maxRowCountPerBatch);
     int32_t maxRowCount = 0; // for reuse vector batch memory
@@ -51,9 +51,11 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
         auto vecBatchSize = CollectVecBatchSize(spillVecBatchPtr);
         if (isSpillCompressEnabled) {
             if (writer->getTotalCompressBytes() + vecBatchSize> UINT64_MAX) {
+                spillFiles.emplace_back(writer->GetSpillFileInfo());
                 return ErrorCode::EXCEED_SPILL_THRESHOLD;
             }
         } else if (spillTracker->CheckIfExceedAndReserve(vecBatchSize)) {
+            spillFiles.emplace_back(writer->GetSpillFileInfo());
             return ErrorCode::EXCEED_SPILL_THRESHOLD;
         }
 
@@ -66,11 +68,19 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
             lockedStats->AddSpilledBytes(vecBatchSize, rowCount, cpuTimeSegment);
         }
         if (result != ErrorCode::SUCCESS) {
+            spillFiles.emplace_back(writer->GetSpillFileInfo());
             return result;
         }
         totalRowOffset += rowCount;
     }
-    return writer->Close();
+    auto result = writer->Close();
+    spillFiles.emplace_back(writer->GetSpillFileInfo());
+    writer.reset();
+    return result;
+    } catch (...) {
+        spillFiles.emplace_back(writer->GetSpillFileInfo());
+        throw;
+    }
 }
 
 ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRadixSort, Operator* op)
@@ -83,9 +93,9 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
     auto lockedStats = op != nullptr ? &op->stats() : nullptr;
 
     // create spill writer object
-    auto writer = new SpillWriter(dataTypes, dirPaths[0], writeBufferSize, isSpillCompressEnabled);
-    writers.emplace_back(writer);
+    auto writer = std::make_unique<SpillWriter>(dataTypes, dirPaths[0], writeBufferSize, isSpillCompressEnabled);
 
+    try {
     int64_t totalRowOffset = 0;
     int32_t vecBatchCount = OperatorUtil::GetVecBatchCount(totalRowCount, maxRowCountPerBatch);
     int32_t maxRowCount = 0; // for reuse vector batch memory
@@ -104,9 +114,11 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
         auto vecBatchSize = CollectVecBatchSize(spillVecBatchPtr);
         if (isSpillCompressEnabled) {
             if (writer->getTotalCompressBytes() + vecBatchSize> UINT64_MAX) {
+                spillFiles.emplace_back(writer->GetSpillFileInfo());
                 return ErrorCode::EXCEED_SPILL_THRESHOLD;
             }
         } else if (spillTracker->CheckIfExceedAndReserve(vecBatchSize)) {
+            spillFiles.emplace_back(writer->GetSpillFileInfo());
             return ErrorCode::EXCEED_SPILL_THRESHOLD;
         }
 
@@ -119,12 +131,20 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
         }
 
         if (result != ErrorCode::SUCCESS) {
+            spillFiles.emplace_back(writer->GetSpillFileInfo());
             return result;
         }
         totalRowOffset += rowCount;
     }
 
-    return writer->Close();
+    auto result = writer->Close();
+    spillFiles.emplace_back(writer->GetSpillFileInfo());
+    writer.reset();
+    return result;
+    } catch (...) {
+        spillFiles.emplace_back(writer->GetSpillFileInfo());
+        throw;
+    }
 }
 
 

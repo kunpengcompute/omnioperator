@@ -33,6 +33,7 @@ WindowGroupLimitWithExprOperatorFactory::WindowGroupLimitWithExprOperatorFactory
     : WindowGroupLimitWithExprOperatorFactory(sourceDataTypes, n, funcName, partitionKeys, sortKeys, sortAscendings, sortNullFirsts, overflowConfig)
 {
     this->queryConfig_ = queryConfig;
+    windowGroupLimitOperatorFactory->SetQueryConfig(queryConfig);
 }
 
 WindowGroupLimitWithExprOperatorFactory::~WindowGroupLimitWithExprOperatorFactory() = default;

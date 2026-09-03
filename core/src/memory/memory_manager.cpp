@@ -3,7 +3,21 @@
  */
 #include "memory_manager.h"
 
+#include <cstdlib>
+#include <cstring>
+
 namespace omniruntime::mem {
+
+namespace {
+constexpr const char *kDisableMemCapExceededEnv = "OMNI_DISABLE_MEM_CAP_EXCEEDED";
+
+bool DisableMemCapExceeded()
+{
+    const char *value = std::getenv(kDisableMemCapExceededEnv);
+    return value == nullptr || std::strcmp(value, "0") != 0;
+}
+} // namespace
+
 // constructor for globalMemoryManager
 MemoryManager::MemoryManager()
 {
@@ -45,14 +59,20 @@ void MemoryManager::AddMemory(int64_t reportedMemory, int64_t curAllocateSize)
         *  */
         if (!isBlocked.load(std::memory_order_relaxed)) {
             isBlocked.store(true, std::memory_order_relaxed);
-            memoryAmount.fetch_sub(curAllocateSize, std::memory_order_relaxed);
 
             if (parent.load(std::memory_order_relaxed) == nullptr) {
                 auto message =
                         op::GetErrorMessage(op::ErrorCode::MEM_CAP_EXCEEDED) + std::to_string(limit / 1024 / 1024)
                         + "; current Memory Usage Total: " + std::to_string(newMemoryAmount / 1024 / 1024)
                         + "MB; current Memory Allocate Size: " + std::to_string(curAllocateSize) + "B";
-                throw OmniException(GetErrorCode(op::ErrorCode::MEM_CAP_EXCEEDED), message);
+                if (DisableMemCapExceeded()) {
+                    LogWarn("%s; exception disabled by %s", message.c_str(), kDisableMemCapExceededEnv);
+                } else {
+                    memoryAmount.fetch_sub(curAllocateSize, std::memory_order_relaxed);
+                    throw OmniException(GetErrorCode(op::ErrorCode::MEM_CAP_EXCEEDED), message);
+                }
+            } else {
+                memoryAmount.fetch_sub(curAllocateSize, std::memory_order_relaxed);
             }
         }
     }

@@ -62,6 +62,7 @@ SortWithExprOperatorFactory::SortWithExprOperatorFactory(const type::DataTypes &
     sortKeys, sortAscendings, sortNullFirsts, sortKeysCount, operatorConfig)
 {
     this->queryConfig_ = queryConfig;
+    sortOperatorFactory->SetQueryConfig(queryConfig);
 }
 
 SortWithExprOperatorFactory *SortWithExprOperatorFactory::CreateSortWithExprOperatorFactory(

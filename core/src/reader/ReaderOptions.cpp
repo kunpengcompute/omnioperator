@@ -178,8 +178,17 @@ int initLeaves(orc::SearchArgumentBuilder& builder,const nlohmann::json& jsonExp
 
     if (leafJson.contains("literalList")) {
         try {
-            std::string listStr = leafJson["literalList"].get<std::string>();
-            auto literalListJson = nlohmann::json::parse(listStr);
+            const auto& literalList = leafJson["literalList"];
+            // Newer Java builders serialize literalList as a JSON array, while
+            // older builders wrapped the array in a JSON string.
+            nlohmann::json literalListJson;
+            if (literalList.is_array()) {
+                literalListJson = literalList;
+            } else if (literalList.is_string()) {
+                literalListJson = nlohmann::json::parse(literalList.get<std::string>());
+            } else {
+                throw std::runtime_error("literalList must be an array or JSON string");
+            }
 
             if (literalListJson.is_array()) {
                 for (const auto& elem : literalListJson) {

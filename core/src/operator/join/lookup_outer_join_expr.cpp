@@ -44,8 +44,11 @@ LookupOuterJoinWithExprOperatorFactory *LookupOuterJoinWithExprOperatorFactory::
     auto probeHashKeysCount = static_cast<int>(probeHashKeys.size());
     auto buildSide = planNode->GetBuildSide();
 
-    return new LookupOuterJoinWithExprOperatorFactory(*probeOutputTypes, probeOutputCols.data(), probeOutputColsCount, probeHashKeys, probeHashKeysCount,
-        buildOutputCols.data(), *buildOutputTypes, reinterpret_cast<int64_t>(hashBuilderOperatorFactory), buildSide);
+    auto operatorFactory = new LookupOuterJoinWithExprOperatorFactory(*probeOutputTypes, probeOutputCols.data(),
+        probeOutputColsCount, probeHashKeys, probeHashKeysCount, buildOutputCols.data(), *buildOutputTypes,
+        reinterpret_cast<int64_t>(hashBuilderOperatorFactory), buildSide);
+    operatorFactory->SetQueryConfig(queryConfig);
+    return operatorFactory;
 }
 
 LookupOuterJoinWithExprOperatorFactory::LookupOuterJoinWithExprOperatorFactory(const type::DataTypes &probeTypes,

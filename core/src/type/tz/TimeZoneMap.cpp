@@ -3,6 +3,7 @@
 //
 
 #include "TimeZoneMap.h"
+#include <utility>
 #include <unordered_map>
 #include <set>
 #include <boost/algorithm/string.hpp>
@@ -329,6 +330,35 @@ TimeZone::seconds TimeZone::to_local(TimeZone::seconds timestamp) const
 TimeZone::milliseconds TimeZone::to_local(TimeZone::milliseconds timestamp) const
 {
     return toLocalImpl(timestamp, tz_, offset_);
+}
+
+TimeZoneInfo TimeZone::getInfo(TimeZone::seconds timestamp, bool includeAbbreviation) const
+{
+    date::sys_time<seconds> timePoint{timestamp};
+    validateRange(timePoint);
+    if (tz_ == nullptr) {
+        TimeZoneInfo result{
+            seconds::min(),
+            seconds::max(),
+            std::chrono::duration_cast<seconds>(offset_),
+            std::chrono::minutes{0},
+            {}};
+        if (includeAbbreviation) {
+            result.abbreviation = timeZoneName_;
+        }
+        return result;
+    }
+    auto info = tz_->get_info(timePoint);
+    TimeZoneInfo result{
+        std::chrono::duration_cast<seconds>(info.begin.time_since_epoch()),
+        std::chrono::duration_cast<seconds>(info.end.time_since_epoch()),
+        info.offset,
+        info.save,
+        {}};
+    if (includeAbbreviation) {
+        result.abbreviation = std::move(info.abbrev);
+    }
+    return result;
 }
 
 TimeZone::seconds TimeZone::correct_nonexistent_time(TimeZone::seconds timestamp) const

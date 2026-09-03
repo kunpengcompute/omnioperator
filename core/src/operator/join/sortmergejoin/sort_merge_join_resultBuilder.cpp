@@ -22,7 +22,7 @@ JoinResultBuilder::JoinResultBuilder(const std::vector<DataTypePtr> &leftTableOu
     int32_t leftTableOutputColsCount, int32_t originalLeftTableColsCount, DynamicPagesIndex *leftTablePagesIndex,
     const std::vector<DataTypePtr> &rightTableOutputTypes, int32_t *rightTableOutputCols,
     int32_t rightTableOutputColsCount, int32_t originalRightTableColsCount, DynamicPagesIndex *rightTablePagesIndex,
-    std::string &filter, JoinType joinType, OverflowConfig *overflowConfig)
+    std::string &filter, JoinType joinType, OverflowConfig *overflowConfig, const config::QueryConfig &queryConfig)
     : leftTableOutputTypes(leftTableOutputTypes),
       leftTableOutputCols(leftTableOutputCols),
       leftTableOutputColsCount(leftTableOutputColsCount),
@@ -36,10 +36,13 @@ JoinResultBuilder::JoinResultBuilder(const std::vector<DataTypePtr> &leftTableOu
       filterExpStr(filter),
       joinType(joinType)
 {
+    executionContext = new ExecutionContext();
+    executionContext->SetConfig(queryConfig);
     int32_t leftRowSize = OperatorUtil::GetRowSize(leftTableOutputTypes);
     int32_t rightRowSize = OperatorUtil::GetRowSize(rightTableOutputTypes);
     int32_t outputRowSize = leftRowSize + rightRowSize;
-    this->maxRowCount = OperatorUtil::GetMaxRowCount(outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE);
+    this->maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE, executionContext != nullptr ? &executionContext->queryConfigRef() : nullptr);
     this->JoinFilterCodeGen(overflowConfig);
     allTypes.insert(allTypes.cend(), leftTableOutputTypes.cbegin(), leftTableOutputTypes.cend());
     allTypes.insert(allTypes.cend(), rightTableOutputTypes.cbegin(), rightTableOutputTypes.cend());
@@ -49,7 +52,7 @@ JoinResultBuilder::JoinResultBuilder(const std::vector<DataTypePtr>& leftTableOu
     int32_t leftTableOutputColsCount, int32_t originalLeftTableColsCount, DynamicPagesIndex* leftTablePagesIndex,
     const std::vector<DataTypePtr>& rightTableOutputTypes, int32_t* rightTableOutputCols,
     int32_t rightTableOutputColsCount, int32_t originalRightTableColsCount, DynamicPagesIndex* rightTablePagesIndex,
-    Expr* filter, JoinType joinType, OverflowConfig* overflowConfig)
+    Expr* filter, JoinType joinType, OverflowConfig* overflowConfig, const config::QueryConfig &queryConfig)
     : leftTableOutputTypes(leftTableOutputTypes),
       leftTableOutputCols(leftTableOutputCols),
       leftTableOutputColsCount(leftTableOutputColsCount),
@@ -63,10 +66,13 @@ JoinResultBuilder::JoinResultBuilder(const std::vector<DataTypePtr>& leftTableOu
       filterExpr(filter),
       joinType(joinType)
 {
+    executionContext = new ExecutionContext();
+    executionContext->SetConfig(queryConfig);
     int32_t leftRowSize = OperatorUtil::GetRowSize(leftTableOutputTypes);
     int32_t rightRowSize = OperatorUtil::GetRowSize(rightTableOutputTypes);
     int32_t outputRowSize = leftRowSize + rightRowSize;
-    this->maxRowCount = OperatorUtil::GetMaxRowCount(outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE);
+    this->maxRowCount = OperatorUtil::GetConfiguredMaxRowCount(
+        outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE, executionContext != nullptr ? &executionContext->queryConfigRef() : nullptr);
     this->JoinFilterExprCodeGen(overflowConfig);
     allTypes.insert(allTypes.cend(), leftTableOutputTypes.cbegin(), leftTableOutputTypes.cend());
     allTypes.insert(allTypes.cend(), rightTableOutputTypes.cbegin(), rightTableOutputTypes.cend());
@@ -78,7 +84,6 @@ void JoinResultBuilder::JoinFilterCodeGen(OverflowConfig* overflowConfig)
         return;
     }
 
-    executionContext = new ExecutionContext();
     omniruntime::expressions::Expr* filterExpression = JSONParser::ParseJSON(filterExpStr);
     simpleFilter = new SimpleFilter(*filterExpression);
     auto result = simpleFilter->Initialize(overflowConfig);
@@ -116,7 +121,6 @@ void JoinResultBuilder::JoinFilterExprCodeGen(OverflowConfig *overflowConfig)
         return;
     }
 
-    executionContext = new ExecutionContext();
     simpleFilter = new SimpleFilter(*filterExpr);
     auto result = simpleFilter->Initialize(overflowConfig);
     if (!result) {
@@ -145,16 +149,32 @@ void JoinResultBuilder::JoinFilterExprCodeGen(OverflowConfig *overflowConfig)
     memset(lengths, 0, sizeof(int32_t) * originalAllColsCount);
 }
 
-VectorBatch *JoinResultBuilder::NewEmptyVectorBatch() const
+VectorBatch *JoinResultBuilder::NewEmptyVectorBatch(int32_t rowCount) const
 {
     // using smart ptr to avoid memory leak when task recovery
-    auto vectorBatch = std::make_unique<VectorBatch>(maxRowCount);
+    auto vectorBatch = std::make_unique<VectorBatch>(rowCount);
 
     for (auto &type : allTypes) {
         // ARRAY/MAP/ROW must use CreateComplexVector; CreateFlatVector only supports primitive types
-        vectorBatch->Append(VectorHelper::CreateComplexVector(type.get(), maxRowCount));
+        vectorBatch->Append(VectorHelper::CreateComplexVector(type.get(), rowCount));
     }
     return vectorBatch.release();
+}
+
+void JoinResultBuilder::EnsureBuildVectorBatchCapacity(int32_t rowCount)
+{
+    if (rowCount <= 0) {
+        return;
+    }
+
+    if (buildVectorBatch == nullptr) {
+        buildVectorBatch = NewEmptyVectorBatch(rowCount);
+        return;
+    }
+
+    if (rowCount > buildVectorBatch->GetRowCount()) {
+        buildVectorBatch->Expand(static_cast<size_t>(rowCount));
+    }
 }
 
 template <type::DataTypeId typeId>
@@ -467,6 +487,7 @@ int32_t JoinResultBuilder::ConstructInnerJoinOutput()
 int32_t JoinResultBuilder::ConstructLeftJoinOutput()
 {
     auto inputSize = static_cast<int32_t>(streamedTableValueAddresses.size());
+    const int32_t addressStart = addressOffset;
     // Rows already materialized in buildVectorBatch from previous AddJoinValueAddresses in the same batch
     const int32_t rowBase = buildRowCount;
     leftOutputBatchIds.clear();
@@ -530,9 +551,7 @@ int32_t JoinResultBuilder::ConstructLeftJoinOutput()
         return 0;
     }
 
-    if (buildVectorBatch == nullptr) {
-        buildVectorBatch = NewEmptyVectorBatch();
-    }
+    EnsureBuildVectorBatchCapacity(rowBase + numOutputRows);
 
     for (int32_t columnIdx = 0; columnIdx < leftTableOutputColsCount; columnIdx++) {
         int32_t outPos = rowBase;
@@ -579,6 +598,17 @@ int32_t JoinResultBuilder::ConstructLeftJoinOutput()
                     buildVectorBatch->Get(buildColumnIdx), rowBase + segmentStart);
             }
         }
+    }
+
+    // Input vectors are still needed while the output columns are copied. Release only
+    // after materialization, and only for addresses consumed by this output batch.
+    for (int32_t processedAddress = addressStart; processedAddress < addressOffset; processedAddress++) {
+        const int32_t leftBatchId = DecodeSliceIndex(streamedTableValueAddresses[processedAddress]);
+        const int32_t rightBatchId = DecodeSliceIndex(bufferedTableValueAddresses[processedAddress]);
+        if (leftBatchId == JOIN_NULL_FLAG || rightBatchId == JOIN_NULL_FLAG) {
+            continue;
+        }
+        FreeVectorBatches(isPreKeyMatched[processedAddress], leftBatchId, rightBatchId);
     }
 
     buildRowCount = rowBase + numOutputRows;
@@ -772,8 +802,10 @@ int32_t JoinResultBuilder::AddJoinValueAddresses()
     // 1 represents the rowCount of buildVectorBatch has reached the maxRowCount
     // 0 represents the rowCount of buildVectorBatch doesn't reached the maxRowCount
     if (buildVectorBatch == nullptr) {
-        buildVectorBatch = NewEmptyVectorBatch();
         buildRowCount = 0;
+        if (joinType != JoinType::OMNI_JOIN_TYPE_LEFT) {
+            buildVectorBatch = NewEmptyVectorBatch(maxRowCount);
+        }
     }
 
     switch (joinType) {
@@ -795,6 +827,8 @@ int32_t JoinResultBuilder::AddJoinValueAddresses()
 void JoinResultBuilder::FreeVectorBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId)
 {
     if (!isPreMatched && leftBatchId > lastUnMatchedStreamedBatchId) {
+        LogWarn("SMJ_LEFT_JOIN_FREE builder=%p left_batch=%d right_batch=%d previous_left_freed=%d",
+            static_cast<const void *>(this), leftBatchId, rightBatchId, lastUnMatchedStreamedBatchId);
         leftTablePagesIndex->FreeBeforeVecBatch(leftBatchId);
         rightTablePagesIndex->FreeBeforeVecBatch(rightBatchId);
         lastUnMatchedStreamedBatchId = leftBatchId;
@@ -824,7 +858,7 @@ VectorBatch *GetVectorBatchFromSlice(VectorBatch *vectorBatch, std::vector<DataT
 int32_t JoinResultBuilder::GetOutput(omniruntime::vec::VectorBatch **outputVecBatch)
 {
     if (buildVectorBatchRowCount > 0) {
-        if (buildVectorBatchRowCount == maxRowCount) {
+        if (buildVectorBatchRowCount == maxRowCount || buildVectorBatchRowCount == buildVectorBatch->GetRowCount()) {
             *outputVecBatch = buildVectorBatch;
         } else {
             *outputVecBatch = GetVectorBatchFromSlice(buildVectorBatch, allTypes, buildVectorBatchRowCount);

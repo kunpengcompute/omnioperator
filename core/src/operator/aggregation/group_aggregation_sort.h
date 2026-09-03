@@ -14,9 +14,15 @@
 
 
 namespace omniruntime::op {
+class TaperColumnSerializeHandler;
+
 class AggregationSort {
 public:
-    explicit AggregationSort(std::vector<std::unique_ptr<Aggregator>> &aggregators) : aggregators(aggregators)
+    // needKeyBuffer must be false only for handlers whose ParseHashMapToVector overload leaves kvString
+    // untouched, i.e. the serialize handler, which points kvVec at keys already materialized in the arena.
+    explicit AggregationSort(std::vector<std::unique_ptr<Aggregator>> &aggregators, bool needKeyBuffer = true,
+        TaperColumnSerializeHandler* serializeHandler = nullptr)
+        : aggregators(aggregators), needKeyBuffer(needKeyBuffer), serializeHandler(serializeHandler)
     {
         for (auto &aggregator : aggregators) {
             aggVectorCounts.emplace_back(aggregator->GetSpillType().size());
@@ -26,7 +32,9 @@ public:
     void ResizeKvVector(size_t size)
     {
         kvVec.resize(size);
-        kvString.resize(size);
+        if (needKeyBuffer) {
+            kvString.resize(size);
+        }
         groupCount = size;
     }
 
@@ -43,6 +51,16 @@ public:
         auto &kv = kvVec[groupIndex];
         kv.keyAddr = const_cast<char *>(key.data);
         kv.keyLen = key.size;
+        kv.hashValue = hashValue;
+        kv.value = value;
+    }
+
+    void ParseHashMapRowToVectorWithHashVal(
+        uint8_t* row, AggregateState* value, size_t groupIndex, int64_t hashValue)
+    {
+        auto& kv = kvVec[groupIndex];
+        kv.rowAddr = row;
+        kv.keyLen = 0;
         kv.hashValue = hashValue;
         kv.value = value;
     }
@@ -79,8 +97,10 @@ public:
 
     void ClearVector()
     {
-        kvVec.clear();
-        kvString.clear();
+        // Give the capacity back rather than only clearing. These buffers sit idle between two spills,
+        // and keeping them resident raises the baseline that the next spill threshold is compared against.
+        std::vector<omniruntime::op::KeyValue>().swap(kvVec);
+        std::vector<std::string>().swap(kvString);
     }
 
     size_t GetRowCount()
@@ -88,9 +108,11 @@ public:
         return groupCount;
     }
 
-    void SortKvVector(bool compareWithHashVal = false)
+    void SortKvVector(bool compareWithHashVal = false);
+
+    bool IsLazyKeySerializationEnabled() const
     {
-        std::sort(kvVec.begin(), kvVec.end(), compareWithHashVal ? HashKeyCompareWithHashVal : HashKeyCompare);
+        return serializeHandler != nullptr;
     }
 
     void SetSpillVectorBatch(vec::VectorBatch *spillVecBatch, uint64_t rowOffset, bool compareWithHashVal);
@@ -102,6 +124,8 @@ private:
     std::vector<AggregateState *> groupStates;
     size_t groupCount = 0;
     std::vector<int32_t> aggVectorCounts;
+    bool needKeyBuffer = true;
+    TaperColumnSerializeHandler* serializeHandler = nullptr;
 
     static ALWAYS_INLINE bool HashKeyCompareWithHashVal(const omniruntime::op::KeyValue &a, omniruntime::op::KeyValue &b)
     {

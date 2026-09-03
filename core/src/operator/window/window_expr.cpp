@@ -113,6 +113,7 @@ WindowWithExprOperatorFactory::WindowWithExprOperatorFactory(const type::DataTyp
     windowFrameEndTypesField, windowFrameEndChannelsField, operatorConfig, windowFunctionOptionsField)
 {
     this->queryConfig_ = queryConfig;
+    operatorFactory->SetQueryConfig(queryConfig);
 }
 
 WindowWithExprOperatorFactory::~WindowWithExprOperatorFactory()

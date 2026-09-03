@@ -28,6 +28,8 @@ public:
                ExecutionContext *context) const override;
 
 private:
+    // Returns true if the pattern requires regex evaluation instead of literal substring matching.
+    bool HasRegexMetaChars(const std::string_view &pattern) const;
 
     // Helper: Get string value from vector with different encodings
     std::string_view GetStringValueFromVector(BaseVector *vec, int32_t row) const;

@@ -159,6 +159,7 @@ public:
     static constexpr const char *KRowShuffleEnabled = "rowShuffle_enabled";
     static constexpr const char *KMaxBatchSizeInBytes = "maxBatchSizeInBytes";
     static constexpr const char *KMaxRowCount = "maxRowCount";
+    static constexpr const char *KMaxBatchRowCount = "maxBatchRowCount";
     static constexpr const char *KMaxBatchSize = "max_batch_size";
     static constexpr const char *KAqeShuffle = "aqe_shuffle";
     static constexpr const char *KShuffleSpillBatchRowNum = "shuffleSpillBatchRowNum";
@@ -190,6 +191,12 @@ public:
     {
         static constexpr uint64_t kDefault = 12UL << 20;
         return get<uint64_t>(KMaxRowCount, kDefault);
+    }
+
+    uint64_t maxBatchRowCount() const
+    {
+        static constexpr uint64_t kDefault = 0;
+        return get<uint64_t>(KMaxBatchRowCount, kDefault);
     }
 
     uint64_t MaxBatchSize() const
