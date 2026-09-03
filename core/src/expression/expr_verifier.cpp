@@ -218,6 +218,45 @@ void ExprVerifier::Visit(const InExpr &inExpr)
     }
 }
 
+void ExprVerifier::Visit(const InSubqueryExpr &inSubExpr)
+{
+    // InSubqueryExpr requires vectorization support
+    if (inSubExpr.vectorFunction == nullptr) {
+        this->isSupportVectorization_ = false;
+    }
+
+    // Check the probe value type
+    DataTypeId valueTypeId = inSubExpr.value->GetReturnTypeId();
+    switch (valueTypeId) {
+        case OMNI_BYTE:
+        case OMNI_SHORT:
+        case OMNI_INT:
+        case OMNI_DATE32:
+        case OMNI_LONG:
+        case OMNI_TIMESTAMP:
+        case OMNI_DOUBLE:
+        case OMNI_FLOAT:
+        case OMNI_CHAR:
+        case OMNI_VARCHAR:
+        case OMNI_DECIMAL64:
+        case OMNI_DECIMAL128:
+            break;
+        default:
+            this->isSupportCodegen_ = false;
+            return;
+    }
+
+    // Visit the probe value and subquery result expressions
+    if (!VisitExpr(*(inSubExpr.value))) {
+        this->isSupportCodegen_ = false;
+        return;
+    }
+    if (!VisitExpr(*(inSubExpr.subqueryResult))) {
+        this->isSupportCodegen_ = false;
+        return;
+    }
+}
+
 void ExprVerifier::Visit(const BetweenExpr &betweenExpr)
 {
     if (betweenExpr.vectorFunction == nullptr) {

@@ -231,6 +231,25 @@ void ExprPrinter::Visit(const InExpr &e)
     }
     this->indentationDepth--;
 }
+
+void ExprPrinter::Visit(const InSubqueryExpr &e)
+{
+    string indent = GenerateIndentation();
+    string output = indent + "InSubquery:" + TypeUtil::TypeToString(e.GetReturnTypeId()) + "(";
+    std::cout << output << '\n';
+    this->indentationDepth++;
+
+    // Print probe value
+    std::cout << GenerateIndentation() << "ProbeValue: ";
+    e.value->Accept(*this);
+
+    // Print subquery column index
+    std::cout << GenerateIndentation() << "SubqueryColIdx: " << e.subqueryColIdx << '\n';
+
+    this->indentationDepth--;
+    std::cout << indent << ")" << '\n';
+}
+
 /*
  * Example:switch:bool(
  * Cmp:bool(EQ

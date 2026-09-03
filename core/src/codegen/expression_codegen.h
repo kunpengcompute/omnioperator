@@ -97,6 +97,8 @@ protected:
 
     void Visit(const InExpr &e) override;
 
+    void Visit(const InSubqueryExpr &e) override;
+
     void Visit(const BetweenExpr &e) override;
 
     void Visit(const IfExpr &e) override;

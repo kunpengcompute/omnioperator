@@ -15,6 +15,7 @@ public:
     void Visit(const omniruntime::expressions::UnaryExpr &unaryExpr) override;
     void Visit(const omniruntime::expressions::BinaryExpr &binaryExpr) override;
     void Visit(const omniruntime::expressions::InExpr &inExpr) override;
+    void Visit(const omniruntime::expressions::InSubqueryExpr &inSubExpr) override;
     void Visit(const omniruntime::expressions::BetweenExpr &betweenExpr) override;
     void Visit(const omniruntime::expressions::IfExpr &ifExpr) override;
     void Visit(const omniruntime::expressions::CoalesceExpr &coalesceExpr) override;

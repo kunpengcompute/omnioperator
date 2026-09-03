@@ -19,7 +19,8 @@ public:
           rowCnt(nullptr),
           rowIdxArray(nullptr),
           executionContext(nullptr),
-          dictionaryVectors(nullptr)
+          dictionaryVectors(nullptr),
+          subqueryRowCount(nullptr)
     {}
 
     explicit BatchCodegenContext(llvm::Value *data, llvm::Value *nullBitmap, llvm::Value *offsets, llvm::Value *rowIdx,
@@ -30,7 +31,21 @@ public:
           rowCnt(rowIdx),
           rowIdxArray(rowIdxArray),
           executionContext(executionContext),
-          dictionaryVectors(dictionaryVectors)
+          dictionaryVectors(dictionaryVectors),
+          subqueryRowCount(nullptr)
+    {}
+
+    explicit BatchCodegenContext(llvm::Value *data, llvm::Value *nullBitmap, llvm::Value *offsets, llvm::Value *rowIdx,
+        llvm::Value *rowIdxArray, llvm::Value *executionContext, llvm::Value *dictionaryVectors,
+        llvm::Value *subqueryRowCnt)
+        : data(data),
+          nullBitmap(nullBitmap),
+          offsets(offsets),
+          rowCnt(rowIdx),
+          rowIdxArray(rowIdxArray),
+          executionContext(executionContext),
+          dictionaryVectors(dictionaryVectors),
+          subqueryRowCount(subqueryRowCnt)
     {}
 
     ~BatchCodegenContext() = default;
@@ -47,6 +62,7 @@ private:
     llvm::Value *rowIdxArray;
     llvm::Value *executionContext;
     llvm::Value *dictionaryVectors;
+    llvm::Value *subqueryRowCount;  // Row count of subquery result for IN (subquery) expressions
 };
 }
 #endif // OMNI_RUNTIME_BATCH_CODEGEN_CONTEXT_H

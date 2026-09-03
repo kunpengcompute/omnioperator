@@ -1179,6 +1179,80 @@ void BatchExpressionCodeGen::Visit(const InExpr &inExpr)
     this->value = std::make_shared<CodeGenValue>(inArray, isNull);
 }
 
+void BatchExpressionCodeGen::Visit(const InSubqueryExpr &inSubExpr)
+{
+    auto baseType = inSubExpr.value->GetReturnTypeId();
+
+    // Visit the probe value expression
+    auto probeValue = VisitExpr(*(inSubExpr.value));
+    if (!probeValue->IsValidValue()) {
+        this->value = CreateInvalidCodeGenValue();
+        return;
+    }
+
+    // Visit the subquery result expression
+    auto subqueryValue = VisitExpr(*(inSubExpr.subqueryResult));
+    if (!subqueryValue->IsValidValue()) {
+        this->value = CreateInvalidCodeGenValue();
+        return;
+    }
+
+    // Result arrays
+    Value *inArray = GetResultArray(OMNI_BOOLEAN, this->batchCodegenContext->rowCnt);
+    Value *isNull = GetResultArray(OMNI_BOOLEAN, this->batchCodegenContext->rowCnt);
+
+    // Get subquery row count from the subquery result
+    // The subquery result is expected to be a single-column vector
+    // We use the batchCodegenContext->subqueryRowCount which should be set before execution
+    Value *subqueryRowCount = this->batchCodegenContext->subqueryRowCount;
+
+    std::vector<Value *> args;
+    switch (baseType) {
+        case OMNI_BOOLEAN:
+        case OMNI_INT:
+        case OMNI_DATE32:
+        case OMNI_LONG:
+        case OMNI_TIMESTAMP:
+        case OMNI_DOUBLE:
+        case OMNI_FLOAT:
+        case OMNI_DECIMAL64:
+        case OMNI_DECIMAL128: {
+            args = { subqueryValue->data,
+                subqueryValue->isNull,
+                subqueryRowCount,
+                probeValue->data,
+                probeValue->isNull,
+                inArray,
+                isNull,
+                this->batchCodegenContext->rowCnt };
+            CallExternFunction("batch_in_subquery", { baseType }, OMNI_BOOLEAN, args, nullptr);
+            break;
+        }
+        case OMNI_CHAR:
+        case OMNI_VARCHAR: {
+            args = { subqueryValue->data,
+                subqueryValue->isNull,
+                subqueryValue->length,
+                subqueryRowCount,
+                probeValue->data,
+                probeValue->isNull,
+                probeValue->length,
+                inArray,
+                isNull,
+                this->batchCodegenContext->rowCnt };
+            CallExternFunction("batch_in_subquery", { baseType }, OMNI_BOOLEAN, args, nullptr);
+            break;
+        }
+        default: {
+            LogWarn("Unsupported data type in IN_SUBQUERY expr %d", baseType);
+            this->value = CreateInvalidCodeGenValue();
+            return;
+        }
+    }
+
+    this->value = std::make_shared<CodeGenValue>(inArray, isNull);
+}
+
 void BatchExpressionCodeGen::Visit(const SwitchExpr &switchExpr)
 {
     auto switchDataType = switchExpr.GetReturnTypeId();

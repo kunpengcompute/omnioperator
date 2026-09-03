@@ -913,6 +913,36 @@ ExprType InExpr::GetType() const
     return ExprType::IN_E;
 }
 
+// InSubqueryExpr implementation
+InSubqueryExpr::InSubqueryExpr()
+{
+    dataType = BooleanType();
+}
+
+InSubqueryExpr::~InSubqueryExpr()
+{
+    delete value;
+    delete subqueryResult;
+}
+
+InSubqueryExpr::InSubqueryExpr(Expr *val, Expr *subResult, int32_t colIdx)
+{
+    dataType = BooleanType();
+    value = val;
+    subqueryResult = subResult;
+    subqueryColIdx = colIdx;
+}
+
+void InSubqueryExpr::Accept(ExprVisitor &visitor) const
+{
+    visitor.Visit(*this);
+}
+
+ExprType InSubqueryExpr::GetType() const
+{
+    return ExprType::IN_SUBQUERY_E;
+}
+
 BetweenExpr::BetweenExpr()
 {
     dataType = BooleanType();

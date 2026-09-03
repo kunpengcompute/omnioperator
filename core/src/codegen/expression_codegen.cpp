@@ -670,6 +670,145 @@ void ExpressionCodeGen::Visit(const InExpr &inExpr)
         builder->CreateLoad(llvmTypes->I1Type(), isNull));
 }
 
+void ExpressionCodeGen::Visit(const InSubqueryExpr &inSubExpr)
+{
+    // For row-level codegen, InSubqueryExpr is more complex because the subquery result
+    // is only known at runtime. We generate a loop that iterates through the subquery result.
+
+    auto baseType = inSubExpr.value->GetReturnTypeId();
+
+    // Visit the probe value expression
+    auto probeValue = VisitExpr(*(inSubExpr.value));
+    if (!probeValue->IsValidValue()) {
+        this->value = CreateInvalidCodeGenValue();
+        return;
+    }
+
+    // Visit the subquery result expression
+    auto subqueryValue = VisitExpr(*(inSubExpr.subqueryResult));
+    if (!subqueryValue->IsValidValue()) {
+        this->value = CreateInvalidCodeGenValue();
+        return;
+    }
+
+    // Result allocation
+    auto inArray = builder->CreateAlloca(Type::getInt1Ty(*context), nullptr, "in_subquery_res");
+    builder->CreateStore(llvmTypes->CreateConstantBool(false), inArray);
+    auto isNull = builder->CreateAlloca(Type::getInt1Ty(*context), nullptr, "in_subquery_null");
+
+    // If probe value is NULL, result is NULL
+    builder->CreateStore(probeValue->isNull, isNull);
+
+    // Create loop for iterating through subquery results
+    // subqueryRowCount is available from the execution context
+    Value *subqueryRowCount = this->codegenContext->subqueryRowCount;
+
+    // Loop variables
+    auto loopCounter = builder->CreateAlloca(llvmTypes->I32Type(), nullptr, "loop_counter");
+    builder->CreateStore(llvmTypes->CreateConstantInt(0), loopCounter);
+
+    auto hasNull = builder->CreateAlloca(Type::getInt1Ty(*context), nullptr, "has_null");
+    builder->CreateStore(llvmTypes->CreateConstantBool(false), hasNull);
+
+    // Create basic blocks for the loop
+    BasicBlock *loopCond = BasicBlock::Create(*context, "loop_cond");
+    BasicBlock *loopBody = BasicBlock::Create(*context, "loop_body");
+    BasicBlock *loopExit = BasicBlock::Create(*context, "loop_exit");
+
+    // Branch to loop condition
+    builder->CreateBr(loopCond);
+
+    // Loop condition: check if counter < subqueryRowCount and not yet matched
+    func->getBasicBlockList().push_back(loopCond);
+    builder->SetInsertPoint(loopCond);
+    Value *counterVal = builder->CreateLoad(llvmTypes->I32Type(), loopCounter);
+    Value *condLess = builder->CreateICmpSLT(counterVal, subqueryRowCount);
+    Value *notMatched = builder->CreateNot(builder->CreateLoad(llvmTypes->I1Type(), inArray));
+    Value *loopCondVal = builder->CreateAnd(condLess, notMatched);
+    builder->CreateCondBr(loopCondVal, loopBody, loopExit);
+
+    // Loop body: compare probe value with subquery value at current index
+    func->getBasicBlockList().push_back(loopBody);
+    builder->SetInsertPoint(loopBody);
+
+    // Get subquery value at current index
+    Value *idx = builder->CreateLoad(llvmTypes->I32Type(), loopCounter);
+    Value *subValPtr = builder->CreateGEP(subqueryValue->data->getType()->getPointerElementType(),
+        subqueryValue->data, idx);
+    Value *subVal = builder->CreateLoad(subValPtr->getType()->getPointerElementType(), subValPtr);
+
+    Value *subNullPtr = builder->CreateGEP(subqueryValue->isNull->getType()->getPointerElementType(),
+        subqueryValue->isNull, idx);
+    Value *subNull = builder->CreateLoad(llvmTypes->I1Type(), subNullPtr);
+
+    // Track if we've seen any NULL in subquery
+    Value *prevHasNull = builder->CreateLoad(llvmTypes->I1Type(), hasNull);
+    Value *newHasNull = builder->CreateOr(prevHasNull, subNull);
+    builder->CreateStore(newHasNull, hasNull);
+
+    // Compare values (only if subquery value is not NULL)
+    Value *compareValid = builder->CreateAnd(builder->CreateNot(subNull), builder->CreateNot(probeValue->isNull));
+
+    // Type-specific comparison
+    Value *isEqual = nullptr;
+    switch (baseType) {
+        case OMNI_INT:
+        case OMNI_DATE32:
+        case OMNI_LONG:
+        case OMNI_TIMESTAMP:
+        case OMNI_BOOLEAN:
+            isEqual = builder->CreateICmpEQ(probeValue->data, subVal);
+            break;
+        case OMNI_DOUBLE:
+        case OMNI_FLOAT:
+            isEqual = builder->CreateFCmpOEQ(probeValue->data, subVal);
+            break;
+        default:
+            // For string and decimal types, we would need more complex comparison
+            // For now, mark as unsupported
+            LogWarn("Unsupported data type in IN_SUBQUERY expr %d", baseType);
+            this->value = CreateInvalidCodeGenValue();
+            return;
+    }
+
+    Value *matchFound = builder->CreateAnd(compareValid, isEqual);
+
+    // If match found, set result to TRUE
+    BasicBlock *matchBlock = BasicBlock::Create(*context, "match_block");
+    BasicBlock *noMatchBlock = BasicBlock::Create(*context, "no_match_block");
+    func->getBasicBlockList().push_back(matchBlock);
+    func->getBasicBlockList().push_back(noMatchBlock);
+
+    builder->CreateCondBr(matchFound, matchBlock, noMatchBlock);
+
+    builder->SetInsertPoint(matchBlock);
+    builder->CreateStore(llvmTypes->CreateConstantBool(true), inArray);
+    builder->CreateBr(loopExit);
+
+    builder->SetInsertPoint(noMatchBlock);
+    // Increment counter
+    Value *newCounter = builder->CreateAdd(counterVal, llvmTypes->CreateConstantInt(1));
+    builder->CreateStore(newCounter, loopCounter);
+    builder->CreateBr(loopCond);
+
+    // Loop exit: determine final result
+    func->getBasicBlockList().push_back(loopExit);
+    builder->SetInsertPoint(loopExit);
+
+    // If not matched and (probe is NULL or subquery has NULL), result is NULL
+    Value *matched = builder->CreateLoad(llvmTypes->I1Type(), inArray);
+    Value *notMatchedFinal = builder->CreateNot(matched);
+    Value *probeIsNull = probeValue->isNull;
+    Value *subHasNull = builder->CreateLoad(llvmTypes->I1Type(), hasNull);
+    Value *shouldBeNull = builder->CreateAnd(notMatchedFinal,
+        builder->CreateOr(probeIsNull, subHasNull));
+    builder->CreateStore(shouldBeNull, isNull);
+
+    this->value = std::make_shared<CodeGenValue>(
+        builder->CreateLoad(llvmTypes->I1Type(), inArray),
+        builder->CreateLoad(llvmTypes->I1Type(), isNull));
+}
+
 void ExpressionCodeGen::Visit(const BetweenExpr &btExpr)
 {
     auto bExpr = const_cast<BetweenExpr *>(&btExpr);

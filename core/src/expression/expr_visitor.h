@@ -15,6 +15,7 @@ public:
     virtual void Visit(const omniruntime::expressions::UnaryExpr &e) = 0;
     virtual void Visit(const omniruntime::expressions::BinaryExpr &e) = 0;
     virtual void Visit(const omniruntime::expressions::InExpr &e) = 0;
+    virtual void Visit(const omniruntime::expressions::InSubqueryExpr &e) = 0;
     virtual void Visit(const omniruntime::expressions::BetweenExpr &e) = 0;
     virtual void Visit(const omniruntime::expressions::IfExpr &e) = 0;
     virtual void Visit(const omniruntime::expressions::CoalesceExpr &e) = 0;
