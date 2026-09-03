@@ -296,6 +296,11 @@ void RegisterStringFunctions(const std::string &prefix)
     RegisterFunction<LevenshteinDistanceFunction, int32_t, std::string_view, std::string_view, int64_t>(
         prefix + "levenshtein", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_LONG}, OMNI_INT);
 
+    // is_digit(string) -> bool
+    // Returns true if all characters are digits ('0'-'9'), false otherwise.
+    RegisterFunction<IsDigitFunction, bool, std::string_view>(
+        prefix + "is_digit", {OMNI_VARCHAR}, OMNI_BOOLEAN);
+
     RegisterFunction<Sha1HexStringFunction, std::string, std::string_view>(prefix + "sha1", {OMNI_VARBINARY}, OMNI_VARCHAR);
     RegisterFunction<Sha2HexStringFunction, std::string, std::string_view, int32_t>(prefix + "sha2", {OMNI_VARBINARY, OMNI_INT}, OMNI_VARCHAR);
 #ifdef OMNI_HAVE_ISAL_CRYPTO_MD5
