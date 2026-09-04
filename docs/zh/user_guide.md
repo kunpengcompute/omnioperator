@@ -1768,7 +1768,6 @@ Spark使用交互式页面命令行来执行SQL任务。如果需要确认Gluten
     |spark.gluten.sql.columnar.sortMergeJoin|true|是否启用列式SortMergeJoin，true表示启用，false表示关闭。|
     |spark.gluten.sql.columnar.takeOrderedAndProject|true|是否启用列式TakeOrderedAndProject，true表示启用，false表示关闭。|
     |spark.gluten.sql.columnar.shuffledHashJoin|true|是否启用列式ShuffledHashJoin，true表示启用，false表示关闭。|
-    |spark.gluten.sql.columnar.backend.omni.shuffleSpillBatchRowNum|10000|Shuffle输出的每个batch中包含数据的行数。请根据实际环境的内存调整参数，可以适当增大此参数，从而减少写入磁盘文件的批次，提升写入速度。|
     |spark.gluten.sql.columnar.backend.omni.shuffleTaskSpillMemoryThreshold|2147483648|Shuffle内存溢写上限，Shuffle内存上限达到缺省值时会发生溢写，单位：Byte。请根据实际环境的内存调整参数，可以适当增大此参数，从而减少Shuffle内存溢写到磁盘文件次数，减少磁盘IO操作。|
     |spark.gluten.sql.columnar.backend.omni.compressBlockSize|65536|Shuffle数据压缩块大小，单位：Byte。请根据实际环境的内存调整参数，建议采用缺省值。|
     |spark.gluten.sql.columnar.backend.omni.shuffleSpillBatchRowNum|10000|列式Shuffle初始化Buffer大小，单位：Byte。请根据实际环境的内存调整参数，可以适当增大此参数，从而减少Shuffle读写次数，提升性能。|
