@@ -2,6 +2,9 @@
 
 ## 最新消息<a name="ZH-CN_TOPIC_0000002547298195"></a>
 
+- \[2026.06.30\]：发布OmniOperator
+  2.2.0。新增ObjHashAggregateExec、InsertIntoHiveTable、GenerateExec、HiveTableScanExec支持；新增数据湖格式支持：Delta Lake
+  3.2.0、Hudi 0.15.0、Iceberg 1.5.0。
 - \[2026.03.30\]：发布OmniOperator 2.1.0。新增InsertIntoHadoopFsRelationCommand支持插入HDFS、WriteFile支持ORC写入、Window支持Array数据分段、FileSourceScanExec支持Array数据读取、LocalLimitExec支持Array数据截取；新增支持datediff、pmod、charTypeWriteSideCheck、least、concat_ws、get_json_object表达式。
 - \[2025.12.30\]：发布OmniOperator 2.0.0。新增适配Spark的适配层Gluten 1.3版本；SparkExtension新增支持concat_ws、regexp、regexp_replace、trim和floor表达式。
 - \[2025.06.30\]：发布OmniOperator 1.9.0。Spark 3.3.1新增Parquet格式，支持列式写入；新增支持操作系统CentOS 7.9。
@@ -28,7 +31,6 @@ OmniOperator算子加速为OmniRuntime的特性之一。OmniOperator算子加速
 - openLooKeng 1.6.1
 - Gluten 1.3
 
-
 ### 架构介绍<a name="ZH-CN_TOPIC_0000002547298205"></a>
 
 OmniOperator算子加速特性提供统一接口，供用户在分布式任务中调用。用户可将SQL任务提交至Spark集群，由集群管理节点进行任务调度，将多个子任务分发到对应的计算节点执行。
@@ -43,9 +45,11 @@ OmniOperator算子加速特性：
 OmniOperator算子加速特性仅在单个任务中被用户代码调用，不涉及与其他子任务交互。OmniOperator算子加速特性的软件架构如下图所示。
 
 **图 1** OmniOperator算子加速特性软件架构<a name="zh-cn_topic_0000002515301928_fig11886120161918"></a><a id="OmniOperator算子加速特性软件架构"></a>
-![](figures/OmniOperator算子加速特性软件架构.png "OmniOperator算子加速特性软件架构")
+
+![](docs/zh/figures/OmniOperator算子加速特性软件架构.png "OmniOperator算子加速特性软件架构")
 
 OmniOperator算子加速特性提供统一接口，供用户在分布式任务中调用。用户可将SQL任务提交至Spark集群，由集群管理节点进行任务调度，将多个子任务分发到对应的计算节点执行。
+
 ### 应用场景<a name="ZH-CN_TOPIC_0000002515818282"></a>
 
 OmniOperator算子加速特性主要应用于数据分析引擎场景，通过优化执行流程，提升数据分析性能。
@@ -58,18 +62,17 @@ OmniOperator算子加速特性已支持以下分析引擎：
 
 - Spark，适配框架：
     - SparkExtension，支持Spark 3.1.1、Spark 3.3.1、Spark 3.4.3、Spark 3.5.2。
-    - Gluten，仅支持Spark 3.3.1，且需在支持SVE指令集的鲲鹏服务器上运行。
+  - Gluten，仅支持Spark 3.3.1、Spark 3.4.3、Spark 3.5.2，且需在支持SVE指令集的鲲鹏服务器上运行。
 
 - Hive，适配框架：
     - HiveExtension，支持Hive 3.1.0。
 
 OmniOperator算子加速特性主要应用于数据分析引擎场景，通过优化执行流程，提升数据分析性能。
+
 ### 相关概念<a name="ZH-CN_TOPIC_0000002547299019"></a>
 
 - OmniVec：一种高效的堆外内存数据组织方式。它支持零副本读取数据，且没有序列化开销。
 - Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底层的物理算子，提升了计算速度。
-
-
 
 ## 约束与限制<a name="ZH-CN_TOPIC_0000002515665484"></a>
 
@@ -81,7 +84,6 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 - Double类型的浮点精度问题：在使用Double类型对SUM和AVG进行操作时，OmniOperator算子加速特性可能因计算过程中的顺序差异导致结果的不一致。如果要求结果的精确性较高，请考虑使用更高精度的数据类型（如Decimal）。
 - 算子Spill功能支持情况：当前Sort、Window和HashAgg等算子支持Spill功能，而BroadcastHashJoin、ShuffledHashJoin和SortMergeJoin等算子仍不支持该功能。请根据数据的特性和处理需求进行算子选择。
 
-
 ### Hive引擎约束<a name="ZH-CN_TOPIC_0000002515825400"></a>
 
 - 当前UDF插件仅支持Simple UDF，用于执行基于Hive UDF框架编写的UDF函数。
@@ -91,22 +93,29 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 - Hive引擎默认开启CBO优化，Hive OmniOperator算子加速当前仅支持开启CBO优化，不支持关闭，即不支持将hive.cbo.enable设置为false。
 - 当SQL中存在Alter字段属性或使用LOAD DATA导入parquet数据的场景时，Hive引擎建议使用开源版本的TableScan算子。
 
-    >![](public_sys-resources/icon-note.gif) **说明：** 
-    >-   Hive OmniOperator算子加速在表声明的数据存储结构和实际存储结构不匹配，且GroupBy和分桶的参数一致时，Hive开源版本可能出现Group By算子分组异常的问题。因此建议在建表时不采用分桶策略或使用load data local inpath的方式导入数据，以保障表声明的存储结构和实际存储结构相匹配。
-    >-   Hive OmniOperator算子加速在求和结果溢出时，可能会产生和引擎开源版本行为不相同的结果。OmniOperator算子加速返回null，使用户能够感知到运算发生溢出；开源版本Hive返回一个错误值，可能对用户造成误导。
-
+  > ![](docs/zh/public_sys-resources/icon-note.gif) **说明：**
+  >- Hive OmniOperator算子加速在表声明的数据存储结构和实际存储结构不匹配，且GroupBy和分桶的参数一致时，Hive开源版本可能出现Group
+     By算子分组异常的问题。因此建议在建表时不采用分桶策略或使用load data local inpath的方式导入数据，以保障表声明的存储结构和实际存储结构相匹配。
+  >- Hive OmniOperator算子加速在求和结果溢出时，可能会产生和引擎开源版本行为不相同的结果。OmniOperator算子加速返回null，使用户能够感知到运算发生溢出；开源版本Hive返回一个错误值，可能对用户造成误导。
 
 ### Spark引擎约束<a name="ZH-CN_TOPIC_0000002547265317"></a>
 
 当前Spark对接OmniOperator的适配层框架有SparkExtension和Gluten。
 
->![](public_sys-resources/icon-notice.gif) **须知：** 
->-   Spark版本支持：
->    -   SparkExtension支持Spark 3.1.1、Spark 3.3.1、Spark 3.4.3和Spark 3.5.2
->    -   Gluten仅支持Spark 3.3.1
->-   操作系统差异：
->    -   SparkExtension支持Centos7.9、openEuler 20.03和openEuler 22.03
->    -   Gluten支持openEuler 22.03
+> ![](docs/zh/public_sys-resources/icon-notice.gif) **须知：**
+>
+>- Spark版本支持：
+>
+
+- SparkExtension支持Spark 3.1.1、Spark 3.3.1、Spark 3.4.3和Spark 3.5.2
+
+> - Gluten仅支持Spark 3.3.1、Spark 3.4.3和Spark 3.5.2
+>- 操作系统差异：
+>
+
+- SparkExtension支持Centos 7.9、openEuler 20.03和openEuler 22.03
+
+> - Gluten支持openEuler 22.03和openEuler 24.03
 
 - 不同的负载所需内存配置不一样，例如TPC-DS 3TB数据集，SparkExtension推荐配置下，堆外内存配置不低于20GB，99条所有SQL可成功运行，运行过程中日志可能出现`MEM_CAP_EXCEEDED`但不影响最终功能，建议适当增大堆外内存配置。如果堆外内存配置过低，SQL执行结果可能不正确。
 - Spark OmniOperator算子加速支持`from_unixtime`和`unix_timestamp`表达式：
@@ -120,13 +129,11 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 - OmniOperator算子加速支持Spark 3.5.2中的`ROW_NUMBER`和rank函数计算，面对`dense_rank`场景时会算子回退。
 - Spark OmniOperator算子加速不支持Boolean类型数据比较运算符（<、<=、\>、\>=、!=、<\>、=、==和<=\>），同时不支持所有数据类型的比较运算符（<=\>），在执行过程中存在这些场景会导致算子回退属于正常现象。如果在大表Join操作中发生回退，由于行列转换开销较大，可能导致性能下降。在实际使用中，建议尽量避免此类场景，以减少回退带来的性能影响。
 
-
-
 ## 目录结构<a name="ZH-CN_TOPIC_0000002547258197"></a>
 
 项目全量目录层级介绍如下：
 
-```
+```text
 ├── docs                                                      # 项目文档目录
 │   ├── zh                                                   # 中文文档目录
 │   │   ├── figures                                          # 中文文档图片资源目录
@@ -158,11 +165,9 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 ├── README.md                                                 # 项目说明
 ```
 
-
 ## 版本说明<a name="ZH-CN_TOPIC_0000002515658372"></a>
 
 每个版本的特性变更详细信息，请参见《[版本说明书](./docs/zh/release_notes.md)》。
-
 
 ## 环境部署<a name="ZH-CN_TOPIC_0000002515658370"></a>
 
@@ -178,20 +183,16 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 |[常见问题](./docs/zh/faq.md)|提供OmniOperator安装、使用过程的常见问题和解决方法。|
 |视频课程：[OmniRuntime特性大揭秘](https://www.hikunpeng.com/document/video-detail/2849)|提供操作视频，帮助开发者在鲲鹏服务器上了解、使能OmniRuntime特性。|
 
-
-
 ## 安全声明<a name="ZH-CN_TOPIC_0000002547265321"></a>
 
 ### 防病毒软件例行检查<a name="ZH-CN_TOPIC_0000002547269013"></a>
 
-定期开展对集群和Spark组件的防病毒扫描，防病毒例行检查会帮助集群免受病毒、恶意代码、间谍软件以及恶意程序，降低系统瘫痪、信息泄露等风险。建议使用业界主流防病毒软件进行防病毒检查。
-
+定期开展对集群和Spark组件的防病毒扫描，防病毒例行检查会帮助集群免受病毒、恶意代码、间谍软件以及恶意程序的攻击，降低系统瘫痪、信息泄露等风险。建议使用业界主流防病毒软件进行防病毒检查。
 
 ### 日志控制<a name="ZH-CN_TOPIC_0000002515669178"></a>
 
 - 检查系统是否可以限制单个日志文件的大小。
 - 检查日志空间占满后，是否存在机制进行清理。
-
 
 ### 漏洞修复<a name="ZH-CN_TOPIC_0000002515829100"></a>
 
@@ -205,32 +206,31 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 - OpenSSL漏洞
 - 其他相关组件漏洞
 
-    以CVE-2021-37137为例。
+  以CVE-2021-37137为例。
 
-    漏洞描述：
+  漏洞描述：
 
-    Netty 4.1.17版本存在两个Content-Length的http header可能会发生混淆的风险通告，漏洞编号：CVE-2021-37137。
+  Netty 4.1.17版本存在两个Content-Length的http header可能会发生混淆的风险通告，漏洞编号：CVE-2021-37137。
 
-    本系统使用hdfs-ceph（version 3.2.0）服务作为存算分离的存储对象，它因依赖aws-java-sdk-bundle-1.11.375.jar而涉及该漏洞。建议用户及时更新漏洞补丁进行防护，以免遭受黑客攻击。
+  本系统使用hdfs-ceph（version 3.2.0）服务作为存算分离的存储对象，它因依赖aws-java-sdk-bundle-1.11.375.jar而涉及该漏洞。建议用户及时更新漏洞补丁进行防护，以免遭受黑客攻击。
 
-    影响范围：
+  影响范围：
 
-    Netty 4.1.68及以前版本。
+  Netty 4.1.68及以前版本。
 
-    修复建议：
+  修复建议：
 
-    目前厂商已发布升级补丁以修复漏洞，请参见[GitHub](https://github.com/netty/netty/security/advisories/GHSA-9vjp-v76f-g363)修复漏洞。
-
+  目前厂商已发布升级补丁以修复漏洞，请参见[GitHub](https://github.com/netty/netty/security/advisories/GHSA-9vjp-v76f-g363)
+  修复漏洞。
 
 ### SSH加固<a name="ZH-CN_TOPIC_0000002547309011"></a>
 
 在部署安装过程中，需要通过SSH连接服务器。由于root用户拥有最高权限，直接使用root用户登录服务器可能会存在安全风险。建议您使用普通用户登录服务器进行安装部署，并建议您通过配置禁止root用户SSH登录的选项，来提升系统安全性。操作步骤：
 
-用户登录系统后检查`/etc/ssh/sshd_config`配置项“PermitRootLogin“。
+用户登录系统后检查`/etc/ssh/sshd_config`配置项“PermitRootLogin”。
 
 - 如果显示no，说明禁止了root用户SSH登录。
 - 如果显示yes，说明需要修改PermitRootLogin为no。
-
 
 ### 公网地址声明<a name="ZH-CN_TOPIC_0000002547269015"></a>
 
@@ -276,8 +276,6 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 </tbody>
 </table>
 
-
-
 ## 免责声明<a name="ZH-CN_TOPIC_0000002515818292"></a>
 
 **致OmniOperator使用者**
@@ -294,13 +292,17 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 
 如果您不希望您的模型或数据集等信息在OmniOperator中被提及，或希望更新OmniOperator中有关的描述，请在GitCode提交issue，我们将根据您的issue要求删除或更新您相关描述。衷心感谢您对OmniOperator的理解和贡献。
 
+## 公网地址声明<a name="ZH-CN_TOPIC_0000002547298197"></a>
+
+声明：以下依赖库均使用Gitee镜像源，以提高国内下载速度。<br>
+fmt镜像地址：<https://gitee.com/mirrors/fmt.git><br>
+folly镜像地址：<https://gitee.com/mirrors/folly.git>
 
 ## License<a name="ZH-CN_TOPIC_0000002547298197"></a>
 
 OmniOperator产品的使用许可证，具体请参见[LICENSE](LICENSE)文件。
 
-OmniOperator docs目录下的文档适用CC-BY 4.0许可证，具体请参见[LICENSE](LICENSE)文件。
-
+OmniOperator docs目录下的文档适用CC-BY 4.0许可证，具体请参见[LICENSE](./docs/LICENSE)文件。
 
 ## 贡献声明<a name="ZH-CN_TOPIC_0000002547298203"></a>
 
@@ -317,21 +319,13 @@ OmniOperator docs目录下的文档适用CC-BY 4.0许可证，具体请参见[LI
     6. 新建Pull Request。
     7. 代码检视：您需要根据评审意见修改代码，并重新提交更新。此流程可能涉及多轮迭代。
     8. 当您的PR获得足够数量的检视者批准后，Committer会进行最终审核。
-    9. 审核和测试通过后，CI会将您的PR合并入到项目的主干分支。
-
-
+   9. 审核和测试通过后，CI会将您的PR合并到项目的主干分支。
 
 ## 建议与交流<a name="ZH-CN_TOPIC_0000002547258203"></a>
 
-欢迎大家为社区做贡献。如果有任何疑问或建议，请提交[Issues](https://gitcode.com/openeuler/OmniAdaptor)，我们会尽快回复。感谢您的支持。
-
+欢迎大家为社区做贡献。如果有任何疑问或建议，请提交[Issues](https://gitcode.com/openeuler/OmniOperator/issues)
+，我们会尽快回复。感谢您的支持。
 
 ## 致谢<a name="ZH-CN_TOPIC_0000002515658382"></a>
 
-OmniOperator由华为公司的下列部门联合贡献：
-
-鲲鹏计算Boostkit开发部
-
 感谢来自社区的每一个PR，欢迎贡献OmniOperator！
-
-

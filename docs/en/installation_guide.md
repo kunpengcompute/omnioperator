@@ -17,6 +17,7 @@ A server can function as a management node and a compute node at the same time. 
 ![](figures/networking-diagram.png "networking-diagram")
 
 A storage-compute coupled networking architecture is recommended for the subfeatures. Storage nodes and compute nodes are shared to maximize the computing acceleration effect in big data scenarios.
+
 ### Environment Requirements<a name="EN-US_TOPIC_0000002515622544"></a>
 
 Before installing OmniOperator, prepare the hardware and software environments to facilitate subsequent installation operations.
@@ -36,7 +37,6 @@ Before installing OmniOperator, prepare the hardware and software environments t
 |Drive|System drive: 1 x RAID 0 (1 x 1.2 TB SAS HDD)Data drive: 12 x RAID 0 (12 x 8 TB SATA HDD)|
 |RAID controller card|LSI SAS3508|
 
-
 **OS and Software Requirements<a name="section112321019581"></a>**
 
 [**Table 2**  OS and software requirements](#os_and_software_requirements) lists the OS and software requirements for each node in the cluster.
@@ -52,12 +52,13 @@ Before installing OmniOperator, prepare the hardware and software environments t
 |Hive|3.1.0|See Hive Deployment Guide (CentOS 7.6 & openEuler 20.03).|√|-|
 |Python|3.10.2 or later|None|√|√|
 
-
 >![](public_sys-resources/icon-note.gif) **NOTE:** 
->-   √: indicates that the item is required on the node.
->-   -: indicates that the item is not required on the node.
->-   If the preceding third-party software has vulnerabilities, fix the vulnerabilities based on official instructions.
->-   The preceding component versions may be different from those in the  _Deployment Guide_. The  _Deployment Guide_  is for reference only.
+>
+>- √: indicates that the item is required on the node.
+>- -: indicates that the item is not required on the node.
+>- If the preceding third-party software has vulnerabilities, fix the vulnerabilities based on official instructions.
+>- The preceding component versions may be different from those in the  _Deployment Guide_. The  _Deployment Guide_  is
+   for reference only.
 
 **Obtaining Software Packages<a name="section189181357102011"></a>**
 
@@ -65,10 +66,12 @@ Before installing OmniOperator, prepare the hardware and software environments t
 
 >![](public_sys-resources/icon-note.gif) **NOTE:** 
 >Use on Spark:
->-   SparkExtension requires installing the software packages numbered 1, 2 \(select the SparkExtension version according to the Spark version\), and 5.
->-   Gluten requires installing the software package numbered 4.
+>
+>- SparkExtension requires installing the software packages numbered 1, 2 \(select the SparkExtension version according
+   to the Spark version\), and 5.
+>- Gluten requires installing the software package numbered 4.
 >Use on Hive:
->-   HiveExtension requires installing the software packages numbered 1, 3, and 5.
+>- HiveExtension requires installing the software packages numbered 1, 3, and 5.
 
 **Table 3**  OmniOperator software packages<a id="omnioperator_software_obtains_columns"></a>
 <table border="1" cellpadding="6" cellspacing="0">
@@ -154,14 +157,42 @@ Before installing OmniOperator, prepare the hardware and software environments t
 
 After downloading a software package from the Kunpeng community, verify the software package to ensure that it is consistent with the original one on the website.
 
-Verify a software package as follows:
+> ![](./public_sys-resources/icon-note.gif) **NOTE：**
+>
+> This chapter uses boostkit-omniop-spark-3.5.2-2.0.0-aarch64.zip as an example.
 
-1. Obtain the digital certificate and software.
-2. Obtain the  [verification tool and guide](https://support.huawei.com/enterprise/en/tool/pgp-verify-TL1000000054).
-3. Verify the package integrity by following the procedure described in the  _OpenPGP Signature Verification Guide_  obtained from the URL.
+### 前提条件
 
-Before installing OmniOperator, prepare the hardware and software environments to facilitate subsequent installation operations.
+Before verifying the integrity of the release package, prepare the following files:
 
+- ZIP compressed file: boostkit-omniop-spark-3.5.2-2.0.0-aarch64.zip.
+
+- Verification file: Copy and save the SHA256 hash value corresponding to the Blue Zone code repository archive for
+  integrity verification.
+
+### Procedures
+
+To verify the file integrity, perform the following operations：
+
+1. Calculate the SHA256 checksum of the file. The Linux command is as follows：
+
+    ```sh
+    sha256sum boostkit-omniop-spark-3.5.2-2.0.0-aarch64.zip
+    ```
+
+   The Windows command is as follows:
+
+    ```sh
+    certutil -hashfile boostkit-omniop-spark-3.5.2-2.0.0-aarch64.zip SHA256
+    ```
+
+   After the command is executed, the checksum value is output.
+
+2. Compare the checksum value calculated in step 1 with the SHA256 value copied from the Blue Zone code repository to
+   check if they match.
+
+   If the checksum value matches, it indicates that the ZIP archive file is intact. If the checksum value does not
+   match, it can be confirmed that the file integrity has been compromised, and the file needs to be re-downloaded.
 
 ## Installing the Feature<a name="EN-US_TOPIC_0000002515782478"></a>
 
@@ -172,8 +203,11 @@ This section describes the requirements for installing dependency packages and c
 - If you choose to perform the installation by compiling the source code, before compiling the source code, install GCC/G++, Autoconf, and CMake on each node.  [**Table  1**  Software required for source code compilation](#software)  lists the version requirements.
 
     >![](public_sys-resources/icon-note.gif) **NOTE:** 
-    >-   LLVM and Jemalloc can run properly only after being compiled on the OS. If you want to run them on CentOS, compile them on CentOS. If you want to run them on openEuler 20.03 LTS SP1 or openEuler 22.03 LTS SP1, compile them on openEuler 20.03 LTS SP1 or openEuler 22.03 LTS SP1.
-    >-   Gluten depends on the ABSL library and can run properly only after it is compiled and installed on the current OS \(openEuler 22.03 SP1\).
+  >- LLVM and Jemalloc can run properly only after being compiled on the OS. If you want to run them on CentOS, compile
+     them on CentOS. If you want to run them on openEuler 20.03 LTS SP1 or openEuler 22.03 LTS SP1, compile them on
+     openEuler 20.03 LTS SP1 or openEuler 22.03 LTS SP1.
+  >- Gluten depends on the ABSL library and can run properly only after it is compiled and installed on the current OS
+     \(openEuler 22.03 SP1\).
 
     **Table  1**  Software required for source code compilation<a id="software"></a>
 
@@ -183,7 +217,6 @@ This section describes the requirements for installing dependency packages and c
 |GCC/G++|openEuler 22.03: 10.3.0|[Link](https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-10.3.0/gcc-10.3.0.tar.gz)|
 |Autoconf|2.69|[Link](https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz)|
 |CMake|3.20.5|[Link](https://github.com/Kitware/CMake/releases/download/v3.20.5/cmake-3.20.5-linux-aarch64.tar.gz)|
-
 
 1. Install GCC/G++. The following uses version 7.3.0 as an example.
     1. Check whether the GCC/G++ version is the target version.
@@ -260,6 +293,7 @@ This section describes the requirements for installing dependency packages and c
 - Before configuring environment variables, check whether the environment variable  **LD\_LIBRARY\_PATH**  exists in your environment. If the environment variable does not exist, you do not need to add  **$LD\_LIBRARY\_PATH**  during configuration, so as to prevent irrelevant content from being introduced to the current path. Otherwise, security problems may occur. All environment variable export operations in this document comply with this principle. Take  **LD\_LIBRARY\_PATH**  as an example. If  **LD\_LIBRARY\_PATH**  already exists in your environment, use  **export LD\_LIBRARY\_PATH=_$LD\_LIBRARY\_PATH:/xxx_**. Otherwise, use  **export LD\_LIBRARY\_PATH=_/xxx_**.
 
 This section describes the requirements for installing dependency packages and configuring environment variables on each node before installing OmniOperator.
+
 ### Installing Dependencies<a name="EN-US_TOPIC_0000002515782474"></a>
 
 When installing OmniOperator locally, install the LLVM and jemalloc dependency packages on the management node to combine OmniOperator and Spark.
@@ -271,8 +305,10 @@ In the Spark on Yarn scenario, use the  **--archives**  parameter of Spark to si
 **Installing LLVM and jemalloc**
 
 >![](public_sys-resources/icon-note.gif) **NOTE:** 
->-   Select the dependency package based on your OS type. The following uses openEuler 22.03 as an example and the dependency package is  **Dependency\_library\_openeuler22.03.zip**.
->-   The  **/opt/omni-operator**  and  **/opt/omni-operator/lib**  directories can be customized.
+>
+>- Select the dependency package based on your OS type. The following uses openEuler 22.03 as an example and the
+   dependency package is  **Dependency\_library\_openeuler22.03.zip**.
+>- The  **/opt/omni-operator**  and  **/opt/omni-operator/lib**  directories can be customized.
 
 1. Create an  **/opt/omni-operator/**  directory on the management node as the root directory for installing OmniOperator. Then go to the directory.
 
@@ -292,6 +328,8 @@ In the Spark on Yarn scenario, use the  **--archives**  parameter of Spark to si
 
     >![](public_sys-resources/icon-notice.gif) **NOTICE:** 
     >If LLVM and jemalloc have been installed in the environment, delete the existing  **libLLVM-15.so**  and  **libjemalloc.so.2**  files before running the copy command.
+
+>
     >```
     >rm -rf /opt/omni-operator/lib/libjemalloc.so.2
     >rm -rf /opt/omni-operator/lib/libLLVM-15.so
@@ -309,8 +347,10 @@ In the Spark on Yarn scenario, use the  **--archives**  parameter of Spark to si
 **Installing LLVM and jemalloc**
 
 >![](public_sys-resources/icon-note.gif) **NOTE:** 
->-   The precompiled SO files of the ABSL library are not provided for Gluten. Therefore, you need to manually compile and install the SO files.
->-   The  **/opt/omni-operator**  and  **/opt/omni-operator/lib**  directories can be customized.
+>
+>- The precompiled SO files of the ABSL library are not provided for Gluten. Therefore, you need to manually compile and
+   install the SO files.
+>- The  **/opt/omni-operator**  and  **/opt/omni-operator/lib**  directories can be customized.
 
 1. Create an  **/opt/omni-operator/**  directory on the management node as the root directory for installing OmniOperator. Then go to the directory.
 
@@ -330,6 +370,8 @@ In the Spark on Yarn scenario, use the  **--archives**  parameter of Spark to si
 
     >![](public_sys-resources/icon-notice.gif) **NOTICE:** 
     >If LLVM and jemalloc have been installed in the environment, delete the existing  **libLLVM-15.so**  and  **libjemalloc.so.2**  files before running the copy command.
+
+>
     >```
     >rm -rf /opt/omni-operator/lib/libjemalloc.so.2
     >rm -rf /opt/omni-operator/lib/libLLVM-15.so
@@ -431,13 +473,19 @@ In the Spark on Yarn scenario, use the  **--archives**  parameter of Spark to si
     ```
 
 When installing OmniOperator locally, install the LLVM and jemalloc dependency packages on the management node to combine OmniOperator and Spark.
+
 ### Installing OmniOperator<a name="EN-US_TOPIC_0000002515622558"></a>
 
 Install OmniOperator on the management and compute nodes and set environment variables. If OmniOperator is enabled for Gluten, skip this section.
 
 >![](public_sys-resources/icon-note.gif) **NOTE:** 
->-   **BoostKit-omniop\_2.0.0.zip**  can be obtained by extracting  **BoostKit-omniruntime\_2.0.0.zip**. The  **BoostKit-omniop\_2.0.0.zip**  package contains the  **boostkit-omniop-operator-2.0.0-aarch64-openeuler.tar.gz**  and  **boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz**  packages, which are used for openEuler and CentOS, respectively. The following uses openEuler as an example.
->-   To install OmniOperator on CentOS, replace  **boostkit-omniop-operator-2.0.0-aarch64-openeuler.tar.gz**  in the following commands with  **boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz**.
+>
+>- **BoostKit-omniop\_2.0.0.zip**  can be obtained by extracting  **BoostKit-omniruntime\_2.0.0.zip**. The  *
+   *BoostKit-omniop\_2.0.0.zip**  package contains the  **boostkit-omniop-operator-2.0.0-aarch64-openeuler.tar.gz**  and
+   **boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz**  packages, which are used for openEuler and CentOS,
+   respectively. The following uses openEuler as an example.
+>- To install OmniOperator on CentOS, replace  **boostkit-omniop-operator-2.0.0-aarch64-openeuler.tar.gz**  in the
+   following commands with  **boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz**.
 
 1. Upload OmniOperator packages obtained in [**Table 3**  OmniOperator software packages](#omnioperator_software_obtains_columns) to the  **/opt/omni-operator/**  directory on the management and compute nodes.
 2. Go to the  **/opt/omni-operator/**  directory and extract the packages.
@@ -486,6 +534,7 @@ Install OmniOperator on the management and compute nodes and set environment var
     ```
 
 Install OmniOperator on the management and compute nodes and set environment variables. If OmniOperator is enabled for Gluten, skip this section.
+
 ### \(Optional\) Installing the UDF Plugin<a name="EN-US_TOPIC_0000002515622536"></a>
 
 You need to perform the operations described in this section only when your service scenario involves user-defined functions \(UDFs\). Perform the following plugin operation operations only on the management node. UDFs cannot be accelerated when OmniOperator is enabled for Gluten.
@@ -595,5 +644,3 @@ After installing row-by-row processing on the management node, modify the  **/op
 3. Press  **Esc**, type  **:wq!**, and press  **Enter**  to save the file and exit.
 
 You need to perform the operations described in this section only when your service scenario involves user-defined functions \(UDFs\). Perform the following plugin operation operations only on the management node. UDFs cannot be accelerated when OmniOperator is enabled for Gluten.
-
-
