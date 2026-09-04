@@ -26,15 +26,14 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 
 **表 1** 硬件要求<a id="hardware_requirements"></a>
 
-|硬件环境|管理/计算/存储节点|
-|--|--|
-|处理器|鲲鹏920系列处理器鲲鹏950处理器只有支持SVE（Scalable Vector Extension，可扩展向量指令集）指令集的服务器支持在Gluten上使能OmniOperator。您可以通过**cat /proc/cpuinfo | grep sve | head -n 1**查询是否支持SVE指令集，如果有输出则表示支持。|
-|内存大小|384GB（12 * 32GB）|
-|内存频率|2666MHz|
-|网络|业务网络10GE管理网络1GE|
-|硬盘|系统盘：1 * RAID 0（1 * 1.2TB SAS HDD）数据盘：12 * RAID 0（12 * 8TB SATA HDD）|
-|RAID控制卡|LSI SAS3508|
-
+| 硬件环境    | 管理/计算/存储节点                                                                                                            |
+|---------|-----------------------------------------------------------------------------------------------------------------------|
+| 处理器     | 鲲鹏920系列处理器鲲鹏950处理器只有支持SVE（Scalable Vector Extension，可扩展向量指令集）指令集的服务器支持在Gluten上使能OmniOperator。您可以通过**cat /proc/cpuinfo | grep sve | head -n 1**查询是否支持SVE指令集，如果有输出则表示支持。|
+| 内存大小    | 384GB（12 * 32GB）                                                                                                      |
+| 内存频率    | 2666MHz                                                                                                               |
+| 网络      | 业务网络10GE管理网络1GE                                                                                                       |
+| 硬盘      | 系统盘：1 *RAID 0（1* 1.2TB SAS HDD）数据盘：12 *RAID 0（12* 8TB SATA HDD）                                                       |
+| RAID控制卡 | LSI SAS3508                                                                                                           |
 
 **操作系统和软件要求<a name="section112321019581"></a>**
 
@@ -51,12 +50,12 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 |Hive| [3.1.0](https://archive.apache.org/dist/hive/hive-3.1.0/apache-hive-3.1.0-bin.tar.gz)                                                | 部署指南请参见《[Hive部署指南（CentOS 7.6&openEuler 20.03）](https://www.hikunpeng.com/document/detail/zh/kunpengbds/ecosystemEnable/Hive/kunpenghive_04_0001.html)》。                                                 |√|-|
 |Python| [3.10.2及以上](https://www.python.org/ftp/python/)                                            | 无特殊要求。                                                                                             |√|√|
 
-
 >![](public_sys-resources/icon-note.gif) **说明：** 
->-   √：表示对应节点需要安装该项目。
->-   -：表示对应节点不需要安装该项目。
->-   以上第三方依赖版本如有漏洞请根据官方说明进行漏洞修复。
->-   以上组件版本，可能和部署指南中的组件版本不一致，部署指南仅供部署参考。
+>
+>- √：表示对应节点需要安装该项目。
+>- -：表示对应节点不需要安装该项目。
+>- 以上第三方依赖版本如有漏洞请根据官方说明进行漏洞修复。
+>- 以上组件版本，可能和部署指南中的组件版本不一致，部署指南仅供部署参考。
 
 **软件安装包获取<a name="section189181357102011"></a>**
 
@@ -65,15 +64,15 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 >![](public_sys-resources/icon-note.gif) **说明：** 
 >
 >在Spark引擎上的应用：
->-   SparkExtension场景涉及安装的软件包为序号1、2（根据Spark版本选择对应的SparkExtension版本）和5。
->-   Gluten场景涉及安装的软件包为序号4。
+>
+>- SparkExtension场景涉及安装的软件包为序号1、2（根据Spark版本选择对应的SparkExtension版本）和5。
+>- Gluten场景涉及安装的软件包为序号4。
 >
 >在Hive引擎上的应用：
 >
->-   HiveExtension场景涉及安装的软件包为序号1、3和5。
+>- HiveExtension场景涉及安装的软件包为序号1、3和5。
 
 **表 3** OmniOperator算子加速软件获取列表<a id="omnioperator_software_obtains_columns"></a>
-
 
 <table border="1" cellpadding="6" cellspacing="0">
   <thead>
@@ -154,17 +153,43 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
   </tbody>
 </table>  
                                                            
-
 **软件安装包完整性校验<a name="section16501429204018"></a>**
 
 从鲲鹏社区获取的软件安装包，下载软件安装包后需要校验软件安装包，确保与网站上的原始软件安装包一致。
 
-校验方法：
+> ![](./public_sys-resources/icon-note.gif) **说明：**
+>
+> 本章节以boostkit-omniop-spark-3.5.2-2.0.0-aarch64.zip为例。
 
-1. 获取软件数字证书和软件安装包。
-2. 获取[校验工具和校验方法](https://support.huawei.com/enterprise/zh/tool/pgp-verify-TL1000000054)。
-3. 参见上述链接下载的《OpenPGP签名验证指南》进行软件安装包完整性检查。
+### 前提条件
 
+在校验发布包完整性之前，需要准备如下文件：
+
+- zip压缩包文件：boostkit-omniop-spark-3.5.2-2.0.0-aarch64.zip。
+
+- 校验文件：蓝区代码仓压缩包对应完整性SHA256校验值，复制保存对应生成的SHA256校验值。
+
+### 操作指导
+
+文件完整性校验操作步骤如下：
+
+1. 计算文件的sha256校验值。linux执行命令如下：
+
+    ```sh
+    sha256sum boostkit-omniop-spark-3.5.2-2.0.0-aarch64.zip
+    ```
+
+   windows执行命令如下：
+
+    ```sh
+    certutil -hashfile boostkit-omniop-spark-3.5.2-2.0.0-aarch64.zip SHA256
+    ```
+
+   命令执行完成后，输出校验值。
+
+2. 对比步骤 1 计算的校验值与蓝区代码仓复制的 SHA256 值是否一致
+
+   如果校验值一致说明zip压缩包文件完整，如果校验值不一致则可以确认文件完整性已被破坏，需要重新获取。
 
 ## 安装特性<a name="ZH-CN_TOPIC_0000002515782478"></a>
 
@@ -175,8 +200,9 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 - 若使用源码编译安装方式，在源码编译前，需在各节点安装GCC/G++、Autoconf以及CMake，其版本要求请参见[**表 1** 源码编译前需要配置的软件](#源码编译前需要配置的软件)。
 
     >![](public_sys-resources/icon-note.gif) **说明：** 
-    >-   LLVM和jemalloc需要在对应操作系统上编译才能正常运行，如需在CentOS上运行则需要在CentOS上编译；如需在openEuler上运行，需在以下两个版本的操作系统（openEuler 20.03 LTS SP1和openEuler 22.03 LTS SP1）中选择对应的版本进行编译。
-    >-   Gluten运行依赖ABSL库，需要在当前运行系统（openEuler 22.03 SP1）上编译安装才能正常运行。
+  >- LLVM和jemalloc需要在对应操作系统上编译才能正常运行，如需在CentOS上运行则需要在CentOS上编译；如需在openEuler上运行，需在以下两个版本的操作系统（openEuler
+     20.03 LTS SP1和openEuler 22.03 LTS SP1）中选择对应的版本进行编译。
+  >- Gluten运行依赖ABSL库，需要在当前运行系统（openEuler 22.03 SP1）上编译安装才能正常运行。
 
     **表 1** 源码编译前需要配置的软件<a id="源码编译前需要配置的软件"></a>
 
@@ -210,7 +236,6 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
     </tr>
   </tbody>
 </table>
-
 
 1. 编译安装GCC/G++。以7.3.0版本为例：
    1. 查看GCC/G++版本，确认是否为目标版本。
@@ -297,8 +322,9 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 **安装LLVM和jemalloc**
 
 >![](public_sys-resources/icon-note.gif) **说明：** 
->-   根据OS类型选择对应的依赖包，以下安装以openEuler 22.03系统为例，对应`Dependency_library_openeuler22.03.zip`。
->-   `/opt/omni-operator`及`/opt/omni-operator/lib`目录用户可自行定义。
+>
+>- 根据OS类型选择对应的依赖包，以下安装以openEuler 22.03系统为例，对应`Dependency_library_openeuler22.03.zip`。
+>- `/opt/omni-operator`及`/opt/omni-operator/lib`目录用户可自行定义。
 
 1. 在管理节点创建`/opt/omni-operator/`目录作为安装OmniOperator算子加速的根目录，进入该目录。
 
@@ -317,6 +343,8 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 
     >![](public_sys-resources/icon-notice.gif) **须知：** 
     >如果环境中安装过LLVM和jemalloc，需要先删除旧的libLLVM-15.so、libjemalloc.so.2文件，再执行复制命令。
+
+>
     >```
     >rm -rf /opt/omni-operator/lib/libjemalloc.so.2
     >rm -rf /opt/omni-operator/lib/libLLVM-15.so
@@ -334,8 +362,9 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 **安装LLVM和jemalloc**
 
 >![](public_sys-resources/icon-note.gif) **说明：** 
->-   Gluten场景中未提供ABSL库的预编译so文件，因此需要用户手动编译安装。
->-   `/opt/omni-operator`及`/opt/omni-operator/lib`目录用户可自行定义。
+>
+>- Gluten场景中未提供ABSL库的预编译so文件，因此需要用户手动编译安装。
+>- `/opt/omni-operator`及`/opt/omni-operator/lib`目录用户可自行定义。
 
 1. 在管理节点创建`/opt/omni-operator/`目录作为安装OmniOperator算子加速的根目录，进入该目录。
 
@@ -355,6 +384,8 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 
     >![](public_sys-resources/icon-notice.gif) **须知：** 
     >如果环境中安装过LLVM和jemalloc，需要先删除旧的libLLVM-15.so、libjemalloc.so.2文件，再执行复制命令。
+
+>
     >```
     >rm -rf /opt/omni-operator/lib/libjemalloc.so.2
     >rm -rf /opt/omni-operator/lib/libLLVM-15.so
@@ -460,8 +491,13 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 在管理节点和计算节点安装OmniOperator并设置相应的环境变量。如果是在Gluten上使能OmniOperator，则跳过本章节。
 
 >![](public_sys-resources/icon-note.gif) **说明：** 
->-   `BoostKit-omniop_2.0.0.zip`可通过`BoostKit-omniruntime_2.0.0.zip`解压获得。`BoostKit-omniop_2.0.0.zip`中有`boostkit-omniop-operator-2.0.0-aarch64-openeuler.tar.gz`和`boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz`两个包，分别适用于openEuler和CentOS操作系统，下文以openEuler为例进行说明。
->-   如果需要在CentOS系统安装OmniOperator算子加速，把以下命令参数中的`boostkit-omniop-operator-2.0.0-aarch64-openeuler.tar.gz`替换为`boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz`即可。
+>
+>- `BoostKit-omniop_2.0.0.zip`可通过`BoostKit-omniruntime_2.0.0.zip`解压获得。`BoostKit-omniop_2.0.0.zip`中有
+   `boostkit-omniop-operator-2.0.0-aarch64-openeuler.tar.gz`和`boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz`
+   两个包，分别适用于openEuler和CentOS操作系统，下文以openEuler为例进行说明。
+>- 如果需要在CentOS系统安装OmniOperator算子加速，把以下命令参数中的
+   `boostkit-omniop-operator-2.0.0-aarch64-openeuler.tar.gz`替换为`boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz`
+   即可。
 
 1. 将[**表 3** OmniOperator算子加速软件获取列表](#omnioperator_software_obtains_columns)中OmniOperator算子加速相关压缩文件上传到管理节点和计算节点的`/opt/omni-operator/`目录。
 2. 进入`/opt/omni-operator/`目录解压OmniOperator算子加速相关文件。
