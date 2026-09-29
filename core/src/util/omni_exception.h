@@ -29,6 +29,14 @@ public:
         return elaborateMessage.c_str();
     }
 
+    // Adds execution context at the boundary where the exception escapes a pipeline.
+    // The exception is often caught as const before it is propagated through JNI.
+    void SetPipelineContext(const std::string &context) const
+    {
+        pipelineContext = context;
+        elaborateMessage.clear();
+    }
+
     bool isUserError() const
     {
         return errorCode == "USER_ERROR";
@@ -37,13 +45,18 @@ public:
 private:
     void FillMessage() const
     {
+        elaborateMessage.clear();
         elaborateMessage += "Error Code: " + errorCode + "\n";
         elaborateMessage += "Reason: " + message + "\n";
+        if (!pipelineContext.empty()) {
+            elaborateMessage += pipelineContext + "\n";
+        }
         elaborateMessage += "Stack: " + TraceUtil::GetStack() + "\n";
     }
 
     std::string errorCode;
     std::string message;
+    mutable std::string pipelineContext;
     mutable std::string elaborateMessage;
 };
 

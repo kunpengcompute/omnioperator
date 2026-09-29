@@ -17,11 +17,42 @@
 #include "driver.h"
 #include "codegen/time_util.h"
 #include "util/debug.h"
+#include "util/omni_exception.h"
 #include "vector/vector_helper.h"
 #include <memory>
+#include <sstream>
 
 namespace omniruntime::compute {
 std::atomic_uint64_t BlockingState::numBlockdDrivers_{0};
+
+namespace {
+std::string BuildPipelineOperatorChain(
+    const std::vector<std::shared_ptr<omniruntime::op::Operator>>& operators,
+    const OpCallStatus& callStatus,
+    size_t currentOperatorId)
+{
+    const auto activeCall = callStatus();
+    std::ostringstream pipeline;
+    pipeline << "Pipeline operator chain (currentOperatorId=" << currentOperatorId
+             << ", activeOperatorId=" << activeCall.opId
+             << ", activeMethod=" << activeCall.method << "): ";
+    for (size_t i = 0; i < operators.size(); ++i) {
+        if (i != 0) {
+            pipeline << " -> ";
+        }
+        const auto& op = operators[i];
+        if (op == nullptr) {
+            pipeline << "[" << i << ":released]";
+            continue;
+        }
+        pipeline << "[" << i
+                 << ":type=" << op->operatorType()
+                 << ",planNodeId=" << op->planNodeId()
+                 << ",operatorId=" << op->GetOperatorId() << "]";
+    }
+    return pipeline.str();
+}
+}
 
 BlockingState::BlockingState(
     std::shared_ptr<OmniDriver> driver,
@@ -263,7 +294,14 @@ StopReason OmniDriver::RunInternal(
                 }
             }
         }
+    } catch (const omniruntime::exception::OmniException &e) {
+        const auto pipeline = BuildPipelineOperatorChain(operators_, opCallStatus_, curOperatorId_);
+        e.SetPipelineContext(pipeline);
+        LogError("OmniDriver pipeline failure: %s", e.what());
+        throw;
     } catch (const std::exception &e) {
+        const auto pipeline = BuildPipelineOperatorChain(operators_, opCallStatus_, curOperatorId_);
+        LogError("OmniDriver pipeline failure: %s\n%s", e.what(), pipeline.c_str());
         throw std::runtime_error(e.what());
     }
 }
