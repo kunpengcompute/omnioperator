@@ -59,6 +59,17 @@ public:
 
     /// Join spilling flag, only applies if "spill_enabled" flag is set.
     static constexpr const char *kJoinSpillEnabled = "join_spill_enabled";
+    /// Compatibility flag for enabling pool reclaim on the join handoff path.
+    /// The target's single-partition handoff remains the join spill protocol.
+    static constexpr const char *kJoinSpillHandoffEnabled = "join_spill_handoff_enabled";
+
+    /// Register HashBuilder with OmniTaskMemoryPool and allow pool-driven reclaim(). Default false.
+    /// Orthogonal to the EOB debug force below.
+    static constexpr const char *kPassiveReclaimEnabled = "passive_reclaim_enabled";
+
+    /// Debug-only compatibility path: spill the resident build at EOB (first GetOutput after
+    /// noMoreInput) before the first handoff. Default false; does not enable pool registration.
+    static constexpr const char *kForceBuildGroupSpillAfterNoMoreInput = "force_build_group_spill_after_no_more_input";
 
     /// OrderBy spilling flag, only applies if "spill_enabled" flag is set.
     static constexpr const char *kOrderBySpillEnabled = "order_by_spill_enabled";
@@ -76,6 +87,10 @@ public:
 
     /// TopNRowNumber spilling flag, only applies if "spill_enabled" flag is set.
     static constexpr const char *kTopNRowNumberSpillEnabled = "topn_row_number_spill_enabled";
+
+    /// The max row numbers to fill and spill for each spill run (shared spill knob).
+    /// HashJoin ignores this for triggering; reclaim / EOB force owns join spill.
+    static constexpr const char *kMaxSpillRunRows = "max_spill_run_rows";
 
     /// The max spill bytes limit set for each query. This is used to cap the
     /// storage used for spilling. If it is zero, then there is no limit and
@@ -241,6 +256,12 @@ public:
         return get<uint64_t>(KCompressBlockSize, 1048);
     }
 
+    uint64_t maxSpillRunRows() const
+    {
+        static constexpr uint64_t kDefault = 12UL << 20;
+        return get<uint64_t>(kMaxSpillRunRows, kDefault);
+    }
+
     uint64_t maxSpillBytes() const
     {
         static constexpr uint64_t kDefault = 100UL << 30;
@@ -271,8 +292,47 @@ public:
 
     bool joinSpillEnabled() const
     {
-        // Same default as aggregationSpillEnabled: on unless Spark conf turns it off.
         return get<bool>(kJoinSpillEnabled, true);
+    }
+    /// Target join spill handoff remains enabled by default; the pool layer adds
+    /// passive reclaim without changing the existing restore protocol.
+    bool joinSpillHandoffEnabled() const
+    {
+        return get<bool>(kJoinSpillHandoffEnabled, true);
+    }
+
+    /// Pool-driven passive reclaim. Default false.
+    bool passiveReclaimEnabled() const
+    {
+        return get<bool>(kPassiveReclaimEnabled, false);
+    }
+
+    /// Debug-only EOB group spill. Default false.
+    bool forceBuildGroupSpillAfterNoMoreInput() const
+    {
+        return get<bool>(kForceBuildGroupSpillAfterNoMoreInput, false);
+    }
+
+    bool joinSpillEffective() const
+    {
+        return spillEnabled() && joinSpillEnabled();
+    }
+
+    bool joinSpillHandoffEffective() const
+    {
+        return joinSpillEffective() && joinSpillHandoffEnabled();
+    }
+
+    bool passiveReclaimEffective() const
+    {
+        // Pool reclaim publishes Path A at EOB and therefore requires the handoff protocol.
+        return joinSpillHandoffEffective() && passiveReclaimEnabled();
+    }
+
+    bool forceBuildGroupSpillEffective() const
+    {
+        // The EOB debug spill publishes Path A and therefore requires the handoff protocol.
+        return joinSpillHandoffEffective() && forceBuildGroupSpillAfterNoMoreInput();
     }
 
     bool orderBySpillEnabled() const

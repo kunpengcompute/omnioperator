@@ -148,7 +148,7 @@ public:
 };
 
 #ifdef COVERAGE
-        static omniruntime::mem::SimpleMemoryPool g_memoryPoolInstance;
+        static omniruntime::mem::JemallocMemoryPool g_memoryPoolInstance;
 #else
         static omniruntime::mem::JemallocMemoryPool g_memoryPoolInstance;
 #endif

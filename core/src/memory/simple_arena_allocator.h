@@ -15,8 +15,14 @@ namespace mem {
 // such as when dealing with types such as varchar/decimal and so on.
 class SimpleArenaAllocator {
 public:
-    explicit SimpleArenaAllocator(int64_t minChunkSize = 4096, Allocator *allocator = Allocator::GetAllocator(),
+    // Pool-bound ctor. The default parameter has been REMOVED; all callers must
+    // supply a pool-bound Allocator* from their ExecutionContext. Bridge callers
+    // (e.g., ExecutionContext member init) pass the legacy singleton allocator
+    // until it is replaced with the pool-bound one.
+    explicit SimpleArenaAllocator(int64_t minChunkSize, Allocator *allocator,
         uint32_t growthFactor = 2, int64_t linearGrowthThreshold = 512 * 1024)
+        // POOL-BOUND: default allocator is process-global. Join/HashAgg task observability requires
+        // passing OmniTaskMemoryPool::getBoundAllocator() (or equivalent) at construction.
         : minChunkSize(minChunkSize),
           totalBytes(0),
           usedBytes(0),
@@ -27,6 +33,12 @@ public:
           growthFactor(growthFactor),
           linearGrowthThreshold(linearGrowthThreshold)
     {}
+
+    // Default ctor + SetAllocator() late-bind pattern is RETIRED.
+    // The only documented caller of the deferred-init pattern was
+    // `gluten/cpp-omni/src/shuffle/splitter.cpp:1409-1425` which did
+    // `partition_arena_.resize(N)` then `partition_arena_[pid].SetAllocator(boundAlloc)`.
+    // That has been refactored to `reserve + emplace_back(minChunkSize, allocator)`.
 
     ~SimpleArenaAllocator()
     {
@@ -145,6 +157,17 @@ public:
     ALWAYS_INLINE uint64_t TotalBytes()
     {
         return totalBytes;
+    }
+
+    // Reset() intentionally retains the first chunk for reuse. Only later
+    // chunks produce a real pool decrease and may be advertised to the task
+    // reclaimer.
+    ALWAYS_INLINE uint64_t ReclaimableBytesOnReset() const
+    {
+        if (chunks.size() <= 1) {
+            return 0;
+        }
+        return totalBytes - chunks.front()->GetSizeInBytes();
     }
 
     ALWAYS_INLINE uint64_t UsedBytes()

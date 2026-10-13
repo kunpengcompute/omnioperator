@@ -52,6 +52,17 @@ endif ()
     find_package(folly REQUIRED)
     find_package(gflags REQUIRED)
 
+    # Fast, isolated cache ownership check. The regular omtest target also
+    # contains this source, but linking it requires every unrelated test suite.
+    add_executable(bhjCacheTest EXCLUDE_FROM_ALL
+        operator/broadcast_hash_table_cache_test.cpp)
+    target_link_libraries(bhjCacheTest PRIVATE
+        ${GTEST_BOTH_LIBRARIES}
+        memory type ${OMNI_CODEGEN_SO} ${OMNI_OPERATOR_SO} ${OMNI_VECTOR_SO}
+        gtest gmock pthread stdc++ dl LLVM-15 re2::re2 Folly::folly z-ng)
+    target_include_directories(bhjCacheTest PRIVATE
+        ${SOURCE_ROOT}/src/util ${SOURCE_ROOT}/src/operator/algorithm ${SOURCE_ROOT}/test)
+
     # compile a executable file
     add_executable(${OM_TEST_TARGET} ${ROOT_SRCS} ${TEST_ROOT_SRCS})
     # dependent libraries

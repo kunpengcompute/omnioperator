@@ -242,7 +242,7 @@ omniruntime::op::Operator *CreateSortMergeJoinOperator(omniruntime::type::DataTy
     OverflowConfig *overflowConfig)
 {
     std::string blank = "";
-    auto smjOp = new SortMergeJoinOperator(JoinType::OMNI_JOIN_TYPE_INNER, blank);
+    auto smjOp = new SortMergeJoinOperator(nullptr, JoinType::OMNI_JOIN_TYPE_INNER, blank);
     DataTypes streamedTblTypes(sourceTypes);
     std::vector<int32_t> streamedKeysCols;
     streamedKeysCols.push_back(1);

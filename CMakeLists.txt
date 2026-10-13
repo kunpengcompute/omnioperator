@@ -47,29 +47,39 @@ endif (CCACHE_FOUND)
 find_package(re2 REQUIRED)
 find_package(fmt REQUIRED)
 
-if (DEFINED COVERAGE AND COVERAGE STREQUAL "ON")
+# SVE vs NEON gate for the omni SIMD layer.
+# omni hard-coded -march=armv8-a+crc+sve, and core/src/simd/targets.h selects
+# OMNI_SVE_256 unless the COVERAGE macro is defined (then OMNI_NEON). Apple
+# Silicon (the Mac dev env) implements no SVE: SVE instructions SIGILL at runtime
+# (seen in omniruntime::reader::BitNotFlip) and the SVE-only SIMD headers fail to
+# compile. The build runs in a container sharing the host kernel, so /proc/cpuinfo
+# reflects the real CPU. When the host lacks SVE, drop +sve AND define COVERAGE so
+# simd/targets.h picks the NEON path. A 区 Kunpeng has SVE and keeps it.
+# (Defining COVERAGE here does NOT add gcov instrumentation — those flags live
+# only in CMAKE_CXX_FLAGS_DEBUG; release builds use CMAKE_CXX_FLAGS_RELEASE.)
+set(OMNI_USE_SVE FALSE)
+set(OMNI_USE_SVE2 FALSE)
+if (NOT (DEFINED COVERAGE AND COVERAGE STREQUAL "ON"))
+    execute_process(COMMAND grep -qw sve2 /proc/cpuinfo RESULT_VARIABLE OMNI_SVE2_RC)
+    if (OMNI_SVE2_RC EQUAL 0)
+        set(OMNI_USE_SVE2 TRUE)
+        set(OMNI_USE_SVE TRUE)
+    else ()
+        execute_process(COMMAND grep -qw sve /proc/cpuinfo RESULT_VARIABLE OMNI_SVE_RC)
+        if (OMNI_SVE_RC EQUAL 0)
+            set(OMNI_USE_SVE TRUE)
+        endif ()
+    endif ()
+endif ()
+if (OMNI_USE_SVE2)
+    set(SIMD_COMPILE_LEVEL "-march=armv8.3-a+crc+sve2 -fpermissive")
+elseif (OMNI_USE_SVE)
+    set(SIMD_COMPILE_LEVEL "-march=armv8.3-a+crc+sve -fpermissive")
+else ()
     add_definitions(-DCOVERAGE)
     set(SIMD_COMPILE_LEVEL "-march=armv8-a+crc -fpermissive")
-else ()
-    # Detect SVE/SVE2 support on ARM
-    if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "aarch64")
-        file(READ "/proc/cpuinfo" CPUINFO)
-        string(FIND "${CPUINFO}" "sve2" SVE2_FOUND)
-        string(FIND "${CPUINFO}" "sve " SVE_FOUND)
-        if(SVE2_FOUND GREATER -1)
-            message(STATUS "SVE2 is supported")
-            set(SIMD_COMPILE_LEVEL "-march=armv8.3-a+crc+sve2 -fpermissive")
-        elseif(SVE_FOUND GREATER -1)
-            message(STATUS "SVE is supported")
-            set(SIMD_COMPILE_LEVEL "-march=armv8.3-a+crc+sve -fpermissive")
-        else()
-            message(STATUS "SVE is not supported")
-            set(SIMD_COMPILE_LEVEL "-march=armv8-a+crc -fpermissive")
-        endif()
-    else()
-        set(SIMD_COMPILE_LEVEL "-march=armv8-a+crc+sve -fpermissive")
-    endif()
 endif ()
+message(STATUS "OmniOperator SIMD: SVE=${OMNI_USE_SVE} SVE2=${OMNI_USE_SVE2} flags=${SIMD_COMPILE_LEVEL}")
 
 #-ffast-math
 #-fopt-info-vec-optimized
@@ -136,6 +146,26 @@ aux_source_directory(${CMAKE_CURRENT_LIST_DIR} ROOT_SRCS)
 include_directories(SYSTEM core/src)
 include_directories(SYSTEM core)
 include_directories(${CMAKE_INSTALL_PREFIX}/lib/APL/include)
+
+# OMNI_MEM_DEBUG: mem_probe memory-accounting diagnostics (REVERTIBLE; OFF in release).
+# Allocator-boundary instrumentation — covered vs pool-less traffic keyed by call-site
+# return address (dladdr) + jemalloc ground truth + per-task pool dtor residual.
+# Replaces the deleted TLS MemoryTrace/ThreadMemoryTrace leak detector.
+# Enable with:  cmake -DOMNI_MEM_DEBUG=ON   (defines -DOMNI_MEM_DEBUG for core + bindings).
+option(OMNI_MEM_DEBUG "Enable mem_probe memory-accounting diagnostics (allocator coverage + jemalloc stats + per-task pool residual)" OFF)
+if (OMNI_MEM_DEBUG)
+    add_definitions(-DOMNI_MEM_DEBUG)
+endif ()
+message(STATUS "Option OMNI_MEM_DEBUG: ${OMNI_MEM_DEBUG}")
+
+# Join probe/table validation guards (per-Find checks added during spill bring-up).
+# OFF for release/performance builds — the hot path must stay check-free. Debug
+# builds and -DOMNI_JOIN_PROBE_VALIDATION=ON keep the diagnostics.
+option(OMNI_JOIN_PROBE_VALIDATION "Enable join probe/table validation guards (debug diagnostics)" OFF)
+if (OMNI_JOIN_PROBE_VALIDATION OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_definitions(-DOMNI_JOIN_PROBE_VALIDATION)
+endif ()
+message(STATUS "Option OMNI_JOIN_PROBE_VALIDATION: ${OMNI_JOIN_PROBE_VALIDATION}")
 
 # compile library
 add_subdirectory(core)

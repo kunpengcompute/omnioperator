@@ -406,7 +406,9 @@ void SetValue(BaseVector *vector, int32_t index, void *value)
 
 omniruntime::op::Operator *CreateTestOperator(omniruntime::op::OperatorFactory *operatorFactory)
 {
-    return operatorFactory->CreateOperator();
+    // nullptr = test/no-pool sentinel (operator.h Operator ctor) — accounting is
+    // skipped; tests needing real accounting use TestPoolFixture directly.
+    return operatorFactory->CreateOperator(nullptr);
 }
 
 bool VecBatchMatchIgnoreOrder(vec::VectorBatch *resultBatch, vec::VectorBatch *expectedBatch, const double error)
