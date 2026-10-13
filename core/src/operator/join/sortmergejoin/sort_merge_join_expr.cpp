@@ -43,7 +43,10 @@ StreamedTableWithExprOperatorFactory::StreamedTableWithExprOperatorFactory(const
     const std::vector<omniruntime::expressions::Expr *> &streamedKeyExprCols, int32_t streamedKeyExprColsCnt,
     int32_t *streamedOutputCols, int32_t streamedOutputColsCnt, JoinType joinType, std::string &filter,
     OverflowConfig *overflowConfig)
-    : joinType(joinType), filter(filter), smjOperator(new SortMergeJoinOperator(joinType, filter))
+    : joinType(joinType), filter(filter),
+      // SMJ operator created at factory construction time — no pool is available yet; explicit
+      // nullptr-pool sentinel. Pool binding is deferred to CreateOperator(pool).
+      smjOperator(new SortMergeJoinOperator(nullptr, joinType, filter))
 {
     std::vector<DataTypePtr> newBuildTypes;
     OperatorUtil::CreateProjections(streamedTypes, streamedKeyExprCols, newBuildTypes, projections, streamedKeyCols,
@@ -61,7 +64,8 @@ StreamedTableWithExprOperatorFactory::StreamedTableWithExprOperatorFactory(const
     OverflowConfig* overflowConfig)
     : joinType(joinType),
       filterExpr(filter),
-      smjOperator(new SortMergeJoinOperator(joinType, filter))
+      // Explicit nullptr-pool sentinel — pool binding is deferred to CreateOperator(pool).
+      smjOperator(new SortMergeJoinOperator(nullptr, joinType, filter))
 {
     std::vector<DataTypePtr> newBuildTypes;
     OperatorUtil::CreateProjections(
@@ -78,9 +82,14 @@ StreamedTableWithExprOperatorFactory::~StreamedTableWithExprOperatorFactory()
     delete smjOperator;
 }
 
-Operator *StreamedTableWithExprOperatorFactory::CreateOperator()
+// Pool-bound override: creates the operator with a per-task memory pool.
+Operator *StreamedTableWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    return new StreamedTableWithExprOperator(*streamedTypes, projections, smjOperator);
+    // Late-bind the per-task pool onto the SMJ operator (built nullptr-pool in the factory
+    // ctor). Idempotent: the buffered factory's CreateOperator calls SetPool again on the
+    // same shared smjOperator — same pool, no-op.
+    smjOperator->SetPool(pool);
+    return new StreamedTableWithExprOperator(pool, *streamedTypes, projections, smjOperator);
 }
 
 SortMergeJoinOperator *StreamedTableWithExprOperatorFactory::GetSmjOperator()
@@ -88,9 +97,11 @@ SortMergeJoinOperator *StreamedTableWithExprOperatorFactory::GetSmjOperator()
     return smjOperator;
 }
 
-StreamedTableWithExprOperator::StreamedTableWithExprOperator(const type::DataTypes &streamedTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, SortMergeJoinOperator *smjOperator)
-    : streamedTypes(streamedTypes), projections(projections), smjOperator(smjOperator)
+// Pool-bound ctor; chains Operator(pool).
+StreamedTableWithExprOperator::StreamedTableWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &streamedTypes, std::vector<std::unique_ptr<Projection>> &projections,
+    SortMergeJoinOperator *smjOperator)
+    : Operator(pool), streamedTypes(streamedTypes), projections(projections), smjOperator(smjOperator)
 {}
 
 StreamedTableWithExprOperator::~StreamedTableWithExprOperator() = default;
@@ -182,15 +193,21 @@ BufferedTableWithExprOperatorFactory::BufferedTableWithExprOperatorFactory(const
 
 BufferedTableWithExprOperatorFactory::~BufferedTableWithExprOperatorFactory() = default;
 
-Operator *BufferedTableWithExprOperatorFactory::CreateOperator()
+// Pool-bound override: creates the operator with a per-task memory pool.
+Operator *BufferedTableWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     auto *smjOperator = streamTblWithExprOperatorFactory->GetSmjOperator();
-    return new BufferedTableWithExprOperator(*bufferedTypes, projections, smjOperator);
+    // Late-bind the per-task pool onto the shared SMJ operator (no-op if the streamed
+    // factory's CreateOperator already bound the same pool).
+    smjOperator->SetPool(pool);
+    return new BufferedTableWithExprOperator(pool, *bufferedTypes, projections, smjOperator);
 }
 
-BufferedTableWithExprOperator::BufferedTableWithExprOperator(const type::DataTypes &bufferedTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, SortMergeJoinOperator *smjOperator)
-    : bufferedTypes(bufferedTypes), projections(projections), smjOperator(smjOperator)
+// Pool-bound ctor; chains Operator(pool).
+BufferedTableWithExprOperator::BufferedTableWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &bufferedTypes, std::vector<std::unique_ptr<Projection>> &projections,
+    SortMergeJoinOperator *smjOperator)
+    : Operator(pool), bufferedTypes(bufferedTypes), projections(projections), smjOperator(smjOperator)
 {}
 
 BufferedTableWithExprOperator::~BufferedTableWithExprOperator() = default;

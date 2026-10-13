@@ -61,10 +61,28 @@ constexpr uint32_t MM3HASH_SEED = 42;
 #endif
 
 
+// Forward-decl the per-task pool so we can add an optional pool parameter to
+// ComputePartitionIds without pulling the full memory header into every TU that
+// includes hash_util.h. Pool is non-owning; nullptr signals the legacy
+// (test/mock) path with no accounting. Use ::omniruntime so the decl lands in
+// the global namespace, not the enclosing omniruntime::op.
+} } // close op + omniruntime to declare in global namespace
+namespace omniruntime { namespace mem {
+class OmniTaskMemoryPool;
+}}
+namespace omniruntime { namespace op {
+
 class HashUtil {
 public:
-    static std::unique_ptr<omniruntime::vec::Vector<int32_t>> ComputePartitionIds(
-        std::vector<omniruntime::vec::BaseVector *> &vecs, int32_t partitionNum, int32_t rowCount);
+    // Optional taskPool parameter for pool-bound allocation.
+    //   - taskPool != nullptr: the returned partitionIds Vector is constructed
+    //     via the pool-bound 3-arg ctor, so its allocation is charged to the
+    //     task pool and ~Vector() routes home.
+    //   - taskPool == nullptr: legacy 2-arg ctor (no accounting). Used by tests
+    //     and any caller that has not been migrated yet.
+    static std::unique_ptr<::omniruntime::vec::Vector<int32_t>> ComputePartitionIds(
+        std::vector<::omniruntime::vec::BaseVector *> &vecs, int32_t partitionNum, int32_t rowCount,
+        ::omniruntime::mem::OmniTaskMemoryPool *taskPool = nullptr);
 
     static uint64_t NextPowerOfTwo(uint64_t x);
 

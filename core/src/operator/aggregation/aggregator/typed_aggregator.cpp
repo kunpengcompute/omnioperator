@@ -11,6 +11,14 @@ TypedAggregator::TypedAggregator(const FunctionType aggregateType, const DataTyp
     : Aggregator(aggregateType, inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull)
 {}
 
+// Binds the `allocator` field to the execution context's pool-bound Allocator
+// so operator-side GetAllocator() singleton calls are eliminated.
+void TypedAggregator::SetExecutionContext(ExecutionContext *executionContext)
+{
+    Aggregator::SetExecutionContext(executionContext);
+    allocator = executionContext->GetAllocator();
+}
+
 
 BaseVector *TypedAggregator::GetVector(VectorBatch *vectorBatch, const int32_t rowOffset, const int32_t rowCount,
     std::shared_ptr<NullsHelper> *nullMap, const size_t channelIdx)
@@ -44,7 +52,6 @@ BaseVector *TypedAggregator::GetVector(VectorBatch *vectorBatch, const int32_t r
 BaseVector* TypedAggregator::GetVector(VectorBatch *vectorBatch, const int32_t rowOffset, const int32_t rowCount,
     std::shared_ptr<NullsHelper> *nullMap) {
     std::vector<BaseVector*> baseVectors;
-    auto nullsBuffer = std::make_shared<NullsBuffer>(rowCount, nullptr, 0);
 
     std::vector<BaseVector*> vectors;
     for (size_t i = 0; i < channels.size(); ++i) {
@@ -61,6 +68,11 @@ BaseVector* TypedAggregator::GetVector(VectorBatch *vectorBatch, const int32_t r
         *nullMap = nullsHelper;
         return vector;
     } else {
+        // NullsBuffer is only consumed on this multi-channel path; constructing it
+        // lazily here keeps the single-channel fast path (the 2.26M-hit common case)
+        // free of a wasted allocation. Pool-accounted via the aggregator's per-task
+        // allocator (executionContext->GetAllocator()).
+        auto nullsBuffer = std::make_shared<NullsBuffer>(rowCount, nullptr, 0, allocator);
         for (size_t i = rowOffset; i < rowCount; ++i) {
             bool isNull = std::any_of(vectors.begin(), vectors.end(), [i](BaseVector* baseVector) {
                 return baseVector->IsNull(i);

@@ -353,7 +353,7 @@ void RegrSlopeAggregator::AlignAggSchema(VectorBatch *result, VectorBatch *input
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptySlope7(result);
+        RegrAlignAppendEmptySlope7(result, this->pool_);
         return;
     }
     if (!inputRaw) {
@@ -364,7 +364,7 @@ void RegrSlopeAggregator::AlignAggSchema(VectorBatch *result, VectorBatch *input
     GetVector(inputVecBatch, 0, rc, &yxNull);
     BaseVector *yVec = inputVecBatch->Get(channels[0]);
     BaseVector *xVec = inputVecBatch->Get(channels[1]);
-    RegrAlignAppendSlope7Raw(result, yVec, xVec, yxNull, rc);
+    RegrAlignAppendSlope7Raw(result, yVec, xVec, yxNull, rc, this->pool_);
 }
 
 void RegrSlopeAggregator::AlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *inputVecBatch,
@@ -372,21 +372,21 @@ void RegrSlopeAggregator::AlignAggSchemaWithFilter(VectorBatch *result, VectorBa
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptySlope7(result);
+        RegrAlignAppendEmptySlope7(result, this->pool_);
         return;
     }
     auto *filterVec = static_cast<Vector<bool> *>(inputVecBatch->Get(filterIndex));
     bool needFilter = DoNeedHandleAggFilter(filterVec, 0, rc);
     std::shared_ptr<NullsHelper> yxNull;
     GetVector(inputVecBatch, 0, rc, &yxNull);
-    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(yxNull, filterVec, needFilter, rc);
+    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(yxNull, filterVec, needFilter, rc, this->pool_);
     if (!inputRaw) {
-        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 7, rc, rowSkip, false);
+        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 7, rc, rowSkip, false, this->pool_);
         return;
     }
     BaseVector *yVec = inputVecBatch->Get(channels[0]);
     BaseVector *xVec = inputVecBatch->Get(channels[1]);
-    RegrAlignAppendSlope7Raw(result, yVec, xVec, rowSkip, rc);
+    RegrAlignAppendSlope7Raw(result, yVec, xVec, rowSkip, rc, this->pool_);
 }
 
 void RegrSlopeAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
@@ -395,10 +395,10 @@ void RegrSlopeAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector 
     (void)nullMap;
     (void)aggFilter;
     if (originVector == nullptr) {
-        RegrAlignAppendEmptySlope7(result);
+        RegrAlignAppendEmptySlope7(result, this->pool_);
         return;
     }
-    RegrAlignAppendSlope7AllNullRows(result, originVector->GetSize());
+    RegrAlignAppendSlope7AllNullRows(result, originVector->GetSize(), this->pool_);
 }
 
 std::vector<DataTypePtr> RegrSlopeAggregator::GetSpillType()

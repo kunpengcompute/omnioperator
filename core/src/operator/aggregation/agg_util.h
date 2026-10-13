@@ -54,7 +54,7 @@ public:
         int32_t rowCount = inputVecBatch->GetRowCount();
         auto newInputVecBatch = std::make_unique<VectorBatch>(rowCount);
         if (rowCount == 0) {
-            VectorHelper::AppendVectors(newInputVecBatch.get(), inputTypes, rowCount);
+            VectorHelper::AppendVectors(newInputVecBatch.get(), inputTypes, rowCount, executionContext->GetPool());
             return newInputVecBatch.release();
         }
 
@@ -101,7 +101,7 @@ public:
                     newInputVecBatch->Append(ColumnFilterFlatVectorSliceHelper(inputVecBatch, aggSimpleFilter));
                 } else {
                     // if the agg expression has filter, then append a boolean vector to vector batch
-                    auto *booleanVector = new Vector<bool>(rowCount);
+                    auto *booleanVector = new Vector<bool>(rowCount, context->GetPool());
                     for (int32_t j = 0; j < rowCount; ++j) {
                         if (AggUtil::IsAggPositionEligible(j, inputVecBatch, aggSimpleFilter, context, originTypes)) {
                             booleanVector->SetValue(j, true);

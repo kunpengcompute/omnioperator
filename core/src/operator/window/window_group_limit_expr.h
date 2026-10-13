@@ -27,7 +27,9 @@ public:
     static WindowGroupLimitWithExprOperatorFactory *WindowGroupLimitWithExprOperatorFactory::CreateWindowGroupLimitWithExprOperatorFactory(
         std::shared_ptr<const WindowGroupLimitNode> planNode, const config::QueryConfig &queryConfig);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::unique_ptr<DataTypes> sourceTypes;
@@ -39,8 +41,10 @@ private:
 
 class WindowGroupLimitWithExprOperator : public Operator {
 public:
-    WindowGroupLimitWithExprOperator(const type::DataTypes &sourceTypes, std::vector<int32_t> &partitionCols,
-        std::vector<int32_t> &sortCols, std::vector<std::unique_ptr<Projection>> &projections,
+    // Pool-bound ctor chains Operator(pool)
+    WindowGroupLimitWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        const type::DataTypes &sourceTypes, std::vector<int32_t> &partitionCols, std::vector<int32_t> &sortCols,
+        std::vector<std::unique_ptr<Projection>> &projections,
         WindowGroupLimitOperator *windowGroupLimitOperator, const config::QueryConfig &queryConfig);
 
     ~WindowGroupLimitWithExprOperator() override;

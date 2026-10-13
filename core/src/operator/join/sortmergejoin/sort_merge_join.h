@@ -21,10 +21,25 @@ namespace op {
 constexpr uint32_t SHIFT_SIZE_16 = 16;
 class SortMergeJoinOperator : public Operator {
 public:
-    SortMergeJoinOperator(JoinType joinType, std::string &filter);
-    SortMergeJoinOperator(JoinType joinType, Expr* filter);
+    // Pool-bound ctors chain Operator(pool)
+    SortMergeJoinOperator(omniruntime::mem::OmniTaskMemoryPool *pool, JoinType joinType, std::string &filter);
+    SortMergeJoinOperator(omniruntime::mem::OmniTaskMemoryPool *pool, JoinType joinType, Expr* filter);
 
     ~SortMergeJoinOperator() override;
+
+    // Late per-task pool binding, called from the factory's CreateOperator(pool). The SMJ
+    // operator is built in the factory ctor with a nullptr-pool sentinel (no pool known yet);
+    // this rebinds the base Operator pool/ExecutionContext and propagates the pool to the
+    // JoinResultBuilder so its NewEmptyVectorBatch output allocations route through the
+    // per-task pool. The streamed operator can be created before the buffered factory has
+    // initialized the result builder, so the propagation is conditional.
+    void SetPool(omniruntime::mem::OmniTaskMemoryPool *pool)
+    {
+        Operator::SetPool(pool);
+        if (joinResultBuilder != nullptr) {
+            joinResultBuilder->SetPool(pool);
+        }
+    }
 
     void ConfigStreamedTblInfo(const DataTypes &streamedTypes, const std::vector<int32_t> &streamedKeysCols,
         const std::vector<int32_t> &streamedOutputCols, int32_t originalInputStreamColsCount);
@@ -83,17 +98,17 @@ private:
     int32_t flowControlCode = static_cast<int32_t>(SortMergeJoinAddInputCode::SMJ_NEED_ADD_BUFFER_TBL_DATA);
     int32_t resCode = 0;
 
-    const type::DataTypes *streamedTypes;
+    const type::DataTypes *streamedTypes = nullptr;
     std::vector<int32_t> streamedKeysCols;
     std::vector<int32_t> streamedOutputCols;
-    int32_t originalStreamedColsCount;
-    DynamicPagesIndex *streamedTblPagesIndex;
+    int32_t originalStreamedColsCount = 0;
+    DynamicPagesIndex *streamedTblPagesIndex = nullptr;
 
-    const type::DataTypes *bufferedTypes;
+    const type::DataTypes *bufferedTypes = nullptr;
     std::vector<int32_t> bufferedKeysCols;
     std::vector<int32_t> bufferedOutputCols;
-    int32_t originalBufferedColsCount;
-    DynamicPagesIndex *bufferedTblPagesIndex;
+    int32_t originalBufferedColsCount = 0;
+    DynamicPagesIndex *bufferedTblPagesIndex = nullptr;
 
     JoinType joinType;
     // When using the adapter, the incoming filter is of type String. When using the Gluten engine, the incoming filter
@@ -101,10 +116,12 @@ private:
     std::string filter;
     Expr* filterExpr = nullptr;
 
-    SortMergeJoinScanner *smjScanner;
-    JoinResultBuilder *joinResultBuilder;
+    SortMergeJoinScanner *smjScanner = nullptr;
+    JoinResultBuilder *joinResultBuilder = nullptr;
 
     VectorBatch *returnVectorBatch = nullptr;
+    uint64_t streamedInputBatches = 0;
+    uint64_t bufferedInputBatches = 0;
 };
 
 inline int32_t SetAddFlag(int16_t addFlag, int32_t resultCode)

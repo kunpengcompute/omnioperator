@@ -29,6 +29,13 @@ public:
         int32_t rightTableOutputColsCount, int32_t originalRightTableColsCount, DynamicPagesIndex* rightTablePagesIndex,
         Expr* filter, JoinType joinType, OverflowConfig* overflowConfig);
 
+    // Late per-task pool binding. The JoinResultBuilder is constructed inside the buffered
+    // factory ctor (InitScannerAndResultBuilder) before the per-task pool is known; the owning
+    // SortMergeJoinOperator::SetPool calls this from CreateOperator(pool) so NewEmptyVectorBatch
+    // routes output allocations through the pool. nullptr (test/no-pool path) routes through the
+    // pool ctor's nullptr-guard (skips accounting) — functionally the deprecated no-pool bridge.
+    void SetPool(omniruntime::mem::OmniTaskMemoryPool *pool) { pool_ = pool; }
+
     void ParsingAndOrganizationResultsForLeftTable(int32_t leftBatchId, int32_t leftRowId);
 
     void ParsingAndOrganizationResultsForRightTable(int32_t rightBatchId, int32_t rightRowId);
@@ -211,6 +218,9 @@ private:
     VectorBatch *buildVectorBatch = nullptr;
 
     ExecutionContext *executionContext = nullptr;
+    // Per-task pool for output VectorBatch allocations (NewEmptyVectorBatch). Set via
+    // SetPool from the owning SortMergeJoinOperator after CreateOperator(pool).
+    omniruntime::mem::OmniTaskMemoryPool *pool_ = nullptr;
     SimpleFilter *simpleFilter = nullptr;
     int32_t *streamedColsInFilter = nullptr;
     int32_t *bufferedColsInFilter = nullptr;

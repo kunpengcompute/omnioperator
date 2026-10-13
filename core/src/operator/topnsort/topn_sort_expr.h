@@ -26,7 +26,9 @@ public:
 
     ~TopNSortWithExprOperatorFactory() override;
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::unique_ptr<DataTypes> sourceTypes;
@@ -38,9 +40,11 @@ private:
 
 class TopNSortWithExprOperator : public Operator {
 public:
-    TopNSortWithExprOperator(const type::DataTypes &sourceTypes, std::vector<int32_t> &partitionCols,
-        std::vector<int32_t> &sortCols, std::vector<std::unique_ptr<Projection>> &projections,
-        TopNSortOperator *topNSortOperator, const config::QueryConfig &queryConfig);
+    // Pool-bound ctor chains Operator(pool)
+    TopNSortWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+        std::vector<int32_t> &partitionCols, std::vector<int32_t> &sortCols,
+        std::vector<std::unique_ptr<Projection>> &projections, TopNSortOperator *topNSortOperator,
+        const config::QueryConfig &queryConfig);
 
     ~TopNSortWithExprOperator() override;
 

@@ -75,7 +75,9 @@ public:
 
     ~TopNOperatorFactory() override;
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     type::DataTypes sourceTypes;
@@ -89,8 +91,10 @@ private:
 
 class TopNOperator : public Operator {
 public:
-    TopNOperator(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset, std::vector<int32_t> &sortCols,
-        std::vector<int32_t> &sortAscendings, std::vector<int32_t> &sortNullFirsts, int32_t sortColCount);
+    // Pool-bound ctor chains Operator(pool)
+    TopNOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes, int32_t limit,
+        int32_t offset, std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
+        std::vector<int32_t> &sortNullFirsts, int32_t sortColCount);
 
     ~TopNOperator() override;
 

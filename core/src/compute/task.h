@@ -41,8 +41,16 @@ class OmniDriver;
 
 class OmniTask {
 public:
-    OmniTask(const PlanFragment& planFragment,  config::QueryConfig&& queryConfig)
-        : planFragment_(planFragment), queryConfig_(std::move(queryConfig))
+    // pool is the per-task OmniTaskMemoryPool, decoded from the JNI nmmHandle
+    // on the gluten side and threaded through here so
+    // LocalPlanner::plan(..., pool) → createOperator(factory, planNode, pool) →
+    // factory->CreateOperator(pool) lands a real pool inside each Operator's
+    // ExecutionContext. Default-nullable so C++ unit-test scaffolds that
+    // construct OmniTask without a JNI handle still compile (they follow the
+    // no-pool path inside createOperator).
+    OmniTask(const PlanFragment& planFragment, config::QueryConfig&& queryConfig,
+        omniruntime::mem::OmniTaskMemoryPool* pool = nullptr)
+        : planFragment_(planFragment), queryConfig_(std::move(queryConfig)), pool_(pool)
     {
         taskStats_ = TaskStats();
     }
@@ -87,6 +95,11 @@ private:
     const config::QueryConfig queryConfig_;
 
     std::unordered_map<omniruntime::PlanNodeId, std::shared_ptr<SplitsStore>> splitsStore_;
+
+    // Non-owning per-task pool; lifetime owned by
+    // gluten::OmniMemoryManager on the Java/JNI side (TaskResources priority=0
+    // releases after Runtime priority=20, so the pool outlives this OmniTask).
+    omniruntime::mem::OmniTaskMemoryPool* pool_ = nullptr;
 };
 } // end of compute
 } // end of omniruntime

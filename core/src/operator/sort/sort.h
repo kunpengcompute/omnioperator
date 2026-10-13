@@ -5,6 +5,7 @@
 #ifndef __SORT_H__
 #define __SORT_H__
 
+#include <atomic>
 #include <vector>
 #include <memory>
 #include "plannode/planNode.h"
@@ -14,6 +15,7 @@
 #include "operator/pages_index.h"
 #include "operator/spill/spiller.h"
 #include "operator/spill/spill_merger.h"
+#include "operator/spillable_operator.h"
 #include "type/data_types.h"
 #include "type/data_type.h"
 
@@ -42,7 +44,9 @@ public:
     static SortOperatorFactory *CreateSortOperatorFactory(std::shared_ptr<const OrderByNode> planNode,
         const config::QueryConfig &queryConfig);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     int32_t GetSourceTypeCount()
     {
@@ -88,9 +92,11 @@ private:
     OperatorConfig operatorConfig;
 };
 
-class SortOperator : public Operator {
+class SortOperator : public Operator, public SpillableOperator {
 public:
-    SortOperator(const type::DataTypes &dataTypes, std::vector<int32_t> &outputCols, std::vector<int32_t> &sortCols,
+    // Pool-bound ctor chains Operator(pool)
+    SortOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &dataTypes,
+        std::vector<int32_t> &outputCols, std::vector<int32_t> &sortCols,
         std::vector<int32_t> &sortAscendings, std::vector<int32_t> &sortNullFirsts,
         const OperatorConfig &operatorConfig);
 
@@ -104,12 +110,28 @@ public:
 
     uint64_t GetSpilledBytes() override;
 
+    OmniStatus Init() override;
+    uint64_t reclaimableBytes() const override;
+    int64_t reclaim(int64_t targetBytes) override;
+    bool isInNonReclaimableSection() const noexcept override
+    {
+        return Operator::isInNonReclaimableSection();
+    }
+    Operator *operatorBase() noexcept override { return this; }
+    const char *reclaimableName() const noexcept override { return "SortOperator"; }
+
     PagesIndex *GetPagesIndex() const
     {
         return pagesIndex.get();
     }
 
 private:
+    // Shared init body for legacy + pool-bound ctors.
+    void InitFromCtor(const type::DataTypes &dataTypes);
+    int64_t EstimateInputReservation(const omniruntime::vec::VectorBatch *vecBatch) const;
+    void EnsureReservationPctsCached();
+    void ReserveForInput(const omniruntime::vec::VectorBatch *vecBatch);
+
     void PrepareSort();
     ErrorCode SpillToDisk();
     void Sort();
@@ -150,6 +172,15 @@ private:
     std::vector<int32_t> rowIdxes;
     bool hasSpill = false;
     uint64_t spilledBytes = 0;
+    std::atomic<bool> reclaimInProgress_{false};
+
+    // QueryConfig is immutable for a query's lifetime (QueryConfig.h). Cache the
+    // clamped reservation percentages once instead of copying QueryConfig and
+    // re-parsing the config map on every AddInput. Defaults mirror QueryConfig's
+    // kDefaultPct values; EnsureReservationPctsCached() fills them on first use.
+    int32_t minSpillableReservationPct_{5};
+    int32_t spillableReservationGrowthPct_{10};
+    bool reservationPctsCached_{false};
 };
 } // end of namespace op
 } // end of namespace omniruntime

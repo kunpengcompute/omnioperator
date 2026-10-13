@@ -28,7 +28,7 @@ using omniruntime::compute::OmniDriver;
 class TestNormalOperator : public omniruntime::op::Operator
 {
 public:
-    TestNormalOperator() : omniruntime::op::Operator() {}
+    TestNormalOperator() : omniruntime::op::Operator(nullptr) {}
 
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override
     {
@@ -50,7 +50,7 @@ public:
 class TestEarlyFinishOperator : public omniruntime::op::Operator
 {
 public:
-    TestEarlyFinishOperator() : omniruntime::op::Operator() {}
+    TestEarlyFinishOperator() : omniruntime::op::Operator(nullptr) {}
 
     bool isEarlyFinish() const override { return true; }
 

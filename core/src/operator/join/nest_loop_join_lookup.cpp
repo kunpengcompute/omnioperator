@@ -95,12 +95,14 @@ NestLoopJoinLookupOperatorFactory *NestLoopJoinLookupOperatorFactory::CreateNest
         probeOutputColsCount, filterPtr, *outputTypes, (int64_t)builderOperatorFactory, overflowConfig, queryConfig, filterExpr);
 }
 
-Operator *NestLoopJoinLookupOperatorFactory::CreateOperator()
+// Pool-bound override
+Operator *NestLoopJoinLookupOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     auto nestedLoopJoinBuilderFactory = reinterpret_cast<NestedLoopJoinBuildOperatorFactory *>(buildOpFactoryAddr);
-    auto pNestLoopLookupJoinOperator = new NestLoopJoinLookupOperator(joinType, probeOutputCols, filter, probeTypes,
-        nestedLoopJoinBuilderFactory->GetBuildVectorBatch(), nestedLoopJoinBuilderFactory->GetBuildDataTypes(),
-        nestedLoopJoinBuilderFactory->GetbuildOutputCols(), joinedTypes, queryConfig_, filterExpr);
+    auto pNestLoopLookupJoinOperator = new NestLoopJoinLookupOperator(pool, joinType, probeOutputCols, filter,
+        probeTypes, nestedLoopJoinBuilderFactory->GetBuildVectorBatch(),
+        nestedLoopJoinBuilderFactory->GetBuildDataTypes(), nestedLoopJoinBuilderFactory->GetbuildOutputCols(),
+        joinedTypes, queryConfig_, filterExpr);
     return pNestLoopLookupJoinOperator;
 }
 
@@ -110,10 +112,12 @@ NestLoopJoinLookupOperatorFactory::~NestLoopJoinLookupOperatorFactory()
     filter = nullptr;
 }
 
-NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(JoinType joinType, std::vector<int32_t> &probeOutputCols,
-    Filter *filter, DataTypes probeTypes, VectorBatch *buildVectorBatch, DataTypes buildTypes,
-    std::vector<int32_t> &buildOutputCols, DataTypes joinedTypes)
-    : buildVectorBatch(buildVectorBatch),
+// Pool-bound ctor (no queryConfig/filterExpr) — same body, chains Operator(pool).
+NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    JoinType joinType, std::vector<int32_t> &probeOutputCols, Filter *filter, DataTypes probeTypes,
+    VectorBatch *buildVectorBatch, DataTypes buildTypes, std::vector<int32_t> &buildOutputCols, DataTypes joinedTypes)
+    : Operator(pool),
+      buildVectorBatch(buildVectorBatch),
       buildOutputCols(buildOutputCols),
       joinType(joinType),
       probeOutputCols(probeOutputCols),
@@ -121,30 +125,16 @@ NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(JoinType joinType, std::v
       joinedTypes(joinedTypes),
       buildTypes(buildTypes)
 {
-    SetOperatorName(metricsNameNestedLoopJoinLookup);
-    int32_t leftRowSize =
-        OperatorUtil::GetOutputRowSize(probeTypes.Get(), probeOutputCols.data(), probeOutputCols.size());
-    int32_t rightRowSize =
-        OperatorUtil::GetOutputRowSize(buildTypes.Get(), buildOutputCols.data(), buildOutputCols.size());
-    int32_t outputRowSize = leftRowSize + rightRowSize;
-    maxRowCount = OperatorUtil::GetMaxRowCount(outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE);
-    int32_t buildRowCount = buildVectorBatch->GetRowCount();
-    joinedVectorBatch = std::make_unique<VectorBatch>(buildRowCount);
-    selectedRows = new int32_t[buildRowCount];
-    if ((joinType == OMNI_JOIN_TYPE_RIGHT || joinType == OMNI_JOIN_TYPE_FULL) && this->filterExpr != nullptr) {
-        buildMatchedRows.assign(buildRowCount, 0);
-        for (int32_t j = 0; j < probeOutputCols.size(); j++) {
-            DataTypeId vectorDataTypeId = probeTypes.GetType(probeOutputCols[j])->GetId();
-            probeOutputDataTypeIds.push_back(vectorDataTypeId);
-            probeOutputDataTypes.push_back(probeTypes.GetType(probeOutputCols[j]));
-        }
-    }
+    InitFromCtor(probeTypes);
 }
 
-NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(JoinType joinType, std::vector<int32_t> &probeOutputCols,
-    Filter *filter, DataTypes probeTypes, VectorBatch *buildVectorBatch, DataTypes buildTypes,
-    std::vector<int32_t> &buildOutputCols, DataTypes joinedTypes, const config::QueryConfig &queryConfig, Expr *filterExpr)
-    : buildVectorBatch(buildVectorBatch),
+// Pool-bound ctor (with queryConfig/filterExpr) — same body, chains Operator(pool).
+NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    JoinType joinType, std::vector<int32_t> &probeOutputCols, Filter *filter, DataTypes probeTypes,
+    VectorBatch *buildVectorBatch, DataTypes buildTypes, std::vector<int32_t> &buildOutputCols, DataTypes joinedTypes,
+    const config::QueryConfig &queryConfig, Expr *filterExpr)
+    : Operator(pool),
+      buildVectorBatch(buildVectorBatch),
       buildOutputCols(buildOutputCols),
       joinType(joinType),
       probeOutputCols(probeOutputCols),
@@ -154,6 +144,11 @@ NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(JoinType joinType, std::v
 {
     executionContext->SetConfig(queryConfig);
     this->filterExpr = filterExpr;
+    InitFromCtor(probeTypes);
+}
+
+void NestLoopJoinLookupOperator::InitFromCtor(DataTypes &probeTypes)
+{
     SetOperatorName(metricsNameNestedLoopJoinLookup);
     int32_t leftRowSize =
         OperatorUtil::GetOutputRowSize(probeTypes.Get(), probeOutputCols.data(), probeOutputCols.size());
@@ -162,6 +157,9 @@ NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(JoinType joinType, std::v
     int32_t outputRowSize = leftRowSize + rightRowSize;
     maxRowCount = OperatorUtil::GetMaxRowCount(outputRowSize != 0 ? outputRowSize : DEFAULT_ROW_SIZE);
     int32_t buildRowCount = buildVectorBatch->GetRowCount();
+    if (buildRowCount < 0) {
+        throw OmniException("OPERATOR_RUNTIME_ERROR", "Nested loop join build row count is negative.");
+    }
     joinedVectorBatch = std::make_unique<VectorBatch>(buildRowCount);
     selectedRows = new int32_t[buildRowCount];
     if ((joinType == OMNI_JOIN_TYPE_RIGHT || joinType == OMNI_JOIN_TYPE_FULL) && this->filterExpr != nullptr) {
@@ -422,7 +420,7 @@ void NestLoopJoinLookupOperator::BuildOutput(VectorBatch **outputVecBatch)
     } else if (buildRowCount == 0) {
         for (int32_t j = 0; j < buildOutputColsSize; j++) {
             BaseVector *vector = buildVectorBatch->Get(buildOutputCols[j]);
-            BaseVector *outputVector = VectorHelper::CreateComplexVector(buildTypes.GetType(buildOutputCols[j]).get(), outputRows);
+            BaseVector *outputVector = VectorHelper::CreateComplexVector(this->pool(), buildTypes.GetType(buildOutputCols[j]).get(), outputRows);
             for (int32_t i = 0; i < buildNullPositionSize; ++i) {
                 outputVector->SetNull(buildNullPosition[i]);
             }
@@ -459,7 +457,7 @@ void NestLoopJoinLookupOperator::BuildNotMatchOutput(VectorBatch **outputVecBatc
 
     // probe side set null
     for (int32_t j = 0; j < probeOutputColsSize; j++) {
-        BaseVector *outputVector = VectorHelper::CreateComplexVector(probeOutputDataTypes[probeOutputCols[j]].get(), outputRows);
+        BaseVector *outputVector = VectorHelper::CreateComplexVector(this->pool(), probeOutputDataTypes[probeOutputCols[j]].get(), outputRows);
         for (int32_t i = 0; i < outputRows; ++i) {
             outputVector->SetNull(i);
         }

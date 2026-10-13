@@ -178,9 +178,9 @@ template <type::DataTypeId typeId> static BaseVector *CreateVectorFromFlat(BaseV
     using RawDataType = typename NativeAndVectorType<typeId>::type;
     BaseVector *outputVec;
     if constexpr (typeId == OMNI_CHAR || typeId == OMNI_VARCHAR || typeId == OMNI_VARBINARY) {
-        outputVec = new VarcharVector(1);
+        outputVec = new VarcharVector(1, inputVec->GetPool());
     } else {
-        outputVec = new Vector<RawDataType>(1);
+        outputVec = new Vector<RawDataType>(1, inputVec->GetPool());
     }
     SetPartitionValueFromFlat<typeId>(inputVec, inputPos, outputVec, 0);
     return outputVec;
@@ -191,9 +191,9 @@ template <type::DataTypeId typeId> static BaseVector *CreateVectorFromDictionary
     using RawDataType = typename NativeAndVectorType<typeId>::type;
     BaseVector *outputVec;
     if constexpr (typeId == OMNI_CHAR || typeId == OMNI_VARCHAR) {
-        outputVec = new VarcharVector(1);
+        outputVec = new VarcharVector(1, inputVec->GetPool());
     } else {
-        outputVec = new Vector<RawDataType>(1);
+        outputVec = new Vector<RawDataType>(1, inputVec->GetPool());
     }
     SetPartitionValueFromDictionary<typeId>(inputVec, inputPos, outputVec, 0);
     return outputVec;
@@ -581,10 +581,13 @@ static void SetPartitionStructValueFromFlat(vec::BaseVector *inputVec, int32_t i
     }
 }
 
-WindowGroupLimitOperator::WindowGroupLimitOperator(const type::DataTypes &sourceTypes, int32_t n,
-    const std::string funcName, const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
+// Pool-bound ctor — same body, chains Operator(pool).
+WindowGroupLimitOperator::WindowGroupLimitOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &sourceTypes, int32_t n, const std::string funcName,
+    const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
     const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts)
-    : sourceTypes(sourceTypes),
+    : Operator(pool),
+      sourceTypes(sourceTypes),
       n(n),
       funcName(funcName),
       partitionCols(partitionCols),
@@ -594,9 +597,14 @@ WindowGroupLimitOperator::WindowGroupLimitOperator(const type::DataTypes &source
       sortAscendings(sortAscendings),
       sortNullFirsts(sortNullFirsts)
 {
+    InitFromCtor(sortCols);
+}
+
+void WindowGroupLimitOperator::InitFromCtor(const std::vector<int32_t> &paramSortCols)
+{
     auto sourceTypeIds = sourceTypes.GetIds();
     for (int32_t i = 0; i < sortColNum; i++) {
-        auto type = sourceTypeIds[sortCols[i]];
+        auto type = sourceTypeIds[paramSortCols[i]];
         sortColTypes.emplace_back(type);
     }
     // Always allocate compare function slots for sort columns.
@@ -912,6 +920,19 @@ void WindowGroupLimitOperator::UpdatePartitionValueRowNumber(LimitPartitionValue
     rowIndexes[insertPos] = inputRowIdx;
 }
 
+bool WindowGroupLimitOperator::HasSelectedRows(const VectorBatch *inputVecBatch) const
+{
+    for (const auto &[partitionKey, value] : partitionedMap) {
+        (void)partitionKey;
+        for (int32_t i = 0; i < value->nextIndex; ++i) {
+            if (value->vecBatches[i] == inputVecBatch) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 int32_t WindowGroupLimitOperator::AddInput(omniruntime::vec::VectorBatch *inputVecBatch)
 {
     if (inputVecBatch->GetRowCount() <= 0) {
@@ -928,7 +949,7 @@ int32_t WindowGroupLimitOperator::AddInput(omniruntime::vec::VectorBatch *inputV
     for (int32_t i = 0; i < inputColNum; i++) {
         auto inputVector = inputVectors[i];
         if (inputVector->GetEncoding() == OMNI_DICTIONARY) {
-            inputVectors[i] = VectorHelper::DecodeDictionaryVector(inputVector);
+            inputVectors[i] = VectorHelper::DecodeDictionaryVector(inputVector, this->pool());
             delete inputVector;
             inputVector = nullptr;
         }
@@ -1015,6 +1036,14 @@ int32_t WindowGroupLimitOperator::AddInput(omniruntime::vec::VectorBatch *inputV
 
     currentIter = partitionedMap.begin();
 
+    // Results reference source rows as (VectorBatch*, rowIndex) pairs. Once
+    // all selection updates for this input are complete, an unreferenced batch
+    // cannot contribute to GetOutput and must not wait for Close to be freed.
+    if (!HasSelectedRows(inputVecBatch)) {
+        inputs.pop_back();
+        VectorHelper::FreeVecBatch(inputVecBatch);
+    }
+
     return 0;
 }
 
@@ -1052,7 +1081,8 @@ int32_t WindowGroupLimitOperator::GetOutput(omniruntime::vec::VectorBatch **outp
     auto result = std::make_unique<VectorBatch>(outputRowCount);
 
     int32_t resultRowIdx = 0;
-    VectorHelper::AppendVectors(result.get(), sourceTypes, outputRowCount);
+    // Pool-bound AppendVectors (4-arg overload).
+    VectorHelper::AppendVectors(result.get(), sourceTypes, outputRowCount, this->pool());
     auto resultVectors = result->GetVectors();
     bool stopOutput = false;
     for (auto iter = currentIter; iter != end && !stopOutput; ++iter) {

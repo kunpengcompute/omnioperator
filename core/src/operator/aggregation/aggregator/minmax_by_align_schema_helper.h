@@ -31,15 +31,15 @@ void MinMaxByAlignAppendPartialSlices(VectorBatch *result, VectorBatch *input, c
     int32_t rowCount);
 
 template <type::DataTypeId COL1_ID, type::DataTypeId COL2_ID>
-void MinMaxByAlignAppendEmptyPartial2(VectorBatch *result)
+void MinMaxByAlignAppendEmptyPartial2(VectorBatch *result, mem::OmniTaskMemoryPool *pool)
 {
-    result->Append(VectorHelper::CreateVector(OMNI_FLAT, COL1_ID, 0));
-    result->Append(VectorHelper::CreateVector(OMNI_FLAT, COL2_ID, 0));
+    result->Append(VectorHelper::CreateVector(pool, OMNI_FLAT, COL1_ID, 0));
+    result->Append(VectorHelper::CreateVector(pool, OMNI_FLAT, COL2_ID, 0));
 }
 
 template <type::DataTypeId COL1_ID, type::DataTypeId COL2_ID>
 void MinMaxByAlignAppendRawPartial2(VectorBatch *result, BaseVector *col1Vec, BaseVector *col2Vec,
-    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount)
+    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount, mem::OmniTaskMemoryPool *pool)
 {
     using TargetVec = std::conditional_t<COL1_ID == type::OMNI_VARCHAR || COL1_ID == type::OMNI_CHAR ||
             COL1_ID == type::OMNI_VARBINARY,
@@ -48,8 +48,8 @@ void MinMaxByAlignAppendRawPartial2(VectorBatch *result, BaseVector *col1Vec, Ba
             COL2_ID == type::OMNI_VARBINARY,
         Vector<LargeStringContainer<std::string_view>>, typename AggNativeAndVectorType<COL2_ID>::vector>;
 
-    auto *targetOut = static_cast<TargetVec *>(VectorHelper::CreateVector(OMNI_FLAT, COL1_ID, rowCount));
-    auto *sortKeyOut = static_cast<SortKeyVec *>(VectorHelper::CreateVector(OMNI_FLAT, COL2_ID, rowCount));
+    auto *targetOut = static_cast<TargetVec *>(VectorHelper::CreateVector(pool, OMNI_FLAT, COL1_ID, rowCount));
+    auto *sortKeyOut = static_cast<SortKeyVec *>(VectorHelper::CreateVector(pool, OMNI_FLAT, COL2_ID, rowCount));
     for (int32_t i = 0; i < rowCount; ++i) {
         const bool skip = (rowSkip != nullptr && (*rowSkip)[i]) || col2Vec->IsNull(i);
         if (skip) {
@@ -70,23 +70,23 @@ void MinMaxByAlignAppendRawPartial2(VectorBatch *result, BaseVector *col1Vec, Ba
 
 template <type::DataTypeId COL1_ID, type::DataTypeId COL2_ID>
 void MinMaxByAlignAppendPartialWithSkip(VectorBatch *result, VectorBatch *input, const std::vector<int32_t> &channels,
-    int32_t rowCount, const std::shared_ptr<NullsHelper> &rowSkip)
+    int32_t rowCount, const std::shared_ptr<NullsHelper> &rowSkip, mem::OmniTaskMemoryPool *pool)
 {
     if (rowSkip == nullptr) {
         MinMaxByAlignAppendPartialSlices(result, input, channels, rowCount);
         return;
     }
     MinMaxByAlignAppendRawPartial2<COL1_ID, COL2_ID>(result, input->Get(channels[0]), input->Get(channels[1]), rowSkip,
-        rowCount);
+        rowCount, pool);
 }
 
 template <type::DataTypeId COL1_ID, type::DataTypeId COL2_ID>
 void MinMaxByAlignAggSchema(VectorBatch *result, VectorBatch *inputVecBatch, const std::vector<int32_t> &channels,
-    bool inputRaw)
+    bool inputRaw, mem::OmniTaskMemoryPool *pool)
 {
     const int32_t rowCount = inputVecBatch->GetRowCount();
     if (rowCount == 0) {
-        MinMaxByAlignAppendEmptyPartial2<COL1_ID, COL2_ID>(result);
+        MinMaxByAlignAppendEmptyPartial2<COL1_ID, COL2_ID>(result, pool);
         return;
     }
     if (!inputRaw) {
@@ -94,16 +94,16 @@ void MinMaxByAlignAggSchema(VectorBatch *result, VectorBatch *inputVecBatch, con
         return;
     }
     MinMaxByAlignAppendRawPartial2<COL1_ID, COL2_ID>(result, inputVecBatch->Get(channels[0]),
-        inputVecBatch->Get(channels[1]), nullptr, rowCount);
+        inputVecBatch->Get(channels[1]), nullptr, rowCount, pool);
 }
 
 template <type::DataTypeId COL1_ID, type::DataTypeId COL2_ID>
 void MinMaxByAlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *inputVecBatch,
-    const std::vector<int32_t> &channels, bool inputRaw, int32_t filterIndex)
+    const std::vector<int32_t> &channels, bool inputRaw, int32_t filterIndex, mem::OmniTaskMemoryPool *pool)
 {
     const int32_t rowCount = inputVecBatch->GetRowCount();
     if (rowCount == 0) {
-        MinMaxByAlignAppendEmptyPartial2<COL1_ID, COL2_ID>(result);
+        MinMaxByAlignAppendEmptyPartial2<COL1_ID, COL2_ID>(result, pool);
         return;
     }
     auto *filterVec = static_cast<Vector<bool> *>(inputVecBatch->Get(filterIndex));
@@ -111,31 +111,31 @@ void MinMaxByAlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *inputVec
     auto *sortKeyVec = inputVecBatch->Get(channels[1]);
     std::shared_ptr<NullsHelper> rowSkip = MinMaxByAlignMergeSortKeySkip(sortKeyVec, filterVec, needFilter, rowCount);
     if (!inputRaw) {
-        MinMaxByAlignAppendPartialWithSkip<COL1_ID, COL2_ID>(result, inputVecBatch, channels, rowCount, rowSkip);
+        MinMaxByAlignAppendPartialWithSkip<COL1_ID, COL2_ID>(result, inputVecBatch, channels, rowCount, rowSkip, pool);
         return;
     }
     MinMaxByAlignAppendRawPartial2<COL1_ID, COL2_ID>(result, inputVecBatch->Get(channels[0]), sortKeyVec, rowSkip,
-        rowCount);
+        rowCount, pool);
 }
 
 inline void MinMaxByComplexAlignAppendEmptyPartial2(VectorBatch *result, type::DataTypeId sortKeyTypeId,
-    type::DataTypePtr targetColDataType)
+    type::DataTypePtr targetColDataType, mem::OmniTaskMemoryPool *pool)
 {
-    result->Append(VectorHelper::CreateComplexVector(targetColDataType.get(), 0));
-    result->Append(VectorHelper::CreateVector(OMNI_FLAT, sortKeyTypeId, 0));
+    result->Append(VectorHelper::CreateComplexVector(pool, targetColDataType.get(), 0));
+    result->Append(VectorHelper::CreateVector(pool, OMNI_FLAT, sortKeyTypeId, 0));
 }
 
 template <type::DataTypeId COL2_ID>
 void MinMaxByComplexAlignAppendPartial2Rows(VectorBatch *result, BaseVector *col1Vec, BaseVector *col2Vec,
     const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount, type::DataTypeId targetColTypeId,
-    type::DataTypePtr targetColDataType)
+    type::DataTypePtr targetColDataType, mem::OmniTaskMemoryPool *pool)
 {
     using SortKeyVec = std::conditional_t<COL2_ID == type::OMNI_VARCHAR || COL2_ID == type::OMNI_CHAR ||
             COL2_ID == type::OMNI_VARBINARY,
         Vector<LargeStringContainer<std::string_view>>, typename AggNativeAndVectorType<COL2_ID>::vector>;
 
-    BaseVector *targetOut = VectorHelper::CreateComplexVector(targetColDataType.get(), rowCount);
-    auto *sortKeyOut = static_cast<SortKeyVec *>(VectorHelper::CreateVector(OMNI_FLAT, COL2_ID, rowCount));
+    BaseVector *targetOut = VectorHelper::CreateComplexVector(pool, targetColDataType.get(), rowCount);
+    auto *sortKeyOut = static_cast<SortKeyVec *>(VectorHelper::CreateVector(pool, OMNI_FLAT, COL2_ID, rowCount));
     for (int32_t i = 0; i < rowCount; ++i) {
         const bool skip = (rowSkip != nullptr && (*rowSkip)[i]) || col2Vec->IsNull(i);
         if (skip) {
@@ -165,24 +165,24 @@ void MinMaxByComplexAlignAppendPartial2Rows(VectorBatch *result, BaseVector *col
 template <type::DataTypeId COL2_ID>
 void MinMaxByComplexAlignAppendPartialWithSkip(VectorBatch *result, VectorBatch *input,
     const std::vector<int32_t> &channels, int32_t rowCount, const std::shared_ptr<NullsHelper> &rowSkip,
-    type::DataTypeId targetColTypeId, type::DataTypePtr targetColDataType)
+    type::DataTypeId targetColTypeId, type::DataTypePtr targetColDataType, mem::OmniTaskMemoryPool *pool)
 {
     if (rowSkip == nullptr) {
         MinMaxByAlignAppendPartialSlices(result, input, channels, rowCount);
         return;
     }
     MinMaxByComplexAlignAppendPartial2Rows<COL2_ID>(result, input->Get(channels[0]), input->Get(channels[1]), rowSkip,
-        rowCount, targetColTypeId, targetColDataType);
+        rowCount, targetColTypeId, targetColDataType, pool);
 }
 
 template <type::DataTypeId COL2_ID>
 void MinMaxByComplexAlignAggSchema(VectorBatch *result, VectorBatch *inputVecBatch,
     const std::vector<int32_t> &channels, bool inputRaw, type::DataTypeId targetColTypeId,
-    type::DataTypePtr targetColDataType)
+    type::DataTypePtr targetColDataType, mem::OmniTaskMemoryPool *pool)
 {
     const int32_t rowCount = inputVecBatch->GetRowCount();
     if (rowCount == 0) {
-        MinMaxByComplexAlignAppendEmptyPartial2(result, COL2_ID, targetColDataType);
+        MinMaxByComplexAlignAppendEmptyPartial2(result, COL2_ID, targetColDataType, pool);
         return;
     }
     if (!inputRaw) {
@@ -190,17 +190,17 @@ void MinMaxByComplexAlignAggSchema(VectorBatch *result, VectorBatch *inputVecBat
         return;
     }
     MinMaxByComplexAlignAppendPartial2Rows<COL2_ID>(result, inputVecBatch->Get(channels[0]),
-        inputVecBatch->Get(channels[1]), nullptr, rowCount, targetColTypeId, targetColDataType);
+        inputVecBatch->Get(channels[1]), nullptr, rowCount, targetColTypeId, targetColDataType, pool);
 }
 
 template <type::DataTypeId COL2_ID>
 void MinMaxByComplexAlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *inputVecBatch,
     const std::vector<int32_t> &channels, bool inputRaw, int32_t filterIndex, type::DataTypeId targetColTypeId,
-    type::DataTypePtr targetColDataType)
+    type::DataTypePtr targetColDataType, mem::OmniTaskMemoryPool *pool)
 {
     const int32_t rowCount = inputVecBatch->GetRowCount();
     if (rowCount == 0) {
-        MinMaxByComplexAlignAppendEmptyPartial2(result, COL2_ID, targetColDataType);
+        MinMaxByComplexAlignAppendEmptyPartial2(result, COL2_ID, targetColDataType, pool);
         return;
     }
     auto *filterVec = static_cast<Vector<bool> *>(inputVecBatch->Get(filterIndex));
@@ -209,11 +209,11 @@ void MinMaxByComplexAlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *i
     std::shared_ptr<NullsHelper> rowSkip = MinMaxByAlignMergeSortKeySkip(sortKeyVec, filterVec, needFilter, rowCount);
     if (!inputRaw) {
         MinMaxByComplexAlignAppendPartialWithSkip<COL2_ID>(result, inputVecBatch, channels, rowCount, rowSkip,
-            targetColTypeId, targetColDataType);
+            targetColTypeId, targetColDataType, pool);
         return;
     }
     MinMaxByComplexAlignAppendPartial2Rows<COL2_ID>(result, inputVecBatch->Get(channels[0]), sortKeyVec, rowSkip,
-        rowCount, targetColTypeId, targetColDataType);
+        rowCount, targetColTypeId, targetColDataType, pool);
 }
 
 } // namespace omniruntime::op

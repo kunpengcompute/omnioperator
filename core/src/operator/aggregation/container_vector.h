@@ -21,7 +21,14 @@ namespace vec {
 class ContainerVector : public Vector<int64_t> {
 public:
     ContainerVector(int32_t positionCount, std::vector<int64_t> &fieldVectors,
+        std::vector<omniruntime::type::DataTypePtr> &dataTypes,
+        omniruntime::mem::OmniTaskMemoryPool *pool);
+
+    ContainerVector(int32_t positionCount, std::vector<int64_t> &fieldVectors,
         std::vector<omniruntime::type::DataTypePtr> &dataTypes);
+
+    ContainerVector(int32_t capacityInBytes, int32_t positionCount,
+        omniruntime::mem::OmniTaskMemoryPool *pool);
 
     ContainerVector(int32_t capacityInBytes, int32_t positionCount);
 

@@ -47,7 +47,7 @@ TEST(NativeOmniDistinctLimitOperator, TestDistinctLimitBasic)
     DistinctLimitOperatorFactory *operatorFactory = DistinctLimitOperatorFactory::CreateDistinctLimitOperatorFactory(
         sourceTypes, distinctCols, sizeof(distinctCols) / sizeof(distinctCols[0]), -1, limitSize);
 
-    auto distinctLimitOperator = dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator());
+    auto distinctLimitOperator = dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator(nullptr));
 
     distinctLimitOperator->AddInput(vecBatch1);
 
@@ -86,7 +86,7 @@ static void TestDistinctLimitTypeCheckAction(const DataTypes &sourceTypes, int32
     distinctCols[0] = typeId; // requires: typeId == colId in sourceTypes vector
     operatorFactory = DistinctLimitOperatorFactory::CreateDistinctLimitOperatorFactory(sourceTypes, distinctCols,
         sizeof(distinctCols) / sizeof(distinctCols[0]), -1, limitSize);
-    distinctLimitOperator = operatorFactory->CreateOperator();
+    distinctLimitOperator = operatorFactory->CreateOperator(nullptr);
     EXPECT_TRUE((distinctLimitOperator != nullptr) == support);
 
     if (distinctLimitOperator != nullptr) {
@@ -171,7 +171,7 @@ TEST(NativeOmniDistinctLimitOperator, TestDistinctLimitWithNull)
         sourceTypes, distinctCols, sizeof(distinctCols) / sizeof(distinctCols[0]), -1, limitSize);
 
     auto distinctLimitOperator =
-        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator());
+        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator(nullptr));
 
     distinctLimitOperator->AddInput(vecBatch1);
 
@@ -220,7 +220,7 @@ TEST(NativeOmniDistinctLimitOperator, TestDistinctLimitWithRepeat)
         sourceTypes, distinctCols, sizeof(distinctCols) / sizeof(distinctCols[0]), -1, limitSize);
 
     auto distinctLimitOperator =
-        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator());
+        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator(nullptr));
 
     distinctLimitOperator->AddInput(vecBatch1);
 
@@ -267,7 +267,7 @@ TEST(NativeOmniDistinctLimitOperator, TestDistinctLimitTypesCover)
         sourceTypes, distinctCols, sizeof(distinctCols) / sizeof(distinctCols[0]), -1, limitSize);
 
     auto distinctLimitOperator =
-        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator());
+        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator(nullptr));
     distinctLimitOperator->AddInput(vecBatch1);
     VectorBatch *outputVecBatch;
     distinctLimitOperator->GetOutput(&outputVecBatch);
@@ -308,7 +308,7 @@ TEST(NativeOmniDistinctLimitOperator, TestDistinctLimitVarchar)
         sourceTypes, distinctCols, sizeof(distinctCols) / sizeof(distinctCols[0]), -1, limitSize);
 
     auto distinctLimitOperator =
-        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator());
+        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator(nullptr));
     distinctLimitOperator->AddInput(vecBatch1);
     VectorBatch *outputVecBatch;
     distinctLimitOperator->GetOutput(&outputVecBatch);
@@ -357,7 +357,7 @@ TEST(NativeOmniDistinctLimitOperator, TestDistinctLimitHashCol)
         sourceTypes, distinctCols, sizeof(distinctCols) / sizeof(distinctCols[0]), hashChannelIndex, limitSize);
 
     auto distinctLimitOperator =
-        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator());
+        dynamic_cast<DistinctLimitOperator *>(operatorFactory->CreateOperator(nullptr));
     distinctLimitOperator->AddInput(vecBatch1);
     VectorBatch *outputVecBatch;
     distinctLimitOperator->GetOutput(&outputVecBatch);

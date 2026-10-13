@@ -96,7 +96,10 @@ private:
 
 class ValueStream : public op::Operator {
 public:
-    ValueStream(std::shared_ptr<const ValueStreamNode> valueStreamNode)
+    // Pool-bound ctor chains Operator(pool).
+    ValueStream(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::shared_ptr<const ValueStreamNode> valueStreamNode)
+        : op::Operator(pool)
     {
         ResultIterator *itr = valueStreamNode->Iterator();
         rvStream_ = std::make_unique<RowVectorStream>(itr, valueStreamNode->OutputType());
@@ -144,9 +147,9 @@ public:
         return new ValueStreamFactory(planNode);
     }
 
-    op::Operator *CreateOperator() override
+    op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override
     {
-        return new ValueStream(planNode_);
+        return new ValueStream(pool, planNode_);
     }
 
 private:

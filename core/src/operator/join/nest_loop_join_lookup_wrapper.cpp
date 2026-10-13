@@ -26,14 +26,21 @@ NestLoopJoinLookupWrapperOperatorFactory *NestLoopJoinLookupWrapperOperatorFacto
     return new NestLoopJoinLookupWrapperOperatorFactory(*nestLoopJoinLookupOperatorFactory);
 }
 
-Operator *NestLoopJoinLookupWrapperOperatorFactory::CreateOperator()
+// Pool-bound override constructs wrapper with deferred pool.
+Operator *NestLoopJoinLookupWrapperOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto pNestLoopJoinLookupWrapperOperator = new NestLoopJoinLookupWrapperOperator(*nestLoopJoinLookupOperatorFactory);
+    auto pNestLoopJoinLookupWrapperOperator = new NestLoopJoinLookupWrapperOperator(pool,
+        *nestLoopJoinLookupOperatorFactory);
     return pNestLoopJoinLookupWrapperOperator;
 }
 
-NestLoopJoinLookupWrapperOperator::NestLoopJoinLookupWrapperOperator(NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
-    : nestLoopJoinLookupOperator(nullptr), nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory) {}
+// Pool-bound ctor — chains Operator(pool); stores pool for deferred InitOperator().
+NestLoopJoinLookupWrapperOperator::NestLoopJoinLookupWrapperOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
+    : Operator(pool),
+      nestLoopJoinLookupOperator(nullptr),
+      nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory),
+      deferredInnerPool_(pool) {}
 
 NestLoopJoinLookupWrapperOperator::~NestLoopJoinLookupWrapperOperator()
 {
@@ -45,7 +52,9 @@ NestLoopJoinLookupWrapperOperator::~NestLoopJoinLookupWrapperOperator()
 
 void NestLoopJoinLookupWrapperOperator::InitOperator()
 {
-    this->nestLoopJoinLookupOperator = dynamic_cast<NestLoopJoinLookupOperator*>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+    // Forward deferred pool if constructed via pool-bound ctor.
+    this->nestLoopJoinLookupOperator = dynamic_cast<NestLoopJoinLookupOperator*>(
+        nestLoopJoinLookupOperatorFactory->CreateOperator(deferredInnerPool_));
     this->nestLoopJoinLookupOperator->setNoMoreInput(false);
 }
 

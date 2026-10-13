@@ -325,11 +325,11 @@ namespace omniruntime {
             const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter) {
             const int32_t rowCount = (originVector != nullptr) ? originVector->GetSize() : 0;
             if (rowCount == 0) {
-                auto *countVector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, 0));
-                auto *m1Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, 0));
-                auto *m2Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, 0));
-                auto *m3Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, 0));
-                auto *m4Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, 0));
+                auto *countVector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, 0));
+                auto *m1Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, 0));
+                auto *m2Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, 0));
+                auto *m3Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, 0));
+                auto *m4Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, 0));
                 result->Append(countVector);
                 result->Append(m1Vector);
                 result->Append(m2Vector);
@@ -350,11 +350,11 @@ namespace omniruntime {
             VectorBatch *result, BaseVector *originVector,
             const std::shared_ptr<NullsHelper> nullMap) {
             const int32_t rowCount = originVector->GetSize();
-            auto *countVector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount));
-            auto *m1Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount));
-            auto *m2Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount));
-            auto *m3Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount));
-            auto *m4Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount));
+            auto *countVector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount));
+            auto *m1Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount));
+            auto *m2Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount));
+            auto *m3Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount));
+            auto *m4Vector = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount));
 
             auto valuePtr = reinterpret_cast<Value *>(VectorHelper::GetFlatValuePtr<IN>(originVector));
             for (int32_t i = 0; i < rowCount; ++i) {

@@ -133,7 +133,7 @@ public:
         ASSERT_NE(function, nullptr) << "from_unixtime function not found for 4-arg signature";
 
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(inputVec);
@@ -607,7 +607,7 @@ TEST(FromUnixTimeTest, FourArgLegacyUnsupportedPatternTokens) {
         ASSERT_NE(function, nullptr) << "from_unixtime function not found for 4-arg signature";
 
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(inputVec);

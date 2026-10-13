@@ -98,7 +98,7 @@ TEST(CollectSetVarcharAggregatorTest, PartialProcessGroupAndExtractValuesVarchar
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     std::string data[] = {"a", "b", "a", "c", "b", "a"};
@@ -145,7 +145,7 @@ TEST(CollectSetVarcharAggregatorTest, PartialProcessGroupEmptyInputExtractNull)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCnt = 0;
@@ -182,7 +182,7 @@ TEST(CollectSetVarcharAggregatorTest, GroupedAggregationVarchar)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     std::string data[] = {"x", "y", "z"};
@@ -243,6 +243,8 @@ TEST(CollectSetVarcharAggregatorTest, InitStatesMultiGroup)
     DataTypes outputTypes(std::vector<DataTypePtr>{ArrayOf(VarcharType(100))});
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
+    agg->SetExecutionContext(executionContext.get());
 
     const int32_t groupCount = 4;
     std::vector<AggregateState *> groupStates(groupCount);
@@ -270,7 +272,7 @@ TEST(CollectSetVarcharAggregatorTest, PartialProcessGroupConstVectorVarchar)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCount = 4;

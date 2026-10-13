@@ -57,7 +57,7 @@ ErrorCode SpillReader::ReadVecBatch(std::unique_ptr<vec::VectorBatch> &vectorBat
     auto vectorBatchPtr = vectorBatch.get();
     if (vectorBatchPtr == nullptr || rowCount > maxRowCount) {
         vectorBatch = std::make_unique<VectorBatch>(rowCount);
-        VectorHelper::AppendVectors(vectorBatch.get(), dataTypes, rowCount);
+        VectorHelper::AppendVectors(vectorBatch.get(), dataTypes, rowCount, pool_);
         vectorBatchPtr = vectorBatch.get();
         maxRowCount = rowCount;
     } else {

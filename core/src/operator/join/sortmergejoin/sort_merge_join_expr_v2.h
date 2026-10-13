@@ -38,7 +38,9 @@ public:
 
     ~StreamedTableWithExprOperatorFactoryV2() override;
 
-    omniruntime::op::Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     std::shared_ptr<SortMergeJoinOperator> GetSmjOperator();
 
@@ -57,7 +59,8 @@ private:
 
 class StreamedTableWithExprOperatorV2 : public Operator {
 public:
-    StreamedTableWithExprOperatorV2(const type::DataTypes &streamedTypes,
+    // Pool-bound ctor chains Operator(pool)
+    StreamedTableWithExprOperatorV2(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &streamedTypes,
         std::vector<std::unique_ptr<Projection>> &projections, std::shared_ptr<SortMergeJoinOperator> smjOperator);
 
     ~StreamedTableWithExprOperatorV2() override;
@@ -75,7 +78,7 @@ public:
         auto eOfvectorBatch = new VectorBatch(0);
         for (int i = 0; i < streamedTypes.Get().size(); i++) {
             auto type = streamedTypes.GetType(i);
-            auto vec = VectorHelper::CreateComplexVector(type.get(), 0);
+            auto vec = VectorHelper::CreateComplexVector(this->pool(), type.get(), 0);
             eOfvectorBatch->Append(vec);
         }
         this->AddInput(eOfvectorBatch);
@@ -138,7 +141,9 @@ public:
 
     ~BufferedTableWithExprOperatorFactoryV2() override;
 
-    omniruntime::op::Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     bool filterIsString = true;
@@ -151,7 +156,8 @@ private:
 
 class BufferedTableWithExprOperatorV2 : public Operator {
 public:
-    BufferedTableWithExprOperatorV2(const type::DataTypes &bufferedTypes,
+    // Pool-bound ctor chains Operator(pool)
+    BufferedTableWithExprOperatorV2(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &bufferedTypes,
         std::vector<std::unique_ptr<Projection>> &projections, std::shared_ptr<SortMergeJoinOperator> smjOperator);
 
     ~BufferedTableWithExprOperatorV2() override;
@@ -169,7 +175,7 @@ public:
         auto eOfvectorBatch = new VectorBatch(0);
         for (unsigned int i = 0; i < bufferedTypes.Get().size(); i++) {
             auto type = bufferedTypes.GetType(i);
-            auto vec = VectorHelper::CreateComplexVector(type.get(), 0);
+            auto vec = VectorHelper::CreateComplexVector(this->pool(), type.get(), 0);
             eOfvectorBatch->Append(vec);
         }
         this->AddInput(eOfvectorBatch);

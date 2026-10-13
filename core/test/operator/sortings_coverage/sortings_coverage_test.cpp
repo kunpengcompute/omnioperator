@@ -32,7 +32,6 @@
 #include <type_traits>
 #include <vector>
 
-#include "memory/memory_manager.h"
 #include "operator/pages_index.h"
 #include "operator/pdqsort.h"
 #include "operator/timsort.h"
@@ -49,14 +48,6 @@ using namespace omniruntime::type;
 using namespace omniruntime::vec;
 
 namespace {
-struct MemoryInit {
-    MemoryInit()
-    {
-        omniruntime::mem::MemoryManager::GetGlobalMemoryManager();
-    }
-};
-const MemoryInit kMemoryInit;
-
 std::string MakeLen(char c, size_t n)
 {
     return std::string(n, c);

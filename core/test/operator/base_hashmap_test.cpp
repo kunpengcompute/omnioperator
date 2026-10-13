@@ -7,6 +7,8 @@
 #include "operator/union/union.h"
 #include "operator/hashmap/base_hash_map.h"
 #include "operator/hashmap/vector_marshaller.h"
+#include "memory/allocator.h"
+#include "memory/simple_arena_allocator.h"
 
 #define MUST_CARE_RET [[nodiscard]]
 
@@ -267,6 +269,15 @@ template <typename T> struct GroupbyHashCalculator<std::unique_ptr<T>> {
 }
 
 namespace HashMapTest {
+// TU-local stand-in for the retired Allocator singleton (allocator.h `= delete`).
+// Null-pool Allocator = the legacy-bridge unaccounted path; same process-wide
+// lifetime and no-accounting semantics the old singleton had.
+static omniruntime::mem::Allocator *TestAllocator()
+{
+    static omniruntime::mem::Allocator allocator(nullptr);
+    return &allocator;
+}
+
 /**
  * test for base hashmap , only key > 0
  * and value is the key of insert time, current insert time is 5;
@@ -278,7 +289,7 @@ TEST(BaseHashMapTest, TestUIntUIntPairNoNullEmplace)
     constexpr uint32_t testTotal = 10000;
     constexpr uint32_t insertTime = 5;
 
-    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> hashMap;
+    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> hashMap{omniruntime::op::OmniHashmapAllocator(TestAllocator())};
     // the min value is 1 , and null value is 0 , so the hashmap didn't have null key
     for (uint32_t key = 1; key <= testTotal; ++key) {
         auto ret = hashMap.Emplace(key);
@@ -305,7 +316,7 @@ TEST(BaseHashMapTest, TestUIntUIntPairNoNullEmplace)
 
 TEST(BaseHashMapTest, OnlyNullEmplace)
 {
-    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> hashMap;
+    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> hashMap{omniruntime::op::OmniHashmapAllocator(TestAllocator())};
 
     constexpr uint32_t testTotal = 1000;
     uint32_t nullInt = 0;
@@ -329,7 +340,7 @@ TEST(BaseHashMapTest, OnlyNullEmplace)
 
 TEST(BaseHashMapTest, TestUIntUIntPairWithNullEmplace)
 {
-    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> hashMap;
+    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> hashMap{omniruntime::op::OmniHashmapAllocator(TestAllocator())};
 
     constexpr uint32_t testTotal = 1000;
     constexpr uint32_t insertTime = 5;
@@ -377,7 +388,7 @@ TEST(BaseHashMapTest, TestValueWithResourceEmplace)
 {
     {
         // hashmap will release all memory
-        omniruntime::op::DefaultHashMap<NotPodSharedClass, MaxState *> hashMap;
+        omniruntime::op::DefaultHashMap<NotPodSharedClass, MaxState *> hashMap{omniruntime::op::OmniHashmapAllocator(TestAllocator())};
 
         constexpr uint32_t total = 100;
         auto currentBytes = 0;
@@ -441,7 +452,7 @@ TEST(BaseHashMapTest, TestStringMaxStateNoNullHashMap)
 {
     {
         // hashmap will release all memory of MaxState in this closure
-        omniruntime::op::DefaultHashMap<std::string, MaxState *> hashMap;
+        omniruntime::op::DefaultHashMap<std::string, MaxState *> hashMap{omniruntime::op::OmniHashmapAllocator(TestAllocator())};
 
         constexpr uint32_t total = 1000;
 
@@ -491,7 +502,7 @@ TEST(BaseHashMapTest, TestStringUniquePtrHashMap)
 {
     constexpr uint32_t testTotal = 10000;
 
-    omniruntime::op::DefaultHashMap<std::string, long *> hashMap;
+    omniruntime::op::DefaultHashMap<std::string, long *> hashMap{omniruntime::op::OmniHashmapAllocator(TestAllocator())};
     {
         std::string str;
         // emplace empty string
@@ -532,7 +543,7 @@ TEST(BaseHashMapTest, TestUniqueUniquePtrHashMap)
 {
     constexpr uint32_t testTotal = 10000;
 
-    omniruntime::op::DefaultHashMap<std::unique_ptr<uint32_t>, long *> hashMap;
+    omniruntime::op::DefaultHashMap<std::unique_ptr<uint32_t>, long *> hashMap{omniruntime::op::OmniHashmapAllocator(TestAllocator())};
     {
         auto ret = hashMap.EmplaceNullValue(std::make_unique<uint32_t>(0));
         EXPECT_TRUE(ret.IsInsert());
@@ -570,7 +581,7 @@ TEST(BaseHashMapTest, TestUniqueUniquePtrHashMap)
 TEST(BaseHashMapTest, TestUserDefinedRelease)
 {
     {
-        omniruntime::op::DefaultHashMap<uint32_t, ValueWithResource *> hashMap;
+        omniruntime::op::DefaultHashMap<uint32_t, ValueWithResource *> hashMap{omniruntime::op::OmniHashmapAllocator(TestAllocator())};
         constexpr uint32_t total = 1000;
         constexpr uint32_t totalBytes = 1000 * 100;
         std::vector<ValueWithResource *> p(total, nullptr);
@@ -597,7 +608,7 @@ TEST(BaseHashMapTest, TestRehash)
     constexpr uint32_t testTotal = 10000;
     constexpr uint32_t insertTime = 4;
 
-    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> hashMap(4);
+    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> hashMap(omniruntime::op::OmniHashmapAllocator(TestAllocator()), 4);
     for (uint32_t key = 0; key < testTotal; ++key) {
         auto ret = hashMap.Emplace(key);
         EXPECT_TRUE(ret.IsInsert());
@@ -616,10 +627,40 @@ TEST(BaseHashMapTest, TestRehash)
     EXPECT_EQ(hashMap.GetElementsSize(), testTotal);
 }
 
+TEST(BaseHashMapTest, TestNotNullEmplaceRehash)
+{
+    constexpr uint32_t testTotal = 10000;
+    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> direct(
+        omniruntime::op::OmniHashmapAllocator(TestAllocator()), 4);
+    omniruntime::op::DefaultHashMap<uint32_t, uint32_t> prehashed(
+        omniruntime::op::OmniHashmapAllocator(TestAllocator()), 4);
+
+    // Adaptive-builder contract: the growth-enabled insert keeps a small seed
+    // correct; plain EmplaceNotNullKey is reserved for pre-sized tables.
+    for (uint32_t key = 0; key < testTotal; ++key) {
+        auto directResult = direct.EmplaceNotNullKeyGrowing(key);
+        ASSERT_TRUE(directResult.IsInsert());
+        directResult.SetValue(key);
+
+        size_t hash = prehashed.CalculateHash(key);
+        auto prehashedResult = prehashed.EmplaceNotNullKeyGrowing(key, hash);
+        ASSERT_TRUE(prehashedResult.IsInsert());
+        prehashedResult.SetValue(key);
+    }
+
+    for (uint32_t key = 0; key < testTotal; ++key) {
+        EXPECT_FALSE(direct.EmplaceNotNullKey(key).IsInsert());
+        size_t hash = prehashed.CalculateHash(key);
+        EXPECT_FALSE(prehashed.EmplaceNotNullKey(key, hash).IsInsert());
+    }
+    EXPECT_EQ(direct.GetElementsSize(), testTotal);
+    EXPECT_EQ(prehashed.GetElementsSize(), testTotal);
+}
+
 TEST(BaseHashMapTest, TestMemoryUsageOfSerializing)
 {
     using namespace omniruntime::vec;
-    omniruntime::mem::SimpleArenaAllocator arenaAllocator;
+    omniruntime::mem::SimpleArenaAllocator arenaAllocator(4096, TestAllocator());
     std::vector<BaseVector *> groupVectors;
     std::vector<omniruntime::op::VectorSerializer> serializers;
     int rowSize = 10000;
@@ -665,7 +706,7 @@ TEST(BaseHashMapTest, TestSerializedAndDeserialized)
     using namespace omniruntime;
     using namespace omniruntime::vec;
 
-    mem::SimpleArenaAllocator arenaAllocator;
+    mem::SimpleArenaAllocator arenaAllocator(4096, TestAllocator());
     std::vector<vec::BaseVector *> groupVectors;
     std::vector<op::VectorSerializer> serializers;
 

@@ -103,6 +103,7 @@ SortMergeJoinScanner::~SortMergeJoinScanner() {}
 int64_t SortMergeJoinScanner::FindNextJoinRows()
 {
     (this->*scanFindNextRow)();
+    ReleaseConsumedPrefix();
     return preStatus->GenerateStatus();
 }
 
@@ -783,8 +784,25 @@ template <JoinType templateJoinType> int32_t SortMergeJoinScanner::FindNextMatch
 {
     auto compare = CompareCurRowKeys();
     auto cur = streamedPagesIndexPosition;
+    const auto batchAt = [](DynamicPagesIndex *index, int64_t position) -> int32_t {
+        if (position < 0 || position >= index->GetPositionCount()) {
+            return -1;
+        }
+        return static_cast<int32_t>(DecodeSliceIndex(index->GetValueAddresses(position)));
+    };
+    auto streamBatch = batchAt(streamedPagesIndex, streamedPagesIndexPosition);
+    auto bufferBatch = batchAt(bufferedPagesIndex, bufferedPagesIndexPosition);
     while ((compare > 0 && AdvancedBufferedToRowWithNullFreeJoinKey()) ||
         (compare < 0 && AdvancedStreamedWithNullFreeJoinKey())) {
+        const auto nextStreamBatch = batchAt(streamedPagesIndex, streamedPagesIndexPosition);
+        const auto nextBufferBatch = batchAt(bufferedPagesIndex, bufferedPagesIndexPosition);
+        // No whole batch becomes releasable while both cursors stay in their
+        // current batches. Avoid rescanning pending matches for every row.
+        if (nextStreamBatch != streamBatch || nextBufferBatch != bufferBatch) {
+            ReleaseConsumedPrefix();
+            streamBatch = nextStreamBatch;
+            bufferBatch = nextBufferBatch;
+        }
         compare = CompareCurRowKeys();
         // cur-stream-key duplicate with pre-key, also save although buffer not match cur-stream-key
         if (compare != 0 && (streamedPagesIndexPosition > cur) && PreKeyMatched()) {
@@ -792,6 +810,60 @@ template <JoinType templateJoinType> int32_t SortMergeJoinScanner::FindNextMatch
         }
     }
     return compare;
+}
+
+void SortMergeJoinScanner::ReleaseConsumedPrefix()
+{
+    // For inner, left outer, and semi joins, only batches referenced by the
+    // current row, the previous peer key, or pending scanner output must
+    // remain alive. Left-outer missing rows are also placed in
+    // streamedValueAddress before this boundary, so their source batches are
+    // protected until the result builder materializes them.
+    if (joinType != JoinType::OMNI_JOIN_TYPE_INNER && joinType != JoinType::OMNI_JOIN_TYPE_LEFT &&
+        joinType != JoinType::OMNI_JOIN_TYPE_LEFT_SEMI) {
+        return;
+    }
+
+    if (streamedPagesIndexPosition >= 0 &&
+        streamedPagesIndexPosition < streamedPagesIndex->GetPositionCount()) {
+        int32_t protectedBatch = static_cast<int32_t>(DecodeSliceIndex(
+            streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition)));
+        if (preStreamedValueAddress >= 0) {
+            protectedBatch = std::min(protectedBatch,
+                static_cast<int32_t>(DecodeSliceIndex(preStreamedValueAddress)));
+        }
+        for (const auto address : streamedValueAddress) {
+            if (address >= 0) {
+                protectedBatch = std::min(protectedBatch,
+                    static_cast<int32_t>(DecodeSliceIndex(address)));
+            }
+        }
+        streamedPagesIndex->FreeBeforeVecBatch(protectedBatch);
+    }
+    if (bufferedPagesIndexPosition >= 0 &&
+        bufferedPagesIndexPosition < bufferedPagesIndex->GetPositionCount()) {
+        int32_t protectedBatch = static_cast<int32_t>(DecodeSliceIndex(
+            bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition)));
+        // NeedBufferedData can rewind one position while waiting for the next
+        // input batch. Keep that position's batch valid as well.
+        if (bufferedPagesIndexPosition > 0) {
+            protectedBatch = std::min(protectedBatch, static_cast<int32_t>(DecodeSliceIndex(
+                bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition - 1))));
+        }
+        for (const auto address : preBufferedValueAddress) {
+            if (address >= 0) {
+                protectedBatch = std::min(protectedBatch,
+                    static_cast<int32_t>(DecodeSliceIndex(address)));
+            }
+        }
+        for (const auto address : bufferedValueAddress) {
+            if (address >= 0) {
+                protectedBatch = std::min(protectedBatch,
+                    static_cast<int32_t>(DecodeSliceIndex(address)));
+            }
+        }
+        bufferedPagesIndex->FreeBeforeVecBatch(protectedBatch);
+    }
 }
 
 bool SortMergeJoinScanner::PreKeyMatched()

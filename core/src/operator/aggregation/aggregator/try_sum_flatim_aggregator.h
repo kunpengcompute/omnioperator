@@ -318,10 +318,10 @@ public:
         const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter) override
     {
         int rowCount = originVector == nullptr ? 0 : originVector->GetSize();
-        auto emptyVector = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowCount));
+        auto emptyVector = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_BOOLEAN, rowCount));
 
         if (rowCount == 0) {
-            auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(OUT_ID, rowCount));
+            auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(this->pool_, OUT_ID, rowCount));
             result->Append(sumVector);
             result->Append(emptyVector);
             return;
@@ -350,7 +350,7 @@ public:
         const std::shared_ptr<NullsHelper> nullMap, Vector<bool> *emptyVector)
     {
         int rowCount = originVector->GetSize();
-        auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(OUT_ID, rowCount));
+        auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(this->pool_, OUT_ID, rowCount));
         // The varchar type is converted to the double type in advance, so InType can't be the varchar type.
         auto vector = reinterpret_cast<T *>(originVector);
         if (nullMap != nullptr) {

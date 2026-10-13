@@ -193,7 +193,7 @@ void MaxComplexAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector
 {
     (void)aggFilter;
     int rowCount = originVector->GetSize();
-    BaseVector *outVector = VectorHelper::CreateComplexVector(targetColDataType_.get(), rowCount);
+    BaseVector *outVector = VectorHelper::CreateComplexVector(this->pool_, targetColDataType_.get(), rowCount);
     for (int index = 0; index < rowCount; index++) {
         if (nullMap != nullptr && (*nullMap)[index]) {
             outVector->SetNull(index);

@@ -78,9 +78,9 @@ namespace omniruntime {
             return new ExpandOperatorFactory(move(exprEvaluators));
         }
 
-        omniruntime::op::Operator *ExpandOperatorFactory::CreateOperator()
+        omniruntime::op::Operator *ExpandOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
         {
-            return new ExpandOperator(this->exprEvaluators);
+            return new ExpandOperator(pool, this->exprEvaluators);
         }
     } // namespace op
 } // namespace omniruntime

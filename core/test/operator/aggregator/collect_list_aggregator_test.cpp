@@ -169,7 +169,7 @@ TEST(CollectListAggregatorTest, PartialProcessGroupOrderAndDuplicatesInt)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCnt = 4;
@@ -210,7 +210,7 @@ TEST(CollectListAggregatorTest, PartialProcessGroupOrderAndDuplicatesIntDictiona
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // Dictionary: distinct values [1, 2, 3]. Row values via ids: 1, 2, 1, 3 -> list [1, 2, 1, 3].
@@ -261,7 +261,7 @@ TEST(CollectListAggregatorTest, PartialProcessGroupOrderAndDuplicatesDecimal128)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCnt = 4;
@@ -301,7 +301,7 @@ TEST(CollectListAggregatorTest, PartialProcessGroupEmptyInputExtractNull)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCnt = 0;
@@ -335,7 +335,7 @@ TEST(CollectListAggregatorTest, PartialProcessGroupAllNullsExtractNull)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCnt = 3;
@@ -373,6 +373,8 @@ TEST(CollectListAggregatorTest, InitStatesMultiGroup)
     DataTypes outputTypes(std::vector<DataTypePtr>{ArrayOf(IntType())});
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
+    agg->SetExecutionContext(executionContext.get());
 
     const int32_t groupCount = 4;
     std::vector<AggregateState *> groupStates(groupCount);
@@ -396,7 +398,7 @@ TEST(CollectListAggregatorTest, GroupedAggregationByte)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t groupCount = 3;
@@ -441,7 +443,7 @@ TEST(CollectListAggregatorTest, GroupedAggregationDecimal64)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t groupCount = 3;
@@ -486,7 +488,7 @@ TEST(CollectListAggregatorTest, GroupedAggregationDecimal128)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t groupCount = 3;
@@ -556,7 +558,7 @@ TEST(CollectListAggregatorTest, ProcessGroupUnspillMergeSpilledArraysOrderPreser
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
     agg->SetStateOffset(0);
 
@@ -626,7 +628,7 @@ TEST(CollectListAggregatorTest, ProcessGroupUnspillSkipsNullRow)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
     agg->SetStateOffset(0);
 
@@ -823,7 +825,7 @@ TEST(CollectListAggregatorTest, TwoCollectListSharedStateBufferOffsets)
     agg0->InitState(stateBuffer.get());
     agg1->InitState(stateBuffer.get());
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg0->SetExecutionContext(executionContext.get());
     agg1->SetExecutionContext(executionContext.get());
 
@@ -891,7 +893,7 @@ TEST(CollectListAggregatorTest, PartialProcessGroupConstVectorInt)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // ConstVector: all 4 rows have value 42
@@ -934,7 +936,7 @@ TEST(CollectListAggregatorTest, PartialProcessGroupConstVectorLong)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCount = 3;

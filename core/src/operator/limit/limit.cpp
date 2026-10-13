@@ -28,13 +28,14 @@ LimitOperatorFactory *LimitOperatorFactory::CreateLimitOperatorFactory(std::shar
     return new LimitOperatorFactory(planNode->Count(), planNode->Offset(), outputColumnCount);
 }
 
-Operator *LimitOperatorFactory::CreateOperator()
+Operator *LimitOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    return new LimitOperator(limit, offset, columnCount);
+    return new LimitOperator(pool, limit, offset, columnCount);
 }
 
-LimitOperator::LimitOperator(int32_t limit, int32_t offset, int32_t columnCount)
-    : remainingLimit(limit), remainingOffset(offset), outputVecBatch(nullptr)
+LimitOperator::LimitOperator(
+    omniruntime::mem::OmniTaskMemoryPool *pool, int32_t limit, int32_t offset, int32_t columnCount)
+    : Operator(pool), remainingLimit(limit), remainingOffset(offset), outputVecBatch(nullptr)
 {
     identityProjections_.reserve(static_cast<size_t>(columnCount));
     for (int32_t i = 0; i < columnCount; ++i) {

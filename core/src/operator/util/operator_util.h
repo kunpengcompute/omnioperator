@@ -801,7 +801,7 @@ public:
         int32_t rowCount = inputVecBatch->GetRowCount();
         auto newInputVecBatch = std::make_unique<vec::VectorBatch>(rowCount);
         if (rowCount == 0) {
-            vec::VectorHelper::AppendVectors(newInputVecBatch.get(), inputTypes, rowCount);
+            vec::VectorHelper::AppendVectors(newInputVecBatch.get(), inputTypes, rowCount, executionContext->GetPool());
             return newInputVecBatch.release();
         }
 

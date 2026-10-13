@@ -5,6 +5,8 @@
 #ifndef GROUP_AGGREGATION_H
 #define GROUP_AGGREGATION_H
 
+#include <atomic>
+
 #include "definitions.h"
 #include "aggregation.h"
 #include "type/data_types.h"
@@ -22,6 +24,7 @@
 #include "operator/pages_index.h"
 #include "operator/spill/spiller.h"
 #include "group_aggregation_sort.h"
+#include "operator/spillable_operator.h"
 
 namespace omniruntime::op {
 using namespace vec;
@@ -30,14 +33,16 @@ class HashAggregationOperatorFactory;
 
 class HashAggregationOperator;
 
-class HashAggregationOperator : public AggregationCommonOperator {
+class HashAggregationOperator : public AggregationCommonOperator, public SpillableOperator {
 public:
-    HashAggregationOperator(std::vector<ColumnIndex> &groupByCols, std::vector<std::vector<int32_t>> &aggInputCols,
+    // Pool-bound ctor — forwards pool to AggregationCommonOperator(pool, ...).
+    HashAggregationOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::vector<ColumnIndex> &groupByCols, std::vector<std::vector<int32_t>> &aggInputCols,
         uint32_t aggInputColsSize, std::vector<DataTypes> &aggInputTypes, std::vector<DataTypes> &aggOutputTypes,
         std::vector<std::unique_ptr<Aggregator>> &&aggs, std::vector<bool> &inputRaws,
         std::vector<bool> &outputPartials, const std::vector<int8_t> &hasAggFilters,
         const OperatorConfig &operatorConfig, std::vector<uint32_t> aggFuncTypesVector, AggregationNode::Step step)
-        : AggregationCommonOperator(std::move(aggs), inputRaws, outputPartials),
+        : AggregationCommonOperator(pool, std::move(aggs), inputRaws, outputPartials),
           groupByCols(groupByCols),
           aggInputCols(aggInputCols),
           aggInputColsSize(aggInputColsSize),
@@ -61,7 +66,7 @@ public:
         }
     }
 
-    ~HashAggregationOperator() override = default;
+    ~HashAggregationOperator() override;
 
     int32_t AddInput(VectorBatch *data) override;
 
@@ -70,6 +75,15 @@ public:
     OmniStatus Init() override;
 
     OmniStatus Close() override;
+
+    uint64_t reclaimableBytes() const override;
+    int64_t reclaim(int64_t targetBytes) override;
+    bool isInNonReclaimableSection() const noexcept override
+    {
+        return Operator::isInNonReclaimableSection();
+    }
+    Operator *operatorBase() noexcept override { return this; }
+    const char *reclaimableName() const noexcept override { return "HashAggregationOperator"; }
 
     template<typename Serialize>
     void Emplace(Serialize &emplaceKey, VectorBatch *vecBatch, BaseVector **groupVectors, int32_t groupColNum);
@@ -113,6 +127,16 @@ private:
     void InitSpillInfos();
 
     ErrorCode SpillHashMap();
+
+    uint64_t EstimateRehashReservation(uint64_t incomingRows) const;
+
+    void EnsureReservationPctsCached();
+
+    void EnsureInputFits(const VectorBatch *vecBatch);
+
+    void ReinitializeHashmapAfterRelease();
+
+    void EnsureOutputFits();
 
     ErrorCode SpillToDisk();
 
@@ -167,7 +191,9 @@ private:
 
     ALWAYS_INLINE size_t GetElementsSize();
 
-    ALWAYS_INLINE void ResetHashmap();
+    ALWAYS_INLINE void ReleaseHashmapCapacity();
+
+    void ReleaseFinishedOutputState();
 
     std::vector<ColumnIndex> groupByCols;
     std::vector<std::vector<int32_t>> aggInputCols;
@@ -222,6 +248,17 @@ private:
     std::vector<AggregateState *> currentRowStates;
     std::vector<AggregateState *> newGroupStates;
     int8_t resizeArrayMapCnt = 0;
+    std::atomic<bool> reclaimInProgress_{false};
+    bool hashmapCapacityReleased_ = false;
+    bool outputStarted_ = false;
+
+    // QueryConfig is immutable for a query's lifetime (QueryConfig.h). Cache the
+    // clamped reservation percentages once instead of copying QueryConfig and
+    // re-parsing the config map on every AddInput. Defaults mirror QueryConfig's
+    // kDefaultPct values; EnsureReservationPctsCached() fills them on first use.
+    int32_t minSpillableReservationPct_{5};
+    int32_t spillableReservationGrowthPct_{10};
+    bool reservationPctsCached_{false};
 };
 
 class HashAggregationOperatorFactory : public AggregationCommonOperatorFactory {
@@ -304,7 +341,9 @@ public:
 
     ~HashAggregationOperatorFactory() override = default;
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     OmniStatus Init() override;
 

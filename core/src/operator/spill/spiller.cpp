@@ -6,7 +6,6 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <cstring>
-#include <string>
 #include <sys/stat.h>
 #include "vector/unsafe_vector.h"
 #include "spiller.h"
@@ -15,7 +14,12 @@ namespace omniruntime {
 namespace op {
 using namespace omniruntime::vec;
 using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-static const char *SPILL_TEMPLATE_CHARS = "spill-XXXXXX";
+static std::string SPILL_TEMPLATE("spill-XXXXXX");
+static const char *SPILL_TEMPLATE_CHARS = SPILL_TEMPLATE.c_str();
+static int32_t SPILL_TEMPLATE_SIZE = static_cast<int32_t>(SPILL_TEMPLATE.size());
+// When PID and TID is converted into a character string, the maximum length is 10.
+constexpr int PID_LENGTH = 10;
+constexpr int TID_LENGTH = 10;
 
 ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool comapreWithHashVal)
 {
@@ -37,7 +41,8 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
         auto rowCount = std::min(maxRowCountPerBatch, static_cast<int32_t>(totalRowCount - totalRowOffset));
         if (spillVecBatch == nullptr || rowCount > maxRowCount) {
             spillVecBatch = std::make_unique<VectorBatch>(rowCount);
-            VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount);
+            VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount,
+                op != nullptr ? op->pool() : nullptr);
             maxRowCount = rowCount;
         } else {
             spillVecBatch->Resize(rowCount);
@@ -89,7 +94,8 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
         auto rowCount = std::min(maxRowCountPerBatch, static_cast<int32_t>(totalRowCount - totalRowOffset));
         if (spillVecBatch == nullptr || rowCount > maxRowCount) {
             spillVecBatch = std::make_unique<VectorBatch>(rowCount);
-            VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount);
+            VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount,
+                op != nullptr ? op->pool() : nullptr);
             maxRowCount = rowCount;
         } else {
             spillVecBatch->Resize(rowCount);
@@ -124,7 +130,8 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
 }
 
 
-uint64_t Spiller::CollectVecBatchSize(const type::DataTypes &dataTypes, vec::VectorBatch *vectorBatch)
+uint64_t Spiller::CollectVecBatchSize(
+    const type::DataTypes &dataTypes, vec::VectorBatch *vectorBatch)
 {
     uint64_t result = sizeof(int32_t); // for row count size
     int32_t vecCount = vectorBatch->GetVectorCount();
@@ -258,9 +265,17 @@ uint64_t Spiller::CollectRowVectorSize(const DataTypePtr &rowType, vec::BaseVect
         // offsets
         result += (rowCount + 1) * sizeof(int32_t);
         // value length
-        auto varcharVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vector);
-        auto offsets = unsafe::UnsafeStringVector::GetOffsets(varcharVector);
-        result += offsets[rowCount] - offsets[0];
+        if (vector->GetEncoding() == OMNI_FLAT) {
+            auto varcharVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vector);
+            auto offsets = unsafe::UnsafeStringVector::GetOffsets(varcharVector);
+            result += offsets[rowCount] - offsets[0];
+        } else {
+            for (int32_t row = 0; row < rowCount; ++row) {
+                if (!vector->IsNull(row)) {
+                    result += VectorHelper::GetStringValueFromVector(vector, row).size();
+                }
+            }
+        }
     } else {
         // value length
         result += rowCount * sizeof(T);
@@ -270,40 +285,40 @@ uint64_t Spiller::CollectRowVectorSize(const DataTypePtr &rowType, vec::BaseVect
 
 ErrorCode SpillWriter::CreateTempFile()
 {
-    // Join spill nests gluten-spill/<uuid>/join-spill-<id>/build/run<N>/sp<M> under the
-    // YARN container local dir. The old VLA was dir.size()+12+10+10+1 and omitted the
-    // three separators in "{dir}/{pid}-{tid}-spill-XXXXXX", so snprintf truncated the
-    // XXXXXX suffix on long paths and mkstemp returned EINVAL ("Invalid argument").
-    const auto pid = static_cast<int>(getpid());
-    const auto tid = static_cast<uint32_t>(pthread_self());
-    std::string filePathBuf;
-    filePathBuf.reserve(dirPath.size() + 48);
-    filePathBuf.append(dirPath);
-    filePathBuf.push_back('/');
-    filePathBuf.append(std::to_string(pid));
-    filePathBuf.push_back('-');
-    filePathBuf.append(std::to_string(tid));
-    filePathBuf.push_back('-');
-    filePathBuf.append(SPILL_TEMPLATE_CHARS);
-    LogDebug("Spill writer create temp file at dir: %s.", dirPath.c_str());
+    // the spill directory will be created when CheckOperatorConfig if it does not exist
+    int32_t fileNameLen = dirPath.size() + SPILL_TEMPLATE_SIZE + PID_LENGTH + TID_LENGTH + 1;
+    auto dirPathChars = dirPath.c_str();
+    char filePathChars[fileNameLen];
+    auto pid = static_cast<int>(getpid());
+    auto tid = static_cast<uint32_t>(pthread_self());
+    LogDebug("Spill writer create temp file at dir: %s.", dirPathChars);
+    if (snprintf(filePathChars, fileNameLen, "%s/%d-%u-%s", dirPathChars, pid, tid,
+        SPILL_TEMPLATE_CHARS) < 0) {
+        auto errorNum = errno;
+        char errorBuf[ERROR_BUFFER_SIZE];
+        GetErrorMsg(errorNum, errorBuf, ERROR_BUFFER_SIZE);
+        LogError("Snprintf for %s and %s failed since %s.", dirPathChars, SPILL_TEMPLATE_CHARS, errorBuf);
+        return ErrorCode::WRITE_FAILED;
+    }
 
-    int32_t tempFd = mkstemp(&filePathBuf[0]);
+    // it will open the file and the file permission is 600
+    int32_t tempFd = mkstemp(const_cast<char *>(filePathChars));
     if (tempFd == -1) {
         auto errorNum = errno;
         char errorBuf[ERROR_BUFFER_SIZE];
         GetErrorMsg(errorNum, errorBuf, ERROR_BUFFER_SIZE);
-        LogError("Mkstemp in %s for %s failed since %s.", dirPath.c_str(), filePathBuf.c_str(), errorBuf);
+        LogError("Mkstemp in %s for %s failed since %s.", dirPathChars, filePathChars, errorBuf);
         return ErrorCode::MKSTEMP_FAILED;
     }
+    // set the file permission to 600
     if (fchmod(tempFd, S_IRUSR | S_IWUSR) == -1) {
         auto errorNum = errno;
         char errorBuf[ERROR_BUFFER_SIZE];
         GetErrorMsg(errorNum, errorBuf, ERROR_BUFFER_SIZE);
-        LogError("Fchmod %s failed since %s.", filePathBuf.c_str(), errorBuf);
-        close(tempFd);
+        LogError("Fchmod %s failed since %s.", filePathChars, errorBuf);
         return ErrorCode::WRITE_FAILED;
     }
-    filePath = std::move(filePathBuf);
+    filePath = filePathChars;
     fd = tempFd;
     return ErrorCode::SUCCESS;
 }
@@ -861,6 +876,15 @@ ErrorCode SpillWriter::Write(void *buf, size_t length)
 
 }
 
+SpillWriter::~SpillWriter()
+{
+    if (fd >= 0) {
+        (void)close(fd);
+        fd = -1;
+    }
+    delete[] writeBuffer;
+}
+
 ErrorCode SpillWriter::Close()
 {
     ErrorCode result = ErrorCode::SUCCESS;
@@ -877,7 +901,12 @@ ErrorCode SpillWriter::Close()
         totalCompressBytes += compress_stream->flush();
         unflushed_size = 0;
     }
-    close(fd);
+    if (fd >= 0) {
+        if (close(fd) != 0) {
+            result = ErrorCode::WRITE_FAILED;
+        }
+        fd = -1;
+    }
     return result;
 }
 

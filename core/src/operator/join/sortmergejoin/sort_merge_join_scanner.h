@@ -224,6 +224,8 @@ private:
 
     bool PreKeyMatchedWithNullValue();
 
+    void ReleaseConsumedPrefix();
+
     // return true if streamedValueAddress bufferedValueAddress both not empty
     ALWAYS_INLINE bool HasResult()
     {

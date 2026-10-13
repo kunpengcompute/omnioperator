@@ -8,7 +8,6 @@
 #include "operator/aggregation/vector_getter.h"
 #include "operator/util/function_type.h"
 #include "type/data_type.h"
-#include "util/debug.h"
 #include "vector/vector.h"
 #include "vector/vector_batch.h"
 
@@ -241,35 +240,23 @@ static bool ShouldEmitRegrR2PartialColumns(bool outputPartial, const omniruntime
 static void SetFinalRegrR2Value(const RegrState *s, BaseVector *outVec, int32_t rowIndex)
 {
     if (s->IsEmpty()) {
-        LogInfo(
-            "regr_r2 final: row=%d branch=empty count=%lld", rowIndex, static_cast<long long>(s->count));
         outVec->SetNull(rowIndex);
         return;
     }
     if (s->m2Y == 0.0) {
-        LogInfo(
-            "regr_r2 final: row=%d branch=xMk0(null) count=%lld m2X=%g m2Y=%g c2=%g meanX=%g meanY=%g", rowIndex,
-            static_cast<long long>(s->count), s->m2X, s->m2Y, s->c2, s->meanX, s->meanY);
         outVec->SetNull(rowIndex);
         return;
     }
     if (s->m2X == 0.0) {
-        LogInfo(
-            "regr_r2 final: row=%d branch=yMk0=>1.0 count=%lld m2X=%g m2Y=%g c2=%g", rowIndex,
-            static_cast<long long>(s->count), s->m2X, s->m2Y, s->c2);
         static_cast<Vector<double> *>(outVec)->SetValue(rowIndex, 1.0);
         return;
     }
     double denom = s->m2X * s->m2Y;
     if (denom == 0.0 || !std::isfinite(denom)) {
-        LogInfo("regr_r2 final: row=%d branch=bad_denom denom=%g m2X=%g m2Y=%g", rowIndex, denom, s->m2X, s->m2Y);
         outVec->SetNull(rowIndex);
         return;
     }
     double result = (s->c2 * s->c2) / denom;
-    LogInfo(
-        "regr_r2 final: row=%d branch=corr2 count=%lld m2X=%g m2Y=%g c2=%g result=%g", rowIndex,
-        static_cast<long long>(s->count), s->m2X, s->m2Y, s->c2, result);
     static_cast<Vector<double> *>(outVec)->SetValue(rowIndex, result);
 }
 
@@ -379,12 +366,6 @@ void RegrR2Aggregator::ExtractValues(const AggregateState *state, std::vector<Ba
     const RegrState *s = reinterpret_cast<const RegrState *>(state + aggStateOffset);
     const bool emitPartial =
         ShouldEmitRegrR2PartialColumns(outputPartial, outputTypes, vectors.size());
-    if (rowIndex == 0) {
-        LogInfo(
-            "regr_r2 ExtractValues: row=%d inputRaw=%d outputPartial=%d outTypesSize=%zu nVec=%zu emitPartial=%d",
-            rowIndex, inputRaw ? 1 : 0, outputPartial ? 1 : 0,
-            static_cast<size_t>(outputTypes.GetSize()), vectors.size(), emitPartial ? 1 : 0);
-    }
     if (emitPartial) {
         ExtractPartialRow(outputTypes, s, vectors, rowIndex);
         return;
@@ -398,12 +379,6 @@ void RegrR2Aggregator::ExtractValuesBatch(std::vector<AggregateState *> &groupSt
 {
     const bool emitPartial =
         ShouldEmitRegrR2PartialColumns(outputPartial, outputTypes, vectors.size());
-    if (rowOffset == 0 && rowCount > 0) {
-        LogInfo(
-            "regr_r2 ExtractValuesBatch: rows=%d inputRaw=%d outputPartial=%d outTypesSize=%zu nVec=%zu emitPartial=%d",
-            rowCount, inputRaw ? 1 : 0, outputPartial ? 1 : 0,
-            static_cast<size_t>(outputTypes.GetSize()), vectors.size(), emitPartial ? 1 : 0);
-    }
     if (emitPartial) {
         ExtractPartialBatch(outputTypes, groupStates, aggStateOffset, vectors, rowOffset, rowCount);
         return;
@@ -478,7 +453,7 @@ void RegrR2Aggregator::AlignAggSchema(VectorBatch *result, VectorBatch *inputVec
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyPearson6(result);
+        RegrAlignAppendEmptyPearson6(result, this->pool_);
         return;
     }
     if (!inputRaw) {
@@ -489,7 +464,7 @@ void RegrR2Aggregator::AlignAggSchema(VectorBatch *result, VectorBatch *inputVec
     GetVector(inputVecBatch, 0, rc, &yxNull);
     BaseVector *yVec = inputVecBatch->Get(channels[0]);
     BaseVector *xVec = inputVecBatch->Get(channels[1]);
-    RegrAlignAppendPearson6RawR2Layout(result, yVec, xVec, yxNull, rc);
+    RegrAlignAppendPearson6RawR2Layout(result, yVec, xVec, yxNull, rc, this->pool_);
 }
 
 void RegrR2Aggregator::AlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *inputVecBatch,
@@ -497,21 +472,21 @@ void RegrR2Aggregator::AlignAggSchemaWithFilter(VectorBatch *result, VectorBatch
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyPearson6(result);
+        RegrAlignAppendEmptyPearson6(result, this->pool_);
         return;
     }
     auto *filterVec = static_cast<Vector<bool> *>(inputVecBatch->Get(filterIndex));
     bool needFilter = DoNeedHandleAggFilter(filterVec, 0, rc);
     std::shared_ptr<NullsHelper> yxNull;
     GetVector(inputVecBatch, 0, rc, &yxNull);
-    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(yxNull, filterVec, needFilter, rc);
+    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(yxNull, filterVec, needFilter, rc, this->pool_);
     if (!inputRaw) {
-        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 6, rc, rowSkip, false);
+        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 6, rc, rowSkip, false, this->pool_);
         return;
     }
     BaseVector *yVec = inputVecBatch->Get(channels[0]);
     BaseVector *xVec = inputVecBatch->Get(channels[1]);
-    RegrAlignAppendPearson6RawR2Layout(result, yVec, xVec, rowSkip, rc);
+    RegrAlignAppendPearson6RawR2Layout(result, yVec, xVec, rowSkip, rc, this->pool_);
 }
 
 void RegrR2Aggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
@@ -520,10 +495,10 @@ void RegrR2Aggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector *or
     (void)nullMap;
     (void)aggFilter;
     if (originVector == nullptr) {
-        RegrAlignAppendEmptyPearson6(result);
+        RegrAlignAppendEmptyPearson6(result, this->pool_);
         return;
     }
-    RegrAlignAppendPearson6AllNullRows(result, originVector->GetSize());
+    RegrAlignAppendPearson6AllNullRows(result, originVector->GetSize(), this->pool_);
 }
 
 std::vector<DataTypePtr> RegrR2Aggregator::GetSpillType()

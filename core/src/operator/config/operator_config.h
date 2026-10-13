@@ -13,10 +13,12 @@
 #define OMNI_RUNTIME_OPERATOR_CONFIG_H
 
 #include <cstdint>
+#include <climits>
 #include <string>
 #include <nlohmann/json.hpp>
-#include "memory/memory_manager.h"
 #include "operator/memory_builder.h"
+#include "memory/global_mem_tracker.h"   // process-global accounting for the self-spill threshold
+#include "util/omni_exception.h"
 
 namespace omniruntime {
 namespace op {
@@ -56,16 +58,6 @@ public:
     {}
 
     virtual ~SpillConfig() = default;
-
-    virtual bool NeedSpill(MemoryBuilder *memoryBuilder)
-    {
-        return false;
-    }
-
-    virtual bool NeedSpill(size_t elementsSize)
-    {
-        return false;
-    }
 
     SpillConfigId GetSpillConfigId()
     {
@@ -135,14 +127,20 @@ public:
     {
         OMNI_CHECK(memUsageFraction > 0.0 && memUsageFraction <= 1.0,
             "Spill memory fraction must be in (0, 1]");
-        const auto limit = mem::MemoryManager::GetGlobalMemoryLimit();
-        if (limit == mem::MemoryManager::UNLIMIT) {
-            memUsageForSpillThreshold = INT64_MAX;
-        } else {
-            // Avoid rounding INT64_MAX to 2^63 before converting it back to int64_t.
-            memUsageForSpillThreshold = memUsageFraction == 1.0
-                ? limit : static_cast<int64_t>(limit * memUsageFraction);
-        }
+        // Self-spill threshold = global limit * pct. The global limit is the executor
+        // offheap budget Gluten passes at init via
+        // nova.hetu.omniruntime.memory.MemoryManager.setGlobalMemoryLimit(offHeapSize).
+        // UNLIMITED until set → INT64_MAX → never triggers, so the
+        // trigger stays dormant in standalone/test paths that never set the limit.
+        // Observe-only: this is the self-spill DECISION threshold, NOT an allocation cap
+        // (Spark still owns per-task MEM_CAP enforcement via the AllocationListener).
+        int64_t globalLimit = mem::GetGlobalMemoryLimit();
+        memUsageForSpillThreshold = (globalLimit == mem::GLOBAL_MEM_UNLIMITED)
+            ? INT64_MAX
+            // INT64_MAX rounds to 2^63 as a double. Preserve the integral
+            // limit at 100% rather than converting that out-of-range value.
+            : (memUsageFraction == 1.0 ? globalLimit
+                : static_cast<int64_t>(static_cast<double>(globalLimit) * memUsageFraction));
     }
 
     SparkSpillConfig(const std::string &spillPath, uint64_t maxSpillBytes, int32_t numElementsThreshold,
@@ -161,10 +159,6 @@ public:
     {}
 
     ~SparkSpillConfig() override = default;
-
-    bool NeedSpill(MemoryBuilder *memoryBuilder) override;
-
-    bool NeedSpill(size_t elementsSize) override;
 
     int32_t GetSpillRowThreshold() const
     {

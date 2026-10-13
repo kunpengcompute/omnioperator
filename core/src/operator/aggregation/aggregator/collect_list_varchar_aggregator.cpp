@@ -88,14 +88,14 @@ void CollectListVarcharAggregator::ExtractValues(const AggregateState *state, st
     auto *list = reinterpret_cast<std::vector<std::string> *>(s->listAddr);
     if (list->empty()) {
         auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-            VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, 0));
+            VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, 0));
         v->SetValue(rowIndex, elementVector);
         delete elementVector;
         return;
     }
     size_t elementSize = list->size();
     auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-        VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, static_cast<int32_t>(elementSize)));
+        VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, static_cast<int32_t>(elementSize)));
     for (size_t i = 0; i < elementSize; i++) {
         elementVector->SetValue(static_cast<int32_t>(i), std::string_view((*list)[i]));
     }
@@ -111,14 +111,14 @@ void CollectListVarcharAggregator::ExtractValuesBatch(std::vector<AggregateState
         auto *list = reinterpret_cast<std::vector<std::string> *>(s->listAddr);
         if (list->empty()) {
             auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-                VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, 0));
+                VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, 0));
             v->SetValue(rowOffset + rowIndex, elementVector);
             delete elementVector;
             continue;
         }
         size_t elementSize = list->size();
         auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-            VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, static_cast<int32_t>(elementSize)));
+            VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, static_cast<int32_t>(elementSize)));
         for (size_t i = 0; i < elementSize; i++) {
             elementVector->SetValue(static_cast<int32_t>(i), std::string_view((*list)[i]));
         }
@@ -249,7 +249,7 @@ void CollectListVarcharAggregator::ProcessAlignAggSchema(VectorBatch *vecBatch, 
     const std::shared_ptr<NullsHelper> nullMap, const bool /* aggFilter */) {
     const int32_t rowCount = (originVector != nullptr) ? originVector->GetSize() : 0;
     if (rowCount == 0) {
-        auto *emptyArr = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), 0));
+        auto *emptyArr = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), 0));
         vecBatch->Append(emptyArr);
         return;
     }
@@ -263,9 +263,9 @@ void CollectListVarcharAggregator::ProcessAlignAggSchema(VectorBatch *vecBatch, 
             nonNullCount++;
         }
     }
-    auto *arrayVector = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), rowCount));
+    auto *arrayVector = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), rowCount));
     auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-        VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, nonNullCount));
+        VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, nonNullCount));
     int32_t elemIdx = 0;
     bool isDictionary = originVector->GetEncoding() == OMNI_DICTIONARY;
     if (isDictionary) {

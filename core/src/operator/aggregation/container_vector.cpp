@@ -7,53 +7,65 @@ namespace omniruntime {
 namespace vec {
 
 ContainerVector::ContainerVector(int32_t positionCount, std::vector<int64_t> &fieldVectors,
-    std::vector<omniruntime::type::DataTypePtr> &dataTypes)
-    : Vector<int64_t>(positionCount, OMNI_ENCODING_CONTAINER), dataTypes(dataTypes)
+    std::vector<omniruntime::type::DataTypePtr> &dataTypes, omniruntime::mem::OmniTaskMemoryPool *pool)
+    : Vector<int64_t>(positionCount, OMNI_ENCODING_CONTAINER, pool), dataTypes(dataTypes)
 {
     dataTypeId = OMNI_CONTAINER;
-    valuesBuffer = std::make_shared<AlignedBuffer<int64_t>>(dataTypes.size());
+    static omniruntime::mem::Allocator nullBridgeContainerFields{nullptr};
+    auto *allocator = pool != nullptr ? pool->getBoundAllocator() : &nullBridgeContainerFields;
+    valuesBuffer = std::make_shared<AlignedBuffer<int64_t>>(dataTypes.size(), allocator);
     values = valuesBuffer->GetBuffer();
-    // init nulls
     for (int32_t rowIndex = 0; rowIndex < positionCount; rowIndex++) {
         bool isNull = true;
         for (int32_t j = 0; j < fieldVectors.size(); j++) {
             BaseVector *col = reinterpret_cast<BaseVector *>(fieldVectors[j]);
-            isNull = isNull && col->IsNull(rowIndex); // each value is null in all column
+            isNull = isNull && col->IsNull(rowIndex);
         }
         this->nullsBuffer->SetNull(rowIndex, isNull);
     }
-
-    // init value
     for (int32_t i = 0; i < this->dataTypes.size(); ++i) {
         SetValue(i, fieldVectors[i]);
     }
 
-    // report memory usage
     int64_t vectorCapacity = sizeof(ContainerVector) + sizeof(NullsBuffer) + sizeof(AlignedBuffer<uint8_t>)
         + sizeof(AlignedBuffer<int64_t>);
-    omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-    omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+    if (pool_ != nullptr) {
+        pool_->AddMemory(vectorCapacity);
+    }
 }
 
-ContainerVector::ContainerVector(int32_t capacityInBytes, int32_t positionCount)
-    : Vector<int64_t>(positionCount, OMNI_ENCODING_CONTAINER)
+ContainerVector::ContainerVector(int32_t positionCount, std::vector<int64_t> &fieldVectors,
+    std::vector<omniruntime::type::DataTypePtr> &dataTypes)
+    : ContainerVector(positionCount, fieldVectors, dataTypes,
+          static_cast<omniruntime::mem::OmniTaskMemoryPool *>(nullptr))
+{}
+
+ContainerVector::ContainerVector(int32_t capacityInBytes, int32_t positionCount,
+    omniruntime::mem::OmniTaskMemoryPool *pool)
+    : Vector<int64_t>(positionCount, OMNI_ENCODING_CONTAINER, pool)
 {
     dataTypeId = OMNI_CONTAINER;
     using T = typename type::NativeType<type::OMNI_CONTAINER>::type;
     int32_t vectorCount = capacityInBytes / sizeof(T);
-    valuesBuffer = std::make_shared<AlignedBuffer<int64_t>>(vectorCount);
+    static omniruntime::mem::Allocator nullBridgeContainerValues{nullptr};
+    auto *allocator = pool != nullptr ? pool->getBoundAllocator() : &nullBridgeContainerValues;
+    valuesBuffer = std::make_shared<AlignedBuffer<int64_t>>(vectorCount, allocator);
     values = valuesBuffer->GetBuffer();
-    // init vec is null in container
     for (int i = 0; i < vectorCount; i++) {
         SetValue(i, 0);
     }
 
-    // report memory usage
     int64_t vectorCapacity = sizeof(ContainerVector) + sizeof(NullsBuffer) + sizeof(AlignedBuffer<uint8_t>)
         + sizeof(AlignedBuffer<int64_t>);
-    omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-    omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+    if (pool_ != nullptr) {
+        pool_->AddMemory(vectorCapacity);
+    }
 }
+
+ContainerVector::ContainerVector(int32_t capacityInBytes, int32_t positionCount)
+    : ContainerVector(capacityInBytes, positionCount,
+          static_cast<omniruntime::mem::OmniTaskMemoryPool *>(nullptr))
+{}
 
 void ContainerVector::AppendToVector(BaseVector *destVector, int32_t offset, BaseVector *srcVector, int32_t length,
     int32_t dataTypeId)
@@ -124,8 +136,9 @@ ContainerVector::~ContainerVector()
 
     int64_t vectorCapacity = sizeof(ContainerVector) + sizeof(NullsBuffer) + sizeof(AlignedBuffer<uint8_t>)
         + sizeof(AlignedBuffer<int64_t>);
-    omniruntime::mem::ThreadMemoryManager::ReclaimMemory(vectorCapacity);
-    omniruntime::mem::MemoryTrace::SubVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+    if (pool_ != nullptr) {
+        pool_->SubMemory(vectorCapacity);
+    }
 }
 
 void ContainerVector::SetDataTypes(const std::vector<type::DataTypePtr> &dataTypes)

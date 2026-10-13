@@ -288,7 +288,7 @@ void SumAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternalForDecimal(Vecto
 {
     int rowCount = originVector->GetSize();
     auto sumVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(
-            VectorHelper::CreateFlatVector(OMNI_VARCHAR, rowCount));
+            VectorHelper::CreateFlatVector(this->pool_, OMNI_VARCHAR, rowCount));
     if (nullMap != nullptr) {
         for (int index = 0; index < rowCount; ++index) {
             if ((*nullMap)[index]) {
@@ -322,7 +322,7 @@ void SumAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch *re
 {
     if constexpr (IN_ID != OMNI_VARCHAR && OUT_ID != OMNI_VARCHAR) {
         int rowCount = originVector->GetSize();
-        auto sumVector = reinterpret_cast<OutVector *>(VectorHelper::CreateFlatVector(OUT_ID, rowCount));
+        auto sumVector = reinterpret_cast<OutVector *>(VectorHelper::CreateFlatVector(this->pool_, OUT_ID, rowCount));
         auto vector = reinterpret_cast<T *>(originVector);
         if (nullMap != nullptr) {
             for (int index = 0; index < rowCount; ++index) {

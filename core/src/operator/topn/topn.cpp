@@ -29,15 +29,16 @@ TopNOperatorFactory::TopNOperatorFactory(const type::DataTypes &sourceTypes, int
 
 TopNOperatorFactory::~TopNOperatorFactory() = default;
 
-Operator *TopNOperatorFactory::CreateOperator()
+Operator *TopNOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    return new TopNOperator(sourceTypes, limit, offset, sortCols, sortAscendings, sortNullFirsts, sortColCount);
+    return new TopNOperator(pool, sourceTypes, limit, offset, sortCols, sortAscendings, sortNullFirsts, sortColCount);
 }
 
-TopNOperator::TopNOperator(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset,
-    std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
+TopNOperator::TopNOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+    int32_t limit, int32_t offset, std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
     std::vector<int32_t> &sortNullFirsts, int32_t sortColCount)
-    : sourceTypes(sourceTypes),
+    : Operator(pool),
+      sourceTypes(sourceTypes),
       sourceTypesCount(this->sourceTypes.GetSize()),
       sortCols(sortCols),
       limit(limit),
@@ -280,7 +281,7 @@ static void ALWAYS_INLINE SetVectorForSingleRowVecBatch(omniruntime::vec::Vector
     using Vector = typename NativeAndVectorType<typeId>::vector;
     using DictVector = typename NativeAndVectorType<typeId>::dictVector;
 
-    auto flatVector = VectorHelper::CreateFlatVector<typeId>(1);
+    auto flatVector = VectorHelper::CreateFlatVector<typeId>(vector->GetPool(), 1);
     if (vector->IsNull(position)) {
         (static_cast<Vector *>(flatVector))->SetNull(0);
     } else {
@@ -300,7 +301,7 @@ static void ALWAYS_INLINE SetVectorForSingleRowVecBatch(omniruntime::vec::Vector
 static ALWAYS_INLINE  BaseVector *CreateComplexVectorForSingleRow(DataType *dataType, BaseVector *vector,
     int32_t position)
 {
-    auto complexVector = VectorHelper::CreateComplexVector(dataType, 1);
+    auto complexVector = VectorHelper::CreateComplexVector(vector->GetPool(), dataType, 1);
     DataTypeId dataTypeId = dataType->GetId();
     if (vector->IsNull(position)) {
         if (dataTypeId == OMNI_ARRAY) {
@@ -411,7 +412,7 @@ int32_t TopNOperator::GetOutput(VectorBatch **outputVecBatch)
     int64_t rowCount = std::min(maxRowCount, totalRowCount - outputtedRowCount);
     auto resultVecBatch = std::make_unique<VectorBatch>(rowCount);
     auto resultVecBatchPtr = resultVecBatch.get();
-    omniruntime::vec::VectorHelper::AppendVectors(resultVecBatchPtr, sourceTypes, rowCount);
+    omniruntime::vec::VectorHelper::AppendVectors(resultVecBatchPtr, sourceTypes, rowCount, this->pool());
     auto typeIds = sourceTypes.GetIds();
     for (int64_t i = 0; i < rowCount; i++) {
         VectorBatch *singleVecBatch = resultVectorBatchList[i + outputtedRowCount];

@@ -18,7 +18,9 @@ public:
         this->queryConfig_ = queryConfig;
     }
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     static GroupingOperatorFactory *CreateGroupingOperatorFactory(
         const std::shared_ptr<const GroupingNode> &aggPlanNode, const config::QueryConfig &queryConfig);
@@ -29,7 +31,9 @@ private:
 
 class GroupingOperator final : public Operator {
 public:
-    GroupingOperator(const std::shared_ptr<const GroupingNode> &groupingNode, config::QueryConfig &queryConfig);
+    // Pool-bound ctor chains Operator(pool)
+    GroupingOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        const std::shared_ptr<const GroupingNode> &groupingNode, config::QueryConfig &queryConfig);
 
     ~GroupingOperator() override
     {
@@ -47,6 +51,10 @@ public:
 
     int32_t GetOutput(VectorBatch **resultVecBatch) override;
 
+    void setNoMoreInput(bool noMoreInput) override;
+
+    void noMoreInput() override;
+
     OmniStatus Close() override;
 
     static std::shared_ptr<OperatorFactory> CreateOperatorFactory(
@@ -57,6 +65,10 @@ public:
         const config::QueryConfig &queryConfig);
 
 private:
+    // Shared init body so both legacy and pool-bound ctors call it after chaining
+    //         the appropriate Operator base ctor.
+    void InitFromGroupingNode(const std::shared_ptr<const GroupingNode> &groupingNode);
+
     uint32_t index_ = 1;
     std::shared_ptr<OperatorFactory> aggFactor_;
     std::shared_ptr<OperatorFactory> residualAggFactor_;

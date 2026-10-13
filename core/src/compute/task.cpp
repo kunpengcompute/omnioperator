@@ -20,9 +20,15 @@ vec::VectorBatch* OmniTask::Next(ContinueFuture* future)
 {
     if (drivers_.empty()) {
         taskStats_.executionStartTimeMs = static_cast<uint64_t>(ThreadCpuNanos());
+        // Thread the per-task pool to LocalPlanner so the
+        // Operator(pool) → ExecutionContext(4096, pool) chain binds to a real
+        // pool. Without this, pool=nullptr fell through to codegen .so's
+        // CreateFlatVector(pool, ...) which dereferenced pool via OmniTaskMemoryPool::
+        // getBoundAllocator() → SIGSEGV under the gluten JNI path.
         LocalPlanner::plan(
             planFragment_, &drivers_, queryConfig_,
-            getSplitsStoreLocked(getScanNodeId(planFragment_.planNode)));
+            getSplitsStoreLocked(getScanNodeId(planFragment_.planNode)),
+            pool_);
         std::reverse(drivers_.begin(), drivers_.end());
     }
     const auto numDrivers = drivers_.size();

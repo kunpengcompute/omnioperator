@@ -12,7 +12,7 @@ using namespace omniruntime::vec;
 class TestConcreteOperator : public Operator
 {
 public:
-    TestConcreteOperator() : Operator() {}
+    TestConcreteOperator() : Operator(nullptr) {}
     int32_t AddInput(VectorBatch *vecBatch) override
     {
         return OMNI_STATUS_NORMAL;

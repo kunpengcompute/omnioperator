@@ -63,9 +63,10 @@ struct SpillFileInfo {
 class SpillReader {
 public:
     SpillReader(const type::DataTypes &dataTypes, const std::string &filePath, uint64_t fileLength,
-        uint64_t totalRowCount, bool isSpillCompressEnabled, bool compareWithHashVal = false)
+        uint64_t totalRowCount, bool isSpillCompressEnabled, omniruntime::mem::OmniTaskMemoryPool *pool,
+        bool compareWithHashVal = false)
         : dataTypes(dataTypes), filePath(filePath), fileLength(fileLength), totalRowCount(totalRowCount),
-          isSpillCompressEnabled(isSpillCompressEnabled), compareWithHashVal(compareWithHashVal)
+          isSpillCompressEnabled(isSpillCompressEnabled), compareWithHashVal(compareWithHashVal), pool_(pool)
     {}
 
     ~SpillReader();
@@ -104,6 +105,9 @@ private:
     uint64_t totalRowCount = 0;
     uint64_t rowOffset = 0;
     int32_t maxRowCount = 0; // for reuse vector batch memory
+    // Per-task pool threaded from the spilling operator (HashAggregation/Sort/Window) so the
+    // deserialized spill VectorBatch — the actual data source for downstream — is pool-accounted.
+    omniruntime::mem::OmniTaskMemoryPool *pool_ = nullptr;
 
     char* currentBuffer_ = nullptr;
     char* prevBuffer_ = nullptr;
@@ -116,9 +120,9 @@ class SpillMergeStream {
 public:
     static SpillMergeStream *Create(const type::DataTypes &dataTypes, const SpillFileInfo &fileInfo,
         const std::vector<int32_t> &sortCols, std::vector<OperatorUtil::CompareFunc> &sortCompareFuncs,
-        SpillTracker *spillTracker, bool isSpillCompressEnabled)
+        SpillTracker *tracker, bool compressEnabled, omniruntime::mem::OmniTaskMemoryPool *pool)
     {
-        auto *stream = new SpillMergeStream(dataTypes, fileInfo, sortCols, sortCompareFuncs, spillTracker, isSpillCompressEnabled);
+        auto *stream = new SpillMergeStream(dataTypes, fileInfo, sortCols, sortCompareFuncs, tracker, compressEnabled, pool);
         auto result = stream->GetNextBatch();
         if (result != ErrorCode::SUCCESS) {
             delete stream;
@@ -129,9 +133,10 @@ public:
 
     static SpillMergeStream *Create(const type::DataTypes &dataTypes, const SpillFileInfo &fileInfo,
         const std::vector<int32_t> &sortCols, std::vector<OperatorUtil::CompareFuncWithHashVal> &sortCompareFuncs,
-        SpillTracker *tracker, bool spillCompressEnabled, bool isCompareWithHashVal = false)
+        SpillTracker *tracker, bool spillCompressEnabled, omniruntime::mem::OmniTaskMemoryPool *pool,
+        bool isCompareWithHashVal = false)
     {
-        auto *stream = new SpillMergeStream(dataTypes, fileInfo, sortCols, sortCompareFuncs, tracker, spillCompressEnabled, isCompareWithHashVal);
+        auto *stream = new SpillMergeStream(dataTypes, fileInfo, sortCols, sortCompareFuncs, tracker, spillCompressEnabled, isCompareWithHashVal, pool);
         auto result = stream->GetNextBatch();
         if (result != ErrorCode::SUCCESS) {
             delete stream;
@@ -203,18 +208,19 @@ public:
 private:
     SpillMergeStream(const type::DataTypes &dataTypes, const SpillFileInfo &fileInfo,
         const std::vector<int32_t> &sortCols, std::vector<OperatorUtil::CompareFunc> &sortCompareFuncs,
-        SpillTracker *spillTracker, bool isSpillCompressEnabled)
+        SpillTracker *spillTracker, bool isSpillCompressEnabled, omniruntime::mem::OmniTaskMemoryPool *pool)
         : sortCols(sortCols), sortCompareFuncs(sortCompareFuncs), spillTracker(spillTracker)
     {
-        reader = new SpillReader(dataTypes, fileInfo.filePath, fileInfo.fileLength, fileInfo.totalRowCount, isSpillCompressEnabled);
+        reader = new SpillReader(dataTypes, fileInfo.filePath, fileInfo.fileLength, fileInfo.totalRowCount, isSpillCompressEnabled, pool);
     }
 
     SpillMergeStream(const type::DataTypes &dataTypes, const SpillFileInfo &fileInfo,
         const std::vector<int32_t> &sortCols, std::vector<OperatorUtil::CompareFuncWithHashVal> &sortCompareFuncs,
-        SpillTracker *spillTracker, bool isSpillCompressEnabled, bool isCompareWithHashVal)
+        SpillTracker *spillTracker, bool isSpillCompressEnabled, bool isCompareWithHashVal,
+        omniruntime::mem::OmniTaskMemoryPool *pool)
         : sortCols(sortCols), sortCompareFuncsWithHashVal(sortCompareFuncs), spillTracker(spillTracker), compareWithHashVal(isCompareWithHashVal)
     {
-        reader = new SpillReader(dataTypes, fileInfo.filePath, fileInfo.fileLength, fileInfo.totalRowCount, isSpillCompressEnabled, compareWithHashVal);
+        reader = new SpillReader(dataTypes, fileInfo.filePath, fileInfo.fileLength, fileInfo.totalRowCount, isSpillCompressEnabled, pool, compareWithHashVal);
     }
 
     std::vector<int32_t> sortCols; // which columns in currentBatch will be used to sort ?
@@ -234,7 +240,8 @@ class SpillMerger {
 public:
     static SpillMerger *Create(const type::DataTypes &dataTypes, const std::vector<int32_t> &sortCols,
         const std::vector<SortOrder> &sortOrders, SpillTracker *spillTracker,
-        const std::vector<SpillFileInfo> &spillFiles, bool isSpillCompressEnabled, bool compareWithHashVal = false)
+        const std::vector<SpillFileInfo> &spillFiles, bool isSpillCompressEnabled,
+        omniruntime::mem::OmniTaskMemoryPool *pool, bool compareWithHashVal = false)
     {
         std::vector<OperatorUtil::CompareFunc> sortCompareFuncs;
         std::vector<OperatorUtil::CompareFuncWithHashVal> sortCompareFuncsWithHashVal;
@@ -247,8 +254,8 @@ public:
         std::vector<SpillMergeStream *> streams;
         uint64_t totalRowCount = 0;
         for (auto &fileInfo : spillFiles) {
-            auto stream = compareWithHashVal ? SpillMergeStream::Create(dataTypes, fileInfo, sortCols, sortCompareFuncsWithHashVal, spillTracker, isSpillCompressEnabled, compareWithHashVal)
-                            : SpillMergeStream::Create(dataTypes, fileInfo, sortCols, sortCompareFuncs, spillTracker, isSpillCompressEnabled);
+            auto stream = compareWithHashVal ? SpillMergeStream::Create(dataTypes, fileInfo, sortCols, sortCompareFuncsWithHashVal, spillTracker, isSpillCompressEnabled, pool, compareWithHashVal)
+                            : SpillMergeStream::Create(dataTypes, fileInfo, sortCols, sortCompareFuncs, spillTracker, isSpillCompressEnabled, pool);
             if (stream == nullptr) {
                 for (auto createdStream : streams) {
                     delete createdStream;

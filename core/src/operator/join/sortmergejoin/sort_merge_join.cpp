@@ -4,24 +4,34 @@
  */
 
 #include "sort_merge_join.h"
+#include <cstdio>
 #include <memory>
+#include "util/telemetry.h"
 #include "vector/vector_helper.h"
 
 namespace omniruntime {
 namespace op {
 using namespace omniruntime::vec;
 
-SortMergeJoinOperator::SortMergeJoinOperator(JoinType joinType, std::string &filter)
-    : joinType(joinType), filter(filter)
+// Pool-bound ctors — same body, chain Operator(pool).
+SortMergeJoinOperator::SortMergeJoinOperator(omniruntime::mem::OmniTaskMemoryPool *pool, JoinType joinType,
+    std::string &filter)
+    : Operator(pool), joinType(joinType), filter(filter)
 {}
 
-SortMergeJoinOperator::SortMergeJoinOperator(JoinType joinType, Expr* filter) : joinType(joinType), filterExpr(filter)
+SortMergeJoinOperator::SortMergeJoinOperator(omniruntime::mem::OmniTaskMemoryPool *pool, JoinType joinType,
+    Expr* filter)
+    : Operator(pool), joinType(joinType), filterExpr(filter)
 {}
 
 SortMergeJoinOperator::~SortMergeJoinOperator()
 {
-    streamedTblPagesIndex->FreeAllRemainingVecBatch();
-    bufferedTblPagesIndex->FreeAllRemainingVecBatch();
+    if (streamedTblPagesIndex != nullptr) {
+        streamedTblPagesIndex->FreeAllRemainingVecBatch();
+    }
+    if (bufferedTblPagesIndex != nullptr) {
+        bufferedTblPagesIndex->FreeAllRemainingVecBatch();
+    }
     delete streamedTblPagesIndex;
     delete bufferedTblPagesIndex;
     delete smjScanner;
@@ -223,6 +233,7 @@ int32_t SortMergeJoinOperator::GetJoinResult()
 
 int32_t SortMergeJoinOperator::AddStreamedTableInput(omniruntime::vec::VectorBatch *vecBatch)
 {
+    const int32_t inputRows = vecBatch->GetRowCount();
     if (streamedTblPagesIndex->IsDataFinish()) {
         VectorHelper::FreeVecBatch(vecBatch);
     } else {
@@ -231,11 +242,23 @@ int32_t SortMergeJoinOperator::AddStreamedTableInput(omniruntime::vec::VectorBat
     SetStatus(OMNI_STATUS_NORMAL);
     int32_t joinResult = GetJoinResult();
     decodeOpStatus(joinResult);
+    ++streamedInputBatches;
+    if (omniruntime::telemetry::IsOperatorVerboseEnabled() &&
+        (inputRows == 0 || (streamedInputBatches & 255U) == 0)) {
+        std::fprintf(stderr,
+            "[OMNI-SMJ] event=input side=stream batches=%llu rows=%d stream_positions=%d buffer_positions=%d "
+            "flow=%d result=%d pool=%p used=%lld\n",
+            static_cast<unsigned long long>(streamedInputBatches), inputRows,
+            streamedTblPagesIndex->GetPositionCount(), bufferedTblPagesIndex->GetPositionCount(), flowControlCode,
+            resCode, static_cast<void *>(this->pool()),
+            static_cast<long long>(this->pool() == nullptr ? 0 : this->pool()->currentBytes()));
+    }
     return joinResult;
 }
 
 int32_t SortMergeJoinOperator::AddBufferedTableInput(omniruntime::vec::VectorBatch *vecBatch)
 {
+    const int32_t inputRows = vecBatch->GetRowCount();
     if (bufferedTblPagesIndex->IsDataFinish()) {
         VectorHelper::FreeVecBatch(vecBatch);
     } else {
@@ -244,6 +267,17 @@ int32_t SortMergeJoinOperator::AddBufferedTableInput(omniruntime::vec::VectorBat
     SetStatus(OMNI_STATUS_NORMAL);
     int32_t joinResult = GetJoinResult();
     decodeOpStatus(joinResult);
+    ++bufferedInputBatches;
+    if (omniruntime::telemetry::IsOperatorVerboseEnabled() &&
+        (inputRows == 0 || (bufferedInputBatches & 255U) == 0)) {
+        std::fprintf(stderr,
+            "[OMNI-SMJ] event=input side=buffer batches=%llu rows=%d stream_positions=%d buffer_positions=%d "
+            "flow=%d result=%d pool=%p used=%lld\n",
+            static_cast<unsigned long long>(bufferedInputBatches), inputRows,
+            streamedTblPagesIndex->GetPositionCount(), bufferedTblPagesIndex->GetPositionCount(), flowControlCode,
+            resCode, static_cast<void *>(this->pool()),
+            static_cast<long long>(this->pool() == nullptr ? 0 : this->pool()->currentBytes()));
+    }
     return joinResult;
 }
 

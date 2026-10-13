@@ -296,7 +296,7 @@ public:
         const std::shared_ptr<NullsHelper> nullMap)
     {
         int rowCount = originVector->GetSize();
-        auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(OUT_ID, rowCount));
+        auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(this->pool_, OUT_ID, rowCount));
         // The varchar type is converted to the double type in advance, so InType can't be the varchar type.
         auto vector = reinterpret_cast<T *>(originVector);
         if (nullMap != nullptr) {

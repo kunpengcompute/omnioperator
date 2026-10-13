@@ -28,9 +28,12 @@ using namespace mem;
 /// Used when EvalCtx::throwOnError() is false.
 class EvalErrors {
 public:
-    EvalErrors(int32_t size): size_{size}
+    // Pool-bound EvalErrors ctor. Accepts an Allocator* obtained from the
+    // owning ExecutionContext; AlignedBuffer requires an allocator argument
+    // (the no-allocator overload has been removed).
+    EvalErrors(int32_t size, mem::Allocator *allocator): size_{size}
     {
-        errorFlags_ = std::make_shared<AlignedBuffer<bool>>(size, true);
+        errorFlags_ = std::make_shared<AlignedBuffer<bool>>(size, allocator, true);
         rawErrorFlags_ = reinterpret_cast<uint64_t *>(errorFlags_->GetBuffer());
     }
 
@@ -184,13 +187,47 @@ using EvalErrorsPtr = std::shared_ptr<EvalErrors>;
 // execution context during operator
 class ExecutionContext {
 public:
-    explicit ExecutionContext(int64_t minChunkSize = 4096) : arena(minChunkSize) {}
+    // Pool-bound primary ctor. Both args are required — no defaults — so an
+    // accidental nullptr-pool requires an explicit `nullptr` at the call site
+    // (test/no-pool sentinel). Production callers supply a real per-task pool;
+    // bridge_allocator_ binds to it; arena alloc/free route through it; the
+    // EvalErrors EnsureErrorsVectorSize allocator is also pool-bound.
+    explicit ExecutionContext(int64_t minChunkSize, omniruntime::mem::OmniTaskMemoryPool *pool)
+        : bridge_allocator_(pool),
+          arena(minChunkSize, &bridge_allocator_)
+    {}
 
+    // The arena stores the address of this context's bridge allocator.
+    // Copying or moving would retain a pointer into the original context.
+    ExecutionContext(const ExecutionContext &) = delete;
+    ExecutionContext &operator=(const ExecutionContext &) = delete;
+    ExecutionContext(ExecutionContext &&) = delete;
+    ExecutionContext &operator=(ExecutionContext &&) = delete;
     ~ExecutionContext() = default;
 
     mem::SimpleArenaAllocator *GetArena()
     {
         return &arena;
+    }
+
+    mem::SimpleArenaAllocator *GetArena() const
+    {
+        return const_cast<mem::SimpleArenaAllocator *>(&arena);
+    }
+
+    // Returns the pool-bound Allocator from the arena. The arena's allocator is
+    // the construction-time allocator set at ExecutionContext init (`&bridge_allocator_`
+    // — pool-bound when constructed with a non-null pool, nullptr-bound otherwise).
+    mem::Allocator *GetAllocator()
+    {
+        return arena.GetAllocator();
+    }
+
+    // Returns the OmniTaskMemoryPool this context's allocator is bound to.
+    // nullptr if the ExecutionContext was constructed without a pool.
+    omniruntime::mem::OmniTaskMemoryPool *GetPool()
+    {
+        return GetAllocator()->getTaskPool();
     }
 
     void SetError(std::string &message)
@@ -259,7 +296,10 @@ public:
     void EnsureErrorsVectorSize(EvalErrorsPtr &vector, int32_t size) const
     {
         if (!vector) {
-            vector = std::make_shared<EvalErrors>(size);
+            // EvalErrors requires an allocator. bridge_allocator_ is pool-bound
+            // when this ExecutionContext was constructed with a non-null pool;
+            // otherwise it is a nullptr-pool Allocator that skips accounting.
+            vector = std::make_shared<EvalErrors>(size, const_cast<mem::Allocator *>(&bridge_allocator_));
         } else {
             vector->ensureCapacity(size);
         }
@@ -330,7 +370,12 @@ public:
 
 private:
     bool *isSelectRow;
-    int32_t resultRowSize;
+    int32_t resultRowSize = 0;
+    // Transitional pool-bound bridge allocator. Declared BEFORE `arena` so its
+    // construction precedes the arena's ctor body (which dereferences `&bridge_allocator_`).
+    // C++ member init order is declaration order, regardless of mem-init list order —
+    // keep this declaration above `arena`.
+    mem::Allocator bridge_allocator_;
     mem::SimpleArenaAllocator arena;
     bool hasError = false;
     std::string errorMessage;

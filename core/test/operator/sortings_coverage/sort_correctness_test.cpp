@@ -28,7 +28,6 @@
 #include <string>
 #include <vector>
 
-#include "memory/memory_manager.h"
 #include "operator/inplace_pdqsort.h"
 #include "operator/pages_index.h"
 #include "operator/pdqsort.h"
@@ -42,14 +41,6 @@ using namespace omniruntime::type;
 using namespace omniruntime::vec;
 
 namespace {
-struct MemoryInit {
-    MemoryInit()
-    {
-        omniruntime::mem::MemoryManager::GetGlobalMemoryManager();
-    }
-};
-const MemoryInit kMemoryInit;
-
 std::vector<uint64_t> IdentityAddrs(size_t n)
 {
     std::vector<uint64_t> a(n);

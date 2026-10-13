@@ -13,6 +13,7 @@
 #include "operator/hashmap/vector_marshaller.h"
 #include "vector/vector.h"
 #include "vector/decoded_vector.h"
+#include "memory/allocator.h"
 #include "memory/simple_arena_allocator.h"
 #include "type/data_type.h"
 #include "util/test_util.h"
@@ -23,6 +24,14 @@ using namespace op;
 using namespace vec;
 using namespace type;
 using namespace mem;
+
+// These data-structure tests intentionally exercise the standalone bridge;
+// task-pool accounting is covered by the dedicated reservation/pool suites.
+Allocator *TestAllocator()
+{
+    static Allocator allocator(nullptr);
+    return &allocator;
+}
 
 /// Visitor-based lookup helper (replaces TaperFlatHashTable::Find which was added later).
 template <typename Table, typename Key>
@@ -45,7 +54,7 @@ uint8_t* Lookup(Table& table, const Key& key) {
 
 class TaperFlatHashTableTest : public ::testing::Test {
 protected:
-    SimpleArenaAllocator pool;
+    SimpleArenaAllocator pool{4096, TestAllocator()};
 };
 
 /// Emplace and Find with int32 keys (KeyScattered=true, Agg mode).
@@ -380,7 +389,7 @@ protected:
         for (auto* v : ownedVectors) delete v;
     }
 
-    SimpleArenaAllocator pool;
+    SimpleArenaAllocator pool{4096, TestAllocator()};
     std::vector<uint8_t*> groups;
     std::vector<uint8_t*> newGroups;
     std::vector<BaseVector*> ownedVectors;
@@ -578,7 +587,7 @@ protected:
         for (auto* v : ownedVectors) delete v;
     }
 
-    SimpleArenaAllocator pool;
+    SimpleArenaAllocator pool{4096, TestAllocator()};
     std::vector<uint8_t*> groups;
     std::vector<uint8_t*> newGroups;
     std::vector<BaseVector*> ownedVectors;
@@ -762,7 +771,7 @@ protected:
         for (auto* v : ownedVectors) delete v;
     }
 
-    SimpleArenaAllocator pool;
+    SimpleArenaAllocator pool{4096, TestAllocator()};
     std::vector<BaseVector*> ownedVectors;
 };
 
@@ -902,7 +911,7 @@ protected:
         for (auto* v : ownedVectors) delete v;
     }
 
-    SimpleArenaAllocator pool;
+    SimpleArenaAllocator pool{4096, TestAllocator()};
     std::vector<BaseVector*> ownedVectors;
 };
 

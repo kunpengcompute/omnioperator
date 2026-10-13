@@ -62,7 +62,9 @@ void CollectSetVarcharAggregator::InitState(AggregateState *state) {
     // Bug-XXX: default BaseHashMap initializes 2^15=32768 buckets per group (mem::Allocator accounted,
     // ~1.34MB/group), so collect_set with many groups blows MEM_CAP instantly. Start with 2^4=16 buckets
     // and grow on demand (Grower doubles); per-group sets are typically tiny.
-    auto *uniqueValues = new DefaultHashMap<std::string, int8_t>(6);
+    // Route hashmap memory to the task pool.
+    auto *uniqueValues = new DefaultHashMap<std::string, int8_t>(
+        OmniHashmapAllocator(EnsureExecutionContext()->GetAllocator()), 6);
     uniqueValues->Reset();
     s->uniqueValuesAddr = reinterpret_cast<int64_t>(uniqueValues);
     allocatedUniqueValuesAddrs_.push_back(s->uniqueValuesAddr);
@@ -92,14 +94,14 @@ void CollectSetVarcharAggregator::ExtractValues(const AggregateState *state, std
     auto *uniqueValues = reinterpret_cast<DefaultHashMap<std::string, int8_t> *>(s->uniqueValuesAddr);
     if (uniqueValues->GetElementsSize() == 0) {
         auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-            VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, 0));
+            VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, 0));
         v->SetValue(rowIndex, elementVector);
         delete elementVector;
         return;
     }
     int32_t elementSize = static_cast<int32_t>(uniqueValues->GetElementsSize());
     auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-        VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, elementSize));
+        VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, elementSize));
     int32_t index = 0;
     uniqueValues->ForEachKV([&](const std::string &key, const int8_t &) {
         elementVector->SetValue(index, std::string_view(key));
@@ -117,14 +119,14 @@ void CollectSetVarcharAggregator::ExtractValuesBatch(std::vector<AggregateState 
         auto *uniqueValues = reinterpret_cast<DefaultHashMap<std::string, int8_t> *>(s->uniqueValuesAddr);
         if (uniqueValues->GetElementsSize() == 0) {
             auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-                VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, 0));
+                VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, 0));
             v->SetValue(rowOffset + rowIndex, elementVector);
             delete elementVector;
             continue;
         }
         int32_t elementSize = static_cast<int32_t>(uniqueValues->GetElementsSize());
         auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-            VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, elementSize));
+            VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, elementSize));
         int32_t index = 0;
         uniqueValues->ForEachKV([&](const std::string &key, const int8_t &) {
             elementVector->SetValue(index, std::string_view(key));
@@ -259,7 +261,7 @@ void CollectSetVarcharAggregator::ProcessAlignAggSchema(VectorBatch *vecBatch, B
     const std::shared_ptr<NullsHelper> nullMap, const bool /* aggFilter */) {
     const int32_t rowCount = (originVector != nullptr) ? originVector->GetSize() : 0;
     if (rowCount == 0) {
-        auto *emptyArr = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), 0));
+        auto *emptyArr = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), 0));
         vecBatch->Append(emptyArr);
         return;
     }
@@ -273,9 +275,9 @@ void CollectSetVarcharAggregator::ProcessAlignAggSchema(VectorBatch *vecBatch, B
             nonNullCount++;
         }
     }
-    auto *arrayVector = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), rowCount));
+    auto *arrayVector = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), rowCount));
     auto *elementVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-        VectorHelper::CreateVector(OMNI_FLAT, elementTypeId_, nonNullCount));
+        VectorHelper::CreateVector(this->pool_, OMNI_FLAT, elementTypeId_, nonNullCount));
     int32_t elemIdx = 0;
     bool isDictionary = originVector->GetEncoding() == OMNI_DICTIONARY;
     if (isDictionary) {

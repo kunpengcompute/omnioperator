@@ -211,7 +211,7 @@ DistinctLimitOperatorFactory *DistinctLimitOperatorFactory::CreateDistinctLimitO
     return new DistinctLimitOperatorFactory(inSourceTypes, inDistinctCols, inDistinctColsCount, inHashColumn, inLimit);
 }
 
-Operator *DistinctLimitOperatorFactory::CreateOperator()
+Operator *DistinctLimitOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     const int32_t *vectorTypeIds = sourceTypes.GetIds();
     int32_t typeId;
@@ -226,7 +226,7 @@ Operator *DistinctLimitOperatorFactory::CreateOperator()
         }
     }
 
-    return new DistinctLimitOperator(sourceTypes, distinctCols, distinctColsCount, hashCol, limit);
+    return new DistinctLimitOperator(pool, sourceTypes, distinctCols, distinctColsCount, hashCol, limit);
 }
 
 void FillPrecomputedHash(VectorBatch *vectorBatch, const int32_t *inputTypeIds, const int32_t start, int32_t rowCount,
@@ -303,9 +303,11 @@ void GenerateCombinedHash(VectorBatch *vectorBatch, const int32_t start, int32_t
     }
 }
 
-DistinctLimitOperator::DistinctLimitOperator(const type::DataTypes &sourceTypes, std::vector<int32_t> &distinctCols,
+DistinctLimitOperator::DistinctLimitOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &sourceTypes, std::vector<int32_t> &distinctCols,
     int32_t distinctColsCount, int32_t hashCol, int64_t limit)
-    : sourceTypes(sourceTypes),
+    : Operator(pool),
+      sourceTypes(sourceTypes),
       distinctCols(distinctCols),
       distinctColsCount(distinctColsCount),
       hashCol(hashCol),
@@ -460,7 +462,7 @@ int32_t DistinctLimitOperator::GetOutput(VectorBatch **outputVecBatch)
         resultBatch = new VectorBatch(distinctRowInfo.size());
 
         type::DataTypes outDataTypes(outputTypes);
-        VectorHelper::AppendVectors(resultBatch, outDataTypes, resultBatch->GetRowCount());
+        VectorHelper::AppendVectors(resultBatch, outDataTypes, resultBatch->GetRowCount(), this->pool());
 
         int32_t rowIndex = 0;
         for (auto item : distinctRowInfo) {

@@ -78,7 +78,7 @@ void JoinResultBuilder::JoinFilterCodeGen(OverflowConfig* overflowConfig)
         return;
     }
 
-    executionContext = new ExecutionContext();
+    executionContext = new ExecutionContext(4096, nullptr);  // SMJ filter codegen ExecutionContext is unscoped; no task pool available here.
     omniruntime::expressions::Expr* filterExpression = JSONParser::ParseJSON(filterExpStr);
     simpleFilter = new SimpleFilter(*filterExpression);
     auto result = simpleFilter->Initialize(overflowConfig);
@@ -116,7 +116,7 @@ void JoinResultBuilder::JoinFilterExprCodeGen(OverflowConfig *overflowConfig)
         return;
     }
 
-    executionContext = new ExecutionContext();
+    executionContext = new ExecutionContext(4096, nullptr);  // SMJ filter codegen ExecutionContext is unscoped; no task pool available here.
     simpleFilter = new SimpleFilter(*filterExpr);
     auto result = simpleFilter->Initialize(overflowConfig);
     if (!result) {
@@ -151,8 +151,12 @@ VectorBatch *JoinResultBuilder::NewEmptyVectorBatch() const
     auto vectorBatch = std::make_unique<VectorBatch>(maxRowCount);
 
     for (auto &type : allTypes) {
-        // ARRAY/MAP/ROW must use CreateComplexVector; CreateFlatVector only supports primitive types
-        vectorBatch->Append(VectorHelper::CreateComplexVector(type.get(), maxRowCount));
+        // ARRAY/MAP/ROW must use CreateComplexVector; CreateFlatVector only supports primitive types.
+        // Pool-threaded overload (vector_helper.h:180): charges output columns to the per-task
+        // pool so SMJ output is visible to Spark spill accounting. pool_==nullptr (test path)
+        // routes through the pool ctor's nullptr-guard (skips accounting) — same outcome as the
+        // deprecated no-pool bridge, without the deprecation warning.
+        vectorBatch->Append(VectorHelper::CreateComplexVector(pool_, type.get(), maxRowCount));
     }
     return vectorBatch.release();
 }

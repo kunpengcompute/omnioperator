@@ -15,39 +15,12 @@
 #include "util/error_code.h"
 #include "operator/spill/spill_tracker.h"
 #include "util/omni_exception.h"
-#include "memory/memory_manager.h"
 #include "operator_config.h"
 
 namespace omniruntime {
 namespace op {
 constexpr int32_t GB_UNIT = (1 << 30);
 constexpr double DEFAULT_AVAILABLE_THRESHOLD = 0.9;
-
-bool SparkSpillConfig::NeedSpill(MemoryBuilder *memoryBuilder)
-{
-    auto usedMemorySize = mem::MemoryManager::GetGlobalAccountedMemory();
-    if (IsSpillEnabled() &&
-        (memoryBuilder->GetRowCount() >= GetSpillRowThreshold() || usedMemorySize >= GetSpillMemThreshold())) {
-        LogDebug("spill get row count %d, row threshold %d, and get memory usage %lld, memory threshold %lld.",
-            memoryBuilder->GetRowCount(), GetSpillRowThreshold(), usedMemorySize, GetSpillMemThreshold());
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool SparkSpillConfig::NeedSpill(size_t elementsSize)
-{
-    auto usedMemorySize = mem::MemoryManager::GetGlobalAccountedMemory();
-    if (IsSpillEnabled() &&
-        (usedMemorySize >= GetSpillMemThreshold() || static_cast<int32_t>(elementsSize) >= GetSpillRowThreshold())) {
-        LogDebug("spill get row count %d, row threshold %d, and get memory usage %lld, memory threshold %lld.",
-            elementsSize, GetSpillRowThreshold(), usedMemorySize, GetSpillMemThreshold());
-        return true;
-    } else {
-        return false;
-    }
-}
 
 OperatorConfig::OperatorConfig(const OperatorConfig &operatorConfig)
 {

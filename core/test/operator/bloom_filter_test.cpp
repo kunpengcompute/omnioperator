@@ -26,7 +26,7 @@ TEST(BloomFilterTest, TestBloomFilterInit)
     VectorBatch *inputVectorBatch = CreateVectorBatch(inputTypes, rowNum, intVecData);
 
     auto *factory = BloomFilterOperatorFactory::CreateBloomFilterOperatorFactory(1);
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(inputVectorBatch);
 
     VectorBatch *result = nullptr;
@@ -223,9 +223,9 @@ TEST(BloomFilterTest, TestBloomFilterAggregator)
     auto finalFactory = CreateFactory(finalAggFuncVector, finalInputTypeVector, finalOutputTypeVector,
         finalAggColIdxVector, finalAggMask, false, false);
 
-    omniruntime::op::Operator *aggPartial1 = partialFactory1->CreateOperator();
-    omniruntime::op::Operator *aggPartial2 = partialFactory2->CreateOperator();
-    omniruntime::op::Operator *aggFinal = finalFactory->CreateOperator();
+    omniruntime::op::Operator *aggPartial1 = partialFactory1->CreateOperator(nullptr);
+    omniruntime::op::Operator *aggPartial2 = partialFactory2->CreateOperator(nullptr);
+    omniruntime::op::Operator *aggFinal = finalFactory->CreateOperator(nullptr);
 
     aggPartial1->Init();
     aggPartial1->AddInput(inputVectorBatch1);

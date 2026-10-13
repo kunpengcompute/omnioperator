@@ -14,11 +14,17 @@ target_link_libraries(${OP_TARGET} PUBLIC expression vectorization io_core ${OMN
 target_include_directories(${OP_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/simd)
 install(TARGETS ${OP_TARGET} DESTINATION ${CMAKE_INSTALL_PREFIX})
 install(FILES ${SOURCE_ROOT}/src/operator/operator.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
+install(FILES ${SOURCE_ROOT}/src/operator/spillable_operator.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
 install(FILES ${SOURCE_ROOT}/src/operator/operator_factory.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
 install(FILES ${SOURCE_ROOT}/src/operator/execution_context.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
 install(FILES ${SOURCE_ROOT}/src/operator/memory_builder.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
 install(FILES ${SOURCE_ROOT}/src/operator/status.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
 install(FILES ${SOURCE_ROOT}/src/operator/config/operator_config.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator/config)
+# operator_config.h now #includes memory/global_mem_tracker.h (the self-spill
+# threshold reads the process-global accounting). operator_config.h is gluten-facing
+# (cpp-omni WholeStageResultIterator.h includes it), so the transitively-required header must
+# be installed too — else gluten compile fails with "memory/global_mem_tracker.h not found".
+install(FILES ${SOURCE_ROOT}/src/memory/global_mem_tracker.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/memory)
 install(FILES ${SOURCE_ROOT}/src/operator/hash_util.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
 install(FILES ${SOURCE_ROOT}/src/operator/aggregation/udaf/udaf_registry.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator/aggregation/udaf)
 install(FILES ${SOURCE_ROOT}/src/operator/util/function_type.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator/util/)

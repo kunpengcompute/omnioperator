@@ -348,7 +348,7 @@ void CovarSampAggregator<IN_ID, OUT_ID>::AlignAggSchema(VectorBatch *result, Vec
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyCov4(result);
+        RegrAlignAppendEmptyCov4(result, this->pool_);
         return;
     }
     if (!inputRaw) {
@@ -359,7 +359,7 @@ void CovarSampAggregator<IN_ID, OUT_ID>::AlignAggSchema(VectorBatch *result, Vec
     GetVector(inputVecBatch, 0, rc, &xyNull);
     BaseVector *leftVec = inputVecBatch->Get(channels[0]);
     BaseVector *rightVec = inputVecBatch->Get(channels[1]);
-    RegrAlignAppendCov4Raw(result, leftVec, rightVec, xyNull, rc);
+    RegrAlignAppendCov4Raw(result, leftVec, rightVec, xyNull, rc, this->pool_);
 }
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
@@ -368,22 +368,23 @@ void CovarSampAggregator<IN_ID, OUT_ID>::AlignAggSchemaWithFilter(VectorBatch *r
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyCov4(result);
+        RegrAlignAppendEmptyCov4(result, this->pool_);
         return;
     }
     auto *filterVec = static_cast<Vector<bool> *>(inputVecBatch->Get(filterIndex));
     bool needFilter = DoNeedHandleAggFilter(filterVec, 0, rc);
     std::shared_ptr<NullsHelper> xyNull;
     GetVector(inputVecBatch, 0, rc, &xyNull);
-    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(xyNull, filterVec, needFilter, rc);
+    std::shared_ptr<NullsHelper> rowSkip =
+        RegrAlignMergeYxNullsWithFilter(xyNull, filterVec, needFilter, rc, this->pool_);
     if (!inputRaw) {
         RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, kCovarPartialColumnCount, rc, rowSkip,
-            false);
+            false, this->pool_);
         return;
     }
     BaseVector *leftVec = inputVecBatch->Get(channels[0]);
     BaseVector *rightVec = inputVecBatch->Get(channels[1]);
-    RegrAlignAppendCov4Raw(result, leftVec, rightVec, rowSkip, rc);
+    RegrAlignAppendCov4Raw(result, leftVec, rightVec, rowSkip, rc, this->pool_);
 }
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
@@ -393,10 +394,10 @@ void CovarSampAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *resu
     (void)nullMap;
     (void)aggFilter;
     if (originVector == nullptr) {
-        RegrAlignAppendEmptyCov4(result);
+        RegrAlignAppendEmptyCov4(result, this->pool_);
         return;
     }
-    RegrAlignAppendCov4AllNullRows(result, originVector->GetSize());
+    RegrAlignAppendCov4AllNullRows(result, originVector->GetSize(), this->pool_);
 }
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>

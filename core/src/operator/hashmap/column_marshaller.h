@@ -48,7 +48,8 @@ public:
     using KeyType = typename Hashmap::Keys;
     using ValueType = typename Hashmap::Values;
     using Result = typename Hashmap::ResultType;
-    ColumnSerializeHandler(uint8_t initDegree = 16) : hashmap(initDegree) {}
+    explicit ColumnSerializeHandler(mem::Allocator *alloc, uint8_t initDegree = 16)
+        : hashmap(OmniHashmapAllocator(alloc), initDegree) {}
 
     Result InsertValueToHashmap(BaseVector **groupVectors, int32_t groupColNum, int32_t rowIdx,
         mem::SimpleArenaAllocator &arenaAllocator)
@@ -162,6 +163,17 @@ public:
         return hashmap.TryEmplaceNotNullKeyWithPartition(key, hashValue, partitionInfo);
     }
 
+    // Adaptive-builder insert (small seed); only used by BuildHashTableAdaptive.
+    ALWAYS_INLINE Result InsertJoinKeysToHashmapGrowing(KeyType &key)
+    {
+        return hashmap.EmplaceNotNullKeyGrowing(key);
+    }
+
+    ALWAYS_INLINE Result InsertJoinKeysToHashmapGrowing(KeyType &key, size_t &hashValue)
+    {
+        return hashmap.EmplaceNotNullKeyGrowing(key, hashValue);
+    }
+
     void ParseKeyToCols(const KeyType &key, std::vector<vec::BaseVector *> &groupOutputVectors, int32_t groupColNum,
         const int32_t rowIdx)
     {
@@ -235,14 +247,9 @@ public:
         return hashmap.GetElementsSize();
     }
 
-    ALWAYS_INLINE uint64_t EstimateAllocatedBytes() const
+    ALWAYS_INLINE uint64_t GetAllocatedBytes() const
     {
-        return hashmap.EstimateAllocatedBytes();
-    }
-
-    ALWAYS_INLINE uint64_t EstimateRehashAllocation(size_t additionalElements) const
-    {
-        return hashmap.EstimateRehashAllocation(additionalElements);
+        return hashmap.GetAllocatedBytes();
     }
 
     void ResetHashmap()
@@ -1898,8 +1905,10 @@ public:
     /// for writing to disk. The key is reconstructed from the RowContainer
     /// row by re-serializing each key column.
     template <class Func, class NullFunc>
-    void SpillExtract(int32_t rowsNum, OutputState &outputState, Func func, NullFunc nullFunc)
+    int32_t SpillExtract(int32_t rowsNum, size_t maxScratchBytes,
+        mem::SimpleArenaAllocator &scratch, OutputState &outputState, Func func, NullFunc nullFunc)
     {
+        const auto initialScratchBytes = scratch.UsedBytes();
         auto tblVisitor = [&] {
             if (outputState.rowBegin) {
                 return table->GetResultVisitor(
@@ -1908,7 +1917,8 @@ public:
             return table->GetResultVisitor();
         }();
         uint32_t idx = 0;
-        while (idx < rowsNum && !tblVisitor.Finished()) {
+        while (idx < rowsNum && !tblVisitor.Finished() &&
+            (idx == 0 || scratch.UsedBytes() - initialScratchBytes < maxScratchBytes)) {
             auto* row = GetRowPtr(tblVisitor.CurVal().buf);
             // Reconstruct serialized key data from RowContainer row
             // For fixed-width types, re-serialize each column into a contiguous buffer
@@ -1940,7 +1950,7 @@ public:
                 }
 
                 if (RowContainer::IsNullAt(reinterpret_cast<char*>(row), nullByte, nullMask)) {
-                    auto* pos = table->Pool().AllocateContinue(sizeof(uint8_t), reinterpret_cast<const uint8_t*&>(key.data));
+                    auto* pos = scratch.AllocateContinue(sizeof(uint8_t), reinterpret_cast<const uint8_t*&>(key.data));
                     *pos = 0;
                     key.size += sizeof(uint8_t);
                     if (varcharColIndices.size() > 1 && mergedVarcharPos != nullptr &&
@@ -1967,7 +1977,7 @@ public:
                             }
                         }
                         if (dataPtr != nullptr && dataSize > 0) {
-                            auto* dest = table->Pool().AllocateContinue(dataSize, reinterpret_cast<const uint8_t*&>(key.data));
+                            auto* dest = scratch.AllocateContinue(dataSize, reinterpret_cast<const uint8_t*&>(key.data));
                             memcpy(dest, dataPtr, dataSize);
                             key.size += dataSize;
                         }
@@ -1975,7 +1985,7 @@ public:
                         char* dataPtr = *reinterpret_cast<char**>(reinterpret_cast<char*>(row) + offset);
                         size_t dataSize = *reinterpret_cast<size_t*>(reinterpret_cast<char*>(row) + offset + sizeof(char*));
                         if (dataPtr != nullptr && dataSize > 0) {
-                            auto* dest = table->Pool().AllocateContinue(dataSize, reinterpret_cast<const uint8_t*&>(key.data));
+                            auto* dest = scratch.AllocateContinue(dataSize, reinterpret_cast<const uint8_t*&>(key.data));
                             memcpy(dest, dataPtr, dataSize);
                             key.size += dataSize;
                         }
@@ -1983,7 +1993,7 @@ public:
                 } else {
                     int32_t colSize = keyTypeSizes[colIdx];
                     auto resSize = sizeof(uint8_t) + colSize;
-                    auto* pos = table->Pool().AllocateContinue(resSize, reinterpret_cast<const uint8_t*&>(key.data));
+                    auto* pos = scratch.AllocateContinue(resSize, reinterpret_cast<const uint8_t*&>(key.data));
                     *pos = static_cast<uint8_t>(colSize);
                     memcpy(pos + sizeof(uint8_t), reinterpret_cast<char*>(row) + offset, colSize);
                     key.size += resSize;
@@ -1991,7 +2001,7 @@ public:
             }
 
             // Ensure space for the key size trailer
-            table->Pool().AllocateContinue(sizeof(size_t), reinterpret_cast<const uint8_t*&>(key.data));
+            scratch.AllocateContinue(sizeof(size_t), reinterpret_cast<const uint8_t*&>(key.data));
 
             // Store key size trailer
             *reinterpret_cast<size_t*>(const_cast<char*>(key.data) + key.size) = key.size;
@@ -2008,6 +2018,7 @@ public:
             outputState.rowOffset = tagPos;
             outputState.hasBeenOutputNum += idx;
         });
+        return idx;
     }
 
     template <DataTypeId id>
@@ -2592,13 +2603,21 @@ public:
     void ResetHashmap()
     {
         table->Clear();
+        ResetRowContainer();
+    };
+
+    // The arena may be reset independently of the hash table capacity. Drop
+    // row pointers and the partially used row batch before accepting input
+    // again; otherwise NewRow can write into an arena chunk already released.
+    void ResetRowContainer()
+    {
         if (aggRows) {
             aggRows->Reset();
         }
         rowContainerIter = RowContainerIterator{};
         workingUpdateCount = 0;
         mergedVarcharCacheCount_ = 0;
-    };
+    }
 
 private:
     std::vector<VectorSerializer> serializers;
@@ -2867,10 +2886,23 @@ public:
         return table->Size() + nullValueSize;
     }
 
+    void ReleaseNullGroup()
+    {
+        nullValueSize = 0;
+        shouldExtractNull = false;
+        std::string().swap(nullValue);
+    }
+
     void ResetHashmap()
     {
         table->Clear();
-        nullValue.clear();
+        ReleaseNullGroup();
+    }
+
+    void ReleaseHashmapCapacity()
+    {
+        table->Release();
+        ReleaseNullGroup();
     }
     private:
     using UnsignedKey = std::conditional_t<std::is_same_v<T, omniruntime::type::int128_t>,

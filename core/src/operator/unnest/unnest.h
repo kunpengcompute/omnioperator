@@ -22,14 +22,17 @@ public:
 
     static UnnestOperatorFactory *CreateUnnestOperatorFactory(std::shared_ptr<const UnnestNode> planNode);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 private:
     std::shared_ptr<const UnnestNode> planNode_;
 };
 
 class UnnestOperator : public Operator {
 public:
-    explicit UnnestOperator(std::shared_ptr<const UnnestNode> planNode);
+    // Pool-bound ctor chains Operator(pool)
+    UnnestOperator(omniruntime::mem::OmniTaskMemoryPool *pool, std::shared_ptr<const UnnestNode> planNode);
 
     ~UnnestOperator() override = default;
 
@@ -40,6 +43,9 @@ public:
     OmniStatus Close() override;
 
 private:
+    // Shared init body for legacy + pool-bound ctors.
+    void InitFromCtor(const std::shared_ptr<const UnnestNode>& planNode);
+
     // Generate output for 'size' input rows starting from 'start' input row.
     // @param start First input row to include in the output.
     // @param size Number of input rows to include in the output.

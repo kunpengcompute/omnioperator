@@ -162,7 +162,7 @@ class TaperHashTableBase : public TaperContainer {
       uint32_t keySize,
       uint32_t valueSize)
       : pool(memPool),
-        systemAlloc_(mem::Allocator::GetAllocator()),
+        systemAlloc_(memPool.GetAllocator()),
         keySize_(keySize),
         valueSize_(valueSize),
         rowSize_(keySize + valueSize) {}
@@ -183,13 +183,58 @@ class TaperHashTableBase : public TaperContainer {
     return rowSize_;
   }
 
-  size_t Capacity() {
-    return GetChunksCapacity() * elemNumInChunk_;
+  size_t Capacity() const {
+    return chunks_ == nullptr ? 0 : GetChunksCapacity() * elemNumInChunk_;
   }
 
   void Clear() override {
     FreeChunks();
     Init(0);
+  }
+
+  // Physical-reclaim lifecycle used by spillable hash aggregation. Unlike
+  // Clear(), Release() leaves the table without a resident chunk; the owner
+  // reinitializes it once at the next input boundary.
+  uint64_t ReclaimableBytesOnRelease() const {
+    return AllocatedBytes();
+  }
+
+  uint64_t EstimateRehashAllocation(size_t additionalElements) const {
+    const uint64_t targetElements = static_cast<uint64_t>(size_) + additionalElements;
+    if (targetElements == 0) {
+      return 0;
+    }
+
+    uint64_t projectedChunks = chunks_ == nullptr ? 1 : GetChunksCapacity();
+    auto thresholdFor = [this](uint64_t chunks) {
+      const uint64_t capacity = chunks * elemNumInChunk_;
+      return capacity - capacity / 10;
+    };
+    uint64_t threshold = thresholdFor(projectedChunks);
+    if (chunks_ != nullptr && targetElements <= threshold) {
+      return 0;
+    }
+    while (targetElements > threshold) {
+      projectedChunks *= 2;
+      threshold = thresholdFor(projectedChunks);
+    }
+    // Rehash allocates the new chunk array before releasing the old one, so
+    // reservation must cover the complete projected allocation.
+    return projectedChunks * sizeof(TaperHashTableChunk);
+  }
+
+  void Release() {
+    FreeChunks();
+    size_ = 0;
+    lastChunkIdx_ = 0;
+    expandThreshold_ = 0;
+    rehashing_ = false;
+  }
+
+  void ReinitializeAfterRelease() {
+    if (chunks_ == nullptr) {
+      Init(0);
+    }
   }
 
   ALWAYS_INLINE
@@ -202,7 +247,7 @@ class TaperHashTableBase : public TaperContainer {
   }
 
   size_t AllocatedBytes() const override {
-    return GetChunksCapacity() * sizeof(TaperHashTableChunk);
+    return chunks_ == nullptr ? 0 : GetChunksCapacity() * sizeof(TaperHashTableChunk);
   }
 
   void PrintStats() override {
@@ -418,10 +463,10 @@ class TaperHashTableBase : public TaperContainer {
     chunks_ = nullptr;
   }
 
-  static void FreeChunkMemory(ChunkPtr chunks, uint32_t lastChunkIdx) {
+  void FreeChunkMemory(ChunkPtr chunks, uint32_t lastChunkIdx) {
     if (chunks != nullptr) {
       auto bytesNum = (lastChunkIdx + 1) * sizeof(TaperHashTableChunk);
-      mem::Allocator::GetAllocator()->Free(chunks, bytesNum);
+      systemAlloc_->Free(chunks, bytesNum);
     }
   }
 

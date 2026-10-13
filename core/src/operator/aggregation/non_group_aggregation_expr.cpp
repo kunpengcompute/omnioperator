@@ -115,18 +115,20 @@ AggregationWithExprOperatorFactory::~AggregationWithExprOperatorFactory()
     aggSimpleFilters.clear();
 }
 
-Operator *AggregationWithExprOperatorFactory::CreateOperator()
+Operator *AggregationWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto aggOperator = static_cast<AggregationOperator *>(aggOperatorFactory->CreateOperator());
-    return new AggregationWithExprOperator(*originSourceTypes, *sourceTypes, projections, aggSimpleFilters,
+    auto aggOperator = static_cast<AggregationOperator *>(aggOperatorFactory->CreateOperator(pool));
+    return new AggregationWithExprOperator(pool, *originSourceTypes, *sourceTypes, projections, aggSimpleFilters,
         aggOperator, queryConfig_);
 }
 
-AggregationWithExprOperator::AggregationWithExprOperator(const DataTypes &originSourceTypes,
-    const DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
+AggregationWithExprOperator::AggregationWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const DataTypes &originSourceTypes, const DataTypes &sourceTypes,
+    std::vector<std::unique_ptr<Projection>> &projections,
     std::vector<SimpleFilter *> &aggSimpleFilters, AggregationOperator *aggOperator,
     const config::QueryConfig &queryConfig)
-    : originTypes(originSourceTypes),
+    : Operator(pool),
+      originTypes(originSourceTypes),
       sourceTypes(sourceTypes),
       projections(projections),
       aggOperator(aggOperator)

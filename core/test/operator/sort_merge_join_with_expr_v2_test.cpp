@@ -252,10 +252,10 @@ TEST(SMJ_JOIN_OPERATOR_WITH_EXPR_V2_TESTCASE, TestInnerEqualityJoinWithOneBuildO
     auto *queryConfig = new config::QueryConfig();
     auto [joinNode, leftKey, rightKey] = ConstructSimpleJoinKeyJoinNode(OMNI_JOIN_TYPE_INNER, false, true, nullptr);
     StreamedTableWithExprOperatorFactoryV2 *streamedTableWithExprOperatorFactoryV2 = StreamedTableWithExprOperatorFactoryV2::CreateStreamedTableWithExprOperatorFactoryV2(joinNode, *queryConfig);
-    auto *streamedTblWithExprOperator = dynamic_cast<StreamedTableWithExprOperatorV2 *>(streamedTableWithExprOperatorFactoryV2->CreateOperator());
+    auto *streamedTblWithExprOperator = dynamic_cast<StreamedTableWithExprOperatorV2 *>(streamedTableWithExprOperatorFactoryV2->CreateOperator(nullptr));
 
     BufferedTableWithExprOperatorFactoryV2 *bufferedTableWithExprOperatorFactoryV2 = BufferedTableWithExprOperatorFactoryV2::CreateBufferedTableWithExprOperatorFactoryV2(joinNode, reinterpret_cast<int64_t>(streamedTableWithExprOperatorFactoryV2), *queryConfig);
-    auto *bufferedTblWithExprOperator = dynamic_cast<BufferedTableWithExprOperatorV2 *>(bufferedTableWithExprOperatorFactoryV2->CreateOperator());
+    auto *bufferedTblWithExprOperator = dynamic_cast<BufferedTableWithExprOperatorV2 *>(bufferedTableWithExprOperatorFactoryV2->CreateOperator(nullptr));
 
 
     VectorBatch *bufferedVecBatch = ConstructSimpleBufferedVectorBatch();

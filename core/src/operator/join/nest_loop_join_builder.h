@@ -28,7 +28,9 @@ public:
 
     ~NestedLoopJoinBuildOperatorFactory() = default;
 
-    omniruntime::op::Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     VectorBatch *GetBuildVectorBatch();
 
@@ -44,7 +46,9 @@ private:
 
 class NestedLoopJoinBuildOperator : public Operator {
 public:
-    NestedLoopJoinBuildOperator(std::unique_ptr<VectorBatch> &vectorBatch, DataTypes &buildTypes);
+    // Pool-bound ctor chains Operator(pool)
+    NestedLoopJoinBuildOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::unique_ptr<VectorBatch> &vectorBatch, DataTypes &buildTypes);
 
     ~NestedLoopJoinBuildOperator() = default;
 

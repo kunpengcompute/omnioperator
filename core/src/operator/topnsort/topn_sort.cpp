@@ -125,9 +125,9 @@ template <type::DataTypeId typeId> static BaseVector *CreateVectorFromFlat(BaseV
     using RawDataType = typename NativeAndVectorType<typeId>::type;
     BaseVector *outputVec;
     if constexpr (typeId == OMNI_CHAR || typeId == OMNI_VARCHAR) {
-        outputVec = new Vector<LargeStringContainer<std::string_view>>(1);
+        outputVec = new Vector<LargeStringContainer<std::string_view>>(1, inputVec->GetPool());
     } else {
-        outputVec = new Vector<RawDataType>(1);
+        outputVec = new Vector<RawDataType>(1, inputVec->GetPool());
     }
     SetValueFromFlat<typeId>(inputVec, inputPos, outputVec, 0);
     return outputVec;
@@ -138,9 +138,9 @@ template <type::DataTypeId typeId> static BaseVector *CreateVectorFromDictionary
     using RawDataType = typename NativeAndVectorType<typeId>::type;
     BaseVector *outputVec;
     if constexpr (typeId == OMNI_CHAR || typeId == OMNI_VARCHAR) {
-        outputVec = new Vector<LargeStringContainer<std::string_view>>(1);
+        outputVec = new Vector<LargeStringContainer<std::string_view>>(1, inputVec->GetPool());
     } else {
-        outputVec = new Vector<RawDataType>(1);
+        outputVec = new Vector<RawDataType>(1, inputVec->GetPool());
     }
     SetValueFromDictionary<typeId>(inputVec, inputPos, outputVec, 0);
     return outputVec;
@@ -410,10 +410,12 @@ static std::vector<SetValueFunc> setValueFromDictionaryFuncs = {
     SetValueFromDictionary<OMNI_BYTE>        // OMNI_BYTE
 };
 
-TopNSortOperator::TopNSortOperator(const type::DataTypes &sourceTypes, int32_t n, bool isStrictTopN,
-    const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
+// Pool-bound ctor — same body, chains Operator(pool).
+TopNSortOperator::TopNSortOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+    int32_t n, bool isStrictTopN, const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
     const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts)
-    : sourceTypes(sourceTypes),
+    : Operator(pool),
+      sourceTypes(sourceTypes),
       n(n),
       isStrictTopN(isStrictTopN),
       partitionCols(partitionCols),
@@ -422,6 +424,11 @@ TopNSortOperator::TopNSortOperator(const type::DataTypes &sourceTypes, int32_t n
       sortAscendings(sortAscendings),
       sortNullFirsts(sortNullFirsts),
       sortColNum(static_cast<int32_t>(sortCols.size()))
+{
+    InitFromCtor();
+}
+
+void TopNSortOperator::InitFromCtor()
 {
     auto sourceTypeIds = sourceTypes.GetIds();
     for (int32_t i = 0; i < sortColNum; i++) {
@@ -677,7 +684,7 @@ int32_t TopNSortOperator::AddInput(omniruntime::vec::VectorBatch *inputVecBatch)
     for (int32_t i = 0; i < inputColNum; i++) {
         auto inputVector = inputVectors[i];
         if (inputVector->GetEncoding() == OMNI_DICTIONARY) {
-            inputVectors[i] = VectorHelper::DecodeDictionaryVector(inputVector);
+            inputVectors[i] = VectorHelper::DecodeDictionaryVector(inputVector, this->pool());
             delete inputVector;
             inputVector = nullptr;
         }
@@ -783,7 +790,7 @@ int32_t TopNSortOperator::GetOutput(omniruntime::vec::VectorBatch **outputVecBat
     auto result = std::make_unique<VectorBatch>(outputRowCount);
 
     int32_t resultRowIdx = 0;
-    VectorHelper::AppendVectors(result.get(), sourceTypes, outputRowCount);
+    VectorHelper::AppendVectors(result.get(), sourceTypes, outputRowCount, this->pool());
     auto resultVectors = result->GetVectors();
     for (auto iter = currentIter; iter != end; ++iter) {
         auto mapValue = iter->second;

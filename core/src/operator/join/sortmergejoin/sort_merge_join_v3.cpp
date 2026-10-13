@@ -146,10 +146,13 @@ template <typename type::DataTypeId typeId>
 static BaseVector *ConstructColumnWithoutNullIndex(BaseVector **outputColumns, uint64_t *outputAddresses,
     int32_t *outputIndexes, int32_t probeRowCount)
 {
+    // Recover the per-task pool from the source columns so the result column is pool-accounted
+    // (SortMergeJoinOperatorV3 has no pool() accessor; the source columns carry it).
+    auto *pool = outputColumns[0]->GetPool();
     if constexpr (typeId == OMNI_VARCHAR) {
         using DictionaryVector = Vector<DictionaryContainer<std::string_view>>;
         using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-        auto resultColumn = new VarcharVector(probeRowCount);
+        auto resultColumn = new VarcharVector(probeRowCount, pool);
         for (int32_t i = 0; i < probeRowCount; i++) {
             auto valueIdx = outputIndexes[i];
             auto valueAddress = outputAddresses[valueIdx];
@@ -171,7 +174,7 @@ static BaseVector *ConstructColumnWithoutNullIndex(BaseVector **outputColumns, u
         return resultColumn;
     } else {
         using RawDataType = typename NativeAndVectorType<typeId>::type;
-        auto resultColumn = new Vector<RawDataType>(probeRowCount);
+        auto resultColumn = new Vector<RawDataType>(probeRowCount, pool);
         for (int32_t i = 0; i < probeRowCount; i++) {
             auto valueIdx = outputIndexes[i];
             auto valueAddress = outputAddresses[valueIdx];
@@ -198,10 +201,12 @@ template <typename type::DataTypeId typeId>
 static BaseVector *ConstructColumnWithNullIndex(BaseVector **outputColumns, uint64_t *outputAddresses,
     int32_t *outputIndexes, int32_t probeRowCount)
 {
+    // Recover the per-task pool from the source columns (see ConstructColumnWithoutNullIndex).
+    auto *pool = outputColumns[0]->GetPool();
     if constexpr (typeId == OMNI_VARCHAR) {
         using DictionaryVector = Vector<DictionaryContainer<std::string_view>>;
         using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-        auto resultColumn = new VarcharVector(probeRowCount);
+        auto resultColumn = new VarcharVector(probeRowCount, pool);
         for (int32_t i = 0; i < probeRowCount; i++) {
             auto valueIdx = outputIndexes[i];
             if (valueIdx == NULL_INDEX) {
@@ -227,7 +232,7 @@ static BaseVector *ConstructColumnWithNullIndex(BaseVector **outputColumns, uint
         return resultColumn;
     } else {
         using RawDataType = typename NativeAndVectorType<typeId>::type;
-        auto resultColumn = new Vector<RawDataType>(probeRowCount);
+        auto resultColumn = new Vector<RawDataType>(probeRowCount, pool);
         for (int32_t i = 0; i < probeRowCount; i++) {
             auto valueIdx = outputIndexes[i];
             if (valueIdx == NULL_INDEX) {
@@ -254,6 +259,11 @@ static BaseVector *ConstructColumnWithNullIndex(BaseVector **outputColumns, uint
     }
 }
 
+// No-pool bridge retained intentionally: this builds all-null result columns for the
+// "no input data" path (outputColumns == nullptr), and SortMergeJoinOperatorV3 has no
+// per-task pool (its ExecutionContext is unscoped — see ctor: `new ExecutionContext(4096,
+// nullptr)`). With no pool and no source vector to recover one from, the null columns stay
+// on the [[deprecated]] no-pool bridge.
 template <typename type::DataTypeId typeId> static BaseVector *ConstructNullColumn(int32_t probeRowCount)
 {
     if constexpr (typeId == OMNI_VARCHAR) {
@@ -337,7 +347,7 @@ void SortMergeJoinOperatorV3::JoinFilterCodeGen(OverflowConfig *overflowConfig)
         return;
     }
 
-    executionContext = new ExecutionContext();
+    executionContext = new ExecutionContext(4096, nullptr);  // SMJ v3 filter codegen ExecutionContext is unscoped; no task pool available here.
     omniruntime::expressions::Expr *filterExpr = JSONParser::ParseJSON(filter);
     simpleFilter = new SimpleFilter(*filterExpr);
     auto isOk = simpleFilter->Initialize(overflowConfig);

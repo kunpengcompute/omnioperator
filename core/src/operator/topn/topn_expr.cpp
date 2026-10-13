@@ -47,16 +47,19 @@ TopNWithExprOperatorFactory *TopNWithExprOperatorFactory::CreateTopNWithExprOper
 
 TopNWithExprOperatorFactory::~TopNWithExprOperatorFactory() = default;
 
-Operator *TopNWithExprOperatorFactory::CreateOperator()
+// Pool-bound override forwards pool to inner factory.
+Operator *TopNWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto topNOperator = static_cast<TopNOperator *>(topNOperatorFactory->CreateOperator());
-    auto pOperator = new TopNWithExprOperator(*sourceTypes, projections, topNOperator, queryConfig_);
+    auto topNOperator = static_cast<TopNOperator *>(topNOperatorFactory->CreateOperator(pool));
+    auto pOperator = new TopNWithExprOperator(pool, *sourceTypes, projections, topNOperator, queryConfig_);
     return pOperator;
 }
 
-TopNWithExprOperator::TopNWithExprOperator(const type::DataTypes &sourceTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, TopNOperator *topNOperator, const config::QueryConfig &queryConfig)
-    : sourceTypes(sourceTypes), projections(projections), topNOperator(topNOperator)
+// Pool-bound ctor — same body, chains Operator(pool).
+TopNWithExprOperator::TopNWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
+    TopNOperator *topNOperator, const config::QueryConfig &queryConfig)
+    : Operator(pool), sourceTypes(sourceTypes), projections(projections), topNOperator(topNOperator)
 {
     executionContext->SetConfig(queryConfig);
 }

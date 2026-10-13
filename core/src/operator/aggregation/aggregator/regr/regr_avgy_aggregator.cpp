@@ -395,7 +395,7 @@ void RegrAvgYAggregator::AlignAggSchema(VectorBatch *result, VectorBatch *inputV
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyPearson6(result);
+        RegrAlignAppendEmptyPearson6(result, this->pool_);
         return;
     }
     if (!inputRaw) {
@@ -406,7 +406,7 @@ void RegrAvgYAggregator::AlignAggSchema(VectorBatch *result, VectorBatch *inputV
     GetVector(inputVecBatch, 0, rc, &yxNull);
     BaseVector *yVec = inputVecBatch->Get(channels[0]);
     BaseVector *xVec = inputVecBatch->Get(channels[1]);
-    RegrAlignAppendPearson6RawStd(result, yVec, xVec, yxNull, rc);
+    RegrAlignAppendPearson6RawStd(result, yVec, xVec, yxNull, rc, this->pool_);
 }
 
 void RegrAvgYAggregator::AlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *inputVecBatch,
@@ -414,21 +414,21 @@ void RegrAvgYAggregator::AlignAggSchemaWithFilter(VectorBatch *result, VectorBat
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyPearson6(result);
+        RegrAlignAppendEmptyPearson6(result, this->pool_);
         return;
     }
     auto *filterVec = static_cast<Vector<bool> *>(inputVecBatch->Get(filterIndex));
     bool needFilter = DoNeedHandleAggFilter(filterVec, 0, rc);
     std::shared_ptr<NullsHelper> yxNull;
     GetVector(inputVecBatch, 0, rc, &yxNull);
-    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(yxNull, filterVec, needFilter, rc);
+    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(yxNull, filterVec, needFilter, rc, this->pool_);
     if (!inputRaw) {
-        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 6, rc, rowSkip, false);
+        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 6, rc, rowSkip, false, this->pool_);
         return;
     }
     BaseVector *yVec = inputVecBatch->Get(channels[0]);
     BaseVector *xVec = inputVecBatch->Get(channels[1]);
-    RegrAlignAppendPearson6RawStd(result, yVec, xVec, rowSkip, rc);
+    RegrAlignAppendPearson6RawStd(result, yVec, xVec, rowSkip, rc, this->pool_);
 }
 
 void RegrAvgYAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
@@ -437,10 +437,10 @@ void RegrAvgYAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector *
     (void)nullMap;
     (void)aggFilter;
     if (originVector == nullptr) {
-        RegrAlignAppendEmptyPearson6(result);
+        RegrAlignAppendEmptyPearson6(result, this->pool_);
         return;
     }
-    RegrAlignAppendPearson6AllNullRows(result, originVector->GetSize());
+    RegrAlignAppendPearson6AllNullRows(result, originVector->GetSize(), this->pool_);
 }
 
 std::vector<DataTypePtr> RegrAvgYAggregator::GetSpillType()

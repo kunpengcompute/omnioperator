@@ -58,19 +58,21 @@ TopNSortWithExprOperatorFactory* TopNSortWithExprOperatorFactory::CreateTopNSort
 
 TopNSortWithExprOperatorFactory::~TopNSortWithExprOperatorFactory() = default;
 
-Operator *TopNSortWithExprOperatorFactory::CreateOperator()
+// Pool-bound override forwards pool to inner factory.
+Operator *TopNSortWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto topNSortOperator = static_cast<TopNSortOperator *>(topNSortOperatorFactory->CreateOperator());
-    auto pOperator = new TopNSortWithExprOperator(*sourceTypes, partitionCols, sortCols, projections,
+    auto topNSortOperator = static_cast<TopNSortOperator *>(topNSortOperatorFactory->CreateOperator(pool));
+    auto pOperator = new TopNSortWithExprOperator(pool, *sourceTypes, partitionCols, sortCols, projections,
         topNSortOperator, queryConfig_);
     return pOperator;
 }
 
-TopNSortWithExprOperator::TopNSortWithExprOperator(const type::DataTypes &sourceTypes,
-    std::vector<int32_t> &partitionCols, std::vector<int32_t> &sortCols,
+// Pool-bound ctor — same body, chains Operator(pool).
+TopNSortWithExprOperator::TopNSortWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &sourceTypes, std::vector<int32_t> &partitionCols, std::vector<int32_t> &sortCols,
     std::vector<std::unique_ptr<Projection>> &projections, TopNSortOperator *topNSortOperator,
     const config::QueryConfig &queryConfig)
-    : sourceTypes(sourceTypes), projections(projections), topNSortOperator(topNSortOperator)
+    : Operator(pool), sourceTypes(sourceTypes), projections(projections), topNSortOperator(topNSortOperator)
 {
     executionContext->SetConfig(queryConfig);
 }

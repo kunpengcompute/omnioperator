@@ -233,7 +233,7 @@ TEST(MaxByAggregatorTest, ProcessGroupExtractValuesIntInt)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // Rows: (target, key) = (10, 3), (20, 1), (30, 2). Max key=3 -> target=10.
@@ -266,7 +266,7 @@ TEST(MaxByAggregatorTest, ProcessGroupExtractValuesLongLong)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     int64_t targetCol[] = {100, 200, 300};
@@ -296,7 +296,7 @@ TEST(MaxByAggregatorTest, ProcessGroupExtractValuesDoubleDouble)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     double targetCol[] = {1.1, 2.2, 3.3};
@@ -326,7 +326,7 @@ TEST(MaxByAggregatorTest, ProcessGroupExtractValuesIntVarchar)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     int32_t targetCol[] = {10, 20, 30};
@@ -357,7 +357,7 @@ TEST(MaxByAggregatorTest, ProcessGroupExtractValuesVarcharVarchar)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     std::string targetCol[] = {"aa", "bb", "cc"};
@@ -433,7 +433,7 @@ TEST(MaxByAggregatorTest, ExtractValuesForSpillIntInt)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     int32_t targetCol[] = {42};
@@ -470,7 +470,7 @@ TEST(MaxByAggregatorTest, ProcessGroupUnspillIntInt)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
     agg->SetStateOffset(0);
 
@@ -522,7 +522,7 @@ TEST(MaxByAggregatorTest, ProcessGroupUnspillLongLong)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
     agg->SetStateOffset(0);
 
@@ -569,7 +569,7 @@ TEST(MaxByAggregatorTest, ProcessGroupUnspillDoubleDouble)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
     agg->SetStateOffset(0);
 
@@ -616,7 +616,7 @@ TEST(MaxByAggregatorTest, ProcessGroupUnspillIntVarchar)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
     agg->SetStateOffset(0);
 
@@ -659,7 +659,7 @@ TEST(MaxByAggregatorTest, ProcessGroupUnspillVarcharVarchar)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
     agg->SetStateOffset(0);
 
@@ -702,7 +702,7 @@ TEST(MaxByAggregatorTest, ProcessGroupUnspillSkipsNullRow)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
     agg->SetStateOffset(0);
 
@@ -752,7 +752,7 @@ TEST(MaxByAggregatorTest, ProcessGroupConstTargetIntInt)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // Build VectorBatch: col1=ConstVector(42), col2=FlatVector{3,1,2}
@@ -790,7 +790,7 @@ TEST(MaxByAggregatorTest, ProcessGroupConstKeyIntInt)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // Build VectorBatch: col1=FlatVector{10,20,30}, col2=ConstVector(5)
@@ -829,7 +829,7 @@ TEST(MaxByAggregatorTest, ProcessGroupBothConstIntInt)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCount = 3;
@@ -863,7 +863,7 @@ TEST(MaxByAggregatorTest, ProcessGroupConstTargetLongLong)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCount = 3;
@@ -900,7 +900,7 @@ TEST(MaxByAggregatorTest, ProcessGroupConstTargetDoubleDouble)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCount = 3;
@@ -937,7 +937,7 @@ TEST(MaxByAggregatorTest, ProcessGroupConstTargetIntVarchar)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCount = 3;
@@ -976,7 +976,7 @@ TEST(MaxByAggregatorTest, ProcessGroupConstVarcharKeyIntVarchar)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCount = 3;
@@ -1017,7 +1017,7 @@ TEST(MaxByAggregatorTest, ProcessGroupConstTargetVarcharVarchar)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     const int32_t rowCount = 3;

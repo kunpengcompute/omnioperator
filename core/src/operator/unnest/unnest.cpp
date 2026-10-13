@@ -28,7 +28,7 @@ omniruntime::vec::BaseVector* NormalizeEncoding(omniruntime::vec::BaseVector* so
     auto encoding = source->GetEncoding();
     if (encoding == OMNI_DICTIONARY) {
         replaced = true;
-        return VectorHelper::DecodeDictionaryVector(source);
+        return VectorHelper::DecodeDictionaryVector(source, source->GetPool());
     }
     if (encoding == OMNI_ENCODING_STRUCT) {
         auto* srcRow = dynamic_cast<RowVector*>(source);
@@ -92,21 +92,21 @@ omniruntime::vec::BaseVector* CreateOutputVectorLike(omniruntime::vec::BaseVecto
             children.push_back(std::shared_ptr<BaseVector>(
                 CreateOutputVectorLike(srcRow->ChildAt(c).get(), size)));
         }
-        return new RowVector(size, children);
+        return new RowVector(size, children, source->GetPool());
     } else if (encoding == OMNI_ENCODING_ARRAY) {
         auto* srcArray = dynamic_cast<ArrayVector*>(source);
         auto elemChild = std::shared_ptr<BaseVector>(
             CreateOutputVectorLike(srcArray->GetElementVector().get(), 0));
-        return new ArrayVector(size, elemChild);
+        return new ArrayVector(size, elemChild, source->GetPool());
     } else if (encoding == OMNI_ENCODING_MAP) {
         auto* srcMap = dynamic_cast<MapVector*>(source);
         auto keyChild = std::shared_ptr<BaseVector>(
             CreateOutputVectorLike(srcMap->GetKeyVector().get(), 0));
         auto valueChild = std::shared_ptr<BaseVector>(
             CreateOutputVectorLike(srcMap->GetValueVector().get(), 0));
-        return new MapVector(size, keyChild, valueChild);
+        return new MapVector(size, keyChild, valueChild, source->GetPool());
     } else {
-        return VectorHelper::CreateVector(OMNI_FLAT, source->GetTypeId(), size);
+        return VectorHelper::CreateVector(source->GetPool(), OMNI_FLAT, source->GetTypeId(), size);
     }
 }
 } // anonymous namespace
@@ -117,16 +117,24 @@ UnnestOperatorFactory* UnnestOperatorFactory::CreateUnnestOperatorFactory(
     return new UnnestOperatorFactory(planNode);
 }
 
-Operator* UnnestOperatorFactory::CreateOperator()
+// Pool-bound override
+Operator* UnnestOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    UnnestOperator *unnestOperator = new UnnestOperator(planNode_);
+    UnnestOperator *unnestOperator = new UnnestOperator(pool, planNode_);
     return unnestOperator;
 }
 
-UnnestOperator::UnnestOperator(std::shared_ptr<const UnnestNode> planNode)
-    : withOrdinality_(planNode->withOrdinality()),
+// Pool-bound ctor — same body, chains Operator(pool).
+UnnestOperator::UnnestOperator(omniruntime::mem::OmniTaskMemoryPool *pool, std::shared_ptr<const UnnestNode> planNode)
+    : Operator(pool),
+      withOrdinality_(planNode->withOrdinality()),
       outer_(planNode->outer()),
       outputVecBatch(nullptr)
+{
+    InitFromCtor(planNode);
+}
+
+void UnnestOperator::InitFromCtor(const std::shared_ptr<const UnnestNode>& planNode)
 {
     const auto& unnestVariables = planNode->unnestVariables();
     for (const auto& variable : unnestVariables) {
@@ -497,8 +505,8 @@ void UnnestOperator::generateRepeatedColumns(int32_t numElements, omniruntime::v
                 throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", "Unnest not support this encoding.");
             }
             auto typeId = elementVector->GetTypeId();
-            auto newElementVector = std::shared_ptr<BaseVector>(VectorHelper::CreateVector(OMNI_FLAT, typeId, totalSize));
-            outputVector = new omniruntime::vec::ArrayVector(numElements, newElementVector);
+            auto newElementVector = std::shared_ptr<BaseVector>(VectorHelper::CreateVector(this->pool(), OMNI_FLAT, typeId, totalSize));
+            outputVector = new omniruntime::vec::ArrayVector(numElements, newElementVector, this->pool());
         } else if (auto mapVector = dynamic_cast<omniruntime::vec::MapVector*>(inputVector)) {
             int64_t totalSize = 0;
             for (auto i = 0; i < inputVector->GetSize(); ++i) {
@@ -509,13 +517,13 @@ void UnnestOperator::generateRepeatedColumns(int32_t numElements, omniruntime::v
             if (keyVector->GetEncoding() != OMNI_FLAT || valueVector->GetEncoding() != OMNI_FLAT) {
                 throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", "Unnest not support this encoding.");
             }
-            auto newKeyVector = std::shared_ptr<BaseVector>(VectorHelper::CreateVector(OMNI_FLAT, keyVector->GetTypeId(), totalSize));
-            auto newValueVector = std::shared_ptr<BaseVector>(VectorHelper::CreateVector(OMNI_FLAT, valueVector->GetTypeId(), totalSize));
-            outputVector = new omniruntime::vec::MapVector(numElements, newKeyVector, newValueVector);
+            auto newKeyVector = std::shared_ptr<BaseVector>(VectorHelper::CreateVector(this->pool(), OMNI_FLAT, keyVector->GetTypeId(), totalSize));
+            auto newValueVector = std::shared_ptr<BaseVector>(VectorHelper::CreateVector(this->pool(), OMNI_FLAT, valueVector->GetTypeId(), totalSize));
+            outputVector = new omniruntime::vec::MapVector(numElements, newKeyVector, newValueVector, this->pool());
         } else if (dynamic_cast<omniruntime::vec::RowVector*>(inputVector)) {
             outputVector = CreateOutputVectorLike(inputVector, numElements);
         } else {
-            outputVector = VectorHelper::CreateVector(OMNI_FLAT, typeId, numElements);
+            outputVector = VectorHelper::CreateVector(this->pool(), OMNI_FLAT, typeId, numElements);
         }
 
         switch (typeId) {
@@ -676,7 +684,7 @@ omniruntime::vec::BaseVector* UnnestOperator::generateUnrepeatedArrayValues(
 
     auto innerElementVec = std::shared_ptr<BaseVector>(
         CreateOutputVectorLike(elementVector->GetElementVector().get(), static_cast<int32_t>(totalInnerElements)));
-    auto* outputArrayVector = new ArrayVector(numElements, innerElementVec);
+    auto* outputArrayVector = new ArrayVector(numElements, innerElementVec, this->pool());
 
     int32_t outputIdx = 0;
     int64_t innerOffset = 0;
@@ -770,7 +778,7 @@ omniruntime::vec::BaseVector* UnnestOperator::generateUnrepeatedMapValues(
     auto outputValueVec = std::shared_ptr<BaseVector>(
         CreateOutputVectorLike(elementVector->GetValueVector().get(), static_cast<int32_t>(totalKVPairs)));
 
-    auto* outputMapVector = new MapVector(numElements, outputKeyVec, outputValueVec);
+    auto* outputMapVector = new MapVector(numElements, outputKeyVec, outputValueVec, this->pool());
 
     int32_t outputIdx = 0;
     int64_t kvOffset = 0;
@@ -882,7 +890,7 @@ omniruntime::vec::BaseVector* UnnestOperator::generateUnrepeatedValuesForType(om
     }
 
     auto typeId = elementVector->GetTypeId();
-    auto outputVector = VectorHelper::CreateVector(OMNI_FLAT, typeId, numElements);
+    auto outputVector = VectorHelper::CreateVector(this->pool(), OMNI_FLAT, typeId, numElements);
 
     switch (typeId) {
         case OMNI_BYTE:
@@ -945,7 +953,7 @@ void UnnestOperator::generateOrdinalityColumns(int32_t numElements, omniruntime:
     omniruntime::vec::VectorBatch* resultVecBatch)
 {
     int32_t index = 0;
-    BaseVector* baseVector = VectorHelper::CreateVector(OMNI_FLAT, OMNI_LONG, numElements);
+    BaseVector* baseVector = VectorHelper::CreateVector(this->pool(), OMNI_FLAT, OMNI_LONG, numElements);
     auto ordVector = dynamic_cast<omniruntime::vec::Vector<int64_t>*>(baseVector);
     
     if (unnestChannels_.empty()) {

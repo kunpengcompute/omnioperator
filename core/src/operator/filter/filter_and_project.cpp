@@ -207,9 +207,9 @@ bool SimpleFilter::Evaluate(int64_t *values, bool *isNulls, int32_t *lengths, in
     return !*this->isResultNull && result;
 }
 
-Operator *FilterAndProjectOperatorFactory::CreateOperator()
+Operator *FilterAndProjectOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    return new FilterAndProjectOperator(this->exprEvaluator, this->stringViewValidationFields);
+    return new FilterAndProjectOperator(pool, this->exprEvaluator, this->stringViewValidationFields);
 }
 
 OperatorFactory *CreateFilterOperatorFactory(

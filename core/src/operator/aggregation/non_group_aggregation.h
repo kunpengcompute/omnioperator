@@ -14,10 +14,12 @@ namespace omniruntime {
 namespace op {
 class AggregationOperator : public AggregationCommonOperator {
 public:
-    AggregationOperator(std::vector<std::unique_ptr<Aggregator>> aggs,
+    // Pool-bound ctor — forwards pool to AggregationCommonOperator(pool, ...).
+    AggregationOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::vector<std::unique_ptr<Aggregator>> aggs,
         std::vector<omniruntime::type::DataTypes> &aggsOutputTypes, std::vector<bool> &inputRaws,
         std::vector<bool> &outputPartials, const std::vector<int8_t> &hasAggFilters)
-        : AggregationCommonOperator(std::move(aggs), inputRaws, outputPartials),
+        : AggregationCommonOperator(pool, std::move(aggs), inputRaws, outputPartials),
           aggsOutputTypes(aggsOutputTypes),
           hasAggFilters(hasAggFilters)
     {
@@ -90,7 +92,9 @@ public:
 
     ~AggregationOperatorFactory() override = default;
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     OmniStatus Init() override;
 

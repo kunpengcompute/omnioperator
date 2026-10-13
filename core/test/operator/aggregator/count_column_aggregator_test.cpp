@@ -188,7 +188,7 @@ namespace omniruntime {
     {
         CountColumnAggregatorFactory factory;
         std::vector<int32_t> channel = {0};
-        auto executionContext = std::make_unique<ExecutionContext>();
+        auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
 
         auto testType = [&](const DataTypePtr &inputType) {
             auto agg = factory.CreateAggregator(*AggregatorUtil::WrapWithDataTypes(inputType).get(),
@@ -232,7 +232,7 @@ namespace omniruntime {
         CountColumnAggregatorFactory factory;
         std::vector<int32_t> channel0 = {0};
         std::vector<int32_t> channelNull = {1};
-        auto executionContext = std::make_unique<ExecutionContext>();
+        auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
 
         auto countCol = factory.CreateAggregator(*AggregatorUtil::WrapWithDataTypes(LongType()).get(),
             *AggregatorUtil::WrapWithDataTypes(LongType()).get(), channel0, true, false, false);
@@ -264,7 +264,7 @@ namespace omniruntime {
         const int32_t nonNullCount = 6;
         CountColumnAggregatorFactory factory;
         std::vector<int32_t> channel = {0};
-        auto executionContext = std::make_unique<ExecutionContext>();
+        auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
 
         auto testScalarType = [&](const DataTypePtr &inputType) {
             auto agg = factory.CreateAggregator(*AggregatorUtil::WrapWithDataTypes(inputType).get(),
@@ -304,7 +304,7 @@ namespace omniruntime {
         CountColumnAggregatorFactory factory;
         std::vector<int32_t> channel = {0};
         auto arrayType = std::make_shared<ArrayType>(IntType());
-        auto executionContext = std::make_unique<ExecutionContext>();
+        auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
         auto agg = factory.CreateAggregator(*AggregatorUtil::WrapWithDataTypes(arrayType).get(),
             *AggregatorUtil::WrapWithDataTypes(LongType()).get(), channel, true, false, false);
         ASSERT_NE(agg, nullptr);
@@ -343,7 +343,7 @@ namespace omniruntime {
         CountColumnAggregatorFactory factory;
         std::vector<int32_t> channel = {0};
         auto mapType = std::make_shared<MapType>(IntType(), IntType());
-        auto executionContext = std::make_unique<ExecutionContext>();
+        auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
         auto agg = factory.CreateAggregator(*AggregatorUtil::WrapWithDataTypes(mapType).get(),
             *AggregatorUtil::WrapWithDataTypes(LongType()).get(), channel, true, false, false);
         ASSERT_NE(agg, nullptr);
@@ -385,7 +385,7 @@ namespace omniruntime {
         std::vector<int32_t> channel = {0};
         std::vector<DataTypePtr> fieldTypes = {IntType()};
         auto rowType = std::make_shared<RowType>(fieldTypes, std::vector<std::string>{"f0"});
-        auto executionContext = std::make_unique<ExecutionContext>();
+        auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
         auto agg = factory.CreateAggregator(*AggregatorUtil::WrapWithDataTypes(rowType).get(),
             *AggregatorUtil::WrapWithDataTypes(LongType()).get(), channel, true, false, false);
         ASSERT_NE(agg, nullptr);
@@ -417,7 +417,7 @@ namespace omniruntime {
         const int32_t rowCount = 200;
         CountAllAggregatorFactory factory;
         std::vector<int32_t> channel = {-1};
-        auto executionContext = std::make_unique<ExecutionContext>();
+        auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
         auto agg = factory.CreateAggregator(*AggregatorUtil::WrapWithDataTypes(NoneType()).get(),
             *AggregatorUtil::WrapWithDataTypes(LongType()).get(), channel, true, false, false);
         ASSERT_NE(agg, nullptr);
@@ -437,7 +437,7 @@ namespace omniruntime {
         const int32_t rowCount = 200;
         CountAllAggregatorFactory factory;
         std::vector<int32_t> channel = {-1};
-        auto executionContext = std::make_unique<ExecutionContext>();
+        auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
         auto agg = factory.CreateAggregator(*AggregatorUtil::WrapWithDataTypes(NoneType()).get(),
             *AggregatorUtil::WrapWithDataTypes(LongType()).get(), channel, true, false, false);
         ASSERT_NE(agg, nullptr);

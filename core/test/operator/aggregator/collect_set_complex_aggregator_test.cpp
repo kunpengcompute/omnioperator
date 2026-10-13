@@ -119,7 +119,7 @@ TEST(CollectSetComplexAggregatorTest, PartialProcessGroupArrayOfIntDedup)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // Input: 4 rows, arrays [1,2], [3], [1,2], [4,5] - [1,2] is duplicated
@@ -176,7 +176,7 @@ TEST(CollectSetComplexAggregatorTest, PartialProcessGroupRowOfIntDedup)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // Input: 4 rows (42), (99), (42), (7) - 42 is duplicated
@@ -225,7 +225,7 @@ TEST(CollectSetComplexAggregatorTest, PartialEmptyInputExtractNull)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     ArrayVector *emptyCol = BuildArrayIntColumn(0, {}, {});
@@ -367,7 +367,7 @@ TEST(CollectSetComplexAggregatorTest, GroupedAggregationRowOfInt)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // 2 rows, each is its own group: (10), (20)

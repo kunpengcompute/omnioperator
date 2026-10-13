@@ -115,6 +115,29 @@ public:
         this->arenaAllocator = executionContext->GetArena();
     }
 
+    // Returns a non-null ExecutionContext for allocator/arena access.
+    //
+    // Production operators always call SetExecutionContext() with a real per-task
+    // context before processing, so this returns `executionContext` unchanged.
+    // When no context was set (no-pool unit-test harness path), it lazily builds an
+    // owned fallback bound to a null pool -- its allocator IS the nullBridge
+    // (ExecutionContext(minChunkSize, nullptr) -> bridge_allocator_(nullptr)),
+    // mirroring how Vector<T>/ContainerVector route through a nullBridge when pool_
+    // is null. Per-task accounting is skipped on this path; it only supplies scratch
+    // memory so InitState/ProcessGroup can run without a deref of a null context.
+    // Side-effects bind `arenaAllocator` so member-based arena derefs are also safe.
+    ExecutionContext *EnsureExecutionContext()
+    {
+        if (executionContext != nullptr) {
+            return executionContext;
+        }
+        if (fallbackExecutionContext == nullptr) {
+            fallbackExecutionContext = std::make_unique<ExecutionContext>(4096, nullptr);
+            this->arenaAllocator = fallbackExecutionContext->GetArena();
+        }
+        return fallbackExecutionContext.get();
+    }
+
     virtual void ProcessGroup(AggregateState *state, VectorBatch *vectorBatch, int32_t rowIndex)
     {
         throw OmniException("Not implemented",
@@ -316,6 +339,22 @@ public:
         return executionContext;
     }
 
+    // Pool plumbed through from the owning Operator (typically
+    // HashAggregationOperatorFactory / non_group_aggregation factory CreateOperator(pool)
+    // which calls SetPool() right after CreateAggregator). The aggregator's internal
+    // ExtractValues / ProcessAlignAggSchema helpers allocate Vector<T> result buffers
+    // via VectorHelper::CreateFlatVector(pool, ...); without this setter they would
+    // bind to the deprecated no-pool overload.
+    virtual void SetPool(omniruntime::mem::OmniTaskMemoryPool *pool)
+    {
+        this->pool_ = pool;
+    }
+
+    omniruntime::mem::OmniTaskMemoryPool *GetPool() const
+    {
+        return pool_;
+    }
+
 public:
     static constexpr int32_t INVALID_MASK_COL = -1;
 
@@ -329,8 +368,12 @@ protected:
     bool isStatisticalAggregate = false;
     const std::vector<int32_t> channels;
     ExecutionContext *executionContext = nullptr;
+    // Owned fallback context, lazily created by EnsureExecutionContext() only when no
+    // real context was set (no-pool unit-test harness). Null in production.
+    std::unique_ptr<ExecutionContext> fallbackExecutionContext = nullptr;
     SimpleArenaAllocator *arenaAllocator = nullptr;
     int32_t aggStateOffset;
+    omniruntime::mem::OmniTaskMemoryPool *pool_ = nullptr;
 };
 } // end of namespace op
 } // end of namespace omniruntime

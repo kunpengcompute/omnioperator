@@ -367,7 +367,7 @@ void ApproxCountDistinctAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorB
     const int32_t kAlignBufSize = 256;
     char alignBuf[kAlignBufSize];
     auto *outVec = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(
-        VectorHelper::CreateFlatVector(OMNI_VARBINARY, rowCount, kAlignBufSize * rowCount));
+        VectorHelper::CreateFlatVector(this->pool_, OMNI_VARBINARY, rowCount, kAlignBufSize * rowCount));
     if (isBooleanInput_) {
         for (int32_t i = 0; i < rowCount; ++i) {
             if (nullMap != nullptr && (*nullMap)[i]) {

@@ -40,7 +40,7 @@ TEST(MaxAggregatorTest, Int_Basic)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input = new Vector<int32_t>(5);
@@ -76,7 +76,7 @@ TEST(MaxAggregatorTest, Long_Basic)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input = new Vector<int64_t>(4);
@@ -111,7 +111,7 @@ TEST(MaxAggregatorTest, Byte_Basic)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input = new Vector<int8_t>(5);
@@ -147,7 +147,7 @@ TEST(MaxAggregatorTest, Varbinary_Basic)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     std::string vals[] = {"xyz", "abc", "mno"};
@@ -185,7 +185,7 @@ TEST(MaxAggregatorTest, Int_AllNull)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, false, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input = new Vector<int32_t>(3);

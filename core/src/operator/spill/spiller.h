@@ -26,10 +26,7 @@ public:
         }
     }
 
-    ~SpillWriter()
-    {
-        delete[] writeBuffer;
-    }
+    ~SpillWriter();
 
     ErrorCode WriteVecBatch(vec::VectorBatch *vectorBatch, uint64_t vectorBatchSize);
 
@@ -134,15 +131,17 @@ public:
         return spillFiles;
     }
 
-    SpillMerger *CreateSpillMerger(const std::vector<SpillFileInfo> &spillFiles, bool isSpillCompressEnabled)
+    SpillMerger *CreateSpillMerger(const std::vector<SpillFileInfo> &spillFiles, bool compressEnabled,
+        omniruntime::mem::OmniTaskMemoryPool *pool)
     {
-        auto merger = SpillMerger::Create(dataTypes, sortCols, sortOrders, spillTracker, spillFiles, isSpillCompressEnabled);
+        auto merger = SpillMerger::Create(dataTypes, sortCols, sortOrders, spillTracker, spillFiles, compressEnabled, pool);
         return merger;
     }
 
-    SpillMerger *CreateSpillMerger(const std::vector<SpillFileInfo> &spillFiles, bool spillCompressEnabled, bool comapreWithHashVal)
+    SpillMerger *CreateSpillMerger(const std::vector<SpillFileInfo> &spillFiles, bool spillCompressEnabled,
+        bool comapreWithHashVal, omniruntime::mem::OmniTaskMemoryPool *pool)
     {
-        auto merger = SpillMerger::Create(dataTypes, sortCols, sortOrders, spillTracker, spillFiles, spillCompressEnabled, comapreWithHashVal);
+        auto merger = SpillMerger::Create(dataTypes, sortCols, sortOrders, spillTracker, spillFiles, spillCompressEnabled, pool, comapreWithHashVal);
         return merger;
     }
 
@@ -167,18 +166,25 @@ public:
 
     bool isSpillCompressEnable() const;
 
-    static uint64_t CollectVecBatchSize(const type::DataTypes &dataTypes, vec::VectorBatch *vectorBatch);
+    /// Logical serialized size consumed by SpillWriter for one batch.
+    /// Shared by regular spill and operators that write batches directly.
+    static uint64_t CollectVecBatchSize(
+        const type::DataTypes &dataTypes, vec::VectorBatch *vectorBatch);
 
 private:
     template <typename T> static uint64_t CollectVectorSize(vec::BaseVector *vector);
 
-    static uint64_t CollectComplexVectorSize(const DataTypePtr &dataType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectComplexVectorSize(
+        const DataTypePtr &dataType, vec::BaseVector *vector, int32_t rowCount);
 
-    static uint64_t CollectArrayVectorSize(const DataTypePtr &arrayType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectArrayVectorSize(
+        const DataTypePtr &arrayType, vec::BaseVector *vector, int32_t rowCount);
 
-    static uint64_t CollectMapVectorSize(const DataTypePtr &mapType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectMapVectorSize(
+        const DataTypePtr &mapType, vec::BaseVector *vector, int32_t rowCount);
 
-    static uint64_t CollectRowVectorSize(const DataTypePtr &rowType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectRowVectorSize(
+        const DataTypePtr &rowType, vec::BaseVector *vector, int32_t rowCount);
 
     DataTypes dataTypes;
     std::vector<int32_t> sortCols;
