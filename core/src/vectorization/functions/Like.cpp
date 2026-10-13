@@ -124,7 +124,7 @@ void LikeFunction::Apply(std::stack<BaseVector*>& args, const DataTypePtr& outpu
         args.pop();
         BaseVector* strVec = args.top();
         args.pop();
-        ApplyLikeWithEscape(strVec, patternVec, escapeVec, result, outputType);
+        ApplyLikeWithEscape(strVec, patternVec, escapeVec, result, outputType, context->GetPool());
         delete escapeVec;
         delete patternVec;
         delete strVec;
@@ -134,16 +134,17 @@ void LikeFunction::Apply(std::stack<BaseVector*>& args, const DataTypePtr& outpu
     args.pop();
     BaseVector* strVec = args.top();
     args.pop();
-    ApplyLike(strVec, patternVec, result, outputType);
+    ApplyLike(strVec, patternVec, result, outputType, context->GetPool());
 
     delete patternVec;
     delete strVec;
 }
 
 void LikeFunction::ApplyLike(BaseVector* strVec, BaseVector* patternVec, BaseVector*& result,
-                             const DataTypePtr& outputType) const {
+                             const DataTypePtr& outputType,
+                             omniruntime::mem::OmniTaskMemoryPool *pool) const {
     int32_t size = strVec->GetSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(pool, outputType->GetId(), size);
 
     if (patternVec->GetEncoding() == OMNI_ENCODING_CONST) {
         std::string_view patternSv;
@@ -177,9 +178,10 @@ void LikeFunction::ApplyLike(BaseVector* strVec, BaseVector* patternVec, BaseVec
 }
 
 void LikeFunction::ApplyLikeWithEscape(BaseVector* strVec, BaseVector* patternVec, BaseVector* escapeVec,
-                                       BaseVector*& result, const DataTypePtr& outputType) const {
+                                       BaseVector*& result, const DataTypePtr& outputType,
+                                       omniruntime::mem::OmniTaskMemoryPool *pool) const {
     int32_t size = strVec->GetSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(pool, outputType->GetId(), size);
 
     if (patternVec->GetEncoding() == OMNI_ENCODING_CONST && patternVec->IsNull(0)) {
         for (int32_t row = 0; row < size; ++row) {

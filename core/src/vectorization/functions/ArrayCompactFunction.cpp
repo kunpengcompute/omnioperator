@@ -65,7 +65,7 @@ void ArrayCompactFunction::Apply(std::stack<BaseVector *> &args, const DataTypeP
     int32_t rowSize = context->GetResultRowSize();
     auto inputElementVector = arrayVec->GetElementVector();
 
-    auto *resultArray = new ArrayVector(rowSize);
+    auto *resultArray = new ArrayVector(rowSize, context->GetPool());
 
     if (inputElementVector == nullptr) {
         for (int32_t row = 0; row < rowSize; ++row) {
@@ -104,7 +104,7 @@ void ArrayCompactFunction::Apply(std::stack<BaseVector *> &args, const DataTypeP
     BaseVector *newElementVector = nullptr;
     const bool complexElement = elementTypeId == OMNI_ARRAY || elementTypeId == OMNI_MAP || elementTypeId == OMNI_ROW;
     if (elementTypeId == OMNI_VARCHAR || elementTypeId == OMNI_CHAR) {
-        newElementVector = VectorHelper::CreateStringVector(nonNullCount > 0 ? nonNullCount : 1);
+        newElementVector = VectorHelper::CreateStringVector(context->GetPool(), nonNullCount > 0 ? nonNullCount : 1);
     } else if (complexElement) {
         auto elemDt = ResolveArrayElementDataType(outputType, arrayVec, inputElementVector);
         if (elemDt == nullptr) {
@@ -113,9 +113,9 @@ void ArrayCompactFunction::Apply(std::stack<BaseVector *> &args, const DataTypeP
                 "Cannot resolve element type for nested array_compact (array/map/struct elements)");
         }
         const int32_t outElemSize = nonNullCount > 0 ? static_cast<int32_t>(nonNullCount) : 1;
-        newElementVector = VectorHelper::CreateComplexVector(elemDt.get(), outElemSize);
+        newElementVector = VectorHelper::CreateComplexVector(context->GetPool(), elemDt.get(), outElemSize);
     } else {
-        newElementVector = VectorHelper::CreateFlatVector(elementTypeId,
+        newElementVector = VectorHelper::CreateFlatVector(context->GetPool(), elementTypeId,
             nonNullCount > 0 ? nonNullCount : 1);
     }
 

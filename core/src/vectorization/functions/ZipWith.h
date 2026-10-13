@@ -45,7 +45,7 @@ namespace omniruntime::vectorization {
             }
 
             int32_t rowSize = leftArrVec->GetSize();
-            result = new ArrayVector(rowSize);
+            result = new ArrayVector(rowSize, context->GetPool());
             auto *dstArrVec = dynamic_cast<ArrayVector *>(result);
 
             int32_t totalElements = 0;
@@ -64,7 +64,7 @@ namespace omniruntime::vectorization {
             if (totalElements == 0) {
                 auto leftEleVec = leftArrVec->GetElementVector();
                 DataTypeId eleTypeId = leftEleVec ? leftEleVec->GetTypeId() : OMNI_INT;
-                VectorHelper::EmptyArrayProjection(dstArrVec, eleTypeId);
+                VectorHelper::EmptyArrayProjection(context->GetPool(), dstArrVec, eleTypeId);
                 delete leftArrVec;
                 delete rightArrVec;
                 return;
@@ -73,20 +73,20 @@ namespace omniruntime::vectorization {
             auto leftEleTypeId = leftArrVec->GetElementVector()->GetTypeId();
             auto rightEleTypeId = rightArrVec->GetElementVector()->GetTypeId();
 
-            std::unique_ptr<BaseVector> paddedLeftHolder(BuildPaddedVector(leftArrVec, leftEleTypeId, totalElements, dstArrVec, rowSize));
-            std::unique_ptr<BaseVector> paddedRightHolder(BuildPaddedVector(rightArrVec, rightEleTypeId, totalElements, dstArrVec, rowSize));
+            std::unique_ptr<BaseVector> paddedLeftHolder(BuildPaddedVector(leftArrVec, leftEleTypeId, totalElements, dstArrVec, rowSize, context->GetPool()));
+            std::unique_ptr<BaseVector> paddedRightHolder(BuildPaddedVector(rightArrVec, rightEleTypeId, totalElements, dstArrVec, rowSize, context->GetPool()));
             BaseVector *paddedLeft = paddedLeftHolder.get();
             BaseVector *paddedRight = paddedRightHolder.get();
 
             paddedLeft->SetIsField(true);
             paddedRight->SetIsField(true);
 
+            context->SetResultRowSize(totalElements);
             ExprEval lambdaEval(context);
             lambdaEval.paramNameToIdxMap = lambdaExpr->paramNameToIdxMap_;
             lambdaEval.lambdaParams_.push_back(paddedLeft);
             lambdaEval.lambdaParams_.push_back(paddedRight);
 
-            context->SetResultRowSize(totalElements);
             lambdaBody->Accept(lambdaEval);
             context->SetResultRowSize(rowSize);
             BaseVector *flatResultVec = lambdaEval.GetResult();
@@ -103,9 +103,10 @@ namespace omniruntime::vectorization {
 
     private:
         BaseVector *BuildPaddedVector(ArrayVector *srcArr, DataTypeId eleTypeId, int32_t totalElements,
-                                      ArrayVector *resultArr, int32_t rowSize) const
+                                      ArrayVector *resultArr, int32_t rowSize,
+                                      omniruntime::mem::OmniTaskMemoryPool *pool) const
         {
-            BaseVector *padded = VectorHelper::CreateFlatVector(static_cast<int32_t>(eleTypeId), totalElements);
+            BaseVector *padded = VectorHelper::CreateFlatVector(pool, static_cast<int32_t>(eleTypeId), totalElements);
             BaseVector *srcElements = srcArr->GetElementVector().get();
 
             int32_t dstIdx = 0;

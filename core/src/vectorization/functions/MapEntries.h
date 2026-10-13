@@ -10,7 +10,6 @@
 #include "vector/map_vector.h"
 #include "vector/row_vector.h"
 #include "type/data_operations.h"
-#include "util/debug.h"
 #include <vector>
 
 namespace omniruntime::vectorization {
@@ -29,20 +28,19 @@ namespace omniruntime::vectorization {
         void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
                    ExecutionContext *context) const override
         {
-            LogInfo("MapEntriesFunction::Apply called");
             BaseVector *inputVec = args.top();
             args.pop();
             auto *srcMapVec = dynamic_cast<MapVector *>(inputVec);
 
             int32_t totalRows = inputVec->GetSize();
-            result = new ArrayVector(totalRows);
+            result = new ArrayVector(totalRows, context->GetPool());
             auto *dstArrayVec = dynamic_cast<ArrayVector *>(result);
 
             auto keyElements = srcMapVec->GetKeyVector();
             auto valueElements = srcMapVec->GetValueVector();
 
             int64_t totalEntries = std::min(keyElements->GetSize(), valueElements->GetSize());
-            auto *rowVec = new RowVector(static_cast<int32_t>(totalEntries));
+            auto *rowVec = new RowVector(static_cast<int32_t>(totalEntries), context->GetPool());
             rowVec->AddChild(keyElements);
             rowVec->AddChild(valueElements);
 

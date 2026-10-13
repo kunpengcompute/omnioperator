@@ -109,7 +109,7 @@ template<typename T>
 void LeastGreatestFunction<Mode>::CompareNumeric(const std::vector<BaseVector *> &argVectors, 
     BaseVector *&result, const DataTypePtr &outputType, ExecutionContext *context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
     
     for (int32_t row = 0; row < size; ++row) {
         bool hasNonNull = false;
@@ -140,7 +140,7 @@ template<CompareMode Mode>
 void LeastGreatestFunction<Mode>::CompareString(const std::vector<BaseVector *> &argVectors, 
     BaseVector *&result, const DataTypePtr &outputType, ExecutionContext *context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
     
     for (int32_t row = 0; row < size; ++row) {
         bool hasNonNull = false;
@@ -174,7 +174,7 @@ template<CompareMode Mode>
 void LeastGreatestFunction<Mode>::CompareBoolean(const std::vector<BaseVector *> &argVectors, 
     BaseVector *&result, const DataTypePtr &outputType, ExecutionContext *context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
     
     for (int32_t row = 0; row < size; ++row) {
         bool hasNonNull = false;

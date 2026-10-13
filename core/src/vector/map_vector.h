@@ -9,6 +9,7 @@
 #include <vector>
 #include <memory>
 #include "vector.h"
+#include "memory/omni_task_memory_pool.h"
 
 namespace omniruntime::vec {
 
@@ -30,9 +31,58 @@ public:
         offsets = offsetsBuffer->GetBuffer();
     }
 
+    // Pool-bound primary ctor. Mirrors ArrayVector(size,pool)
+    // — routes offsetsBuffer (#3) AND the BaseVector validity NullsBuffer (#15)
+    // through the pool-bound allocator; nullptr-pool falls through to the no-pool
+    // [[deprecated]] AlignedBuffer ctor.
+    MapVector(int64_t size, omniruntime::mem::OmniTaskMemoryPool *pool)
+        : BaseVector(size, OMNI_ENCODING_MAP, OMNI_MAP, /*nullsBufferPtr*/nullptr, /*sliceOffset*/0,
+              (pool != nullptr ? pool->getBoundAllocator() : nullptr)),
+          capacity(static_cast<int32_t>(size)), pool_(pool)
+    {
+        if (pool != nullptr) {
+            offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(size + 1,
+                pool->getBoundAllocator(), true);
+        } else {
+            _Pragma("GCC diagnostic push")
+            _Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")
+            offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(size + 1, true);
+            _Pragma("GCC diagnostic pop")
+        }
+        offsets = offsetsBuffer->GetBuffer();
+    }
+
+    // Pool-bound children-taking ctor. Same pool routing as the (size,pool) ctor
+    // above (offsetsBuffer #3 + validity NullsBuffer #15) but also adopts the
+    // pre-built key/value children. Used by VectorHelper::CreateComplexVector and
+    // ArrayConstructorFunction so the wrapper's top-level buffers are pool-accounted.
+    MapVector(int64_t size, std::shared_ptr<BaseVector> keyVector, std::shared_ptr<BaseVector> valueVector,
+        omniruntime::mem::OmniTaskMemoryPool *pool)
+        : BaseVector(size, OMNI_ENCODING_MAP, OMNI_MAP, /*nullsBufferPtr*/nullptr, /*sliceOffset*/0,
+              (pool != nullptr ? pool->getBoundAllocator() : nullptr)),
+          keys(std::move(keyVector)),
+          values(std::move(valueVector)), capacity(static_cast<int32_t>(size)), pool_(pool)
+    {
+        if (pool != nullptr) {
+            offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(size + 1,
+                pool->getBoundAllocator(), true);
+        } else {
+            _Pragma("GCC diagnostic push")
+            _Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")
+            offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(size + 1, true);
+            _Pragma("GCC diagnostic pop")
+        }
+        offsets = offsetsBuffer->GetBuffer();
+    }
+
     const std::shared_ptr<AlignedBuffer<int64_t>>& GetOffsetsBuffer() const
     {
         return offsetsBuffer;
+    }
+
+    omniruntime::mem::OmniTaskMemoryPool *GetPool() const override
+    {
+        return pool_;
     }
 
     int64_t* GetOffsets()
@@ -136,6 +186,9 @@ protected:
     std::shared_ptr<BaseVector> keys;
     std::shared_ptr<BaseVector> values;
     int32_t capacity;
+    // Per-task pool captured from the pool-bound ctor so Expand() re-allocates the
+    // offsets + validity buffers through it (nullptr for no-pool/legacy ctors).
+    omniruntime::mem::OmniTaskMemoryPool *pool_ = nullptr;
 };
 }
 

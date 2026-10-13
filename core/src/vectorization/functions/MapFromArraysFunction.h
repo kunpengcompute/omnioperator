@@ -59,7 +59,7 @@ namespace omniruntime::vectorization {
             }
 
             int32_t totalRows = keysArray->GetSize();
-            result = new MapVector(totalRows);
+            result = new MapVector(totalRows, context->GetPool());
             auto *dstMapVec = dynamic_cast<MapVector *>(result);
 
             dstMapVec->SetKeyVector(std::move(keyElements));

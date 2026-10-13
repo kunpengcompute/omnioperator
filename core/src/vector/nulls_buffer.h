@@ -21,10 +21,22 @@ public:
         return BitUtil::Nbytes(bits) + 8;
     }
 
-    NullsBuffer(int32_t size, NullsBuffer *inputNullsBuffer = nullptr, int32_t sliceOffset = 0) : size(size)
+    // Pool-bound when an allocator is supplied (per-task accounting); falls back
+    // to the [[deprecated]] no-pool bridge for
+    // legacy/test callers that have no per-task pool context.
+    static inline std::shared_ptr<AlignedBuffer<uint8_t>> MakeNullsBuffer(int32_t nbytes, Allocator *allocator)
+    {
+        if (allocator != nullptr) {
+            return std::make_shared<AlignedBuffer<uint8_t>>(static_cast<size_t>(nbytes), allocator, true);
+        }
+        return std::make_shared<AlignedBuffer<uint8_t>>(static_cast<size_t>(nbytes), true);
+    }
+
+    NullsBuffer(int32_t size, NullsBuffer *inputNullsBuffer = nullptr, int32_t sliceOffset = 0,
+                Allocator *allocator = nullptr) : size(size)
     {
         if (inputNullsBuffer == nullptr) {
-            this->nullsBuffer = std::make_shared<AlignedBuffer<uint8_t>>(CalculateNbytes(size), true);
+            this->nullsBuffer = MakeNullsBuffer(CalculateNbytes(size), allocator);
             this->nulls = reinterpret_cast<uint64_t *>(this->nullsBuffer->GetBuffer());
             return;
         }
@@ -34,7 +46,36 @@ public:
                 reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(inputNullsBuffer->nulls) + sliceOffset / 8);
             return;
         }
-        this->nullsBuffer = std::make_shared<AlignedBuffer<uint8_t>>(CalculateNbytes(size), true);
+        this->nullsBuffer = MakeNullsBuffer(CalculateNbytes(size), allocator);
+        this->nulls = reinterpret_cast<uint64_t *>(this->nullsBuffer->GetBuffer());
+        BitUtil::CopyBits(inputNullsBuffer->nulls, sliceOffset, this->nulls, 0, size);
+    }
+
+    static inline std::shared_ptr<AlignedBuffer<uint8_t>> MakeNullsBufferWithScope(int32_t nbytes, Allocator *allocator,
+        const OmniTaskMemoryPool::AllocationAccountingScope &scope)
+    {
+        if (allocator != nullptr) {
+            return std::make_shared<AlignedBuffer<uint8_t>>(static_cast<size_t>(nbytes), allocator, true, scope);
+        }
+        throw std::logic_error("NullsBuffer: accounting scope requires a bound allocator");
+    }
+
+    NullsBuffer(int32_t size, NullsBuffer *inputNullsBuffer, int32_t sliceOffset,
+                Allocator *allocator,
+                const OmniTaskMemoryPool::AllocationAccountingScope &scope) : size(size)
+    {
+        if (inputNullsBuffer == nullptr) {
+            this->nullsBuffer = MakeNullsBufferWithScope(CalculateNbytes(size), allocator, scope);
+            this->nulls = reinterpret_cast<uint64_t *>(this->nullsBuffer->GetBuffer());
+            return;
+        }
+        if (sliceOffset % 8 == 0) {
+            this->nullsBuffer = inputNullsBuffer->nullsBuffer;
+            this->nulls =
+                reinterpret_cast<uint64_t *>(reinterpret_cast<uint8_t *>(inputNullsBuffer->nulls) + sliceOffset / 8);
+            return;
+        }
+        this->nullsBuffer = MakeNullsBufferWithScope(CalculateNbytes(size), allocator, scope);
         this->nulls = reinterpret_cast<uint64_t *>(this->nullsBuffer->GetBuffer());
         BitUtil::CopyBits(inputNullsBuffer->nulls, sliceOffset, this->nulls, 0, size);
     }

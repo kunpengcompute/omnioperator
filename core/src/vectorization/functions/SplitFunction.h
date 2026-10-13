@@ -33,7 +33,7 @@ public:
         args.pop();
 
         int32_t rowSize = inputArg->GetSize();
-        result = new ArrayVector(rowSize);
+        result = new ArrayVector(rowSize, context->GetPool());
 
         auto *arrayResult = dynamic_cast<ArrayVector *>(result);
         if (!arrayResult) {

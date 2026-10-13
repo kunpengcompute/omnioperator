@@ -213,14 +213,14 @@ void ArrayIntersectImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr
         }
     }
 
-    auto *resultArray = new ArrayVector(rowSize);
+    auto *resultArray = new ArrayVector(rowSize, context->GetPool());
     BaseVector *newElementVector = nullptr;
 
     if (elementTypeId != OMNI_NONE) {
         if (elementTypeId == OMNI_VARCHAR || elementTypeId == OMNI_CHAR || elementTypeId == OMNI_VARBINARY) {
-            newElementVector = VectorHelper::CreateStringVector(maxElements > 0 ? maxElements : 1);
+            newElementVector = VectorHelper::CreateStringVector(context->GetPool(), maxElements > 0 ? maxElements : 1);
         } else {
-            newElementVector = VectorHelper::CreateFlatVector(elementTypeId, maxElements > 0 ? maxElements : 1);
+            newElementVector = VectorHelper::CreateFlatVector(context->GetPool(), elementTypeId, maxElements > 0 ? maxElements : 1);
         }
     }
 
@@ -288,7 +288,7 @@ void ArrayIntersectImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr
     if (newElementVector != nullptr) {
         resultArray->SetElementVector(std::shared_ptr<BaseVector>(newElementVector));
     } else if (elementTypeId != OMNI_NONE) {
-        VectorHelper::EmptyArrayProjection(resultArray, elementTypeId);
+        VectorHelper::EmptyArrayProjection(context->GetPool(), resultArray, elementTypeId);
     }
 
     result = resultArray;

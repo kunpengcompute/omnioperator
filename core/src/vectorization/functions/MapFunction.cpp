@@ -38,12 +38,13 @@ void MapFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outpu
     // MAP() with 0 arguments: create empty map for each row (Spark semantics)
     if (argCount == 0) {
         int32_t rowCount = context->GetResultRowSize();
-        result = new MapVector(rowCount);
+        result = new MapVector(rowCount, context->GetPool());
         auto *dstMap = static_cast<MapVector *>(result);
+        // Uses pool-bound overload (VectorHelper::CreateComplexVector); pool carried by ExecutionContext via GetPool().
         BaseVector *keyResult = VectorHelper::CreateComplexVector(
-            const_cast<DataType *>(mapType->Key().get()), 0);
+            context->GetPool(), const_cast<DataType *>(mapType->Key().get()), 0);
         BaseVector *valResult = VectorHelper::CreateComplexVector(
-            const_cast<DataType *>(mapType->Value().get()), 0);
+            context->GetPool(), const_cast<DataType *>(mapType->Value().get()), 0);
         dstMap->SetKeyVector(std::shared_ptr<BaseVector>(keyResult));
         dstMap->SetValueVector(std::shared_ptr<BaseVector>(valResult));
         for (int32_t row = 0; row < rowCount; ++row) {
@@ -70,13 +71,14 @@ void MapFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outpu
 
     int64_t totalEntries = static_cast<int64_t>(rowCount) * static_cast<int64_t>(mapSize);
 
+    // Uses pool-bound overload (VectorHelper::CreateComplexVector).
     BaseVector *keyResult = VectorHelper::CreateComplexVector(
-        const_cast<DataType *>(mapType->Key().get()), static_cast<int32_t>(totalEntries));
+        context->GetPool(), const_cast<DataType *>(mapType->Key().get()), static_cast<int32_t>(totalEntries));
     BaseVector *valResult = VectorHelper::CreateComplexVector(
-        const_cast<DataType *>(mapType->Value().get()), static_cast<int32_t>(totalEntries));
+        context->GetPool(), const_cast<DataType *>(mapType->Value().get()), static_cast<int32_t>(totalEntries));
 
     result = new MapVector(rowCount, std::shared_ptr<BaseVector>(keyResult),
-                           std::shared_ptr<BaseVector>(valResult));
+                           std::shared_ptr<BaseVector>(valResult), context->GetPool());
     auto *dstMap = static_cast<MapVector *>(result);
 
     int64_t runningKeyOffset = 0;

@@ -55,39 +55,39 @@ void ArrayRepeatFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
 
     switch (elementTypeId) {
         case OMNI_BYTE:
-            ProcessRepeat<int8_t>(elementVec, countVec, result, rowSize, elementTypeId);
+            ProcessRepeat<int8_t>(elementVec, countVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_SHORT:
-            ProcessRepeat<int16_t>(elementVec, countVec, result, rowSize, elementTypeId);
+            ProcessRepeat<int16_t>(elementVec, countVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_INT:
         case OMNI_DATE32:
-            ProcessRepeat<int32_t>(elementVec, countVec, result, rowSize, elementTypeId);
+            ProcessRepeat<int32_t>(elementVec, countVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_LONG:
         case OMNI_TIMESTAMP:
         case OMNI_DECIMAL64:
-            ProcessRepeat<int64_t>(elementVec, countVec, result, rowSize, elementTypeId);
+            ProcessRepeat<int64_t>(elementVec, countVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_FLOAT:
-            ProcessRepeat<float>(elementVec, countVec, result, rowSize, elementTypeId);
+            ProcessRepeat<float>(elementVec, countVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_DOUBLE:
-            ProcessRepeat<double>(elementVec, countVec, result, rowSize, elementTypeId);
+            ProcessRepeat<double>(elementVec, countVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_BOOLEAN:
-            ProcessRepeat<bool>(elementVec, countVec, result, rowSize, elementTypeId);
+            ProcessRepeat<bool>(elementVec, countVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_DECIMAL128:
-            ProcessRepeat<Decimal128>(elementVec, countVec, result, rowSize, elementTypeId);
+            ProcessRepeat<Decimal128>(elementVec, countVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_VARCHAR:
         case OMNI_CHAR:
         case OMNI_VARBINARY:
-            ProcessRepeatVarchar(elementVec, countVec, result, rowSize);
+            ProcessRepeatVarchar(elementVec, countVec, result, rowSize, context->GetPool());
             break;
         case OMNI_NONE:
-            ProcessRepeatAllNull(countVec, result, rowSize);
+            ProcessRepeatAllNull(countVec, result, rowSize, context->GetPool());
             break;
         default:
             delete countVec;
@@ -102,7 +102,7 @@ void ArrayRepeatFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
 
 template <typename T>
 void ArrayRepeatFunction::ProcessRepeat(BaseVector *elementVec, BaseVector *countVec, BaseVector *&result,
-    int32_t rowSize, DataTypeId elementTypeId) const
+    int32_t rowSize, DataTypeId elementTypeId, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     int64_t totalElements = 0;
     std::vector<int32_t> counts(rowSize, 0);
@@ -125,13 +125,13 @@ void ArrayRepeatFunction::ProcessRepeat(BaseVector *elementVec, BaseVector *coun
     }
 
     auto elementResult = std::shared_ptr<BaseVector>(
-        VectorHelper::CreateFlatVector(static_cast<int32_t>(elementTypeId), static_cast<int32_t>(totalElements)));
+        VectorHelper::CreateFlatVector(pool, static_cast<int32_t>(elementTypeId), static_cast<int32_t>(totalElements)));
     auto *typedElementResult = dynamic_cast<Vector<T> *>(elementResult.get());
     if (!typedElementResult) {
         OMNI_THROW("ArrayRepeatFunction Error:", "Failed to create element vector");
     }
 
-    auto *arrayResult = new ArrayVector(rowSize, elementResult);
+    auto *arrayResult = new ArrayVector(rowSize, elementResult, pool);
     int64_t offset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -171,7 +171,7 @@ void ArrayRepeatFunction::ProcessRepeat(BaseVector *elementVec, BaseVector *coun
 }
 
 void ArrayRepeatFunction::ProcessRepeatVarchar(BaseVector *elementVec, BaseVector *countVec, BaseVector *&result,
-    int32_t rowSize) const
+    int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
 
@@ -196,13 +196,13 @@ void ArrayRepeatFunction::ProcessRepeatVarchar(BaseVector *elementVec, BaseVecto
     }
 
     auto elementResult = std::shared_ptr<BaseVector>(
-        new VarcharVector(static_cast<int32_t>(totalElements)));
+        new VarcharVector(static_cast<int32_t>(totalElements), pool));
     auto *typedElementResult = dynamic_cast<VarcharVector *>(elementResult.get());
     if (!typedElementResult) {
         OMNI_THROW("ArrayRepeatFunction Error:", "Failed to create varchar element vector");
     }
 
-    auto *arrayResult = new ArrayVector(rowSize, elementResult);
+    auto *arrayResult = new ArrayVector(rowSize, elementResult, pool);
     int64_t offset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -236,7 +236,8 @@ void ArrayRepeatFunction::ProcessRepeatVarchar(BaseVector *elementVec, BaseVecto
     result = arrayResult;
 }
 
-void ArrayRepeatFunction::ProcessRepeatAllNull(BaseVector *countVec, BaseVector *&result, int32_t rowSize) const
+void ArrayRepeatFunction::ProcessRepeatAllNull(BaseVector *countVec, BaseVector *&result, int32_t rowSize,
+    omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     int64_t totalElements = 0;
     std::vector<int32_t> counts(rowSize, 0);
@@ -259,13 +260,13 @@ void ArrayRepeatFunction::ProcessRepeatAllNull(BaseVector *countVec, BaseVector 
     }
 
     auto elementResult = std::shared_ptr<BaseVector>(
-        VectorHelper::CreateFlatVector(static_cast<int32_t>(OMNI_INT), static_cast<int32_t>(totalElements)));
+        VectorHelper::CreateFlatVector(pool, static_cast<int32_t>(OMNI_INT), static_cast<int32_t>(totalElements)));
     auto *typedElementResult = dynamic_cast<Vector<int32_t> *>(elementResult.get());
     if (!typedElementResult) {
         OMNI_THROW("ArrayRepeatFunction Error:", "Failed to create element vector for all-null");
     }
 
-    auto *arrayResult = new ArrayVector(rowSize, elementResult);
+    auto *arrayResult = new ArrayVector(rowSize, elementResult, pool);
     int64_t offset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -291,20 +292,20 @@ void ArrayRepeatFunction::ProcessRepeatAllNull(BaseVector *countVec, BaseVector 
 }
 
 template void ArrayRepeatFunction::ProcessRepeat<int8_t>(BaseVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRepeatFunction::ProcessRepeat<int16_t>(BaseVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRepeatFunction::ProcessRepeat<int32_t>(BaseVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRepeatFunction::ProcessRepeat<int64_t>(BaseVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRepeatFunction::ProcessRepeat<float>(BaseVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRepeatFunction::ProcessRepeat<double>(BaseVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRepeatFunction::ProcessRepeat<bool>(BaseVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRepeatFunction::ProcessRepeat<Decimal128>(BaseVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 
 } // namespace omniruntime::vectorization

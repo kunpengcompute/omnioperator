@@ -450,14 +450,17 @@ BloomFilterOperatorFactory *BloomFilterOperatorFactory::CreateBloomFilterOperato
     return pOperatorFactory;
 }
 
-Operator *BloomFilterOperatorFactory::CreateOperator()
+// Pool-bound override
+Operator *BloomFilterOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto pSortOperator = new BloomFilterOperator(version);
+    auto pSortOperator = new BloomFilterOperator(pool, version);
     return pSortOperator;
 }
 
 // function implements for class BloomFilterOperator
-BloomFilterOperator::BloomFilterOperator(int32_t version) : version(version) {}
+// Pool-bound ctor — chains Operator(pool).
+BloomFilterOperator::BloomFilterOperator(omniruntime::mem::OmniTaskMemoryPool *pool, int32_t version)
+    : Operator(pool), version(version) {}
 
 BloomFilterOperator::~BloomFilterOperator()
 {
@@ -487,7 +490,7 @@ int32_t BloomFilterOperator::AddInput(VectorBatch *vecBatch)
 int32_t BloomFilterOperator::GetOutput(VectorBatch **blOutPut)
 {
     auto outPut = new VectorBatch(1);
-    auto *col = new Vector<int64_t>(1);
+    auto *col = new Vector<int64_t>(1, this->pool());
     col->SetValue(0, reinterpret_cast<int64_t>(bloomFilterAddress));
     outPut->Append(col);
     *blOutPut = outPut;

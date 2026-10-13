@@ -52,7 +52,7 @@ namespace omniruntime::vectorization {
 
 
             int32_t arrRowSize = srcArrVec->GetSize();
-            result = new ArrayVector(arrRowSize);
+            result = new ArrayVector(arrRowSize, context->GetPool());
             auto *dstArrVec = dynamic_cast<ArrayVector *>(result);
             if (!dstArrVec) {
                 OMNI_THROW("Transform Error:", "Result vector is not an ArrayVector");
@@ -67,10 +67,10 @@ namespace omniruntime::vectorization {
 
             if (arrRowSize == 0 || srcArrVec->GetNullCount() == arrRowSize) {
                 if (srcEleTypeId == OMNI_ARRAY) {
-                    auto emptyInnerVec = new ArrayVector(0);
+                    auto emptyInnerVec = new ArrayVector(0, context->GetPool());
                     dstArrVec->SetElementVector(std::shared_ptr<BaseVector>(emptyInnerVec));
                 } else {
-                    VectorHelper::EmptyArrayProjection(dstArrVec, srcEleTypeId);
+                    VectorHelper::EmptyArrayProjection(context->GetPool(), dstArrVec, srcEleTypeId);
                 }
                 delete srcArrVec;
                 return;
@@ -80,20 +80,20 @@ namespace omniruntime::vectorization {
             flatElementVec->SetIsField(true);
             if (flatElementVec == nullptr || flatElementVec->GetSize() == 0) {
                 if (srcEleTypeId == OMNI_ARRAY) {
-                    auto emptyInnerVec = new ArrayVector(0);
+                    auto emptyInnerVec = new ArrayVector(0, context->GetPool());
                     dstArrVec->SetElementVector(std::shared_ptr<BaseVector>(emptyInnerVec));
                 } else {
-                    VectorHelper::EmptyArrayProjection(dstArrVec, srcEleTypeId);
+                    VectorHelper::EmptyArrayProjection(context->GetPool(), dstArrVec, srcEleTypeId);
                 }
                 delete srcArrVec;
                 return;
             }
 
+            context->SetResultRowSize(flatElementVec->GetSize());
             ExprEval lambdaEval(context);
             lambdaEval.paramNameToIdxMap = lambdaExpr->paramNameToIdxMap_;
             lambdaEval.lambdaParams_.push_back(flatElementVec);
 
-            context->SetResultRowSize(flatElementVec->GetSize());
             lambdaBody->Accept(lambdaEval);
             context->SetResultRowSize(dstArrVec->GetSize());
             BaseVector *flatResultVec = lambdaEval.GetResult();

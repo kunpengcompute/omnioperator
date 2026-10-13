@@ -21,16 +21,17 @@ void RLikeFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &out
     auto strVec = args.top();
     args.pop();
 
-    ApplyRLike(strVec, patternVec, result, outputType);
+    ApplyRLike(strVec, patternVec, result, outputType, context->GetPool());
 
     delete patternVec;
     delete strVec;
 }
 
 void RLikeFunction::ApplyRLike(BaseVector *strVec, BaseVector *patternVec, BaseVector *&result,
-                               const DataTypePtr &outputType) const {
+                               const DataTypePtr &outputType,
+                               omniruntime::mem::OmniTaskMemoryPool *pool) const {
     auto size = strVec->GetSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(pool, outputType->GetId(), size);
 
     if(patternVec->GetEncoding() == OMNI_ENCODING_CONST) {
        std::string_view pattern = reinterpret_cast<ConstVector<std::string_view> *>(patternVec)->GetConstValue();

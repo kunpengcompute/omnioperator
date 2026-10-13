@@ -70,7 +70,7 @@ TEST_F(ArrayRepeatTest, IntegerRepeat)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -114,7 +114,7 @@ TEST_F(ArrayRepeatTest, LongRepeat)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -152,7 +152,7 @@ TEST_F(ArrayRepeatTest, DoubleRepeat)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -192,7 +192,7 @@ TEST_F(ArrayRepeatTest, FloatRepeat)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -232,7 +232,7 @@ TEST_F(ArrayRepeatTest, BooleanRepeat)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -272,7 +272,7 @@ TEST_F(ArrayRepeatTest, ByteRepeat)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -310,7 +310,7 @@ TEST_F(ArrayRepeatTest, ShortRepeat)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -350,7 +350,7 @@ TEST_F(ArrayRepeatTest, NegativeCountTreatedAsZero)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -392,7 +392,7 @@ TEST_F(ArrayRepeatTest, NullCountReturnsNull)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -434,7 +434,7 @@ TEST_F(ArrayRepeatTest, NullElementReturnsArrayOfNulls)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -477,7 +477,7 @@ TEST_F(ArrayRepeatTest, ZeroCountReturnsEmptyArray)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -515,7 +515,7 @@ TEST_F(ArrayRepeatTest, DoubleSpecialValues)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -575,7 +575,7 @@ TEST_F(ArrayRepeatTest, VarcharRepeat)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -622,7 +622,7 @@ TEST_F(ArrayRepeatTest, IntegerBoundaryValues)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -660,7 +660,7 @@ TEST_F(ArrayRepeatTest, LargeRepeatCount)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -695,7 +695,7 @@ TEST_F(ArrayRepeatTest, MixedCountValues)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -745,7 +745,7 @@ TEST_F(ArrayRepeatTest, Decimal128Repeat)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -780,7 +780,7 @@ TEST_F(ArrayRepeatTest, SingleRowSingleElement)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

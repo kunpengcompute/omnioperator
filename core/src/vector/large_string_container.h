@@ -15,9 +15,18 @@ class UnsafeStringContainer;
 namespace omniruntime::vec {
 template <typename RAW_DATA_TYPE> class LargeStringContainer {
 public:
+    // Original 2-arg ctor — symbol PRESERVED for ABI compatibility (other .so's, e.g.
+    // libspark_columnar_plugin.so, link this mangled symbol). Delegates to the pool-bound
+    // overload with pool=nullptr (legacy no-pool bridge behaviour, unchanged).
     explicit LargeStringContainer(int valueSize, int capacityInBytes = INITIAL_STRING_SIZE);
 
-    ~LargeStringContainer() = default;
+    // Pool-bound overload: when pool != nullptr the varchar/char/varbinary content
+    // buffer (LargeStringBuffer) is charged to the per-task pool. New symbol,
+    // additive — does not disturb the 2-arg ABI above.
+    LargeStringContainer(int valueSize, int capacityInBytes, omniruntime::mem::OmniTaskMemoryPool *pool);
+
+    // Non-default: releases the ctor's offsets pool-accounting (definition in .cpp).
+    ~LargeStringContainer();
 
     std::string_view GetValue(int index) const;
 
@@ -44,6 +53,10 @@ private:
     char *GetBufferWithSpace(uint32_t needCapacityInBytes);
 
     char *ExpandBufferToCapacity(size_t toCapacityInBytes);
+
+    // Grow offsets with strong exception safety and charge the exact new
+    // std::vector capacity before committing the replacement.
+    void ResizeOffsets(int32_t valueSize);
 
     friend class unsafe::UnsafeStringContainer;
 

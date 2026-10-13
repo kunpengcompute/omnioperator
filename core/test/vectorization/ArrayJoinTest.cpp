@@ -62,7 +62,7 @@ TEST_F(ArrayJoinTest, IntArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -106,7 +106,7 @@ TEST_F(ArrayJoinTest, IntArrayWithNullNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -151,7 +151,7 @@ TEST_F(ArrayJoinTest, IntArrayWithNullReplacement)
         new LiteralExpr(new std::string("0"), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -197,7 +197,7 @@ TEST_F(ArrayJoinTest, ByteArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -243,7 +243,7 @@ TEST_F(ArrayJoinTest, ShortArrayNoReplacement)
         new LiteralExpr(new std::string("-"), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -289,7 +289,7 @@ TEST_F(ArrayJoinTest, LongArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -335,7 +335,7 @@ TEST_F(ArrayJoinTest, FloatArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -381,7 +381,7 @@ TEST_F(ArrayJoinTest, DoubleArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -427,7 +427,7 @@ TEST_F(ArrayJoinTest, BoolArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -472,7 +472,7 @@ TEST_F(ArrayJoinTest, BoolArrayWithNullReplacement)
         new LiteralExpr(new std::string("apple"), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -519,7 +519,7 @@ TEST_F(ArrayJoinTest, VarcharArrayNoReplacement)
         new LiteralExpr(new std::string("-"), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -565,7 +565,7 @@ TEST_F(ArrayJoinTest, VarcharArrayWithNullReplacement)
         new LiteralExpr(new std::string("z"), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -610,7 +610,7 @@ TEST_F(ArrayJoinTest, Decimal128ArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -653,7 +653,7 @@ TEST_F(ArrayJoinTest, EmptyArray)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -695,7 +695,7 @@ TEST_F(ArrayJoinTest, SingleElement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -735,7 +735,7 @@ TEST_F(ArrayJoinTest, NullArray)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -776,7 +776,7 @@ TEST_F(ArrayJoinTest, AllNullElementsNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -821,7 +821,7 @@ TEST_F(ArrayJoinTest, AllNullElementsWithReplacement)
         new LiteralExpr(new std::string("X"), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -871,7 +871,7 @@ TEST_F(ArrayJoinTest, MultipleRows)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -918,7 +918,7 @@ TEST_F(ArrayJoinTest, Date32ArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -963,7 +963,7 @@ TEST_F(ArrayJoinTest, TimestampArrayNoReplacement)
         new LiteralExpr(new std::string("~"), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1009,7 +1009,7 @@ TEST_F(ArrayJoinTest, VarbinaryArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1054,7 +1054,7 @@ TEST_F(ArrayJoinTest, Decimal64ArrayNoReplacement)
         new LiteralExpr(new std::string(","), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1100,7 +1100,7 @@ TEST_F(ArrayJoinTest, MultiCharDelimiter)
         new LiteralExpr(new std::string(" - "), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1144,7 +1144,7 @@ TEST_F(ArrayJoinTest, EmptyDelimiter)
         new LiteralExpr(new std::string(""), varcharType)
     }, varcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);

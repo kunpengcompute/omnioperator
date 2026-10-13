@@ -47,7 +47,7 @@ void TestUnaryMathOperation(
 
      int32_t rowSize = static_cast<int32_t>(inputData.size());
 
-     BaseVector* rawInput = VectorHelper::CreateFlatVector(typeId, rowSize);
+     BaseVector* rawInput = VectorHelper::CreateFlatVector(nullptr, typeId, rowSize);
      auto* inputVector = static_cast<Vector<T>*>(rawInput);
      for (int32_t i = 0; i < rowSize; ++i) {
          inputVector->SetValue(i, inputData[i]);
@@ -59,7 +59,7 @@ void TestUnaryMathOperation(
      auto vectorFunction = VectorFunction::Find(signature);
      ASSERT_NE(vectorFunction, nullptr);
 
-     ExecutionContext context;
+     ExecutionContext context(4096, nullptr);
      context.SetResultRowSize(rowSize);
 
      std::stack<BaseVector*> args;
@@ -113,7 +113,7 @@ void TestUnaryMathOperation(
  	     int32_t rowSize = static_cast<int32_t>(leftData.size());
 
  	     // Create left vector
- 	     BaseVector* leftVec = VectorHelper::CreateFlatVector(typeId, rowSize);
+         BaseVector* leftVec = VectorHelper::CreateFlatVector(nullptr, typeId, rowSize);
  	     auto* leftVector = static_cast<Vector<T>*>(leftVec);
  	     for (int32_t i = 0; i < rowSize; ++i) {
  	         leftVector->SetValue(i, leftData[i]);
@@ -121,7 +121,7 @@ void TestUnaryMathOperation(
  	     }
 
  	     // Create right vector
- 	     BaseVector* rightVec = VectorHelper::CreateFlatVector(typeId, rowSize);
+         BaseVector* rightVec = VectorHelper::CreateFlatVector(nullptr, typeId, rowSize);
  	     auto* rightVector = static_cast<Vector<T>*>(rightVec);
  	     for (int32_t i = 0; i < rowSize; ++i) {
  	         rightVector->SetValue(i, rightData[i]);
@@ -137,7 +137,7 @@ void TestUnaryMathOperation(
  	     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName << " not found for type " << static_cast<int>(typeId);
 
  	     // Create execution context
- 	     ExecutionContext context;
+         ExecutionContext context(4096, nullptr);
  	     context.SetResultRowSize(rowSize);
 
  	     // Prepare arguments stack
@@ -186,14 +186,14 @@ static void TestBinaryRoundOperation(const std::string &functionName,
     ASSERT_EQ(rightData.size(), static_cast<size_t>(rowSize));
     ASSERT_EQ(expectedResults.size(), static_cast<size_t>(rowSize));
 
-    BaseVector *leftVec = VectorHelper::CreateFlatVector(typeId, rowSize);
+    BaseVector *leftVec = VectorHelper::CreateFlatVector(nullptr, typeId, rowSize);
     auto *leftVector = static_cast<Vector<T> *>(leftVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         leftVector->SetValue(i, leftData[i]);
         leftVector->SetNotNull(i);
     }
 
-    BaseVector *rightVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    BaseVector *rightVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     auto *rightVector = static_cast<Vector<int32_t> *>(rightVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         rightVector->SetValue(i, rightData[i]);
@@ -205,7 +205,7 @@ static void TestBinaryRoundOperation(const std::string &functionName,
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName << " not found for type " << static_cast<int>(typeId);
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector *> args;
     args.push(leftVec);
@@ -265,7 +265,7 @@ TEST(MathFunctionsTest, AcoshDouble) {
     std::cout << "=== acosh input ===" << std::endl;
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -604,7 +604,7 @@ TEST(MathFunctionsTest, RandNoArg) {
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr);
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector *> args;
 
@@ -627,7 +627,7 @@ TEST(MathFunctionsTest, RandNoArg) {
 TEST(MathFunctionsTest, RandWithSeed) {
     const int32_t rowSize = 4;
     std::vector<int32_t> seedData = {42, 42, 42, 42};
-    BaseVector *seedVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    BaseVector *seedVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     auto *seedVector = static_cast<Vector<int32_t> *>(seedVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         seedVector->SetValue(i, seedData[i]);
@@ -641,7 +641,7 @@ TEST(MathFunctionsTest, RandWithSeed) {
     auto vectorFunction = VectorFunction::Find(signature, constantInputs);
     ASSERT_NE(vectorFunction, nullptr);
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector *> args;
     args.push(seedVec);
@@ -773,7 +773,7 @@ TEST(MathFunctionsTest, HypotDoubleExprEval) {
     std::cout << "=== hypot input ===" << std::endl;
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -921,7 +921,7 @@ TEST(MathFunctionsExtendedTest, PmodWithNull) {
     std::cout << "=== pmod with NULL input ===" << std::endl;
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -1093,7 +1093,7 @@ TEST(MathFunctionsTest, CscDoubleExprEval) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -1174,7 +1174,7 @@ TEST(MathFunctionsTest, DegreesDoubleExprEval) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -1253,7 +1253,7 @@ TEST(MathFunctionsTest, CotDoubleExprEval) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -1336,7 +1336,7 @@ TEST(MathFunctionsTest, AtanhDoubleExprEval) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -1447,7 +1447,7 @@ void TestIntegralDivideOperation(
     int32_t rowSize = static_cast<int32_t>(leftData.size());
 
     // Create left vector
-    BaseVector* leftVec = VectorHelper::CreateFlatVector(inputTypeId, rowSize);
+    BaseVector* leftVec = VectorHelper::CreateFlatVector(nullptr, inputTypeId, rowSize);
     auto* leftVector = static_cast<Vector<TInput>*>(leftVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         leftVector->SetValue(i, leftData[i]);
@@ -1455,7 +1455,7 @@ void TestIntegralDivideOperation(
     }
 
     // Create right vector
-    BaseVector* rightVec = VectorHelper::CreateFlatVector(inputTypeId, rowSize);
+    BaseVector* rightVec = VectorHelper::CreateFlatVector(nullptr, inputTypeId, rowSize);
     auto* rightVector = static_cast<Vector<TInput>*>(rightVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         rightVector->SetValue(i, rightData[i]);
@@ -1471,7 +1471,7 @@ void TestIntegralDivideOperation(
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName << " not found for type " << static_cast<int>(inputTypeId);
 
     // Create execution context
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
 
     // Prepare arguments stack
@@ -1560,7 +1560,7 @@ TEST(MathFunctionsTest, DivLongDivisionByZero) {
     std::cout << "=== div with zero divisor input ===" << std::endl;
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -1696,7 +1696,7 @@ TEST(MathFunctionsTest, DivWithNullValues) {
     std::cout << "=== div with NULL input ===" << std::endl;
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

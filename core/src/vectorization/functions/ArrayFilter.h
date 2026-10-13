@@ -47,14 +47,14 @@ namespace omniruntime::vectorization {
             auto srcEleTypeId = elementVecHolder->GetTypeId();
 
             int32_t arrRowSize = srcArrVec->GetSize();
-            result = new ArrayVector(arrRowSize);
+            result = new ArrayVector(arrRowSize, context->GetPool());
             auto *dstArrVec = static_cast<ArrayVector *>(result);
 
             if (arrRowSize == 0 || srcArrVec->GetNullCount() == arrRowSize) {
                 for (int32_t i = 0; i < arrRowSize; ++i) {
                     dstArrVec->SetNull(i);
                 }
-                VectorHelper::EmptyArrayProjection(dstArrVec, srcEleTypeId);
+                VectorHelper::EmptyArrayProjection(context->GetPool(), dstArrVec, srcEleTypeId);
                 delete srcArrVec;
                 return;
             }
@@ -66,7 +66,7 @@ namespace omniruntime::vectorization {
                         dstArrVec->SetNull(i);
                     }
                 }
-                VectorHelper::EmptyArrayProjection(dstArrVec, srcEleTypeId);
+                VectorHelper::EmptyArrayProjection(context->GetPool(), dstArrVec, srcEleTypeId);
                 delete srcArrVec;
                 return;
             }
@@ -76,11 +76,11 @@ namespace omniruntime::vectorization {
             std::unique_ptr<BaseVector> lambdaInputHolder(flatElementVec->Slice(0, elemSize));
             BaseVector *lambdaInputVec = lambdaInputHolder.get();
 
+            context->SetResultRowSize(elemSize);
             ExprEval lambdaEval(context);
             lambdaEval.paramNameToIdxMap = lambdaExpr->paramNameToIdxMap_;
             lambdaEval.lambdaParams_.push_back(lambdaInputVec);
 
-            context->SetResultRowSize(elemSize);
             lambdaBody->Accept(lambdaEval);
             context->SetResultRowSize(arrRowSize);
             BaseVector *boolResultVec = lambdaEval.GetResult();
@@ -139,7 +139,7 @@ namespace omniruntime::vectorization {
 
             int32_t selectedCount = static_cast<int32_t>(selectedIndices.size());
             if (selectedCount == 0) {
-                VectorHelper::EmptyArrayProjection(dstArrVec, srcEleTypeId);
+                VectorHelper::EmptyArrayProjection(context->GetPool(), dstArrVec, srcEleTypeId);
             } else {
                 BaseVector *filteredElements = flatElementVec->CopyPositions(
                     selectedIndices.data(), 0, selectedCount);

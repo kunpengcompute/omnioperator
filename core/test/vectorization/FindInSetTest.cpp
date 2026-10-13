@@ -72,7 +72,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << "find_in_set function not found for given type signature";
         auto outputType = std::make_shared<DataType>(outputTypeId);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(strVec);

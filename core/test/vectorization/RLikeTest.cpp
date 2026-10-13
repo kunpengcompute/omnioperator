@@ -74,7 +74,7 @@ public:
         ASSERT_NE(function, nullptr) << "RLike function not found for signature";
 
         auto outputType = std::make_shared<DataType>(OMNI_BOOLEAN);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
 

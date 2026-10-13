@@ -49,7 +49,7 @@ TEST_F(FloorTest, FloorDouble) {
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);
@@ -96,7 +96,7 @@ TEST_F(FloorTest, FloorLong) {
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);
@@ -142,7 +142,7 @@ TEST_F(FloorTest, FloorEdgeCases) {
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);
@@ -182,7 +182,7 @@ TEST_F(FloorTest, FloorWithNullInput) {
     input->Get(0)->SetNull(0);
     input->Get(0)->SetNull(2);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);
@@ -213,7 +213,7 @@ TEST_F(FloorTest, FloorVectorFunctionDouble) {
     int32_t rowSize = 5;
     
     // Create input vector
-    BaseVector* rawInput = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    BaseVector* rawInput = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, rowSize);
     auto* inputVector = static_cast<Vector<double>*>(rawInput);
     std::vector<double> inputData = {2.5, -2.5, 0.0, 100.999, -100.001};
     for (int32_t i = 0; i < rowSize; ++i) {
@@ -227,7 +227,7 @@ TEST_F(FloorTest, FloorVectorFunctionDouble) {
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function floor(double) not found";
     
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     
     std::stack<BaseVector*> args;
@@ -264,7 +264,7 @@ TEST_F(FloorTest, FloorVectorFunctionLong) {
     int32_t rowSize = 4;
     
     // Create input vector
-    BaseVector* rawInput = VectorHelper::CreateFlatVector(OMNI_LONG, rowSize);
+    BaseVector* rawInput = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, rowSize);
     auto* inputVector = static_cast<Vector<int64_t>*>(rawInput);
     std::vector<int64_t> inputData = {100LL, -100LL, 0LL, 9223372036854775807LL};
     for (int32_t i = 0; i < rowSize; ++i) {
@@ -278,7 +278,7 @@ TEST_F(FloorTest, FloorVectorFunctionLong) {
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function floor(long) not found";
     
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     
     std::stack<BaseVector*> args;
@@ -323,7 +323,7 @@ TEST_F(FloorTest, FloorNegativeDecimalsCloseToInteger) {
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);

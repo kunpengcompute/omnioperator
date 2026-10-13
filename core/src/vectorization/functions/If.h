@@ -24,41 +24,41 @@ public:
 
     /// Creates the result vector for an if expression, mirroring the structure of
     /// sourceVec (used for complex types whose children must be allocated upfront).
-    static void CreateResultVector(DataTypeId typeId, int32_t size, BaseVector *sourceVec,
-        BaseVector *&result)
+    static void CreateResultVector(omniruntime::mem::OmniTaskMemoryPool *pool, DataTypeId typeId,
+        int32_t size, BaseVector *sourceVec, BaseVector *&result)
     {
         switch (typeId) {
             case OMNI_ARRAY :
             {
                 auto *srcArray = static_cast<ArrayVector *>(sourceVec);
                 auto elemVec = std::shared_ptr<BaseVector>(
-                    VectorHelper::CreateFlatVector(srcArray->GetElementVector()->GetTypeId(), 0));
-                result = new ArrayVector(size, elemVec);
+                    VectorHelper::CreateFlatVector(pool, srcArray->GetElementVector()->GetTypeId(), 0));
+                result = new ArrayVector(size, elemVec, pool);
                 break;
             }
             case OMNI_MAP :
             {
                 auto *srcMap = static_cast<MapVector *>(sourceVec);
                 auto keyVec = std::shared_ptr<BaseVector>(
-                    VectorHelper::CreateFlatVector(srcMap->GetKeyVector()->GetTypeId(), 0));
+                    VectorHelper::CreateFlatVector(pool, srcMap->GetKeyVector()->GetTypeId(), 0));
                 auto valVec = std::shared_ptr<BaseVector>(
-                    VectorHelper::CreateFlatVector(srcMap->GetValueVector()->GetTypeId(), 0));
-                result = new MapVector(size, keyVec, valVec);
+                    VectorHelper::CreateFlatVector(pool, srcMap->GetValueVector()->GetTypeId(), 0));
+                result = new MapVector(size, keyVec, valVec, pool);
                 break;
             }
             case OMNI_ROW :
             {
                 auto *srcRow = static_cast<RowVector *>(sourceVec);
-                auto *resRow = new RowVector(size);
+                auto *resRow = new RowVector(size, pool);
                 for (int32_t c = 0; c < srcRow->ChildSize(); ++c) {
                     auto childTypeId = srcRow->ChildAt(c)->GetTypeId();
-                    resRow->AddChild(VectorHelper::CreateFlatVector(childTypeId, size));
+                    resRow->AddChild(VectorHelper::CreateFlatVector(pool, childTypeId, size));
                 }
                 result = resRow;
                 break;
             }
             default :
-                result = VectorHelper::CreateFlatVector(typeId, size);
+                result = VectorHelper::CreateFlatVector(pool, typeId, size);
                 break;
         }
     }
@@ -130,7 +130,7 @@ public:
         auto *boolVec = static_cast<Vector<bool> *>(condVec);
         auto size = context->GetResultRowSize();
         DataTypeId typeId = outputType->GetId();
-        CreateResultVector(typeId, size, trueVec, result);
+        CreateResultVector(context->GetPool(), typeId, size, trueVec, result);
 
         bool condHasNull = boolVec->HasNull();
         bool trueHasNull = trueVec->HasNull();

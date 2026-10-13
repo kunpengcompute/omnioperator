@@ -118,7 +118,7 @@ void TestFilter(void **testData, omniruntime::type::DataTypes &sourceTypes, int3
 
     auto factory = dynamic_cast<FilterAndProjectOperatorFactory *>(
         CreateFilterFactory(sourceTypes, eqExpr, projections, overflowConfig));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(sourceVecBatch);
     VectorBatch *resultVecBatch = nullptr;
     op->GetOutput(&resultVecBatch);
@@ -137,7 +137,7 @@ void TestSort(void **testData, omniruntime::type::DataTypes &sourceTypes, int32_
     auto sourceVecBatch = CreateInputForAllTypes(sourceTypes, testData, dataSize, loopCount, true, true);
 
     auto operatorFactory = dynamic_cast<SortOperatorFactory *>(CreateSortFactory(sourceTypes));
-    auto sortOperator = dynamic_cast<SortOperator *>(operatorFactory->CreateOperator());
+    auto sortOperator = dynamic_cast<SortOperator *>(operatorFactory->CreateOperator(nullptr));
     sortOperator->AddInput(sourceVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     sortOperator->GetOutput(&outputVecBatch);
@@ -157,7 +157,7 @@ void TestAggregation(void **testData, omniruntime::type::DataTypes &sourceTypes,
     AggregationOperatorFactory *nativeOperatorFactory =
         dynamic_cast<AggregationOperatorFactory *>(CreateAggregationFactory(sourceTypes));
     nativeOperatorFactory->Init();
-    auto groupBy = nativeOperatorFactory->CreateOperator();
+    auto groupBy = nativeOperatorFactory->CreateOperator(nullptr);
     groupBy->AddInput(sourceVecBatch);
     VectorBatch *resultVecBatch = nullptr;
     groupBy->GetOutput(&resultVecBatch);
@@ -178,7 +178,7 @@ void TestHashAggregation(void **testData, omniruntime::type::DataTypes &sourceTy
     HashAggregationOperatorFactory *nativeOperatorFactory =
         dynamic_cast<HashAggregationOperatorFactory *>(CreateHashAggregationFactory(sourceTypes));
     nativeOperatorFactory->Init();
-    auto groupBy = nativeOperatorFactory->CreateOperator();
+    auto groupBy = nativeOperatorFactory->CreateOperator(nullptr);
     groupBy->AddInput(sourceVecBatch);
     VectorBatch *resultVecBatch = nullptr;
     groupBy->GetOutput(&resultVecBatch);
@@ -200,7 +200,7 @@ void TestHashJoin(void **testData, omniruntime::type::DataTypes &sourceTypes, in
     auto overflowConfig = new OverflowConfig();
     auto operatorFactories = CreateHashJoinFactory(sourceTypes, overflowConfig, filterExpr, optCount);
     auto hashBuilderFactory = dynamic_cast<HashBuilderOperatorFactory *>(operatorFactories[0]);
-    auto hashBuilderOperator = hashBuilderFactory->CreateOperator();
+    auto hashBuilderOperator = hashBuilderFactory->CreateOperator(nullptr);
     hashBuilderOperator->AddInput(vecBatch);
     VectorBatch *hashBuildOutput = nullptr;
     hashBuilderOperator->GetOutput(&hashBuildOutput);
@@ -208,7 +208,7 @@ void TestHashJoin(void **testData, omniruntime::type::DataTypes &sourceTypes, in
     VectorBatch *probeVecBatch = CreateInputForAllTypes(sourceTypes, testData, dataSize, loopCount, true, true);
 
     auto lookupJoinFactory = dynamic_cast<LookupJoinOperatorFactory *>(operatorFactories[1]);
-    auto lookupJoinOperator = lookupJoinFactory->CreateOperator();
+    auto lookupJoinOperator = lookupJoinFactory->CreateOperator(nullptr);
     lookupJoinOperator->AddInput(probeVecBatch);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
@@ -236,7 +236,7 @@ void TestLookupOuterJoin(void **testData, omniruntime::type::DataTypes &sourceTy
     auto overflowConfig = new OverflowConfig();
     auto operatorFactories = CreateLookupOuterFactory(sourceTypes, overflowConfig, filterExpr, optCount);
     auto hashBuilderFactory = dynamic_cast<HashBuilderOperatorFactory *>(operatorFactories[0]);
-    auto hashBuilderOperator = hashBuilderFactory->CreateOperator();
+    auto hashBuilderOperator = hashBuilderFactory->CreateOperator(nullptr);
     hashBuilderOperator->AddInput(vecBatch);
     VectorBatch *hashBuildOutput = nullptr;
     hashBuilderOperator->GetOutput(&hashBuildOutput);
@@ -244,7 +244,7 @@ void TestLookupOuterJoin(void **testData, omniruntime::type::DataTypes &sourceTy
     VectorBatch *probeVecBatch = CreateInputForAllTypes(sourceTypes, testData, dataSize, loopCount, true, true);
 
     auto lookupJoinFactory = dynamic_cast<LookupOuterJoinOperatorFactory *>(operatorFactories[1]);
-    auto lookupJoinOperator = lookupJoinFactory->CreateOperator();
+    auto lookupJoinOperator = lookupJoinFactory->CreateOperator(nullptr);
     lookupJoinOperator->AddInput(probeVecBatch);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
@@ -267,7 +267,7 @@ void TestDistinctLimit(void **testData, omniruntime::type::DataTypes &sourceType
 
     auto operatorFactory =
         dynamic_cast<DistinctLimitOperatorFactory *>(CreateDistinctLimitFactory(sourceTypes, loopCount));
-    auto distinctLimitOperator = operatorFactory->CreateOperator();
+    auto distinctLimitOperator = operatorFactory->CreateOperator(nullptr);
     distinctLimitOperator->AddInput(vecBatch);
     VectorBatch *outputVecBatch = nullptr;
     distinctLimitOperator->GetOutput(&outputVecBatch);
@@ -293,7 +293,7 @@ void TestProject(void **testData, omniruntime::type::DataTypes &sourceTypes, int
 
     auto operatorFactory =
         dynamic_cast<ProjectionOperatorFactory *>(CreateProjectFactory(sourceTypes, exprs, overflowConfig));
-    auto projectOperator = operatorFactory->CreateOperator();
+    auto projectOperator = operatorFactory->CreateOperator(nullptr);
     projectOperator->AddInput(vecBatch);
     VectorBatch *resultVecBatch = nullptr;
     projectOperator->GetOutput(&resultVecBatch);
@@ -313,7 +313,7 @@ void TestUnion(void **testData, omniruntime::type::DataTypes &sourceTypes, int32
     VectorBatch *vecBatch2 = CreateInputForAllTypes(sourceTypes, testData, dataSize, loopCount, true, true);
 
     UnionOperatorFactory *operatorFactory = dynamic_cast<UnionOperatorFactory *>(CreateUnionFactory(sourceTypes));
-    auto unionOperator = operatorFactory->CreateOperator();
+    auto unionOperator = operatorFactory->CreateOperator(nullptr);
     unionOperator->AddInput(vecBatch1);
     unionOperator->AddInput(vecBatch2);
     std::vector<VectorBatch *> outputVecBatches;
@@ -381,7 +381,7 @@ void TestTopN(void **testData, omniruntime::type::DataTypes &sourceTypes, int32_
     auto sourceVecBatch = CreateInputForAllTypes(sourceTypes, testData, dataSize, loopCount, true, true);
 
     TopNOperatorFactory *topNOperatorFactory = dynamic_cast<TopNOperatorFactory *>(CreateTopNFactory(sourceTypes));
-    auto topNOperator = topNOperatorFactory->CreateOperator();
+    auto topNOperator = topNOperatorFactory->CreateOperator(nullptr);
     topNOperator->AddInput(sourceVecBatch);
     VectorBatch *outputVectorBatch = nullptr;
     topNOperator->GetOutput(&outputVectorBatch);
@@ -401,7 +401,7 @@ void TestTopNSort(void **testData, omniruntime::type::DataTypes &sourceTypes, in
     std::vector<omniruntime::expressions::Expr *> sortKeys = { new FieldExpr(1, IntType()) };
     TopNSortWithExprOperatorFactory *topNSortOperatorFactory = dynamic_cast<TopNSortWithExprOperatorFactory *>(
         CreateTopNSortFactory(sourceTypes, partitionKeys, sortKeys, dataSize));
-    auto topNSortOperator = static_cast<TopNSortWithExprOperator *>(topNSortOperatorFactory->CreateOperator());
+    auto topNSortOperator = static_cast<TopNSortWithExprOperator *>(topNSortOperatorFactory->CreateOperator(nullptr));
     topNSortOperator->AddInput(sourceVecBatch);
     VectorBatch *outputVectorBatch = nullptr;
     topNSortOperator->GetOutput(&outputVectorBatch);
@@ -427,7 +427,7 @@ void TestSortMergeJoinV3(void **testData, omniruntime::type::DataTypes &sourceTy
         dynamic_cast<BufferedTableWithExprOperatorFactoryV3 *>(
         CreateSortMergeJoinV3Factory(streamedTableWithExprOperatorFactoryV3));
     auto sortMergeJoinV3Operator =
-        static_cast<BufferedTableWithExprOperatorV3 *>(sortMergeJoinV3OperatorFactory->CreateOperator());
+        static_cast<BufferedTableWithExprOperatorV3 *>(sortMergeJoinV3OperatorFactory->CreateOperator(nullptr));
     sortMergeJoinV3Operator->AddInput(sourceVecBatch);
     VectorBatch *outputVectorBatch = nullptr;
     sortMergeJoinV3Operator->GetOutput(&outputVectorBatch);
@@ -450,7 +450,7 @@ void TestWindow(void **testData, omniruntime::type::DataTypes &sourceTypes, int3
 
     // dealing data with the operator
     WindowOperatorFactory *operatorFactory = dynamic_cast<WindowOperatorFactory *>(CreateWindowFactory(sourceTypes));
-    auto windowOperator = operatorFactory->CreateOperator();
+    auto windowOperator = operatorFactory->CreateOperator(nullptr);
     windowOperator->AddInput(sourceVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     windowOperator->GetOutput(&outputVecBatch);

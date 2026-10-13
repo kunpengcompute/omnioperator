@@ -63,7 +63,7 @@ public:
         
         // Create result vector if it doesn't exist
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
         
         auto *resultVector = reinterpret_cast<Vector<int32_t> *>(result);

@@ -78,4 +78,30 @@ TEST(vector2, vec_batch_resize)
     VectorHelper::PrintVecBatch(pVb);
     VectorHelper::FreeVecBatch(pVb);
 }
+
+TEST(vector2, flat_size_is_bytes_not_column_element_count)
+{
+    constexpr int32_t rowCount = 3;
+    auto intVector = std::make_unique<Vector<int32_t>>(rowCount);
+    constexpr int32_t stringCapacity = 16;
+    auto stringVector = std::make_unique<Vector<LargeStringContainer<std::string_view>>>(
+        rowCount, stringCapacity);
+    const std::string values[] = {"a", "bb", "ccc"};
+    for (int32_t i = 0; i < rowCount; ++i) {
+        intVector->SetValue(i, i);
+        stringVector->SetValue(i, values[i]);
+    }
+
+    VectorBatch batch(rowCount);
+    batch.Append(intVector.release());
+    batch.Append(stringVector.release());
+
+    EXPECT_EQ(batch.CalculateTotalSize(), 6);
+    const uint64_t expectedBytes =
+        2 * NullsBuffer::CalculateNbytes(rowCount) +
+        rowCount * sizeof(int32_t) +
+        (rowCount + 1) * sizeof(int32_t) +
+        stringCapacity;
+    EXPECT_EQ(batch.EstimateFlatSize(), expectedBytes);
+}
 }

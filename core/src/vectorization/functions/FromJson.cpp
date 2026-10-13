@@ -38,14 +38,14 @@ void FromJsonFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
     std::vector<std::shared_ptr<BaseVector>> children;
     for (size_t i = 0; i < rowType.Size(); ++i) {
         const DataTypePtr &childType = rowType.childAt(i);
-        BaseVector *childVec = VectorHelper::CreateFlatVector(childType->GetId(), rowSize);
+        BaseVector *childVec = VectorHelper::CreateFlatVector(context != nullptr ? context->GetPool() : nullptr, childType->GetId(), rowSize);
         if (!childVec) {
             OMNI_THROW("FromJsonFunction Error:", "Failed to create child vector");
         }
         childVec->SetIsField(true);
         children.emplace_back(std::shared_ptr<BaseVector>(childVec));
     }
-    result = new RowVector(rowSize, children);
+    result = new RowVector(rowSize, children, context != nullptr ? context->GetPool() : nullptr);
     if (!result) {
         OMNI_THROW("FromJsonFunction Error:", "Failed to create result RowVector");
     }

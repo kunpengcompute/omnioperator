@@ -33,10 +33,10 @@ static void RegisterOnce() {
 TEST(MapConstructTest, MapBooleanKeyValue) {
     RegisterOnce();
     int rowSize = 2;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_BOOLEAN, rowSize);
     static_cast<Vector<bool>*>(col0)->SetValue(0, true);
     static_cast<Vector<bool>*>(col0)->SetValue(1, false);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_BOOLEAN, rowSize);
     static_cast<Vector<bool>*>(col1)->SetValue(0, false);
     static_cast<Vector<bool>*>(col1)->SetValue(1, true);
     auto batch = new VectorBatch(rowSize);
@@ -50,7 +50,7 @@ TEST(MapConstructTest, MapBooleanKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_BOOLEAN))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -76,10 +76,10 @@ TEST(MapConstructTest, MapBooleanKeyValue) {
 TEST(MapConstructTest, MapByteKeyValue) {
     RegisterOnce();
     int rowSize = 2;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_BYTE, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_BYTE, rowSize);
     static_cast<Vector<int8_t>*>(col0)->SetValue(0, 1);
     static_cast<Vector<int8_t>*>(col0)->SetValue(1, 2);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_BYTE, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_BYTE, rowSize);
     static_cast<Vector<int8_t>*>(col1)->SetValue(0, 10);
     static_cast<Vector<int8_t>*>(col1)->SetValue(1, 20);
     auto batch = new VectorBatch(rowSize);
@@ -93,7 +93,7 @@ TEST(MapConstructTest, MapByteKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_BYTE))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -117,10 +117,10 @@ TEST(MapConstructTest, MapByteKeyValue) {
 TEST(MapConstructTest, MapShortKeyValue) {
     RegisterOnce();
     int rowSize = 2;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_SHORT, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_SHORT, rowSize);
     static_cast<Vector<int16_t>*>(col0)->SetValue(0, 100);
     static_cast<Vector<int16_t>*>(col0)->SetValue(1, 200);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_SHORT, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_SHORT, rowSize);
     static_cast<Vector<int16_t>*>(col1)->SetValue(0, 1000);
     static_cast<Vector<int16_t>*>(col1)->SetValue(1, 2000);
     auto batch = new VectorBatch(rowSize);
@@ -134,7 +134,7 @@ TEST(MapConstructTest, MapShortKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_SHORT))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -158,11 +158,11 @@ TEST(MapConstructTest, MapShortKeyValue) {
 TEST(MapConstructTest, MapIntKeyValue) {
     RegisterOnce();
     int rowSize = 3;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col0)->SetValue(0, 1);
     static_cast<Vector<int32_t>*>(col0)->SetValue(1, 2);
     static_cast<Vector<int32_t>*>(col0)->SetValue(2, 3);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col1)->SetValue(0, 10);
     static_cast<Vector<int32_t>*>(col1)->SetValue(1, 20);
     static_cast<Vector<int32_t>*>(col1)->SetValue(2, 30);
@@ -177,7 +177,7 @@ TEST(MapConstructTest, MapIntKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -204,10 +204,10 @@ TEST(MapConstructTest, MapIntKeyValue) {
 TEST(MapConstructTest, MapLongKeyValue) {
     RegisterOnce();
     int rowSize = 2;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_LONG, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, rowSize);
     static_cast<Vector<int64_t>*>(col0)->SetValue(0, 100L);
     static_cast<Vector<int64_t>*>(col0)->SetValue(1, 200L);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_LONG, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, rowSize);
     static_cast<Vector<int64_t>*>(col1)->SetValue(0, 1000L);
     static_cast<Vector<int64_t>*>(col1)->SetValue(1, 2000L);
     auto batch = new VectorBatch(rowSize);
@@ -221,7 +221,7 @@ TEST(MapConstructTest, MapLongKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_LONG))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -245,10 +245,10 @@ TEST(MapConstructTest, MapLongKeyValue) {
 TEST(MapConstructTest, MapFloatKeyValue) {
     RegisterOnce();
     int rowSize = 2;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_FLOAT, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_FLOAT, rowSize);
     static_cast<Vector<float>*>(col0)->SetValue(0, 1.5f);
     static_cast<Vector<float>*>(col0)->SetValue(1, 2.5f);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_FLOAT, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_FLOAT, rowSize);
     static_cast<Vector<float>*>(col1)->SetValue(0, 10.5f);
     static_cast<Vector<float>*>(col1)->SetValue(1, 20.5f);
     auto batch = new VectorBatch(rowSize);
@@ -262,7 +262,7 @@ TEST(MapConstructTest, MapFloatKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_FLOAT))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -286,10 +286,10 @@ TEST(MapConstructTest, MapFloatKeyValue) {
 TEST(MapConstructTest, MapDoubleKeyValue) {
     RegisterOnce();
     int rowSize = 2;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, rowSize);
     static_cast<Vector<double>*>(col0)->SetValue(0, 1.1);
     static_cast<Vector<double>*>(col0)->SetValue(1, 2.2);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, rowSize);
     static_cast<Vector<double>*>(col1)->SetValue(0, 10.1);
     static_cast<Vector<double>*>(col1)->SetValue(1, 20.2);
     auto batch = new VectorBatch(rowSize);
@@ -303,7 +303,7 @@ TEST(MapConstructTest, MapDoubleKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_DOUBLE))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -327,10 +327,10 @@ TEST(MapConstructTest, MapDoubleKeyValue) {
 TEST(MapConstructTest, MapTimestampKeyValue) {
     RegisterOnce();
     int rowSize = 2;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_TIMESTAMP, rowSize);
     static_cast<Vector<int64_t>*>(col0)->SetValue(0, 1706522730000000L);
     static_cast<Vector<int64_t>*>(col0)->SetValue(1, 0L);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_TIMESTAMP, rowSize);
     static_cast<Vector<int64_t>*>(col1)->SetValue(0, 100L);
     static_cast<Vector<int64_t>*>(col1)->SetValue(1, 200L);
     auto batch = new VectorBatch(rowSize);
@@ -344,7 +344,7 @@ TEST(MapConstructTest, MapTimestampKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_TIMESTAMP))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -369,10 +369,10 @@ TEST(MapConstructTest, MapBinaryKeyValue) {
     RegisterOnce();
     int rowSize = 2;
     using StringVector = Vector<LargeStringContainer<std::string_view>>;
-    auto* col0 = static_cast<StringVector*>(VectorHelper::CreateFlatVector(OMNI_VARBINARY, rowSize));
+    auto* col0 = static_cast<StringVector*>(VectorHelper::CreateFlatVector(nullptr, OMNI_VARBINARY, rowSize));
     col0->SetValue(0, std::string_view("key1", 4));
     col0->SetValue(1, std::string_view("key2", 4));
-    auto* col1 = static_cast<StringVector*>(VectorHelper::CreateFlatVector(OMNI_VARBINARY, rowSize));
+    auto* col1 = static_cast<StringVector*>(VectorHelper::CreateFlatVector(nullptr, OMNI_VARBINARY, rowSize));
     col1->SetValue(0, std::string_view("val1", 4));
     col1->SetValue(1, std::string_view("val2", 4));
     auto batch = new VectorBatch(rowSize);
@@ -386,7 +386,7 @@ TEST(MapConstructTest, MapBinaryKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_VARBINARY))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -410,11 +410,11 @@ TEST(MapConstructTest, MapBinaryKeyValue) {
 TEST(MapConstructTest, MapIntKeyDoubleValue) {
     RegisterOnce();
     int rowSize = 3;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col0)->SetValue(0, 1);
     static_cast<Vector<int32_t>*>(col0)->SetValue(1, 2);
     static_cast<Vector<int32_t>*>(col0)->SetValue(2, 3);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, rowSize);
     static_cast<Vector<double>*>(col1)->SetValue(0, 4.0);
     static_cast<Vector<double>*>(col1)->SetValue(1, 5.0);
     static_cast<Vector<double>*>(col1)->SetValue(2, 6.0);
@@ -429,7 +429,7 @@ TEST(MapConstructTest, MapIntKeyDoubleValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_DOUBLE))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -458,16 +458,16 @@ TEST(MapConstructTest, MapIntKeyDoubleValue) {
 TEST(MapConstructTest, MapMultipleKeyValuePairs) {
     RegisterOnce();
     int rowSize = 2;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col0)->SetValue(0, 1);
     static_cast<Vector<int32_t>*>(col0)->SetValue(1, 4);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col1)->SetValue(0, 10);
     static_cast<Vector<int32_t>*>(col1)->SetValue(1, 40);
-    auto col2 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col2 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col2)->SetValue(0, 2);
     static_cast<Vector<int32_t>*>(col2)->SetValue(1, 5);
-    auto col3 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col3 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col3)->SetValue(0, 20);
     static_cast<Vector<int32_t>*>(col3)->SetValue(1, 50);
     auto batch = new VectorBatch(rowSize);
@@ -485,7 +485,7 @@ TEST(MapConstructTest, MapMultipleKeyValuePairs) {
         new FieldExpr(3, std::make_shared<DataType>(OMNI_INT))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -516,16 +516,16 @@ TEST(MapConstructTest, MapMultipleKeyValuePairs) {
 TEST(MapConstructTest, MapDuplicateKeyLastWin) {
     RegisterOnce();
     int rowSize = 2;
-    auto col0 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col0 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col0)->SetValue(0, 1);
     static_cast<Vector<int32_t>*>(col0)->SetValue(1, 3);
-    auto col1 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col1 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col1)->SetValue(0, 100);
     static_cast<Vector<int32_t>*>(col1)->SetValue(1, 300);
-    auto col2 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col2 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col2)->SetValue(0, 1);
     static_cast<Vector<int32_t>*>(col2)->SetValue(1, 4);
-    auto col3 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto col3 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(col3)->SetValue(0, 999);
     static_cast<Vector<int32_t>*>(col3)->SetValue(1, 400);
     auto batch = new VectorBatch(rowSize);
@@ -543,7 +543,7 @@ TEST(MapConstructTest, MapDuplicateKeyLastWin) {
         new FieldExpr(3, std::make_shared<DataType>(OMNI_INT))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -591,7 +591,7 @@ TEST(MapConstructTest, MapArrayKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);
@@ -636,7 +636,7 @@ TEST(MapConstructTest, MapNestedMapKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_MAP))
     }, outerMapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch1, context);
     e.VisitExpr(*expr);
@@ -661,18 +661,18 @@ TEST(MapConstructTest, MapStructKeyValue) {
     };
     auto rowType = std::make_shared<RowType>(fieldTypes, std::vector<std::string>{"f1", "f2"});
 
-    auto* intVec1 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto* intVec1 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(intVec1)->SetValue(0, 42);
-    auto* dblVec1 = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    auto* dblVec1 = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, rowSize);
     static_cast<Vector<double>*>(dblVec1)->SetValue(0, 3.14);
     std::vector<std::shared_ptr<BaseVector>> children1 = {
         std::shared_ptr<BaseVector>(intVec1), std::shared_ptr<BaseVector>(dblVec1)
     };
     auto* rowVec1 = new RowVector(rowSize, children1);
 
-    auto* intVec2 = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto* intVec2 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     static_cast<Vector<int32_t>*>(intVec2)->SetValue(0, 99);
-    auto* dblVec2 = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    auto* dblVec2 = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, rowSize);
     static_cast<Vector<double>*>(dblVec2)->SetValue(0, 2.71);
     std::vector<std::shared_ptr<BaseVector>> children2 = {
         std::shared_ptr<BaseVector>(intVec2), std::shared_ptr<BaseVector>(dblVec2)
@@ -689,7 +689,7 @@ TEST(MapConstructTest, MapStructKeyValue) {
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ROW))
     }, mapType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(batch, context);
     e.VisitExpr(*expr);

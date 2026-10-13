@@ -17,13 +17,14 @@ using namespace omniruntime::op;
 
 namespace {
 
-BaseVector *CreateElementVectorByType(DataTypeId typeId, int64_t size)
+// Pool is threaded through to CreateFlatVector for per-task memory tracking.
+BaseVector *CreateElementVectorByType(DataTypeId typeId, int64_t size, omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     int64_t allocSize = size > 0 ? size : 1;
     if (typeId == OMNI_VARCHAR || typeId == OMNI_CHAR || typeId == OMNI_VARBINARY) {
-        return VectorHelper::CreateStringVector(static_cast<uint32_t>(allocSize));
+        return VectorHelper::CreateStringVector(pool, static_cast<uint32_t>(allocSize));
     }
-    return VectorHelper::CreateFlatVector(typeId, static_cast<int32_t>(allocSize));
+    return VectorHelper::CreateFlatVector(pool, typeId, static_cast<int32_t>(allocSize));
 }
 
 void CopyElementValue(BaseVector *srcElem, int32_t srcIdx, BaseVector *dstElem, int32_t dstIdx)
@@ -88,12 +89,12 @@ void ArrayShuffleImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
     BaseVector *newElementVector = nullptr;
     if (inputElementVector != nullptr && totalElements > 0) {
         DataTypeId elemTypeId = inputElementVector->GetTypeId();
-        newElementVector = CreateElementVectorByType(elemTypeId, totalElements);
+        newElementVector = CreateElementVectorByType(elemTypeId, totalElements, context->GetPool());
     } else {
-        newElementVector = VectorHelper::CreateFlatVector(OMNI_INT, 1);
+        newElementVector = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_INT, 1);
     }
 
-    auto *resultArray = new ArrayVector(rowSize);
+    auto *resultArray = new ArrayVector(rowSize, context->GetPool());
 
     int64_t currentOffset = 0;
     for (int32_t row = 0; row < rowSize; ++row) {

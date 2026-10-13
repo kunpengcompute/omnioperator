@@ -46,7 +46,7 @@ TEST(MapConcatTest, BasicTwoMaps)
     auto field1 = new FieldExpr(1, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_concat", {field0, field1}, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(combinedBatch, context);
     e.VisitExpr(expr);
@@ -92,7 +92,7 @@ TEST(MapConcatTest, SingleMap)
     auto field = new FieldExpr(0, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_concat", {field}, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -146,7 +146,7 @@ TEST(MapConcatTest, WithNullMap)
     auto field1 = new FieldExpr(1, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_concat", {field0, field1}, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(combinedBatch, context);
     e.VisitExpr(expr);
@@ -202,7 +202,7 @@ TEST(MapConcatTest, EmptyMaps)
     auto field1 = new FieldExpr(1, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_concat", {field0, field1}, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(combinedBatch, context);
     e.VisitExpr(expr);
@@ -259,7 +259,7 @@ TEST(MapConcatTest, StringKeyValueMaps)
     auto field1 = new FieldExpr(1, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_concat", {field0, field1}, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(combinedBatch, context);
     e.VisitExpr(expr);

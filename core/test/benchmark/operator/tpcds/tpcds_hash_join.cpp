@@ -38,7 +38,7 @@ protected:
         hashBuilderOperatorFactory =
             new HashBuilderWithExprOperatorFactory(JoinType(buildMetaData["joinType"]["value"].get<int>()),
             DataTypes(buildTypes), buildHashKeys, hashTableCount, new OverflowConfig());
-        hashBuilderOperator = hashBuilderOperatorFactory->CreateOperator();
+        hashBuilderOperator = hashBuilderOperatorFactory->CreateOperator(nullptr);
 
         for (const auto &vb : LoadVectorBatchFromPath(dependentDataPath, buildTypes)) {
             hashBuilderOperator->AddInput(vb());

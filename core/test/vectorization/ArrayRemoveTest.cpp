@@ -87,7 +87,7 @@ TEST_F(ArrayRemoveTest, IntegerRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -137,7 +137,7 @@ TEST_F(ArrayRemoveTest, LongRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_LONG))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -182,7 +182,7 @@ TEST_F(ArrayRemoveTest, ByteRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_BYTE))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -226,7 +226,7 @@ TEST_F(ArrayRemoveTest, ShortRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_SHORT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -271,7 +271,7 @@ TEST_F(ArrayRemoveTest, DoubleRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_DOUBLE))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -315,7 +315,7 @@ TEST_F(ArrayRemoveTest, FloatRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_FLOAT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -359,7 +359,7 @@ TEST_F(ArrayRemoveTest, BooleanRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_BOOLEAN))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -415,7 +415,7 @@ TEST_F(ArrayRemoveTest, FloatNaNRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_FLOAT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -473,7 +473,7 @@ TEST_F(ArrayRemoveTest, DoubleNaNRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_DOUBLE))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -525,7 +525,7 @@ TEST_F(ArrayRemoveTest, ArrayWithNullElements)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -570,7 +570,7 @@ TEST_F(ArrayRemoveTest, EmptyArrayRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -607,7 +607,7 @@ TEST_F(ArrayRemoveTest, NoMatchRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -647,7 +647,7 @@ TEST_F(ArrayRemoveTest, AllMatchRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -691,7 +691,7 @@ TEST_F(ArrayRemoveTest, NullElementToRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -741,7 +741,7 @@ TEST_F(ArrayRemoveTest, NullArrayRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -797,7 +797,7 @@ TEST_F(ArrayRemoveTest, VarcharRemove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_VARCHAR))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -853,7 +853,7 @@ TEST_F(ArrayRemoveTest, Decimal128Remove)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_DECIMAL128))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -896,7 +896,7 @@ TEST_F(ArrayRemoveTest, IntegerBoundaryValues)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -943,7 +943,7 @@ TEST_F(ArrayRemoveTest, MultipleRowsMixedResults)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_INT))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -1008,7 +1008,7 @@ TEST_F(ArrayRemoveTest, VarcharWithNullElements)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_VARCHAR))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

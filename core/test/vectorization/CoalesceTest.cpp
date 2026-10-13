@@ -103,7 +103,7 @@ public:
 
     template<typename T>
     static BaseVector* CreateNumericVector(const std::vector<T>& values, DataTypeId typeId) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, typeId, values.size());
         auto* typedVec = static_cast<Vector<T>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -112,7 +112,7 @@ public:
     }
 
     static BaseVector* CreateStringVector(const std::vector<std::string>& values, DataTypeId typeId = OMNI_VARCHAR) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, typeId, values.size());
         auto* typedVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             std::string_view sv(values[i]);
@@ -130,7 +130,7 @@ public:
         ASSERT_NE(function, nullptr) << "Coalesce function not found for signature";
 
         auto outputType = std::make_shared<DataType>(outputTypeId);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(inputs[0]->GetSize());
         std::stack<BaseVector*> args;
         for (auto* input : inputs) {
@@ -151,7 +151,7 @@ public:
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "Coalesce function not found for complex type signature";
 
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(inputs[0]->GetSize());
         std::stack<BaseVector*> args;
         for (auto* input : inputs) {
@@ -448,7 +448,7 @@ TEST(CoalesceTest, ArrayCoalesce) {
 
     auto arg1 = static_cast<ArrayVector*>(VectorHelper::CreateComplexVector(arrayType.get(), 3));
     
-    auto elem0 = VectorHelper::CreateFlatVector(OMNI_INT, 3);
+    auto elem0 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, 3);
     static_cast<Vector<int32_t>*>(elem0)->SetValue(0, 1);
     static_cast<Vector<int32_t>*>(elem0)->SetValue(1, 2);
     static_cast<Vector<int32_t>*>(elem0)->SetValue(2, 3);
@@ -457,7 +457,7 @@ TEST(CoalesceTest, ArrayCoalesce) {
     
     arg1->SetNull(1);
     
-    auto elem2 = VectorHelper::CreateFlatVector(OMNI_INT, 3);
+    auto elem2 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, 3);
     static_cast<Vector<int32_t>*>(elem2)->SetValue(0, 7);
     static_cast<Vector<int32_t>*>(elem2)->SetValue(1, 8);
     static_cast<Vector<int32_t>*>(elem2)->SetValue(2, 9);
@@ -465,12 +465,12 @@ TEST(CoalesceTest, ArrayCoalesce) {
     delete elem2;
 
     auto arg2 = static_cast<ArrayVector*>(VectorHelper::CreateComplexVector(arrayType.get(), 3));
-    auto elem3 = VectorHelper::CreateFlatVector(OMNI_INT, 2);
+    auto elem3 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, 2);
     static_cast<Vector<int32_t>*>(elem3)->SetValue(0, 10);
     static_cast<Vector<int32_t>*>(elem3)->SetValue(1, 20);
     arg2->SetValue(0, elem3);
     delete elem3;
-    auto elem4 = VectorHelper::CreateFlatVector(OMNI_INT, 2);
+    auto elem4 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, 2);
     static_cast<Vector<int32_t>*>(elem4)->SetValue(0, 40);
     static_cast<Vector<int32_t>*>(elem4)->SetValue(1, 50);
     arg2->SetValue(1, elem4);
@@ -527,10 +527,10 @@ TEST(CoalesceTest, MapCoalesce) {
 
     auto arg1 = static_cast<MapVector*>(VectorHelper::CreateComplexVector(mapType.get(), 3));
 
-    auto keyVec1 = VectorHelper::CreateFlatVector(OMNI_VARCHAR, 1);
+    auto keyVec1 = VectorHelper::CreateFlatVector(nullptr, OMNI_VARCHAR, 1);
     std::string_view k1("k1");
     static_cast<Vector<LargeStringContainer<std::string_view>>*>(keyVec1)->SetValue(0, k1);
-    auto valVec1 = VectorHelper::CreateFlatVector(OMNI_INT, 1);
+    auto valVec1 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, 1);
     static_cast<Vector<int32_t>*>(valVec1)->SetValue(0, 1);
 
     VectorHelper::ExpandElementVector(arg1->GetKeyVector().get(), OMNI_VARCHAR, 1);
@@ -543,10 +543,10 @@ TEST(CoalesceTest, MapCoalesce) {
 
     arg1->SetNull(1);
 
-    auto keyVec3 = VectorHelper::CreateFlatVector(OMNI_VARCHAR, 1);
+    auto keyVec3 = VectorHelper::CreateFlatVector(nullptr, OMNI_VARCHAR, 1);
     std::string_view k3("k3");
     static_cast<Vector<LargeStringContainer<std::string_view>>*>(keyVec3)->SetValue(0, k3);
-    auto valVec3 = VectorHelper::CreateFlatVector(OMNI_INT, 1);
+    auto valVec3 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, 1);
     static_cast<Vector<int32_t>*>(valVec3)->SetValue(0, 3);
 
     int64_t currentOffset = arg1->GetOffset(2);
@@ -562,10 +562,10 @@ TEST(CoalesceTest, MapCoalesce) {
 
     arg2->SetNull(0);
 
-    auto keyVec2 = VectorHelper::CreateFlatVector(OMNI_VARCHAR, 1);
+    auto keyVec2 = VectorHelper::CreateFlatVector(nullptr, OMNI_VARCHAR, 1);
     std::string_view k2("k2");
     static_cast<Vector<LargeStringContainer<std::string_view>>*>(keyVec2)->SetValue(0, k2);
-    auto valVec2 = VectorHelper::CreateFlatVector(OMNI_INT, 1);
+    auto valVec2 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, 1);
     static_cast<Vector<int32_t>*>(valVec2)->SetValue(0, 2);
 
     int64_t offset2 = arg2->GetOffset(1);

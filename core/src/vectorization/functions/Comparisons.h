@@ -27,7 +27,7 @@ public:
         const auto right = args.top();
         args.pop();
         auto size = context->GetResultRowSize();
-        result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, size);
+        result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, size);
         bool lValue;
         bool rValue;
         for (size_t i = 0; i < size; i++) {
@@ -70,7 +70,7 @@ public:
         const auto right = args.top();
         args.pop();
         auto size = context->GetResultRowSize();
-        result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, size);
+        result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, size);
         bool lValue;
         bool rValue;
         for (size_t i = 0; i < size; i++) {
@@ -251,7 +251,7 @@ public:
         auto inputTypeId = left->GetTypeId();
         auto size = context->GetResultRowSize();
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
         for (size_t i = 0; i < size; i++) {
             if (left->IsNull(i) && right->IsNull(i)) {

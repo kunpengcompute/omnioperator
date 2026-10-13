@@ -35,14 +35,16 @@ public:
 private:
     static constexpr int32_t MAX_REPEAT_COUNT = 10000;
 
+    // Pool is plumbed through to element-vector CreateFlatVector.
     template <typename T>
     void ProcessRepeat(BaseVector *elementVec, BaseVector *countVec, BaseVector *&result,
-        int32_t rowSize, DataTypeId elementTypeId) const;
+        int32_t rowSize, DataTypeId elementTypeId, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     void ProcessRepeatVarchar(BaseVector *elementVec, BaseVector *countVec, BaseVector *&result,
-        int32_t rowSize) const;
+        int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
-    void ProcessRepeatAllNull(BaseVector *countVec, BaseVector *&result, int32_t rowSize) const;
+    void ProcessRepeatAllNull(BaseVector *countVec, BaseVector *&result, int32_t rowSize,
+        omniruntime::mem::OmniTaskMemoryPool *pool) const;
 };
 
 } // namespace omniruntime::vectorization

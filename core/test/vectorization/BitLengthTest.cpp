@@ -70,7 +70,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << "bit_length function not found for input type " << inputTypeId;
         auto outputType = std::make_shared<DataType>(outputTypeId);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(stringVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(stringVec);

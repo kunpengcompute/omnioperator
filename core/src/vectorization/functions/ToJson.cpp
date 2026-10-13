@@ -21,7 +21,7 @@ void ToJsonFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &ou
     // unavailable, in which case we fall back to field0/field1/... key names.
     const DataType *inputType = (context != nullptr) ? context->GetToJsonInputType() : nullptr;
     int32_t rowSize = inputArg->GetSize();
-    auto *stringResult = new Vector<LargeStringContainer<std::string_view>>(rowSize);
+    auto *stringResult = new Vector<LargeStringContainer<std::string_view>>(rowSize, context->GetPool());
     stringResult->SetIsField(true);
     for (int32_t row = 0; row < rowSize; ++row) {
         if (inputArg->IsNull(row)) {

@@ -86,7 +86,7 @@ TEST(DecimalOperations, decode_avg_decimal)
 {
     using namespace omniruntime::op;
     AggregateState *state;
-    ExecutionContext executionContext;
+    ExecutionContext executionContext(4096, nullptr);
     state = executionContext.GetArena()->Allocate(32);
 
     int128_t oldDec = CreateInt128(2, 3);

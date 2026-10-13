@@ -37,7 +37,7 @@ private:
 
     // Main implementation for RLIKE operation
     void ApplyRLike(BaseVector *strVec, BaseVector *patternVec, BaseVector *&result,
-                    const DataTypePtr &outputType) const;
+                    const DataTypePtr &outputType, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     // Match a string against a regex pattern
     bool MatchRegex(const std::string_view &str, const std::string_view &pattern) const;

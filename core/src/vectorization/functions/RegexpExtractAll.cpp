@@ -48,7 +48,7 @@ void RegexpExtractAllFunction::ApplyRegexpExtractAll(BaseVector *strVec, BaseVec
                                                       BaseVector *groupIdxVec, BaseVector *&result,
                                                       const DataTypePtr &outputType) const {
     auto rowSize = strVec->GetSize();
-    result = new ArrayVector(rowSize);
+    result = new ArrayVector(rowSize, strVec->GetPool());
     auto *arrayResult = dynamic_cast<ArrayVector *>(result);
     if (!arrayResult) {
         OMNI_THROW("RegexpExtractAll function Error", "Result vector is not an ArrayVector");

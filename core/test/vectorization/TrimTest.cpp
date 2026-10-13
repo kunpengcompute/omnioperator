@@ -78,7 +78,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << "Trim(string) function not found";
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(strVec);
@@ -92,7 +92,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << "Trim(trimStr, string) function not found";
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(trimStrVec);
@@ -121,7 +121,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << fnName << "(StringView) overload not found — SV registration missing";
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(strVec);
@@ -138,7 +138,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << "Trim({trimStr, SV}) overload not found — SV registration missing";
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(trimStrVec);
@@ -157,7 +157,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << fnName << " SV-out {SV}->OMNI_STRING_VIEW not found";
         auto outputType = std::make_shared<DataType>(OMNI_STRING_VIEW);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(strVec);

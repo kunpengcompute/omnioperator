@@ -28,7 +28,7 @@ public:
         args.pop();
 
         int32_t rowSize = inputArg->GetSize();
-        auto *arrayResult = new ArrayVector(rowSize);
+        auto *arrayResult = new ArrayVector(rowSize, context->GetPool());
         result = arrayResult;
 
         std::vector<std::string> allKeys;

@@ -81,7 +81,7 @@ public:
     }
 
     static BaseVector* CreateInt64Vector(const std::vector<int64_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_LONG, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, values.size());
         vec->SetIsField(true);
         auto* typed = static_cast<Vector<int64_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
@@ -101,7 +101,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << "split_part function not found";
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(inputVec->GetSize());
         // SimpleFunction pops last arg first: push (input, delimiter, index) so pop order is (index, delimiter, input)
         std::stack<BaseVector*> args;

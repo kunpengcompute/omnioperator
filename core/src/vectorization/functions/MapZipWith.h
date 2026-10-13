@@ -43,7 +43,7 @@ namespace omniruntime::vectorization {
             }
 
             int32_t rowSize = leftMap->GetSize();
-            result = new MapVector(rowSize);
+            result = new MapVector(rowSize, context->GetPool());
             auto *dstMap = static_cast<MapVector *>(result);
 
             auto keyTypeId = leftMap->GetKeyVector()->GetTypeId();
@@ -119,15 +119,15 @@ namespace omniruntime::vectorization {
             }
 
             if (totalMergedElements == 0) {
-                VectorHelper::EmptyMapProjection(dstMap, keyTypeId, leftValueTypeId);
+                VectorHelper::EmptyMapProjection(context->GetPool(), dstMap, keyTypeId, leftValueTypeId);
                 delete leftMap;
                 delete rightMap;
                 return;
             }
 
-            std::unique_ptr<BaseVector> mergedKeysHolder(VectorHelper::CreateFlatVector(static_cast<int32_t>(keyTypeId), totalMergedElements));
-            std::unique_ptr<BaseVector> mergedLeftValuesHolder(VectorHelper::CreateFlatVector(static_cast<int32_t>(leftValueTypeId), totalMergedElements));
-            std::unique_ptr<BaseVector> mergedRightValuesHolder(VectorHelper::CreateFlatVector(static_cast<int32_t>(rightValueTypeId), totalMergedElements));
+            std::unique_ptr<BaseVector> mergedKeysHolder(VectorHelper::CreateFlatVector(context->GetPool(), static_cast<int32_t>(keyTypeId), totalMergedElements));
+            std::unique_ptr<BaseVector> mergedLeftValuesHolder(VectorHelper::CreateFlatVector(context->GetPool(), static_cast<int32_t>(leftValueTypeId), totalMergedElements));
+            std::unique_ptr<BaseVector> mergedRightValuesHolder(VectorHelper::CreateFlatVector(context->GetPool(), static_cast<int32_t>(rightValueTypeId), totalMergedElements));
             BaseVector *mergedKeys = mergedKeysHolder.get();
             BaseVector *mergedLeftValues = mergedLeftValuesHolder.get();
             BaseVector *mergedRightValues = mergedRightValuesHolder.get();
@@ -163,13 +163,13 @@ namespace omniruntime::vectorization {
             mergedLeftValues->SetIsField(true);
             mergedRightValues->SetIsField(true);
 
+            context->SetResultRowSize(totalMergedElements);
             ExprEval lambdaEval(context);
             lambdaEval.paramNameToIdxMap = lambdaExpr->paramNameToIdxMap_;
             lambdaEval.lambdaParams_.push_back(mergedKeys);
             lambdaEval.lambdaParams_.push_back(mergedLeftValues);
             lambdaEval.lambdaParams_.push_back(mergedRightValues);
 
-            context->SetResultRowSize(totalMergedElements);
             lambdaBody->Accept(lambdaEval);
             context->SetResultRowSize(rowSize);
             BaseVector *lambdaResult = lambdaEval.GetResult();

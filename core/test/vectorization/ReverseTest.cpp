@@ -91,7 +91,7 @@ TEST(ReverseTest, ReverseFunctionBasicTest) {
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -125,7 +125,7 @@ TEST(ReverseTest, ReverseFunctionEmptyStringTest) {
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -162,7 +162,7 @@ TEST(ReverseTest, ReverseFunctionNullTest) {
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -213,7 +213,7 @@ TEST(ReverseTest, ReverseFunctionSingleCharTest) {
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -247,7 +247,7 @@ TEST(ReverseTest, ReverseFunctionLongStringTest) {
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -283,7 +283,7 @@ public:
             offsets.push_back(totalElements);
         }
 
-        auto elementVector = VectorHelper::CreateFlatVector(OMNI_INT, allElements.size());
+        auto elementVector = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, allElements.size());
         auto* elementFlatVec = reinterpret_cast<Vector<int32_t>*>(elementVector);
         for (size_t i = 0; i < allElements.size(); ++i) {
             elementFlatVec->SetValue(i, allElements[i]);
@@ -383,7 +383,7 @@ TEST(ReverseTest, ReverseArrayIntBasicTest) {
     vec::BaseVector* resultVector = nullptr;
     auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -444,7 +444,7 @@ TEST(ReverseTest, ReverseArrayStringTest) {
     vec::BaseVector* resultVector = nullptr;
     auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -501,7 +501,7 @@ TEST(ReverseTest, ReverseArrayNullTest) {
     vec::BaseVector* resultVector = nullptr;
     auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -560,7 +560,7 @@ TEST(ReverseTest, ReverseEmptyArrayTest) {
     vec::BaseVector* resultVector = nullptr;
     auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -599,7 +599,7 @@ TEST(ReverseTest, ReverseSingleElementArrayTest) {
     vec::BaseVector* resultVector = nullptr;
     auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -652,7 +652,7 @@ TEST(ReverseTest, ReverseArrayNullElementVectorTest) {
     vec::BaseVector* resultVector = nullptr;
     auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);

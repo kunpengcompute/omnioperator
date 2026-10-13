@@ -40,7 +40,7 @@ public:
     }
 
     static BaseVector* CreateInt32Vector(const std::vector<int32_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_INT, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, values.size());
         vec->SetIsField(true);
         auto* typed = static_cast<Vector<int32_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
@@ -57,7 +57,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << "make_date function not found";
         auto outputType = std::make_shared<DataType>(OMNI_DATE32);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(yearVec->GetSize());
         std::stack<BaseVector*> args;
         // Push in call order (year, month, day) so stack top = day, matching Apply pop order

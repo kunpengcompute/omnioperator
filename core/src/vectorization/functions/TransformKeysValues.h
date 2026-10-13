@@ -44,7 +44,7 @@ namespace omniruntime::vectorization {
             auto srcKeyEleTypeId = srcMapVec->GetKeyVector()->GetTypeId();
             auto srcValueEleTypeId = srcMapVec->GetValueVector()->GetTypeId();
 
-            result = new MapVector(mapRowSize);
+            result = new MapVector(mapRowSize, context->GetPool());
             auto *dstMapVec = static_cast<MapVector *>(result);
 
             for (int32_t i = 0; i < mapRowSize; ++i) {
@@ -55,7 +55,8 @@ namespace omniruntime::vectorization {
             }
 
             if (mapRowSize == 0 || srcMapVec->GetNullCount() == mapRowSize) {
-                VectorHelper::EmptyMapProjection(dstMapVec, srcKeyEleTypeId, srcValueEleTypeId);
+                VectorHelper::EmptyMapProjection(
+                    context->GetPool(), dstMapVec, srcKeyEleTypeId, srcValueEleTypeId);
                 delete srcMapVec;
                 return;
             }
@@ -66,19 +67,20 @@ namespace omniruntime::vectorization {
             valueElementVec = srcMapVec->GetValueVector().get();
             if (keyElementVec == nullptr || keyElementVec->GetSize() == 0 ||
                 valueElementVec == nullptr || valueElementVec->GetSize() == 0) {
-                VectorHelper::EmptyMapProjection(dstMapVec, srcKeyEleTypeId, srcValueEleTypeId);
+                VectorHelper::EmptyMapProjection(
+                    context->GetPool(), dstMapVec, srcKeyEleTypeId, srcValueEleTypeId);
                 delete srcMapVec;
                 return;
             }
             keyElementVec->SetIsField(true);
             valueElementVec->SetIsField(true);
 
+            context->SetResultRowSize(keyElementVec->GetSize());
             ExprEval lambdaEval(context);
             lambdaEval.paramNameToIdxMap = lambdaExpr->paramNameToIdxMap_;
             lambdaEval.lambdaParams_.push_back(keyElementVec);
             lambdaEval.lambdaParams_.push_back(valueElementVec);
 
-            context->SetResultRowSize(keyElementVec->GetSize());
             lambdaBody->Accept(lambdaEval);
             context->SetResultRowSize(mapRowSize);
             BaseVector *flatResultVec = lambdaEval.GetResult();

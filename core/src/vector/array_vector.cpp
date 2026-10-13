@@ -93,7 +93,8 @@ ArrayVector *ArrayVector::Slice(int positionOffset, int length, bool isCopy)
             size);
         throw OmniException("OPERATOR_RUNTIME_ERROR", message);
     }
-    auto sliced = new ArrayVector(length);
+    // Preserve per-task accounting for the sliced wrapper's offsets and null bitmap.
+    auto sliced = new ArrayVector(length, GetPool());
     sliced->isSliced = true;
     int32_t startOffset = GetOffset(positionOffset);
     for (int i = 0; i < length; ++i) {
@@ -120,7 +121,7 @@ ArrayVector *ArrayVector::CopyPositions(const int *positions, int positionOffset
         std::string message = "ArrayVector positions is null or the input length is incorrect: " + std::to_string(length) + ".";
         throw OmniException("OPERATOR_RUNTIME_ERROR", message);
     }
-    ArrayVector *newArrayVector = new ArrayVector(length);
+    ArrayVector *newArrayVector = new ArrayVector(length, GetPool());
     auto startPositions = positions + positionOffset;
 
     std::vector<int> elementPositions;
@@ -147,7 +148,11 @@ ArrayVector *ArrayVector::CopyPositions(const int *positions, int positionOffset
     if (UNLIKELY(elementLength == 0)) {
         // need create concreate vector, not BaseVector
         auto elementDataType = VectorHelper::GetDataType(elementVector.get());
-        newArrayVector->SetElementVectorFromRaw(VectorHelper::CreateComplexVector(elementDataType.get(), elementLength));
+        // Inherit the source element vector's per-task pool so the (empty) copy is accounted to
+        // the same pool — recovered via the polymorphic BaseVector::GetPool() so the wrapper need
+        // not carry its own pool_ member.
+        newArrayVector->SetElementVectorFromRaw(
+            VectorHelper::CreateComplexVector(elementVector->GetPool(), elementDataType.get(), elementLength));
     } else {
         auto newElementVector = elementVector->CopyPositions(elementPositions.data(), 0, elementLength);
         newArrayVector->SetElementVectorFromRaw(newElementVector);
@@ -155,7 +160,6 @@ ArrayVector *ArrayVector::CopyPositions(const int *positions, int positionOffset
 
     return newArrayVector;
 }
-
 void ArrayVector::Expand(int32_t needCapacity)
 {
     if (needCapacity <= size) {
@@ -169,9 +173,17 @@ void ArrayVector::Expand(int32_t needCapacity)
 
     int32_t newCapacity = std::max(capacity * 2, needCapacity);
     int32_t oldSize = size;
+    auto *expandAlloc = (pool_ != nullptr) ? pool_->getBoundAllocator() : nullptr;
 
     auto oldOffsetsBuffer = offsetsBuffer;
-    offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(newCapacity + 1, true);
+    if (expandAlloc != nullptr) {
+        offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(newCapacity + 1, expandAlloc, true);
+    } else {
+        _Pragma("GCC diagnostic push")
+        _Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")
+        offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(newCapacity + 1, true);
+        _Pragma("GCC diagnostic pop")
+    }
     offsets = offsetsBuffer->GetBuffer();
 
     if (oldOffsetsBuffer != nullptr) {
@@ -183,7 +195,7 @@ void ArrayVector::Expand(int32_t needCapacity)
     }
 
     auto oldNullsBuffer = nullsBuffer;
-    nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
+    nullsBuffer = std::make_shared<NullsBuffer>(newCapacity, nullptr, 0, expandAlloc);
     if (oldNullsBuffer != nullptr) {
         nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
     } else {

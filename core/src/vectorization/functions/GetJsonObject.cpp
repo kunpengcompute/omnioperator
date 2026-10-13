@@ -32,7 +32,7 @@
      args.pop();
  
      int32_t rowSize = context->GetResultRowSize();
-     result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, rowSize);
+     result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_VARCHAR, rowSize);
      if (!result) {
          OMNI_THROW("GetJsonObjectFunction Error:", "Failed to create result vector");
      }

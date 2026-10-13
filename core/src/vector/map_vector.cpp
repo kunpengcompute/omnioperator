@@ -14,7 +14,8 @@ namespace omniruntime::vec {
                                 size);
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
-        auto sliced = new MapVector(length);
+        // Preserve per-task accounting for the sliced wrapper's offsets and null bitmap.
+        auto sliced = new MapVector(length, GetPool());
         sliced->isSliced = true;
         int32_t startOffset = GetOffset(positionOffset);
         for (int i = 0; i < length; ++i) {
@@ -45,7 +46,7 @@ namespace omniruntime::vec {
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
 
-        MapVector *newMapVector = new MapVector(length);
+        MapVector *newMapVector = new MapVector(length, GetPool());
         auto startPositions = positions + positionOffset;
 
         std::vector<int> keyPositions;
@@ -68,7 +69,9 @@ namespace omniruntime::vec {
         auto keyVector = this->GetKeyVector();
         if (UNLIKELY(keyLength == 0)) {
             auto keyDataType = VectorHelper::GetDataType(keyVector.get());
-            newMapVector->AddKeys(VectorHelper::CreateComplexVector(keyDataType.get(), length));
+            // Inherit the source key vector's per-task pool (recovered polymorphically via
+            // BaseVector::GetPool()) so the empty-key copy is charged to the same pool.
+            newMapVector->AddKeys(VectorHelper::CreateComplexVector(keyVector->GetPool(), keyDataType.get(), length));
         } else {
             auto newKeyVector = keyVector->CopyPositions(keyPositions.data(), 0, keyLength);
             newMapVector->AddKeys(newKeyVector);
@@ -78,7 +81,8 @@ namespace omniruntime::vec {
         if (UNLIKELY(keyLength == 0)) {
             // need create concreate vector, not BaseVector
             auto valueDataType = VectorHelper::GetDataType(valueVector.get());
-            newMapVector->AddValues(VectorHelper::CreateComplexVector(valueDataType.get(), keyLength));
+            // Inherit the source value vector's per-task pool (polymorphic BaseVector::GetPool()).
+            newMapVector->AddValues(VectorHelper::CreateComplexVector(valueVector->GetPool(), valueDataType.get(), keyLength));
         } else {
             auto newValueVector = valueVector->CopyPositions(keyPositions.data(), 0, keyLength);
             newMapVector->AddValues(newValueVector);
@@ -99,9 +103,17 @@ namespace omniruntime::vec {
 
         int32_t newCapacity = std::max(capacity * 2, needCapacity);
         int32_t oldSize = size;
+        auto *expandAlloc = (pool_ != nullptr) ? pool_->getBoundAllocator() : nullptr;
 
         auto oldOffsetsBuffer = offsetsBuffer;
-        offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(newCapacity + 1, true);
+        if (expandAlloc != nullptr) {
+            offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(newCapacity + 1, expandAlloc, true);
+        } else {
+            _Pragma("GCC diagnostic push")
+            _Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")
+            offsetsBuffer = std::make_shared<AlignedBuffer<int64_t>>(newCapacity + 1, true);
+            _Pragma("GCC diagnostic pop")
+        }
         offsets = offsetsBuffer->GetBuffer();
 
         if (oldOffsetsBuffer != nullptr) {
@@ -113,7 +125,7 @@ namespace omniruntime::vec {
         }
 
         auto oldNullsBuffer = nullsBuffer;
-        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
+        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity, nullptr, 0, expandAlloc);
         if (oldNullsBuffer != nullptr) {
             nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
         } else {

@@ -39,7 +39,7 @@ TEST(ArrayFunctionTest, GetArrayItemTest)
         new LiteralExpr(0, type)
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -75,7 +75,7 @@ TEST(ArrayFunctionTest, TransformTest)
             new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -106,7 +106,7 @@ TEST(ArrayFunctionTest, MapFromArraysTest)
             new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);

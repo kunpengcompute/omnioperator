@@ -46,9 +46,9 @@ void ArrayMaxFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
 
     int32_t rowSize = context->GetResultRowSize();
     DataTypeId elementTypeId = outputType->GetId();
-    
+
     // Create result vector based on element type
-    result = VectorHelper::CreateFlatVector(elementTypeId, rowSize);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), elementTypeId, rowSize);
     if (!result) {
         delete inputArg;
         OMNI_THROW("ArrayMaxFunction Error:", "Failed to create result vector");
@@ -205,9 +205,9 @@ void ArrayMinFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
 
     int32_t rowSize = context->GetResultRowSize();
     DataTypeId elementTypeId = outputType->GetId();
-    
+
     // Create result vector based on element type
-    result = VectorHelper::CreateFlatVector(elementTypeId, rowSize);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), elementTypeId, rowSize);
     if (!result) {
         delete inputArg;
         OMNI_THROW("ArrayMinFunction Error:", "Failed to create result vector");

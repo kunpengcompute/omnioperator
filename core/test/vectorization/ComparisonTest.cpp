@@ -36,14 +36,14 @@ void TestComparisonOp(const std::string& functionName,
     ASSERT_EQ(expectedResults.size(), leftData.size());
     ASSERT_EQ(expectedNulls.size(), leftData.size());
 
-    BaseVector* leftVec = VectorHelper::CreateFlatVector(typeId, rowSize);
+    BaseVector* leftVec = VectorHelper::CreateFlatVector(nullptr, typeId, rowSize);
     auto* leftVector = static_cast<Vector<T>*>(leftVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         leftVector->SetValue(i, leftData[i]);
         leftNulls[i] ? leftVector->SetNull(i) : leftVector->SetNotNull(i);
     }
 
-    BaseVector* rightVec = VectorHelper::CreateFlatVector(typeId, rowSize);
+    BaseVector* rightVec = VectorHelper::CreateFlatVector(nullptr, typeId, rowSize);
     auto* rightVector = static_cast<Vector<T>*>(rightVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         rightVector->SetValue(i, rightData[i]);
@@ -55,7 +55,7 @@ void TestComparisonOp(const std::string& functionName,
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName << " not found for type " << static_cast<int>(typeId);
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
 
     std::stack<BaseVector*> args;
@@ -94,7 +94,7 @@ void TestComparisonOpStringLike(DataTypeId typeId,
     ASSERT_EQ(expectedNulls.size(), leftData.size());
 
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-    BaseVector* leftVec = VectorHelper::CreateFlatVector(typeId, rowSize);
+    BaseVector* leftVec = VectorHelper::CreateFlatVector(nullptr, typeId, rowSize);
     auto* leftVector = dynamic_cast<VarcharVector*>(leftVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         std::string_view lsv(leftData[i]);
@@ -102,7 +102,7 @@ void TestComparisonOpStringLike(DataTypeId typeId,
         leftNulls[i] ? leftVector->SetNull(i) : leftVector->SetNotNull(i);
     }
 
-    BaseVector* rightVec = VectorHelper::CreateFlatVector(typeId, rowSize);
+    BaseVector* rightVec = VectorHelper::CreateFlatVector(nullptr, typeId, rowSize);
     auto* rightVector = dynamic_cast<VarcharVector*>(rightVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         std::string_view rsv(rightData[i]);
@@ -115,7 +115,7 @@ void TestComparisonOpStringLike(DataTypeId typeId,
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName << " not found for type " << static_cast<int>(typeId);
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
 
     std::stack<BaseVector*> args;

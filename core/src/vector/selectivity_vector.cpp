@@ -69,7 +69,7 @@ bool SelectivityVector::GetFlatBaseVectorsFromSelectivityVector(std::vector<Base
     for (size_t i = 0; i < baseVectors.size(); i++) {
         auto baseVector = baseVectors[i];
         auto dataType = baseVector->GetTypeId();
-        auto selectedBaseVector = VectorHelper::CreateVector(OMNI_FLAT, dataType, static_cast<int32_t>(resultSize));
+        auto selectedBaseVector = VectorHelper::CreateVector(baseVector->GetPool(), OMNI_FLAT, dataType, static_cast<int32_t>(resultSize));
         switch (dataType) {
             case OMNI_INT:
             case OMNI_DATE32: {

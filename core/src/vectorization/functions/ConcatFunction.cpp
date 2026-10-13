@@ -51,7 +51,7 @@ void ConcatFunction::ApplyConcat(const std::vector<BaseVector *> &argVectors, Ba
 {
     // Get size from context (handles constant vectors correctly)
     int32_t size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
 
     // Process each row
     for (int32_t row = 0; row < size; ++row) {
@@ -139,7 +139,7 @@ void ConcatWsFunction::ApplyConcatWs(const std::vector<BaseVector *> &argVectors
     const DataTypePtr &outputType, ExecutionContext *context) const
 {
     int32_t size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_VARCHAR, size);
     auto resultVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(result);
     for (int32_t row = 0; row < size; ++row) {
         ConcatWsRow(argVectors, resultVector, row);

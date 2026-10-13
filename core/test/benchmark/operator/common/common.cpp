@@ -92,7 +92,7 @@ void BaseOperatorFixture::RunDefaultBenchmark(benchmark::State &state)
     }
     for (__attribute__((unused)) auto _ : state) {
         std::vector<VectorBatchSupplier> vvb = createVecBatch(state);
-        Operator *op = operatorFactory->CreateOperator();
+        Operator *op = operatorFactory->CreateOperator(nullptr);
         VectorBatch *outputVecBatch = nullptr;
         std::chrono::duration<double> addInputDuration(0);
         std::chrono::duration<double> getOutputDuration(0);
@@ -197,7 +197,7 @@ void BaseOperatorLargeFixture::RunDefaultBenchmark(benchmark::State &state)
         return;
     }
     for (__attribute__((unused)) auto _ : state) {
-        Operator *op = operatorFactory->CreateOperator();
+        Operator *op = operatorFactory->CreateOperator(nullptr);
         VectorBatch *outputVecBatch = nullptr;
         std::chrono::duration<double> addInputDuration(0);
         std::chrono::duration<double> getOutputDuration(0);

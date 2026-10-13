@@ -44,7 +44,7 @@ TEST_F(StringRepeatTest, RepeatVarcharIntBasic) {
     strV->SetValue(2, sv2);
     strV->SetValue(3, sv3);
 
-    vec::BaseVector* countVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    vec::BaseVector* countVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     countVec->SetIsField(true);
     auto* intV = dynamic_cast<Vector<int32_t>*>(countVec);
     ASSERT_NE(intV, nullptr);
@@ -60,7 +60,7 @@ TEST_F(StringRepeatTest, RepeatVarcharIntBasic) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(strVec);
@@ -93,7 +93,7 @@ TEST_F(StringRepeatTest, RepeatZeroOrNegative) {
     strV->SetValue(1, sv);
     strV->SetValue(2, sv);
 
-    vec::BaseVector* countVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    vec::BaseVector* countVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     countVec->SetIsField(true);
     auto* intV = dynamic_cast<Vector<int32_t>*>(countVec);
     ASSERT_NE(intV, nullptr);
@@ -108,7 +108,7 @@ TEST_F(StringRepeatTest, RepeatZeroOrNegative) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(strVec);
@@ -139,7 +139,7 @@ TEST_F(StringRepeatTest, RepeatVarcharLong) {
     strV->SetValue(0, sv);
     strV->SetValue(1, sv);
 
-    vec::BaseVector* countVec = VectorHelper::CreateFlatVector(OMNI_LONG, rowSize);
+    vec::BaseVector* countVec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, rowSize);
     countVec->SetIsField(true);
     auto* longV = dynamic_cast<Vector<int64_t>*>(countVec);
     ASSERT_NE(longV, nullptr);
@@ -153,7 +153,7 @@ TEST_F(StringRepeatTest, RepeatVarcharLong) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(strVec);
@@ -182,7 +182,7 @@ TEST_F(StringRepeatTest, RepeatUtf8) {
     std::string_view sv(s);
     strV->SetValue(0, sv);
 
-    vec::BaseVector* countVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    vec::BaseVector* countVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     countVec->SetIsField(true);
     auto* intV = dynamic_cast<Vector<int32_t>*>(countVec);
     ASSERT_NE(intV, nullptr);
@@ -195,7 +195,7 @@ TEST_F(StringRepeatTest, RepeatUtf8) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(strVec);

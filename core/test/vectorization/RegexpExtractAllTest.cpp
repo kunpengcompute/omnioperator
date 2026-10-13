@@ -50,7 +50,7 @@ public:
 
     template<typename T>
     static BaseVector* CreateNumericVector(const std::vector<T>& values, DataTypeId typeId) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, typeId, values.size());
         auto* typedVec = static_cast<Vector<T>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -89,7 +89,7 @@ public:
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "regexp_extract_all (2 args) not found";
         auto outputType = std::make_shared<DataType>(OMNI_ARRAY);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(strVec);
@@ -104,7 +104,7 @@ public:
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "regexp_extract_all (3 args) not found";
         auto outputType = std::make_shared<DataType>(OMNI_ARRAY);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(strVec);
@@ -120,7 +120,7 @@ public:
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "regexp_extract_all (3 args LONG) not found";
         auto outputType = std::make_shared<DataType>(OMNI_ARRAY);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(strVec);

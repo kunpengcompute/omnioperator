@@ -52,7 +52,7 @@ void RegexpExtractFunction::Apply(std::stack<BaseVector *> &args, const DataType
 void RegexpExtractFunction::ApplyRegexpExtract(BaseVector *strVec, BaseVector *patternVec,
     BaseVector *groupIdxVec, BaseVector *&result, const DataTypePtr &outputType, ExecutionContext *context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
 
     for (int32_t row = 0; row < size; ++row) {
         // If string or pattern is NULL, result is NULL

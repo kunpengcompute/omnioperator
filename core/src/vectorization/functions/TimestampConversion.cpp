@@ -53,16 +53,16 @@ namespace omniruntime::vectorization {
 
         switch (inputTypeId) {
             case OMNI_BYTE:
-                ProcessIntegral<int8_t>(inputArg, result);
+                ProcessIntegral<int8_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_SHORT:
-                ProcessIntegral<int16_t>(inputArg, result);
+                ProcessIntegral<int16_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_INT:
-                ProcessIntegral<int32_t>(inputArg, result);
+                ProcessIntegral<int32_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_LONG:
-                ProcessIntegral<int64_t>(inputArg, result);
+                ProcessIntegral<int64_t>(context->GetPool(), inputArg, result);
                 break;
             default:
                 OMNI_THROW("TimestampMicros function Error",
@@ -76,9 +76,10 @@ namespace omniruntime::vectorization {
     }
 
     template<typename T>
-    void TimestampMicrosFunction::ProcessIntegral(BaseVector *input, BaseVector *&result) const {
+    void TimestampMicrosFunction::ProcessIntegral(omniruntime::mem::OmniTaskMemoryPool *pool,
+        BaseVector *input, BaseVector *&result) const {
         auto size = input->GetSize();
-        result = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, size);
+        result = VectorHelper::CreateFlatVector(pool, OMNI_TIMESTAMP, size);
 
         for (int32_t row = 0; row < size; ++row) {
             if (input->IsNull(row)) {
@@ -107,16 +108,16 @@ namespace omniruntime::vectorization {
 
         switch (inputTypeId) {
             case OMNI_BYTE:
-                ProcessIntegral<int8_t>(inputArg, result);
+                ProcessIntegral<int8_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_SHORT:
-                ProcessIntegral<int16_t>(inputArg, result);
+                ProcessIntegral<int16_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_INT:
-                ProcessIntegral<int32_t>(inputArg, result);
+                ProcessIntegral<int32_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_LONG:
-                ProcessIntegral<int64_t>(inputArg, result);
+                ProcessIntegral<int64_t>(context->GetPool(), inputArg, result);
                 break;
             default:
                 OMNI_THROW("TimestampMillis function Error",
@@ -130,9 +131,10 @@ namespace omniruntime::vectorization {
     }
 
     template<typename T>
-    void TimestampMillisFunction::ProcessIntegral(BaseVector *input, BaseVector *&result) const {
+    void TimestampMillisFunction::ProcessIntegral(omniruntime::mem::OmniTaskMemoryPool *pool,
+        BaseVector *input, BaseVector *&result) const {
         auto size = input->GetSize();
-        result = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, size);
+        result = VectorHelper::CreateFlatVector(pool, OMNI_TIMESTAMP, size);
 
         for (int32_t row = 0; row < size; ++row) {
             if (input->IsNull(row)) {
@@ -161,22 +163,22 @@ namespace omniruntime::vectorization {
 
         switch (inputTypeId) {
             case OMNI_BYTE:
-                ProcessIntegral<int8_t>(inputArg, result);
+                ProcessIntegral<int8_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_SHORT:
-                ProcessIntegral<int16_t>(inputArg, result);
+                ProcessIntegral<int16_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_INT:
-                ProcessIntegral<int32_t>(inputArg, result);
+                ProcessIntegral<int32_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_LONG:
-                ProcessIntegral<int64_t>(inputArg, result);
+                ProcessIntegral<int64_t>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_FLOAT:
-                ProcessFloatingPoint<float>(inputArg, result);
+                ProcessFloatingPoint<float>(context->GetPool(), inputArg, result);
                 break;
             case OMNI_DOUBLE:
-                ProcessFloatingPoint<double>(inputArg, result);
+                ProcessFloatingPoint<double>(context->GetPool(), inputArg, result);
                 break;
             default:
                 OMNI_THROW("TimestampSeconds function Error",
@@ -190,9 +192,10 @@ namespace omniruntime::vectorization {
     }
 
     template<typename T>
-    void TimestampSecondsFunction::ProcessIntegral(BaseVector *input, BaseVector *&result) const {
+    void TimestampSecondsFunction::ProcessIntegral(omniruntime::mem::OmniTaskMemoryPool *pool,
+        BaseVector *input, BaseVector *&result) const {
         auto size = input->GetSize();
-        result = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, size);
+        result = VectorHelper::CreateFlatVector(pool, OMNI_TIMESTAMP, size);
 
         for (int32_t row = 0; row < size; ++row) {
             if (input->IsNull(row)) {
@@ -208,9 +211,10 @@ namespace omniruntime::vectorization {
     }
 
     template<typename T>
-    void TimestampSecondsFunction::ProcessFloatingPoint(BaseVector *input, BaseVector *&result) const {
+    void TimestampSecondsFunction::ProcessFloatingPoint(omniruntime::mem::OmniTaskMemoryPool *pool,
+        BaseVector *input, BaseVector *&result) const {
         auto size = input->GetSize();
-        result = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, size);
+        result = VectorHelper::CreateFlatVector(pool, OMNI_TIMESTAMP, size);
 
         // Cast to double and check bounds to prevent ensuing overflow.
         static constexpr double kMaxSecondsD =
@@ -267,22 +271,22 @@ namespace omniruntime::vectorization {
     }
 
     // Explicit template instantiations
-    template void TimestampMicrosFunction::ProcessIntegral<int8_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampMicrosFunction::ProcessIntegral<int16_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampMicrosFunction::ProcessIntegral<int32_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampMicrosFunction::ProcessIntegral<int64_t>(BaseVector *, BaseVector *&) const;
+    template void TimestampMicrosFunction::ProcessIntegral<int8_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampMicrosFunction::ProcessIntegral<int16_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampMicrosFunction::ProcessIntegral<int32_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampMicrosFunction::ProcessIntegral<int64_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
 
-    template void TimestampMillisFunction::ProcessIntegral<int8_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampMillisFunction::ProcessIntegral<int16_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampMillisFunction::ProcessIntegral<int32_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampMillisFunction::ProcessIntegral<int64_t>(BaseVector *, BaseVector *&) const;
+    template void TimestampMillisFunction::ProcessIntegral<int8_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampMillisFunction::ProcessIntegral<int16_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampMillisFunction::ProcessIntegral<int32_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampMillisFunction::ProcessIntegral<int64_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
 
-    template void TimestampSecondsFunction::ProcessIntegral<int8_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampSecondsFunction::ProcessIntegral<int16_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampSecondsFunction::ProcessIntegral<int32_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampSecondsFunction::ProcessIntegral<int64_t>(BaseVector *, BaseVector *&) const;
-    template void TimestampSecondsFunction::ProcessFloatingPoint<float>(BaseVector *, BaseVector *&) const;
-    template void TimestampSecondsFunction::ProcessFloatingPoint<double>(BaseVector *, BaseVector *&) const;
+    template void TimestampSecondsFunction::ProcessIntegral<int8_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampSecondsFunction::ProcessIntegral<int16_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampSecondsFunction::ProcessIntegral<int32_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampSecondsFunction::ProcessIntegral<int64_t>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampSecondsFunction::ProcessFloatingPoint<float>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
+    template void TimestampSecondsFunction::ProcessFloatingPoint<double>(omniruntime::mem::OmniTaskMemoryPool *, BaseVector *, BaseVector *&) const;
 
     template int8_t GetValueFromVectorHelper<int8_t>(BaseVector *, int32_t);
     template int16_t GetValueFromVectorHelper<int16_t>(BaseVector *, int32_t);

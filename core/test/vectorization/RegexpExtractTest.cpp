@@ -69,7 +69,7 @@ public:
 
     template<typename T>
     static BaseVector* CreateNumericVector(const std::vector<T>& values, DataTypeId typeId) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, typeId, values.size());
         auto* typedVec = static_cast<Vector<T>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -89,7 +89,7 @@ public:
         ASSERT_NE(function, nullptr) << "RegexpExtract function not found for signature";
 
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
 

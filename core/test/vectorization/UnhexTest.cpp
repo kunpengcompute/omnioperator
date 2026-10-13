@@ -61,7 +61,7 @@ TEST_F(UnhexTest, BasicHexConversion) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varbinaryType = std::make_shared<DataType>(OMNI_VARBINARY);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -111,7 +111,7 @@ TEST_F(UnhexTest, OddLengthHexStrings) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varbinaryType = std::make_shared<DataType>(OMNI_VARBINARY);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -158,7 +158,7 @@ TEST_F(UnhexTest, Utf8HexStrings) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varbinaryType = std::make_shared<DataType>(OMNI_VARBINARY);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -203,7 +203,7 @@ TEST_F(UnhexTest, InvalidHexCharacters) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varbinaryType = std::make_shared<DataType>(OMNI_VARBINARY);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -245,7 +245,7 @@ TEST_F(UnhexTest, NullInput) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varbinaryType = std::make_shared<DataType>(OMNI_VARBINARY);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -288,7 +288,7 @@ TEST_F(UnhexTest, MixedCaseHex) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varbinaryType = std::make_shared<DataType>(OMNI_VARBINARY);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);

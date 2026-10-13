@@ -44,7 +44,7 @@ void ArrayPositionFunction::Apply(std::stack<BaseVector *> &args, const DataType
 
     int32_t rowSize = context->GetResultRowSize();
 
-    result = VectorHelper::CreateFlatVector(OMNI_LONG, rowSize);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_LONG, rowSize);
     auto *resultVec = dynamic_cast<Vector<int64_t> *>(result);
     if (resultVec == nullptr) {
         delete arrayArg;

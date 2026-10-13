@@ -58,7 +58,7 @@ public:
     }
 
     static BaseVector* CreateLongVector(const std::vector<int64_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_LONG, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, values.size());
         auto* typedVec = static_cast<Vector<int64_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -67,7 +67,7 @@ public:
     }
 
     static BaseVector* CreateTimestampVector(const std::vector<int64_t>& microValues) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, microValues.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_TIMESTAMP, microValues.size());
         auto* typedVec = static_cast<Vector<int64_t>*>(vec);
         for (size_t i = 0; i < microValues.size(); ++i) {
             typedVec->SetValue(i, microValues[i]);
@@ -76,7 +76,7 @@ public:
     }
 
     static BaseVector* CreateStringVector(const std::vector<std::string>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_VARCHAR, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_VARCHAR, values.size());
         auto* typedVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, std::string_view(values[i]));
@@ -96,7 +96,7 @@ public:
         ASSERT_NE(function, nullptr) << "from_unixtime function not found for signature";
 
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(inputVec);
@@ -114,7 +114,7 @@ public:
         ASSERT_NE(function, nullptr) << "from_unixtime function not found for 3-arg signature";
 
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(inputVec);

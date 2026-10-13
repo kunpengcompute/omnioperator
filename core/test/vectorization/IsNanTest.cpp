@@ -39,7 +39,7 @@ class IsNanFunctionTestHelper {
 public:
     template<typename T>
     static BaseVector* CreateNumericVector(const std::vector<T>& values, DataTypeId typeId) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, typeId, values.size());
         auto* typedVec = static_cast<Vector<T>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -55,7 +55,7 @@ public:
                                     << static_cast<int>(inputTypeId);
 
         auto outputType = std::make_shared<DataType>(OMNI_BOOLEAN);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(inputVec);

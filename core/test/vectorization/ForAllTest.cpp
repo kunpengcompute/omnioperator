@@ -61,7 +61,7 @@ TEST(ForAllTest, BasicAllMatch)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -106,7 +106,7 @@ TEST(ForAllTest, BasicNotAllMatch)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -151,7 +151,7 @@ TEST(ForAllTest, EmptyArrayReturnsTrue)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -195,7 +195,7 @@ TEST(ForAllTest, NullArrayRowReturnsNull)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -225,7 +225,7 @@ TEST(ForAllTest, NullElementsInArray)
     std::vector<int32_t> offsets = {0, 2, 3, 4};
 
     // RAII: failed ASSERT_* returns immediately; manual deletes below would be skipped and confuse ASAN.
-    auto context = std::make_unique<ExecutionContext>();
+    auto context = std::make_unique<ExecutionContext>(4096, nullptr);
     std::unique_ptr<VectorBatch> input(CreateIntArrayVectorBatch(rowSize, 4, elems, offsets));
     auto *arrVec = dynamic_cast<ArrayVector *>(input->Get(0));
     auto *elemVec = dynamic_cast<Vector<int32_t> *>(arrVec->GetElementVector().get());
@@ -287,7 +287,7 @@ TEST(ForAllTest, AllNullArrayRows)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -326,7 +326,7 @@ TEST(ForAllTest, MixedMatchAndNonMatch)
         new LambdaExpr(gteExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -374,7 +374,7 @@ TEST(ForAllTest, SingleElementArray)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);

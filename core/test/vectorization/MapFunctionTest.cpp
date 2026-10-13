@@ -35,7 +35,7 @@ TEST(MapFunctionTest, MapKeysTest)
     auto field = new FieldExpr(0, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_keys", {field}, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -67,7 +67,7 @@ TEST(MapFunctionTest, MapValuesTest)
     auto field = new FieldExpr(0, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_values", {field}, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -109,7 +109,7 @@ TEST(MapFunctionTest, TransformKeysTest)
             new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -154,7 +154,7 @@ TEST(MapFunctionTest, TransformValuesTest)
             new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -189,7 +189,7 @@ TEST(MapFunctionTest, MapEntriesBasicTest)
     auto field = new FieldExpr(0, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_entries", {field}, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -240,7 +240,7 @@ TEST(MapFunctionTest, MapEntriesSingleEntryTest)
     auto field = new FieldExpr(0, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_entries", {field}, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -285,7 +285,7 @@ TEST(MapFunctionTest, MapEntriesNullRowTest)
     auto field = new FieldExpr(0, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_entries", {field}, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -318,7 +318,7 @@ TEST(MapFunctionTest, MapEntriesMultiRowTest)
     auto field = new FieldExpr(0, std::make_shared<DataType>(OMNI_MAP));
     auto expr = FuncExpr("map_entries", {field}, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -373,7 +373,7 @@ TEST(MapFunctionTest, MapFilterByKeyTest)
             new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -425,7 +425,7 @@ TEST(MapFunctionTest, MapFilterByValueTest)
             new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -477,7 +477,7 @@ TEST(MapFunctionTest, MapFilterNonePassTest)
             new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -520,7 +520,7 @@ TEST(MapFunctionTest, MapFilterAllPassTest)
             new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -574,7 +574,7 @@ TEST(MapFunctionTest, MapFilterWithNullRowTest)
             new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);

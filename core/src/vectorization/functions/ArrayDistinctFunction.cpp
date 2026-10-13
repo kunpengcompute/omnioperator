@@ -61,7 +61,7 @@ struct DoubleEqual {
 
 template <typename T>
 void ArrayDistinctFunction::ProcessTyped(ArrayVector *arrayVec, ArrayVector *resultArray,
-    int32_t rowSize) const
+    int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto inputElementVector = arrayVec->GetElementVector();
     auto *inputElemVec = dynamic_cast<Vector<T> *>(inputElementVector.get());
@@ -75,7 +75,7 @@ void ArrayDistinctFunction::ProcessTyped(ArrayVector *arrayVec, ArrayVector *res
         totalUniqueCount += (offsets[row + 1] - offsets[row]);
     }
 
-    auto *newElementVector = new Vector<T>(totalUniqueCount > 0 ? totalUniqueCount : 1);
+    auto *newElementVector = new Vector<T>(totalUniqueCount > 0 ? totalUniqueCount : 1, pool);
     int64_t newElementIndex = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -119,7 +119,7 @@ void ArrayDistinctFunction::ProcessTyped(ArrayVector *arrayVec, ArrayVector *res
 
 template <>
 void ArrayDistinctFunction::ProcessTyped<float>(ArrayVector *arrayVec, ArrayVector *resultArray,
-    int32_t rowSize) const
+    int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto inputElementVector = arrayVec->GetElementVector();
     auto *inputElemVec = dynamic_cast<Vector<float> *>(inputElementVector.get());
@@ -133,7 +133,7 @@ void ArrayDistinctFunction::ProcessTyped<float>(ArrayVector *arrayVec, ArrayVect
         totalUniqueCount += (offsets[row + 1] - offsets[row]);
     }
 
-    auto *newElementVector = new Vector<float>(totalUniqueCount > 0 ? totalUniqueCount : 1);
+    auto *newElementVector = new Vector<float>(totalUniqueCount > 0 ? totalUniqueCount : 1, pool);
     int64_t newElementIndex = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -177,7 +177,7 @@ void ArrayDistinctFunction::ProcessTyped<float>(ArrayVector *arrayVec, ArrayVect
 
 template <>
 void ArrayDistinctFunction::ProcessTyped<double>(ArrayVector *arrayVec, ArrayVector *resultArray,
-    int32_t rowSize) const
+    int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto inputElementVector = arrayVec->GetElementVector();
     auto *inputElemVec = dynamic_cast<Vector<double> *>(inputElementVector.get());
@@ -191,7 +191,7 @@ void ArrayDistinctFunction::ProcessTyped<double>(ArrayVector *arrayVec, ArrayVec
         totalUniqueCount += (offsets[row + 1] - offsets[row]);
     }
 
-    auto *newElementVector = new Vector<double>(totalUniqueCount > 0 ? totalUniqueCount : 1);
+    auto *newElementVector = new Vector<double>(totalUniqueCount > 0 ? totalUniqueCount : 1, pool);
     int64_t newElementIndex = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -234,7 +234,7 @@ void ArrayDistinctFunction::ProcessTyped<double>(ArrayVector *arrayVec, ArrayVec
 }
 
 void ArrayDistinctFunction::ProcessString(ArrayVector *arrayVec, ArrayVector *resultArray,
-    int32_t rowSize) const
+    int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto inputElementVector = arrayVec->GetElementVector();
     auto *inputStrVec = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
@@ -249,7 +249,7 @@ void ArrayDistinctFunction::ProcessString(ArrayVector *arrayVec, ArrayVector *re
     }
 
     auto *newElementVector = new Vector<LargeStringContainer<std::string_view>>(
-        totalElements > 0 ? totalElements : 1);
+        totalElements > 0 ? totalElements : 1, pool);
     int64_t newElementIndex = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -320,7 +320,7 @@ void ArrayDistinctFunction::Apply(std::stack<BaseVector *> &args, const DataType
     int32_t rowSize = context->GetResultRowSize();
     auto inputElementVector = arrayVec->GetElementVector();
 
-    auto *resultArray = new ArrayVector(rowSize);
+    auto *resultArray = new ArrayVector(rowSize, context->GetPool());
 
     if (inputElementVector == nullptr) {
         for (int32_t row = 0; row < rowSize; ++row) {
@@ -341,29 +341,29 @@ void ArrayDistinctFunction::Apply(std::stack<BaseVector *> &args, const DataType
 
     switch (elementTypeId) {
         case OMNI_BYTE:
-            ProcessTyped<int8_t>(arrayVec, resultArray, rowSize);
+            ProcessTyped<int8_t>(arrayVec, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_SHORT:
-            ProcessTyped<int16_t>(arrayVec, resultArray, rowSize);
+            ProcessTyped<int16_t>(arrayVec, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_INT:
-            ProcessTyped<int32_t>(arrayVec, resultArray, rowSize);
+            ProcessTyped<int32_t>(arrayVec, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_LONG:
-            ProcessTyped<int64_t>(arrayVec, resultArray, rowSize);
+            ProcessTyped<int64_t>(arrayVec, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_FLOAT:
-            ProcessTyped<float>(arrayVec, resultArray, rowSize);
+            ProcessTyped<float>(arrayVec, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_DOUBLE:
-            ProcessTyped<double>(arrayVec, resultArray, rowSize);
+            ProcessTyped<double>(arrayVec, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_BOOLEAN:
-            ProcessTyped<bool>(arrayVec, resultArray, rowSize);
+            ProcessTyped<bool>(arrayVec, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_VARCHAR:
         case OMNI_CHAR:
-            ProcessString(arrayVec, resultArray, rowSize);
+            ProcessString(arrayVec, resultArray, rowSize, context->GetPool());
             break;
         default:
             delete resultArray;

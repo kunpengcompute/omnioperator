@@ -21,8 +21,10 @@ public:
         ExecutionContext *context) const override;
 
 private:
+    // Pool is threaded through to the implementation.
     template<typename T>
-    void IsNanNumeric(BaseVector *inputVec, BaseVector *&result) const;
+    void IsNanNumeric(BaseVector *inputVec, BaseVector *&result,
+        omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     template<typename T>
     T GetValueFromVector(BaseVector *vec, int32_t row) const;

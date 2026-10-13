@@ -40,7 +40,7 @@ TEST(VectorizationTest, InExprInt32Test)
     DataTypes inputTypes(vecOfTypes);
     VectorBatch* inputBatch = CreateVectorBatch(inputTypes, rowSize, col0);
 
-    ExecutionContext* context = new ExecutionContext();
+    ExecutionContext* context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval exprEval(inputBatch, context);
@@ -81,7 +81,7 @@ TEST(VectorizationTest, InExprStringViewTest)
     DataTypes inputTypes(vecOfTypes);
     VectorBatch* inputBatch = CreateVectorBatch(inputTypes, rowSize, col0.data());
 
-    ExecutionContext* context = new ExecutionContext();
+    ExecutionContext* context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval exprEval(inputBatch, context);

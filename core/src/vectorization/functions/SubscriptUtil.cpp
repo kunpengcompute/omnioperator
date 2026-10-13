@@ -34,7 +34,7 @@ BaseVector *ApplyMapTyped(const SelectivityVector &rows, BaseVector *mapArg, Bas
             auto offsets = mapVector->GetOffsets();
 
             // Create output flat vector of map value type.
-            auto *outVec = VectorHelper::CreateVector(OMNI_FLAT, static_cast<int32_t>(valueTypeId), rowSize);
+            auto *outVec = VectorHelper::CreateVector(context->GetPool(), OMNI_FLAT, static_cast<int32_t>(valueTypeId), rowSize);
 
             for (int32_t row = 0; row < rowSize; ++row) {
                 int32_t start = offsets[row];

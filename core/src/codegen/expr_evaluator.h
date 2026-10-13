@@ -209,7 +209,8 @@ private:
 
     bool ConstantColumnProjection(ExecutionContext *context, BaseVector *outVec);
 
-    BaseVector *ConstantArrayProjection(int32_t numSelectedRows) const;
+    BaseVector *ConstantArrayProjection(omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t numSelectedRows) const;
 
     template <typename T> void SetConstantValues(T &value, BaseVector *outVec);
 };

@@ -56,7 +56,7 @@ public:
         BaseVector *resultVector = nullptr;
         auto mapType = std::make_shared<DataType>(OMNI_MAP);
 
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(rowSize);
         // Nested expression evaluation can leave unrelated operands below this call.
         auto outerOperand = std::make_unique<ConstVector<bool>>(false, OMNI_BOOLEAN, rowSize);

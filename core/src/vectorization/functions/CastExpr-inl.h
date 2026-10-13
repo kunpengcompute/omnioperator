@@ -343,7 +343,7 @@ template <typename FromNativeType>
 VectorPtr CastExpr::applyDecimalToVarcharCast(const SelectivityVector &rows, BaseVector *input,
     ExecutionContext &context, const DataTypePtr &fromType)
 {
-    VectorPtr result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, context.GetResultRowSize());
+    VectorPtr result = VectorHelper::CreateFlatVector(context.GetPool(), OMNI_VARCHAR, context.GetResultRowSize());
     auto flatResult = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(result);
     const auto simpleInput = reinterpret_cast<Vector<FromNativeType> *>(input);
     int precision = GetDecimalPrecisionScale(*fromType).first;
@@ -422,7 +422,7 @@ VectorPtr CastExpr::applyDecimalToFloatCast(const SelectivityVector &rows, BaseV
 {
     using To = typename NativeType<ToKind>::type;
 
-    VectorPtr result = VectorHelper::CreateFlatVector(ToKind, context.GetResultRowSize());
+    VectorPtr result = VectorHelper::CreateFlatVector(context.GetPool(), ToKind, context.GetResultRowSize());
     auto resultBuffer = static_cast<To *>(VectorHelper::UnsafeGetValues(result));
     const auto precisionScale = GetDecimalPrecisionScale(*fromType);
     const auto simpleInput = reinterpret_cast<Vector<FromNativeType> *>(input);
@@ -443,7 +443,7 @@ VectorPtr CastExpr::applyDecimalToIntegralCast(const SelectivityVector &rows, Ba
 {
     using To = typename NativeType<ToKind>::type;
 
-    VectorPtr result = VectorHelper::CreateFlatVector(ToKind, context.GetResultRowSize());
+    VectorPtr result = VectorHelper::CreateFlatVector(context.GetPool(), ToKind, context.GetResultRowSize());
     auto resultBuffer = static_cast<To *>(VectorHelper::UnsafeGetValues(result));
     const auto precisionScale = GetDecimalPrecisionScale(*fromType);
     const auto simpleInput = reinterpret_cast<Vector<FromNativeType> *>(input);
@@ -458,7 +458,7 @@ template <typename FromNativeType>
 VectorPtr CastExpr::applyDecimalToBooleanCast(const SelectivityVector &rows, BaseVector *input,
     ExecutionContext &context)
 {
-    VectorPtr result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, context.GetResultRowSize());
+    VectorPtr result = VectorHelper::CreateFlatVector(context.GetPool(), OMNI_BOOLEAN, context.GetResultRowSize());
     auto resultBuffer = static_cast<bool *>(VectorHelper::UnsafeGetValues(result));
     const auto simpleInput = reinterpret_cast<Vector<FromNativeType> *>(input);
     applyToSelectedNoThrowLocal(context, rows, result, [&](int row) {
@@ -495,7 +495,7 @@ template <DataTypeId ToKind>
 void CastExpr::applyCastPrimitivesDispatch(const DataTypePtr &fromType, const DataTypePtr &toType,
     const SelectivityVector &rows, ExecutionContext &context, BaseVector *input, VectorPtr &result)
 {
-    result = VectorHelper::CreateFlatVector(toType->GetId(), context.GetResultRowSize());
+    result = VectorHelper::CreateFlatVector(context.GetPool(), toType->GetId(), context.GetResultRowSize());
     // This already excludes complex types, hugeInt and unknown from type kinds.
     switch (fromType->GetId()) {
         case OMNI_BOOLEAN: {

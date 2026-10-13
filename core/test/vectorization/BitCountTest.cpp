@@ -54,7 +54,7 @@ TEST(VectorizationTest, BitCountBoolean) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     input->Get(0)->SetNull(3);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitCountExpr);
@@ -105,7 +105,7 @@ TEST(VectorizationTest, BitCountByte) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     input->Get(0)->SetNull(5);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitCountExpr);
@@ -160,7 +160,7 @@ TEST(VectorizationTest, BitCountShort) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     input->Get(0)->SetNull(3);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitCountExpr);
@@ -215,7 +215,7 @@ TEST(VectorizationTest, BitCountInt) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     input->Get(0)->SetNull(5);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitCountExpr);
@@ -272,7 +272,7 @@ TEST(VectorizationTest, BitCountLong) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     input->Get(0)->SetNull(5);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitCountExpr);
@@ -327,7 +327,7 @@ TEST(VectorizationTest, BitCountEdgeCases) {
     };
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitCountExpr);

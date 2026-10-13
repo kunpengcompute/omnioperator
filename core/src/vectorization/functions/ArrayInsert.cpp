@@ -99,14 +99,14 @@ void ArrayInsertImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &o
         totalElements += newSizes[row];
     }
 
-    auto *resultArray = new ArrayVector(rowSize);
+    auto *resultArray = new ArrayVector(rowSize, context->GetPool());
 
     BaseVector *newElementVector = nullptr;
     if (inputElementVector != nullptr) {
         if (elementTypeId == OMNI_VARCHAR || elementTypeId == OMNI_CHAR || elementTypeId == OMNI_VARBINARY) {
-            newElementVector = VectorHelper::CreateStringVector(totalElements);
+            newElementVector = VectorHelper::CreateStringVector(context->GetPool(), totalElements);
         } else {
-            newElementVector = VectorHelper::CreateFlatVector(elementTypeId, totalElements);
+            newElementVector = VectorHelper::CreateFlatVector(context->GetPool(), elementTypeId, totalElements);
         }
     }
 

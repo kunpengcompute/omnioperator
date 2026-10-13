@@ -72,7 +72,7 @@ TEST(CodeGenTest, Operators1)
     DataTypes inputTypes(vecOfTypes);
 
     int64_t dictionaries[3] = {};
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
@@ -164,7 +164,7 @@ TEST(CodeGenTest, MathFunctions1)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
 
     int64_t dictionaries[3] = {};
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -238,7 +238,7 @@ TEST(CodeGenTest, MathFunctions2)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -329,7 +329,7 @@ TEST(CodeGenTest, MathFunctions3)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -426,7 +426,7 @@ TEST(CodeGenTest, MathFunctions4)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -548,7 +548,7 @@ TEST(CodeGenTest, CastNumbers1)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -634,7 +634,7 @@ TEST(CodeGenTest, CastNumbers2)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -727,7 +727,7 @@ TEST(CodeGenTest, Like)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -812,7 +812,7 @@ TEST(CodeGenTest, DISABLED_CountChar)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -899,7 +899,7 @@ TEST(CodeGenTest, DISABLED_SplitIndex)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -982,7 +982,7 @@ TEST(CodeGenTest, DateCast)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1094,7 +1094,7 @@ TEST(CodeGenTest, SubstrIn)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1195,7 +1195,7 @@ TEST(CodeGenTest, ConcatStr)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1299,7 +1299,7 @@ TEST(CodeGenTest, ConcatChars)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1394,7 +1394,7 @@ TEST(CodeGenTest, ToUpper)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[2] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
 
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
@@ -1461,7 +1461,7 @@ TEST(CodeGenTest, ToUpperChar)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[2] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
 
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
@@ -1535,7 +1535,7 @@ TEST(CodeGenTest, StringWithOps)
 
     auto codegen = FilterCodeGen("stringTest1", *expr, nullptr);
     int64_t dictionaries[3] = {};
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1624,7 +1624,7 @@ TEST(CodeGenTest, Coalesce)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1689,7 +1689,7 @@ TEST(CodeGenTest, ProjectionCoalesce)
     int64_t dictionaryVectors[1] = {};
 
     bool oVec[3];
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (ProjectFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t r = func(vals, 3, (int64_t)oVec, nullptr, 3, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1763,7 +1763,7 @@ TEST(CodeGenTest, ProjectionIsNull)
     int64_t dictionaryVectors[1] = {};
 
     bool oVec[3];
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (ProjectFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t r = func(vals, 3, (int64_t)oVec, nullptr, 3, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1834,7 +1834,7 @@ TEST(CodeGenTest, IsNull)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[1] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1888,7 +1888,7 @@ TEST(CodeGenTest, IsNotNull)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[1] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -1951,7 +1951,7 @@ TEST(CodeGenTest, DecimalOperators1)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[1] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -2013,7 +2013,7 @@ TEST(CodeGenTest, DecimalOperators2)
 
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -2083,7 +2083,7 @@ TEST(CodeGenTest, DecimalOperators3)
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -2159,7 +2159,7 @@ TEST(CodeGenTest, DecimalNegate)
 
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[4] = {};
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     bool result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets), reinterpret_cast<int64_t>(context),
@@ -2227,7 +2227,7 @@ TEST(CodeGenTest, Decimal128AbsAndCompare)
 
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[2] = {};
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     bool result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets), reinterpret_cast<int64_t>(context),
@@ -2285,7 +2285,7 @@ TEST(CodeGenTest, ProjectionSubtractNulls)
     auto ov = oVec.data();
     void *vecVals = &ov;
     auto cvecVals = static_cast<int64_t *>(vecVals);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (ProjectFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t r = func(vals, 3, *cvecVals, nullptr, 3, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -2365,7 +2365,7 @@ TEST(CodeGenTest, ProjectionCodeGen)
     auto ov = oVec.data();
     void *vecVals = &ov;
     auto cvecVals = static_cast<int64_t *>(vecVals);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (ProjectFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t r = func(vals, 3, *cvecVals, nullptr, 3, (int64_t *)(bitmap), (int64_t *)(offsets),
@@ -2454,7 +2454,7 @@ TEST(CodeGenTest, Pmod)
     int32_t (*func)(int64_t *, int32_t, int32_t *, int64_t *, int64_t *, int64_t, int64_t *);
     int64_t dictionaries[1] = {};
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
 
     func = (int32_t(*)(int64_t *, int32_t, int32_t *, int64_t *, int64_t *, int64_t, int64_t *))(
         intptr_t)codegen.GetFunction(inputTypes);
@@ -2515,7 +2515,7 @@ TEST(CodeGenTest, CombineHash)
 
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     bool result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets), reinterpret_cast<int64_t>(context),
@@ -2610,7 +2610,7 @@ TEST(CodeGenTest, JSONFunc)
 
     auto codegen = FilterCodeGen(defaultTestFunctionName, *expr, nullptr);
     int64_t dictionaries[3] = {};
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto func = (FilterFunc)(intptr_t)codegen.GetFunction(inputTypes);
 
     int32_t result = func(vals, 1, selected, (int64_t *)(bitmap), (int64_t *)(offsets),

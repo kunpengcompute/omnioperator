@@ -15,8 +15,6 @@
 #include "row_vector.h"
 #include "array_vector.h"
 #include "memory/allocator.h"
-#include "memory/memory_manager.h"
-#include "memory/memory_trace.h"
-#include "memory/thread_memory_trace.h"
+#include "memory/omni_task_memory_pool.h"
 
 #endif // OMNI_RUNTIME_VECTOR_COMMON_H

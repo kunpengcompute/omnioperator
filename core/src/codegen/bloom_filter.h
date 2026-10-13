@@ -68,7 +68,9 @@ public:
 
     static BloomFilterOperatorFactory *CreateBloomFilterOperatorFactory(int32_t version);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     int32_t version;
@@ -80,7 +82,8 @@ private:
  */
 class BloomFilterOperator : public Operator {
 public:
-    explicit BloomFilterOperator(int32_t version);
+    // Pool-bound ctor chains Operator(pool)
+    BloomFilterOperator(omniruntime::mem::OmniTaskMemoryPool *pool, int32_t version);
 
     ~BloomFilterOperator() override;
 

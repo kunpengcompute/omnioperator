@@ -57,7 +57,7 @@ public:
         const auto size = timestampArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_TIMESTAMP, size);
         }
 
         bool tzIsConst = (timezoneArg->GetEncoding() == OMNI_ENCODING_CONST);
@@ -128,7 +128,7 @@ public:
         const auto size = timestampArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_TIMESTAMP, size);
         }
 
         bool tzIsConst = (timezoneArg->GetEncoding() == OMNI_ENCODING_CONST);

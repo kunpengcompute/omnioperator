@@ -3,12 +3,14 @@
  * Description: omni_row_test
  */
 #include <iostream>
+#include <type_traits>
 #include "gtest/gtest.h"
 #include "vector/omni_row.h"
 #include "vector/vector.h"
 #include "test/util/test_util.h"
 #include "operator/hash_util.h"
 #include "util/type_util.h"
+#include "memory/allocator.h"
 
 namespace omniruntime::vec::test {
 using namespace omniruntime::vec;
@@ -16,6 +18,48 @@ using namespace omniruntime::TestUtil;
 using omniruntime::type::ByteType;
 using OmniArrayType = omniruntime::type::ArrayType;
 using OmniMapType = omniruntime::type::MapType;
+
+// TU-local stand-in for the retired Allocator singleton (allocator.h `= delete`).
+// Null-pool Allocator = the legacy-bridge unaccounted path; same process-wide
+// lifetime and no-accounting semantics the old singleton had.
+static mem::Allocator *TestAllocator()
+{
+    static mem::Allocator allocator(nullptr);
+    return &allocator;
+}
+
+static_assert(!std::is_copy_constructible<RowInfo>::value, "Owned rows cannot share ownership");
+static_assert(!std::is_copy_assignable<RowInfo>::value, "Owned rows cannot share ownership");
+
+TEST(omni_row, borrowed_row_does_not_free_storage)
+{
+    uint8_t bytes[] = {1, 2, 3};
+    {
+        RowInfo borrowed(bytes, sizeof(bytes));
+        RowInfo moved(std::move(borrowed));
+        EXPECT_EQ(borrowed.row, nullptr);
+        EXPECT_EQ(moved.row, bytes);
+    }
+    EXPECT_EQ(bytes[1], 2);
+}
+
+TEST(omni_row, owned_rows_survive_vector_growth)
+{
+    std::vector<RowInfo> rows;
+    for (int i = 0; i < 100; ++i) {
+        auto *bytes = static_cast<uint8_t *>(TestAllocator()->Alloc(8));
+        bytes[0] = i;
+        rows.emplace_back(bytes, 8, TestAllocator());
+    }
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_EQ(rows[i].row[0], i);
+    }
+    RowInfo destination(static_cast<uint8_t *>(TestAllocator()->Alloc(8)), 8, TestAllocator());
+    destination = std::move(rows.back());
+    EXPECT_EQ(rows.back().row, nullptr);
+    EXPECT_EQ(destination.row[0], 99);
+}
+
 TEST(omni_row, compact_value_test)
 {
     Vector<int16_t> shortVec(1);
@@ -201,7 +245,7 @@ TEST(omni_row, fill_buffer_no_null)
     buffer = rowBuffer.GetOneOfRow(2);
     auto *strValue = reinterpret_cast<SerializedValue<std::string_view> *>(buffer);
     strValue->SetValue(testStr);
-    auto len = rowBuffer.FillBuffer();
+    auto len = rowBuffer.FillBuffer(TestAllocator());
     auto *buf = rowBuffer.GetRowBuffer();
 
     EXPECT_EQ(buf[0], 0b00000010);
@@ -215,7 +259,7 @@ TEST(omni_row, fill_buffer_no_null)
     EXPECT_EQ(buf[12], 0b00000001);
     EXPECT_EQ(buf[13], 11);
     EXPECT_TRUE(memcmp(reinterpret_cast<void *>(buf + 14), testStr.data(), testStr.length()) == 0);
-    mem::Allocator::GetAllocator()->Free(buf, len);
+    TestAllocator()->Free(buf, len);
 }
 
 TEST(omni_row, fill_buffer_and_deserial_to_vector)
@@ -295,8 +339,8 @@ TEST(omni_row, fill_buffer_and_deserial_to_vector)
     rows.reserve(rowNumber);
     for (int32_t i = 0; i < vecBatch->GetRowCount(); ++i) {
         rowBuffer.TransValueFromVectorBatch(vecBatch, i);
-        auto len = rowBuffer.FillBuffer();
-        rows.emplace_back(rowBuffer.TakeRowBuffer(), len, true);
+        auto len = rowBuffer.FillBuffer(TestAllocator());
+        rows.emplace_back(rowBuffer.TakeRowBuffer(), len, TestAllocator());
     }
 
     auto parser = std::make_unique<RowParser>(types);
@@ -332,8 +376,8 @@ TEST(omni_row, fill_buffer_and_check_hash)
     rows.reserve(rowNumber);
     for (int32_t i = 0; i < vecBatch->GetRowCount(); ++i) {
         rowBuffer.TransValueFromVectorBatch(vecBatch, i);
-        auto len = rowBuffer.FillBuffer();
-        rows.emplace_back(rowBuffer.GetRowBuffer(), len, true);
+        auto len = rowBuffer.FillBuffer(TestAllocator());
+        rows.emplace_back(rowBuffer.GetRowBuffer(), len);
         // 3.get hash position for shuffle
         int32_t hashPos = rowBuffer.CalculateHashPos();
 
@@ -370,8 +414,8 @@ TEST(omni_row, fill_buffer_performance)
     rows.reserve(rowNumber);
     for (int32_t i = 0; i < vecBatch->GetRowCount(); ++i) {
         rowBuffer.TransValueFromVectorBatch(vecBatch, i);
-        auto len = rowBuffer.FillBuffer();
-        rows.emplace_back(rowBuffer.TakeRowBuffer(), len, true);
+        auto len = rowBuffer.FillBuffer(TestAllocator());
+        rows.emplace_back(rowBuffer.TakeRowBuffer(), len, TestAllocator());
     }
     t.End();
     VectorHelper::FreeVecBatch(vecBatch);
@@ -390,8 +434,8 @@ TEST(omni_row, fill_bool_buffer_and_deserial_to_vector)
     rows.reserve(rowNumber);
     for (int32_t i = 0; i < vecBatch->GetRowCount(); ++i) {
         rowBuffer.TransValueFromVectorBatch(vecBatch, i);
-        auto len = rowBuffer.FillBuffer();
-        rows.emplace_back(rowBuffer.TakeRowBuffer(), len, true);
+        auto len = rowBuffer.FillBuffer(TestAllocator());
+        rows.emplace_back(rowBuffer.TakeRowBuffer(), len, TestAllocator());
     }
 
     auto parser = std::make_unique<RowParser>(types);
@@ -495,8 +539,8 @@ TEST(omni_row, fill_buffer_and_deserial_to_map_vector)
     rows.reserve(rowNumber);
     for (int32_t i = 0; i < vecBatch->GetRowCount(); ++i) {
         rowBuffer.TransValueFromVectorBatch(vecBatch, i);
-        auto len = rowBuffer.FillBuffer();
-        rows.emplace_back(rowBuffer.TakeRowBuffer(), len, true);
+        auto len = rowBuffer.FillBuffer(TestAllocator());
+        rows.emplace_back(rowBuffer.TakeRowBuffer(), len, TestAllocator());
     }
 
     auto parser = std::make_unique<RowParser>(types);
@@ -600,8 +644,8 @@ TEST(omni_row, array_byte_yarn_missing_tinyints_roundtrip_wide_row)
     std::vector<RowInfo> rows;
     rows.reserve(rowNumber);
     rowBuffer.TransValueFromVectorBatch(vecBatch, 0);
-    auto len = rowBuffer.FillBuffer();
-    rows.emplace_back(rowBuffer.TakeRowBuffer(), len, true);
+    auto len = rowBuffer.FillBuffer(TestAllocator());
+    rows.emplace_back(rowBuffer.TakeRowBuffer(), len, TestAllocator());
 
     auto parser = std::make_unique<RowParser>(types);
     BaseVector *vecs[4];

@@ -20,10 +20,10 @@ void IsNanFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &out
 
     switch (inputTypeId) {
         case OMNI_FLOAT:
-            IsNanNumeric<float>(inputVec, result);
+            IsNanNumeric<float>(inputVec, result, context->GetPool());
             break;
         case OMNI_DOUBLE:
-            IsNanNumeric<double>(inputVec, result);
+            IsNanNumeric<double>(inputVec, result, context->GetPool());
             break;
         default:
             OMNI_THROW("IsNan function Error", "Unsupported input type, isnan only supports FLOAT and DOUBLE");
@@ -32,10 +32,11 @@ void IsNanFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &out
 }
 
 template<typename T>
-void IsNanFunction::IsNanNumeric(BaseVector *inputVec, BaseVector *&result) const
+void IsNanFunction::IsNanNumeric(BaseVector *inputVec, BaseVector *&result,
+    omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto size = inputVec->GetSize();
-    result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, size);
+    result = VectorHelper::CreateFlatVector(pool, OMNI_BOOLEAN, size);
     auto *resultVec = static_cast<Vector<bool> *>(result);
 
     for (int32_t row = 0; row < size; ++row) {
@@ -68,8 +69,8 @@ T IsNanFunction::GetValueFromVector(BaseVector *vec, int32_t row) const
     }
 }
 
-template void IsNanFunction::IsNanNumeric<float>(BaseVector *, BaseVector *&) const;
-template void IsNanFunction::IsNanNumeric<double>(BaseVector *, BaseVector *&) const;
+template void IsNanFunction::IsNanNumeric<float>(BaseVector *, BaseVector *&, omniruntime::mem::OmniTaskMemoryPool *) const;
+template void IsNanFunction::IsNanNumeric<double>(BaseVector *, BaseVector *&, omniruntime::mem::OmniTaskMemoryPool *) const;
 
 template float IsNanFunction::GetValueFromVector<float>(BaseVector *, int32_t) const;
 template double IsNanFunction::GetValueFromVector<double>(BaseVector *, int32_t) const;

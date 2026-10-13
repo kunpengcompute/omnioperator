@@ -42,7 +42,7 @@ TEST(HashFunctionTest, hash) {
     std::vector<bool> expectedNulls = {false, false, false, false, false};
     std::string functionName = "mm3hash";
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-    BaseVector* inputVec = VectorHelper::CreateFlatVector(OMNI_VARCHAR, values.size());
+    BaseVector* inputVec = VectorHelper::CreateFlatVector(nullptr, OMNI_VARCHAR, values.size());
     auto* inputVector = dynamic_cast<VarcharVector*>(inputVec);
     for (int32_t i = 0; i < values.size(); ++i) {
         std::string_view lsv(values[i]);
@@ -57,7 +57,7 @@ TEST(HashFunctionTest, hash) {
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName <<" not found ";
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(values.size());
 
     std::stack<BaseVector*> args;
@@ -100,7 +100,7 @@ TEST(HashFunctionTest, xxhash64) {
     std::vector<bool> expectedNulls = {false, false, false, false, false};
     std::string functionName = "xxhash64";
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-    BaseVector* inputVec = VectorHelper::CreateFlatVector(OMNI_VARCHAR, values.size());
+    BaseVector* inputVec = VectorHelper::CreateFlatVector(nullptr, OMNI_VARCHAR, values.size());
     auto* inputVector = dynamic_cast<VarcharVector*>(inputVec);
     for (int32_t i = 0; i < values.size(); ++i) {
         std::string_view lsv(values[i]);
@@ -115,7 +115,7 @@ TEST(HashFunctionTest, xxhash64) {
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName <<" not found ";
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(values.size());
 
     std::stack<BaseVector*> args;

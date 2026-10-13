@@ -20,6 +20,7 @@
 #include "large_string_container.h"
 #include "string_view.h"
 #include "memory/aligned_buffer.h"
+#include "memory/omni_task_memory_pool.h"
 #include "type/data_type.h"
 #include "nulls_buffer.h"
 #include "libboundscheck/include/securec.h"
@@ -57,16 +58,29 @@ public:
     BaseVector() = default;
     explicit BaseVector(int32_t size) : BaseVector(size, OMNI_FLAT /* * ordinary vector */) {}
 
-    BaseVector(int32_t size, Encoding encoding, NullsBuffer *nullsBufferPtr = nullptr, int32_t sliceOffset = 0)
+    BaseVector(int32_t size, Encoding encoding, NullsBuffer *nullsBufferPtr = nullptr, int32_t sliceOffset = 0,
+        omniruntime::mem::Allocator *allocator = nullptr)
         : size(size), encoding(encoding), offset(0), isSliced(false)
     {
-        this->nullsBuffer = std::make_shared<NullsBuffer>(size, nullsBufferPtr, sliceOffset);
+        this->nullsBuffer = std::make_shared<NullsBuffer>(size, nullsBufferPtr, sliceOffset, allocator);
     }
 
-    BaseVector(int32_t size, Encoding encoding, DataTypeId dataTypeId, NullsBuffer *nullsBufferPtr = nullptr, int32_t sliceOffset = 0)
+    BaseVector(int32_t size, Encoding encoding, NullsBuffer *nullsBufferPtr, int32_t sliceOffset,
+        omniruntime::mem::Allocator *allocator,
+        const OmniTaskMemoryPool::AllocationAccountingScope &scope)
+        : size(size), encoding(encoding), offset(0), isSliced(false)
+    {
+        this->nullsBuffer = std::make_shared<NullsBuffer>(size, nullsBufferPtr, sliceOffset, allocator, scope);
+    }
+
+    BaseVector(int32_t size, Encoding encoding, DataTypeId dataTypeId, NullsBuffer *nullsBufferPtr = nullptr,
+        int32_t sliceOffset = 0, omniruntime::mem::Allocator *allocator = nullptr)
         : size(size), encoding(encoding), dataTypeId(dataTypeId), offset(0), isSliced(false)
     {
-        this->nullsBuffer = std::make_shared<NullsBuffer>(size, nullsBufferPtr, sliceOffset);
+        // Thread the per-task pool allocator into the validity NullsBuffer so the
+        // complex-wrapper (Array/Map/Row) top-level nulls are pool-accounted (#15).
+        // allocator==nullptr keeps the no-pool bridge for legacy callers.
+        this->nullsBuffer = std::make_shared<NullsBuffer>(size, nullsBufferPtr, sliceOffset, allocator);
     }
 
     virtual ~BaseVector() = default;
@@ -181,6 +195,14 @@ public:
         return nullptr;
     }
 
+    // Polymorphic per-task pool accessor. Pool-bound vector implementations override this
+    // to return their construction-time pool_. No-pool bridge vectors return nullptr.
+    // Appended to the vtable tail — existing virtual slot offsets are unchanged (ABI-safe).
+    virtual omniruntime::mem::OmniTaskMemoryPool *GetPool() const
+    {
+        return nullptr;
+    }
+
     void SetOffset(int32_t offset)
     {
         this->offset = offset;
@@ -276,6 +298,23 @@ public:
         MakeOwnedCopy();
     }
 
+    // Pool-bound variant. The only heap allocation a ConstVector performs is its
+    // validity (nulls) buffer; routing the per-task pool's bound allocator into
+    // BaseVector charges that buffer to the pool (symmetric SubMemory on free via
+    // the bound allocator). pool may be nullptr (legacy / test callers with no
+    // per-task pool context) → falls back to the no-pool NullsBuffer bridge,
+    // accounting skipped.
+    ConstVector(RAW_DATA_TYPE value, DataTypeId dataTypeId, int32_t size,
+        omniruntime::mem::OmniTaskMemoryPool *pool)
+        : BaseVector(size, OMNI_ENCODING_CONST, /*nullsBufferPtr*/nullptr, /*sliceOffset*/0,
+              (pool != nullptr ? pool->getBoundAllocator() : nullptr)),
+          value(value),
+          pool_(pool)
+    {
+        this->dataTypeId = dataTypeId;
+        MakeOwnedCopy();
+    }
+
     RAW_DATA_TYPE GetConstValue() const
     {
         return value;
@@ -284,6 +323,11 @@ public:
     const RAW_DATA_TYPE& GetConstValueRef() const
     {
         return value;
+    }
+
+    omniruntime::mem::OmniTaskMemoryPool *GetPool() const override
+    {
+        return pool_;
     }
 
     // Prevent copy/move to avoid dangling string_view after copy
@@ -309,6 +353,8 @@ private:
 
     RAW_DATA_TYPE value;
     std::string ownedData_;  // Only meaningful when RAW_DATA_TYPE is std::string_view
+    // Construction-time task pool. nullptr for legacy/no-pool ConstVectors.
+    omniruntime::mem::OmniTaskMemoryPool *pool_ = nullptr;
 };
 
 /**
@@ -317,22 +363,81 @@ private:
  */
 template <typename RAW_DATA_TYPE> class Vector : public BaseVector {
 public:
+    // No-pool bridge ctor. Required by vector_helper.h DecodeFlatDictionaryVector
+    // (helper allocates a result Vector without access to a pool). Do not delete
+    // until DecodeFlatDictionaryVector / DecodeVarcharDictionaryVector callers are
+    // pool-threaded.
+    [[deprecated("no-pool bridge; vector_helper.h DecodeFlatDictionaryVector / DecodeVarcharDictionaryVector callers still need pool-threading")]]
+    explicit Vector(int vSize, DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>)
+        : BaseVector(vSize), pool_(nullptr)
+    {
+        static omniruntime::mem::Allocator nullBridge{nullptr};
+        this->dataTypeId = dataTypeId;
+        valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(vSize, &nullBridge);
+        values = valuesBuffer->GetBuffer();
+        capacity = vSize;
+        int64_t vectorCapacity = sizeof(Vector<RAW_DATA_TYPE>) + sizeof(NullsBuffer) +
+            sizeof(AlignedBuffer<uint8_t>) + sizeof(AlignedBuffer<RAW_DATA_TYPE>);
+    }
+
     /* *
-     * Constructor for data types of arithmetic types without encoding
-     * @param vSize: size of array in variables nulls and values
-     * @param dataTypeId: the dataTypeId of vector
+     * Pool-bound primary ctor. Mirrors Velox Buffer::pool_ const member invariant:
+     * pool_ is set once at construction; ~Vector() always routes SubMemory to this
+     * pool, regardless of calling thread's TLS scope.
+     *
+     * pool is non-owning; pool lifetime (Spark task) outlives operator-owned Vectors.
+     * pool must not be null; all call sites supply a real pool from ExecutionContext.
+     *
+     * @param vSize  number of elements
+     * @param pool   owning per-task memory pool (non-null, non-owning)
+     * @param dataTypeId  optional override (defaults to TYPE_ID<RAW_DATA_TYPE>)
      */
-    Vector(int vSize, DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>) : BaseVector(vSize)
+    Vector(int vSize, omniruntime::mem::OmniTaskMemoryPool *pool,
+        DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>)
+        // Thread the per-task pool's bound allocator into the NullsBuffer alloc so the
+        // validity buffer is pool-accounted instead of going through the [[deprecated]]
+        // no-pool bridge. Values buffer is pool-bound below via allocForCtor.
+        : BaseVector(vSize, OMNI_FLAT, /*nullsBufferPtr*/nullptr, /*sliceOffset*/0,
+              (pool != nullptr ? pool->getBoundAllocator() : nullptr)),
+          pool_(pool)
     {
         this->dataTypeId = dataTypeId;
-        valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(vSize);
+        // nullptr-pool sentinel: VectorHelper helpers may receive pool=nullptr when
+        // invoked through the no-pool bridge chain (CreateComplexVector(DataType*, int32_t)
+        // → CreateFlatVector(pool=nullptr)). Route allocator through nullBridge;
+        // per-task accounting skipped until those callers are pool-threaded.
+        static omniruntime::mem::Allocator nullBridgePrimaryCtor{nullptr};
+        omniruntime::mem::Allocator *allocForCtor =
+            (pool_ != nullptr) ? pool_->getBoundAllocator() : &nullBridgePrimaryCtor;
+        valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(vSize, allocForCtor);
         values = valuesBuffer->GetBuffer();
         capacity = vSize;
         // vector class capacity, valuesBuffer class capacity and nullsBuffer class capacity
         int64_t vectorCapacity = sizeof(Vector<RAW_DATA_TYPE>) + sizeof(NullsBuffer) + sizeof(AlignedBuffer<uint8_t>) +
             sizeof(AlignedBuffer<RAW_DATA_TYPE>);
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        if (pool_ != nullptr) {
+            pool_->AddMemory(vectorCapacity);   // direct — no TLS (Velox pool_ invariant, const after ctor)
+        }
+    }
+
+    Vector(int vSize, const OmniTaskMemoryPool::AllocationAccountingScope &scope,
+        DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>)
+        // The scope commits each charge; buffers keep their persistent allocator.
+        : BaseVector(vSize, OMNI_FLAT, /*nullsBufferPtr*/nullptr, /*sliceOffset*/0,
+              scope.pool()->getBoundAllocator(), scope),
+          pool_(scope.pool())
+    {
+        this->dataTypeId = dataTypeId;
+        auto *allocForCtor = pool_->getBoundAllocator();
+        valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(vSize, allocForCtor, false, scope);
+        values = valuesBuffer->GetBuffer();
+        capacity = vSize;
+        // vector class capacity, valuesBuffer class capacity and nullsBuffer class capacity
+        int64_t vectorCapacity = sizeof(Vector<RAW_DATA_TYPE>) + sizeof(NullsBuffer) + sizeof(AlignedBuffer<uint8_t>) +
+            sizeof(AlignedBuffer<RAW_DATA_TYPE>);
+        if (pool_ != nullptr) {
+            pool_->AddMemoryWithScope(vectorCapacity, scope);   // direct — no TLS (Velox pool_ invariant, const after ctor)
+        }
     }
 
     virtual ~Vector() override
@@ -343,31 +448,64 @@ public:
                 // vector class, nullsBuffer class and valuesBuffer class
                 vectorCapacity += sizeof(AlignedBuffer<uint8_t>) + sizeof(AlignedBuffer<RAW_DATA_TYPE>);
             }
-            omniruntime::mem::ThreadMemoryManager::ReclaimMemory(vectorCapacity);
-            omniruntime::mem::MemoryTrace::SubVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+            if (pool_ != nullptr) {
+                // Pool-bound path: routes SubMemory to the construction-time pool,
+                // never consulting TLS — cross-scope free is structurally impossible.
+                pool_->SubMemory(vectorCapacity);
+            }
+            // pool_==nullptr: no-pool bridge instance — accounting skipped.
         }
     }
 
-    // used for container vector, dictionary vector and varchar vector.
-    Vector(int vSize, Encoding encoding, NullsBuffer *nullsBufferPtr = nullptr, int32_t sliceOffset = 0)
-        : BaseVector(vSize, encoding, nullsBufferPtr, sliceOffset)
+    // Legacy encoding-variant no-pool ctor RETIRED.
+    // Container / dictionary / varchar subclasses now MUST construct via the pool-bound
+    // encoding variant below.
+
+    // Pool-bound variant for container/dictionary/varchar subclasses.
+    // Used by ContainerVector and specialization ctors that inherit from Vector<T>.
+    Vector(int vSize, Encoding encoding, omniruntime::mem::OmniTaskMemoryPool *pool,
+        NullsBuffer *nullsBufferPtr = nullptr, int32_t sliceOffset = 0)
+        // Thread the per-task pool's bound allocator into the validity NullsBuffer so the
+        // varchar/dictionary vectors' null bitmaps are pool-accounted. When
+        // nullsBufferPtr!=nullptr the NullsBuffer shares the parent buffer (allocator
+        // unused), so this is inert for the dict-slice path; otherwise it is purely
+        // additive — this ctor charges no bitmap bytes itself, so no double-count.
+        : BaseVector(vSize, encoding, nullsBufferPtr, sliceOffset,
+              (pool != nullptr ? pool->getBoundAllocator() : nullptr)),
+          pool_(pool)
     {
         capacity = vSize;
     }
 
-    // used for vector slice, sliced vector use same values as parent vector
+    // Legacy slice ctor (no-pool, TLS-bridge) RETIRED.
+    // All slices now MUST inherit the parent's pool via the pool-bound slice ctor below
+    // (preserves dtor-side SubMemory routing symmetry).
+
+    // Pool-bound slice ctor. Slice inherits the parent's pool so its SubMemory in
+    // the dtor goes to the same pool as the parent's AddMemory.
+    //
+    // pool MAY be nullptr when parent was constructed through a no-pool bridge path
+    // (shuffle reader / JNI input iterator vectors are created Java-side with no
+    // per-task pool). The slice dtor already tolerates pool_==nullptr (skips
+    // SubMemory); the AddMemory side is symmetric to avoid SIGSEGV at construction.
+    // Without this guard, every Projection::Project on a shuffle-deserialized vector
+    // crashes at slice time.
     Vector(int vSize, Encoding encoding, NullsBuffer *nullsBufferPtr,
-        std::shared_ptr<AlignedBuffer<RAW_DATA_TYPE>> valuesBuffer, DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>,
-        int32_t sliceOffset = 0) : BaseVector(vSize, encoding, nullsBufferPtr, sliceOffset)
+        std::shared_ptr<AlignedBuffer<RAW_DATA_TYPE>> valuesBuffer,
+        omniruntime::mem::OmniTaskMemoryPool *pool,
+        DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>,
+        int32_t sliceOffset = 0) : BaseVector(vSize, encoding, nullsBufferPtr, sliceOffset), pool_(pool)
     {
         this->dataTypeId = dataTypeId;
         this->valuesBuffer = valuesBuffer; // copy the data field shared_ptr
         values = valuesBuffer->GetBuffer();
         capacity = vSize;
-        // vector class capacity
+        // vector class capacity (slice only charges Vector + NullsBuffer; shared buffer not re-charged)
         int64_t vectorCapacity = sizeof(Vector<RAW_DATA_TYPE>) + sizeof(NullsBuffer);
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        if (pool_ != nullptr) {
+            pool_->AddMemory(vectorCapacity);   // direct — no TLS
+        }
+        // pool_==nullptr: no-pool bridge / shuffle path — per-task accounting skipped.
     }
 
     /* *
@@ -441,19 +579,27 @@ public:
         if(suggestedCapacity <= this->capacity || this->offset != 0) {
             return;
         }
+        // nullptr-pool sentinel: if Vector was constructed via a no-pool bridge ctor
+        // or shuffle path (pool_=nullptr), route through nullBridge for symmetric dtor
+        // Free until those callers are pool-threaded. Hoisted above the nulls block so
+        // the reallocated validity bitmap is pool-accounted too.
+        static omniruntime::mem::Allocator nullBridgeReserve{nullptr};
+        omniruntime::mem::Allocator *allocForReserve = (pool_ != nullptr) ? pool_->getBoundAllocator() : &nullBridgeReserve;
         if (copyNulls && this->nullsBuffer != nullptr) {
             auto oldNullsBuffer = std::move(nullsBuffer);
-            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
+            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity, nullptr, 0, allocForReserve);
             this->nullsBuffer->SetNulls(0, oldNullsBuffer.get(), size);
         } else {
-            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
+            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity, nullptr, 0, allocForReserve);
         }
         if (copyValues && valuesBuffer != nullptr) {
             auto oldValuesBuffer = std::move(valuesBuffer);
-            this->valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(suggestedCapacity);
+            this->valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(
+                suggestedCapacity, allocForReserve);
             memcpy(this->valuesBuffer->GetBuffer(), oldValuesBuffer->GetBuffer(), this->size * sizeof(RAW_DATA_TYPE));
         } else {
-            this->valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(suggestedCapacity);
+            this->valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(
+                suggestedCapacity, allocForReserve);
         }
         values = valuesBuffer->GetBuffer();
         this->capacity = suggestedCapacity;
@@ -471,7 +617,8 @@ public:
             std::string message("positions is null or the input length is incorrect: %d.", length);
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
-        auto vector = new Vector<RAW_DATA_TYPE>(length);
+        // Inherit parent's pool (pool-bound only path).
+        auto vector = new Vector<RAW_DATA_TYPE>(length, pool_);
         auto startPositions = positions + positionOffset;
         for (int32_t i = 0; i < length; i++) {
             int position = startPositions[i];
@@ -505,8 +652,11 @@ public:
                 size);
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
-        auto sliced = new Vector<RAW_DATA_TYPE>(length, encoding, nullsBuffer.get(), valuesBuffer, dataTypeId,
-            positionOffset);
+        // Pool-bound only. The legacy TLS-bridge slice ctor was retired; parents now
+        // always carry a non-null pool, so the slice inherits it directly for
+        // dtor-side accounting symmetry.
+        Vector<RAW_DATA_TYPE> *sliced = new Vector<RAW_DATA_TYPE>(length, encoding, nullsBuffer.get(),
+            valuesBuffer, pool_, dataTypeId, positionOffset);
         sliced->offset = offset + positionOffset; // update offset
         sliced->isSliced = true;
         return sliced;
@@ -514,6 +664,14 @@ public:
 
     RAW_DATA_TYPE * GetValuesBuffer() {
         return values;
+    }
+
+    // Per-task pool this vector was constructed with (may be nullptr for no-pool
+    // bridge / shuffle-deserialized vectors). Lets helpers (e.g. VectorHelper::SliceVector
+    // container branch) recover the source pool and thread it into derived vectors
+    // without a no-pool [[deprecated]] bridge ctor.
+    omniruntime::mem::OmniTaskMemoryPool *GetPool() const override {
+        return pool_;
     }
 
     ALWAYS_INLINE void Expand(int32_t needCapacity)
@@ -532,7 +690,10 @@ public:
         auto oldValuesBuffer = valuesBuffer;
         auto oldValues = values;
 
-        valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(newCapacity);
+        // nullptr-pool sentinel for no-pool bridge ctor / shuffle compat.
+        static omniruntime::mem::Allocator nullBridgeExpand{nullptr};
+        omniruntime::mem::Allocator *allocForExpand = (pool_ != nullptr) ? pool_->getBoundAllocator() : &nullBridgeExpand;
+        valuesBuffer = std::make_shared<AlignedBuffer<RAW_DATA_TYPE>>(newCapacity, allocForExpand);
         values = valuesBuffer->GetBuffer();
 
         if (oldValues != nullptr) {
@@ -540,7 +701,9 @@ public:
         }
 
         auto oldNullsBuffer = nullsBuffer;
-        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
+        // Reuse allocForExpand so the reallocated validity bitmap is pool-accounted
+        // alongside the values buffer.
+        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity, nullptr, 0, allocForExpand);
         if (oldNullsBuffer != nullptr) {
             nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
         }
@@ -553,6 +716,11 @@ protected:
     std::shared_ptr<AlignedBuffer<RAW_DATA_TYPE>> valuesBuffer; // manage values memory and it's metadata
     RAW_DATA_TYPE *values; // valuesBuffer->GetBuffer(), for primitive types without encoding
     int32_t capacity = 0;
+
+    // Pool-bound memory tracker. Non-owning pointer; set at ctor, never reassigned
+    // (Velox const pool_ invariant). Pool lifetime (Spark task) strictly outlives
+    // operator-owned Vectors. nullptr for Vectors constructed via the no-pool bridge ctor.
+    omniruntime::mem::OmniTaskMemoryPool *pool_;
 };
 
 /**
@@ -562,29 +730,67 @@ protected:
 template <typename RAW_DATA_TYPE, template <typename> typename CONTAINER>
 class Vector<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>> final : public Vector<RAW_DATA_TYPE> {
 public:
+    // Disambiguates the reduced-charge slice ctor (below) from the full-charge primary
+    // ctor: both take an existing container shared_ptr, so their parameter lists would
+    // otherwise collide. Mirrors the dedicated LargeString slice ctor.
+    struct SliceCtorTag {};
+
+    // Pool-bound primary ctor.
     Vector(int size, std::shared_ptr<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>> container,
-        NullsBuffer *nullsBufferPtr, DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>, int32_t sliceOffset = 0)
-        : Vector<RAW_DATA_TYPE>(size, OMNI_DICTIONARY, nullsBufferPtr, sliceOffset), container(container)
+        NullsBuffer *nullsBufferPtr, omniruntime::mem::OmniTaskMemoryPool *pool,
+        DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>, int32_t sliceOffset = 0)
+        : Vector<RAW_DATA_TYPE>(size, OMNI_DICTIONARY, pool, nullsBufferPtr, sliceOffset), container(container)
     {
         this->dataTypeId = dataTypeId;
         // vector class capacity, nullsBuffer class capacity and container total capacity.
         int64_t vectorCapacity = sizeof(Vector<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>>) + sizeof(NullsBuffer) +
             sizeof(AlignedBuffer<uint8_t>) + container->GetContainerCapacity();
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        // nullptr-pool sentinel: dict primary ctor is reached via Slice()/CopyPositions()
+        // on parents constructed through the no-pool bridge ctor (OmniColReader.cc:914
+        // string-dict reader, VectorHelper::CreateStringDictionary, vector_helper.h:70)
+        // which set pool_=nullptr. The dtor already guards (pool_ != nullptr); make
+        // AddMemory symmetric. Without this guard, every Project(dict-string-vector) on
+        // an ORC-scanned shuffle/scan input SIGSEGVs at the atomic-add in usedBytes_.
+        // e.g. TopNWithExprOperator::AddInput → OperatorUtil::ProjectVectors → Slice → here.
+        if (this->GetPool() != nullptr) {
+            this->GetPool()->AddMemory(vectorCapacity);   // direct — no TLS
+        }
+        // pool_==nullptr: no-pool bridge path — accounting skipped until callers are pool-threaded.
     }
 
-    // used for vector slice, sliced vector use same container as parent vector
+    // No-pool bridge for dictionary variant. Required by vector_helper.h CreateDictionary
+    // (helper allocates a dictionary Vector without access to a pool). Do not delete
+    // until CreateDictionary callers are pool-threaded.
+    [[deprecated("no-pool bridge; vector_helper.h CreateDictionary callers still need pool-threading")]]
     Vector(int size, std::shared_ptr<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>> container,
-        NullsBuffer *nullsBufferPtr, bool isSliced, DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>,
+        NullsBuffer *nullsBufferPtr, DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>,
         int32_t sliceOffset = 0)
-        : Vector<RAW_DATA_TYPE>(size, OMNI_DICTIONARY, nullsBufferPtr, sliceOffset), container(container)
+        : Vector<RAW_DATA_TYPE>(size, OMNI_DICTIONARY,
+              static_cast<omniruntime::mem::OmniTaskMemoryPool *>(nullptr),
+              nullsBufferPtr, sliceOffset),
+          container(container)
     {
         this->dataTypeId = dataTypeId;
-        // vector class capacity
+        int64_t vectorCapacity = sizeof(Vector<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>>) + sizeof(NullsBuffer) +
+            sizeof(AlignedBuffer<uint8_t>) + container->GetContainerCapacity();
+    }
+
+    // Pool-bound slice ctor. Shares the parent's container via shared_ptr and charges only
+    // {Vector + NullsBuffer} — the container capacity is intentionally NOT charged (the
+    // dtor's isSliced branch skips crediting it back). Previously Slice() routed through the
+    // full-charge primary ctor, charging container capacity the isSliced dtor never credits
+    // back — a persistent per-slice over-count in usedBytes_. SliceCtorTag disambiguates this
+    // from the primary ctor (identical arg shape).
+    Vector(SliceCtorTag, int size, std::shared_ptr<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>> container,
+        NullsBuffer *nullsBufferPtr, omniruntime::mem::OmniTaskMemoryPool *pool,
+        DataTypeId dataTypeId = TYPE_ID<RAW_DATA_TYPE>, int32_t sliceOffset = 0)
+        : Vector<RAW_DATA_TYPE>(size, OMNI_DICTIONARY, pool, nullsBufferPtr, sliceOffset), container(container)
+    {
+        this->dataTypeId = dataTypeId;
         int64_t vectorCapacity = sizeof(Vector<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>>) + sizeof(NullsBuffer);
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        if (this->GetPool() != nullptr) {
+            this->GetPool()->AddMemory(vectorCapacity);
+        }
     }
 
     ~Vector() override
@@ -594,8 +800,11 @@ public:
         if (!this->isSliced) {
             vectorCapacity += sizeof(AlignedBuffer<uint8_t>) + container->GetContainerCapacity();
         }
-        omniruntime::mem::ThreadMemoryManager::ReclaimMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::SubVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        if (this->GetPool() != nullptr) {
+            // Pool-bound path: routes SubMemory to construction-time pool.
+            this->GetPool()->SubMemory(vectorCapacity);
+        }
+        // pool_==nullptr: no-pool bridge instance — accounting skipped.
     }
 
     /* *
@@ -632,8 +841,10 @@ public:
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
 
-        // new nulls
-        std::unique_ptr<NullsBuffer> newNullsBuffer = std::make_unique<NullsBuffer>(length);
+        // new nulls — pool-account the copied dictionary validity bitmap.
+        auto *pool = this->GetPool();
+        std::unique_ptr<NullsBuffer> newNullsBuffer = std::make_unique<NullsBuffer>(length, nullptr, 0,
+            pool != nullptr ? pool->getBoundAllocator() : nullptr);
         // new positions
         std::vector<int32_t> newPositions(length);
         auto startPositions = positions + positionOffset;
@@ -647,8 +858,9 @@ public:
         // new container
         std::shared_ptr<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>> newContainer =
             container->CopyPositions(newPositions.data(), length);
+        // Pool-bound dictionary ctor only path.
         return new Vector<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>>(length, newContainer, newNullsBuffer.get(),
-                                                                         this->dataTypeId);
+            pool, this->dataTypeId);
     }
 
     /* *
@@ -667,9 +879,11 @@ public:
                 this->size);
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
-        // copy the data field shared_ptr
-        auto sliced = new Vector<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>>(length, this->container,
-            this->nullsBuffer.get(), true, this->dataTypeId, positionOffset);
+        // Pool-bound dictionary slice ctor: charges only {Vector + NullsBuffer}. The shared
+        // container capacity is intentionally not charged here — the dtor's isSliced branch
+        // skips re-crediting it. Symmetric accounting, no per-slice over-count.
+        auto sliced = new Vector<DictionaryContainer<RAW_DATA_TYPE, CONTAINER>>(SliceCtorTag{}, length,
+            this->container, this->nullsBuffer.get(), this->GetPool(), this->dataTypeId, positionOffset);
         sliced->offset = this->offset + positionOffset; // update offset
         sliced->isSliced = true;
         return sliced;
@@ -687,30 +901,59 @@ private:
 template <typename RAW_DATA_TYPE>
 class Vector<LargeStringContainer<RAW_DATA_TYPE>> final : public Vector<RAW_DATA_TYPE> {
 public:
-    explicit Vector(int size, int capacityInBytes = INITIAL_STRING_SIZE,
-        DataTypeId stringDataTypeId = OMNI_VARCHAR)
-        : Vector<RAW_DATA_TYPE>(size, OMNI_FLAT)
+    // Pool-bound primary ctor for LargeString encoding.
+    explicit Vector(int size, omniruntime::mem::OmniTaskMemoryPool *pool,
+        int capacityInBytes = INITIAL_STRING_SIZE, DataTypeId stringDataTypeId = OMNI_VARCHAR)
+        : Vector<RAW_DATA_TYPE>(size, OMNI_FLAT, pool)
     {
         this->dataTypeId = stringDataTypeId;
-        // default string_view vector use large string encoding
-        this->container = std::make_shared<LargeStringContainer<std::string_view>>(size, capacityInBytes);
+        // default string_view vector use large string encoding.
+        // Thread the per-task pool so the string content buffer (LargeStringBuffer)
+        // is charged inside the container. GetContainerCapacity() below charges only the
+        // container object; offsets are charged by LargeStringContainer itself,
+        // so the content and offsets do not double-count.
+        this->container = std::make_shared<LargeStringContainer<std::string_view>>(size, capacityInBytes, this->pool_);
         // vector class capacity, nullsBuffer class capacity and values total capacity
         int64_t vectorCapacity = sizeof(Vector<LargeStringContainer<RAW_DATA_TYPE>>) + sizeof(NullsBuffer) +
             sizeof(AlignedBuffer<uint8_t>) + container->GetContainerCapacity();
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        // nullptr-pool sentinel for no-pool bridge compat.
+        if (this->pool_ != nullptr) {
+            this->pool_->AddMemory(vectorCapacity);   // direct — no TLS
+        }
     }
 
-    // used for vector slice, sliced vector use same container as parent vector
+    // No-pool bridge for LargeString encoding. Required by vector_helper.h
+    // DecodeVarcharDictionaryVector (helper allocates a result VarcharVector without
+    // access to a pool). Do not delete until those callers are pool-threaded.
+    [[deprecated("no-pool bridge; vector_helper.h DecodeVarcharDictionaryVector callers still need pool-threading")]]
+    explicit Vector(int size, int capacityInBytes = INITIAL_STRING_SIZE,
+        DataTypeId stringDataTypeId = OMNI_VARCHAR)
+        : Vector<RAW_DATA_TYPE>(size, OMNI_FLAT,
+              static_cast<omniruntime::mem::OmniTaskMemoryPool *>(nullptr))
+    {
+        this->dataTypeId = stringDataTypeId;
+        this->container = std::make_shared<LargeStringContainer<std::string_view>>(size, capacityInBytes);
+        int64_t vectorCapacity = sizeof(Vector<LargeStringContainer<RAW_DATA_TYPE>>) + sizeof(NullsBuffer) +
+            sizeof(AlignedBuffer<uint8_t>) + container->GetContainerCapacity();
+    }
+
+    // Pool-bound slice ctor for LargeString encoding. Slice inherits parent's pool;
+    // only charges {Vector + NullsBuffer} (container is shared via shared_ptr, the
+    // dtor's isSliced path correctly skips re-credit).
     explicit Vector(int size, std::shared_ptr<LargeStringContainer<std::string_view>> container,
-        NullsBuffer *nullsBufferPtr, DataTypeId dataTypeId = OMNI_VARCHAR, int32_t sliceOffset = 0)
-        : Vector<RAW_DATA_TYPE>(size, OMNI_FLAT, nullsBufferPtr, sliceOffset), container(container)
+        NullsBuffer *nullsBufferPtr, omniruntime::mem::OmniTaskMemoryPool *pool,
+        DataTypeId dataTypeId = OMNI_VARCHAR, int32_t sliceOffset = 0)
+        : Vector<RAW_DATA_TYPE>(size, OMNI_FLAT, pool, nullsBufferPtr, sliceOffset), container(container)
     {
         this->dataTypeId = dataTypeId;
-        // vector class capacity
+        // vector class capacity only (slice shares container via shared_ptr).
         int64_t vectorCapacity = sizeof(Vector<LargeStringContainer<RAW_DATA_TYPE>>) + sizeof(NullsBuffer);
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        // nullptr-pool sentinel: parent may be shuffle-deserialized (no pool), and the
+        // dtor already skips SubMemory when pool_ is null. Symmetric guard avoids SIGSEGV
+        // in the slice path.
+        if (this->pool_ != nullptr) {
+            this->pool_->AddMemory(vectorCapacity);   // direct — no TLS
+        }
     }
 
     ~Vector() override
@@ -720,8 +963,11 @@ public:
         if (!this->isSliced) {
             vectorCapacity += sizeof(AlignedBuffer<uint8_t>) + container->GetContainerCapacity();
         }
-        omniruntime::mem::ThreadMemoryManager::ReclaimMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::SubVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        if (this->pool_ != nullptr) {
+            // Pool-bound path: routes SubMemory to construction-time pool.
+            this->pool_->SubMemory(vectorCapacity);
+        }
+        // pool_==nullptr: no-pool bridge instance — accounting skipped.
     }
 
     /* *
@@ -817,7 +1063,9 @@ public:
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
 
-        auto vector = new Vector<LargeStringContainer<std::string_view>>(length, INITIAL_STRING_SIZE, this->dataTypeId);
+        // Pool-bound LargeString ctor only path.
+        auto vector = new Vector<LargeStringContainer<std::string_view>>(length, this->pool_,
+            INITIAL_STRING_SIZE, this->dataTypeId);
         auto startPositions = positions + offset;
         for (int32_t i = 0; i < length; i++) {
             auto position = startPositions[i];
@@ -846,9 +1094,9 @@ public:
                 this->size);
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
-        // copy the data field shared_ptr
+        // Pool-bound LargeString slice ctor only path.
         auto sliced = new Vector<LargeStringContainer<std::string_view>>(length, container, this->nullsBuffer.get(),
-            this->dataTypeId, positionOffset);
+            this->pool_, this->dataTypeId, positionOffset);
         sliced->SetOffset(this->offset + positionOffset); // update offset
         sliced->SetSliced(true);
         return std::move(sliced);
@@ -870,7 +1118,9 @@ public:
         int32_t oldSize = this->size;
 
         auto oldNullsBuffer = this->nullsBuffer;
-        this->nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
+        // Pool-account the reallocated varchar validity bitmap.
+        this->nullsBuffer = std::make_shared<NullsBuffer>(newCapacity, nullptr, 0,
+            this->pool_ != nullptr ? this->pool_->getBoundAllocator() : nullptr);
         if (oldNullsBuffer != nullptr) {
             this->nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
         }
@@ -884,12 +1134,15 @@ public:
         if(suggestedCapacity <= this->capacity || this->offset != 0) {
             return;
         }
+        // Pool-account the varchar validity bitmap on Reserve too.
+        omniruntime::mem::Allocator *allocForReserveStr =
+            this->pool_ != nullptr ? this->pool_->getBoundAllocator() : nullptr;
         if (copyNulls && this->nullsBuffer != nullptr) {
             auto oldNullsBuffer = std::move(this->nullsBuffer);
-            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
+            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity, nullptr, 0, allocForReserveStr);
             this->nullsBuffer->SetNulls(0, oldNullsBuffer.get(), this->size);
         } else {
-            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
+            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity, nullptr, 0, allocForReserveStr);
         }
         this->capacity = suggestedCapacity;
         container->Expand(suggestedCapacity);
@@ -917,57 +1170,63 @@ private:
 template <>
 class Vector<StringView> : public BaseVector {
 public:
-    explicit Vector(int32_t vSize, int32_t capacityInBytes = INITIAL_STRING_SIZE)
-        : BaseVector(vSize),
-          stringBuffer(std::make_shared<LargeStringBuffer>(static_cast<size_t>(capacityInBytes)))
+    Vector(int32_t vSize, omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t capacityInBytes = INITIAL_STRING_SIZE)
+        : BaseVector(vSize, OMNI_FLAT, /*nullsBufferPtr*/nullptr, /*sliceOffset*/0,
+              AllocatorFor(pool)),
+          stringBuffer(MakeStringBuffer(static_cast<size_t>(capacityInBytes), pool)),
+          pool_(pool)
     {
         this->dataTypeId = OMNI_STRING_VIEW;
-        valuesBuffer = std::make_shared<AlignedBuffer<StringView>>(vSize);
+        valuesBuffer = std::make_shared<AlignedBuffer<StringView>>(vSize, AllocatorFor(pool_));
         values = valuesBuffer->GetBuffer();
         capacity = vSize;
-        int64_t vectorCapacity = sizeof(Vector<StringView>) + sizeof(NullsBuffer) +
-            sizeof(AlignedBuffer<uint8_t>) + sizeof(AlignedBuffer<StringView>) +
-            static_cast<int64_t>(stringBuffer->Capacity());
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        AddFlatMetadata(/*sharedBuffers=*/false);
+    }
+
+    // No-pool bridge for reader/tests that do not yet carry a task pool.
+    explicit Vector(int32_t vSize, int32_t capacityInBytes = INITIAL_STRING_SIZE)
+        : Vector(vSize, static_cast<omniruntime::mem::OmniTaskMemoryPool *>(nullptr), capacityInBytes)
+    {}
+
+    // Encoding variant used as the base of Vector<DictionaryContainer<StringView>>.
+    Vector(int32_t vSize, Encoding encoding, omniruntime::mem::OmniTaskMemoryPool *pool,
+        NullsBuffer *nullsBufferPtr = nullptr, int32_t sliceOffset = 0)
+        : BaseVector(vSize, encoding, nullsBufferPtr, sliceOffset, AllocatorFor(pool)), pool_(pool)
+    {
+        this->dataTypeId = OMNI_STRING_VIEW;
+        capacity = vSize;
     }
 
     // Used by Vector<DictionaryContainer<StringView>> — does not allocate values or string buffer.
     Vector(int32_t vSize, Encoding encoding, NullsBuffer *nullsBufferPtr = nullptr, int32_t sliceOffset = 0)
-        : BaseVector(vSize, encoding, nullsBufferPtr, sliceOffset)
-    {
-        this->dataTypeId = OMNI_STRING_VIEW;
-        capacity = vSize;
-        int64_t vectorCapacity = sizeof(Vector<StringView>) + sizeof(NullsBuffer);
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
-    }
+        : Vector(vSize, encoding, static_cast<omniruntime::mem::OmniTaskMemoryPool *>(nullptr),
+              nullsBufferPtr, sliceOffset)
+    {}
 
     // Creates a new vector of `vSize` elements that shares `source`'s string buffer.
     // Allows SetNoCopy to safely reference substrings from source's string buffer
     // without copying; the shared_ptr keeps the buffer alive even after source is destroyed.
     explicit Vector(int32_t vSize, Vector<StringView>& source)
-        : BaseVector(vSize), stringBuffer(source.stringBuffer)
+        : BaseVector(vSize, OMNI_FLAT, /*nullsBufferPtr*/nullptr, /*sliceOffset*/0,
+              AllocatorFor(source.pool_)),
+          stringBuffer(source.stringBuffer),
+          pool_(source.pool_)
     {
         this->dataTypeId = OMNI_STRING_VIEW;
         sharesStringBuffer_ = true;
-        valuesBuffer = std::make_shared<AlignedBuffer<StringView>>(vSize);
+        valuesBuffer = std::make_shared<AlignedBuffer<StringView>>(vSize, AllocatorFor(pool_));
         values = valuesBuffer->GetBuffer();
         capacity = vSize;
-        int64_t vectorCapacity = sizeof(Vector<StringView>) + sizeof(NullsBuffer);
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        AddFlatMetadata(/*sharedBuffers=*/false);
     }
 
     ~Vector() override
     {
-        int64_t vectorCapacity = sizeof(Vector<StringView>) + sizeof(NullsBuffer);
-        if (!isSliced && !sharesStringBuffer_ && stringBuffer != nullptr) {
-            vectorCapacity += sizeof(AlignedBuffer<uint8_t>) + sizeof(AlignedBuffer<StringView>) +
-                static_cast<int64_t>(stringBuffer->Capacity());
+        if (encoding != OMNI_FLAT || valuesBuffer == nullptr || pool_ == nullptr) {
+            return;
         }
-        omniruntime::mem::ThreadMemoryManager::ReclaimMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::SubVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        pool_->SubMemory(FlatMetadataBytes(/*sharedBuffers=*/isSliced));
     }
 
     /* *
@@ -1078,7 +1337,8 @@ public:
                 size);
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
-        auto sliced = new Vector<StringView>(length, valuesBuffer, stringBuffer, nullsBuffer.get(), positionOffset);
+        auto sliced = new Vector<StringView>(
+            length, valuesBuffer, stringBuffer, nullsBuffer.get(), pool_, positionOffset);
         sliced->SetOffset(offset + positionOffset);
         sliced->SetSliced(true);
         return sliced;
@@ -1104,7 +1364,7 @@ public:
 
         auto oldValuesBuffer = valuesBuffer;
         auto oldValues = values;
-        valuesBuffer = std::make_shared<AlignedBuffer<StringView>>(newCapacity);
+        valuesBuffer = std::make_shared<AlignedBuffer<StringView>>(newCapacity, AllocatorFor(pool_));
         values = valuesBuffer->GetBuffer();
         if (oldValues != nullptr) {
             error_t res = memcpy_s(values, newCapacity * sizeof(StringView),
@@ -1115,7 +1375,7 @@ public:
         }
 
         auto oldNullsBuffer = nullsBuffer;
-        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
+        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity, nullptr, 0, AllocatorFor(pool_));
         if (oldNullsBuffer != nullptr) {
             nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
         }
@@ -1128,6 +1388,11 @@ public:
         return values;
     }
 
+    omniruntime::mem::OmniTaskMemoryPool *GetPool() const override
+    {
+        return pool_;
+    }
+
 protected:
     friend class unsafe::UnsafeVector;
     std::shared_ptr<AlignedBuffer<StringView>> valuesBuffer;
@@ -1137,19 +1402,50 @@ protected:
     bool sharesStringBuffer_ = false;
 
 private:
+    static omniruntime::mem::Allocator *AllocatorFor(omniruntime::mem::OmniTaskMemoryPool *pool)
+    {
+        static omniruntime::mem::Allocator nullBridge{nullptr};
+        return pool == nullptr ? &nullBridge : pool->getBoundAllocator();
+    }
+
+    static std::shared_ptr<LargeStringBuffer> MakeStringBuffer(
+        size_t capacityInBytes, omniruntime::mem::OmniTaskMemoryPool *pool)
+    {
+        if (pool != nullptr) {
+            return std::make_shared<LargeStringBuffer>(capacityInBytes, pool);
+        }
+        return std::make_shared<LargeStringBuffer>(capacityInBytes);
+    }
+
+    static constexpr int64_t FlatMetadataBytes(bool sharedBuffers)
+    {
+        int64_t bytes = sizeof(Vector<StringView>) + sizeof(NullsBuffer);
+        if (!sharedBuffers) {
+            bytes += sizeof(AlignedBuffer<uint8_t>) + sizeof(AlignedBuffer<StringView>);
+        }
+        return bytes;
+    }
+
+    void AddFlatMetadata(bool sharedBuffers)
+    {
+        if (pool_ != nullptr) {
+            pool_->AddMemory(FlatMetadataBytes(sharedBuffers));
+        }
+    }
+
     /* Shared constructor used by Slice — shares both buffers with the parent. */
     Vector(int32_t vSize, std::shared_ptr<AlignedBuffer<StringView>> valuesBuffer,
-        std::shared_ptr<LargeStringBuffer> stringBuffer, NullsBuffer *nullsBufferPtr, int32_t sliceOffset = 0)
-        : BaseVector(vSize, OMNI_FLAT, nullsBufferPtr, sliceOffset),
+        std::shared_ptr<LargeStringBuffer> stringBuffer, NullsBuffer *nullsBufferPtr,
+        omniruntime::mem::OmniTaskMemoryPool *pool, int32_t sliceOffset = 0)
+        : BaseVector(vSize, OMNI_FLAT, nullsBufferPtr, sliceOffset, AllocatorFor(pool)),
           valuesBuffer(valuesBuffer),
-          stringBuffer(stringBuffer)
+          stringBuffer(stringBuffer),
+          pool_(pool)
     {
         this->dataTypeId = OMNI_STRING_VIEW;
         this->values = this->valuesBuffer->GetBuffer();
         this->capacity = vSize;
-        int64_t vectorCapacity = sizeof(Vector<StringView>) + sizeof(NullsBuffer);
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(vectorCapacity);
-        omniruntime::mem::MemoryTrace::AddVectorMemory(reinterpret_cast<uintptr_t>(this), vectorCapacity);
+        AddFlatMetadata(/*sharedBuffers=*/true);
     }
 
     /* Appends `len` bytes to the string buffer, growing it if necessary, and returns
@@ -1177,7 +1473,7 @@ private:
         uint64_t newCapacity = std::max(stringBuffer->Capacity() * 2, neededBytes);
         const char *oldData = stringBuffer->Data();
 
-        auto newBuffer = std::make_shared<LargeStringBuffer>(newCapacity);
+        auto newBuffer = MakeStringBuffer(newCapacity, pool_);
         newBuffer->SetSize(stringBuffer->Size());
         error_t res = memcpy_s(newBuffer->Data(), newCapacity, oldData, stringBuffer->Size());
         if (UNLIKELY(res != EOK)) {
@@ -1198,13 +1494,12 @@ private:
             }
         }
 
-        // Account for the capacity difference.
-        int64_t delta = static_cast<int64_t>(newCapacity) - static_cast<int64_t>(stringBuffer->Capacity());
-        if (delta > 0) {
-            omniruntime::mem::ThreadMemoryManager::ReportMemory(delta);
-        }
+        // LargeStringBuffer's pool-bound ctor/dtor account the new/old capacities
+        // symmetrically when the shared_ptr is replaced.
         stringBuffer = std::move(newBuffer);
     }
+
+    omniruntime::mem::OmniTaskMemoryPool *pool_ = nullptr;
 };
 }
 

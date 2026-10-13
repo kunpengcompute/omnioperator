@@ -49,7 +49,7 @@ TEST(VectorizationTest, BitwiseAndByte) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(2);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitAndExpr);
@@ -94,7 +94,7 @@ TEST(VectorizationTest, BitwiseAndShort) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(1)->SetNull(3);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitAndExpr);
@@ -139,7 +139,7 @@ TEST(VectorizationTest, BitwiseAndInt) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(4);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitAndExpr);
@@ -188,7 +188,7 @@ TEST(VectorizationTest, BitwiseAndLong) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(1)->SetNull(5);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitAndExpr);
@@ -239,7 +239,7 @@ TEST(VectorizationTest, BitwiseAndAllNulls) {
         input->Get(0)->SetNull(i);
     }
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitAndExpr);
@@ -277,7 +277,7 @@ TEST(VectorizationTest, BitwiseAndSameValue) {
     int32_t col2[rowSize] = {0, 42, -1, INT32_MAX};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitAndExpr);
@@ -326,7 +326,7 @@ TEST(VectorizationTest, BitwiseXorByte) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(2);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitXorExpr);
@@ -371,7 +371,7 @@ TEST(VectorizationTest, BitwiseXorShort) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(1)->SetNull(3);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitXorExpr);
@@ -416,7 +416,7 @@ TEST(VectorizationTest, BitwiseXorInt) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(4);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitXorExpr);
@@ -465,7 +465,7 @@ TEST(VectorizationTest, BitwiseXorLong) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(1)->SetNull(5);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitXorExpr);
@@ -511,7 +511,7 @@ TEST(VectorizationTest, BitwiseXorSameValue) {
     int32_t col2[rowSize] = {0, 42, -1, INT32_MAX};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitXorExpr);
@@ -555,7 +555,7 @@ TEST(VectorizationTest, BitwiseXorAllNulls) {
         input->Get(0)->SetNull(i);
     }
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitXorExpr);
@@ -604,7 +604,7 @@ TEST(VectorizationTest, BitwiseOrByte) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(2);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitOrExpr);
@@ -649,7 +649,7 @@ TEST(VectorizationTest, BitwiseOrShort) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(1)->SetNull(3);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitOrExpr);
@@ -694,7 +694,7 @@ TEST(VectorizationTest, BitwiseOrInt) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(4);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitOrExpr);
@@ -743,7 +743,7 @@ TEST(VectorizationTest, BitwiseOrLong) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(1)->SetNull(5);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitOrExpr);
@@ -789,7 +789,7 @@ TEST(VectorizationTest, BitwiseOrSameValue) {
     int32_t col2[rowSize] = {0, 42, -1, INT32_MAX};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitOrExpr);
@@ -833,7 +833,7 @@ TEST(VectorizationTest, BitwiseOrAllNulls) {
         input->Get(0)->SetNull(i);
     }
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitOrExpr);
@@ -871,7 +871,7 @@ TEST(VectorizationTest, BitwiseOrWithZero) {
     int32_t col2[rowSize] = {0, 0, 0, 0};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitOrExpr);
@@ -920,7 +920,7 @@ TEST(VectorizationTest, BitwiseNotByte) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     input->Get(0)->SetNull(3);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitNotExpr);
@@ -964,7 +964,7 @@ TEST(VectorizationTest, BitwiseNotShort) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     input->Get(0)->SetNull(3);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitNotExpr);
@@ -1008,7 +1008,7 @@ TEST(VectorizationTest, BitwiseNotInt) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     input->Get(0)->SetNull(4);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitNotExpr);
@@ -1054,7 +1054,7 @@ TEST(VectorizationTest, BitwiseNotLong) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     input->Get(0)->SetNull(4);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitNotExpr);
@@ -1100,7 +1100,7 @@ TEST(VectorizationTest, BitwiseNotDoubleNot) {
     int32_t col1[rowSize] = {0, 42, -1, INT32_MAX, INT32_MIN};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
 
-    auto context1 = new ExecutionContext();
+    auto context1 = new ExecutionContext(4096, nullptr);
     context1->SetResultRowSize(rowSize);
     ExprEval e1(input, context1);
     e1.Visit(*bitNotExpr1);
@@ -1113,7 +1113,7 @@ TEST(VectorizationTest, BitwiseNotDoubleNot) {
     std::vector<Expr*> args2 = {new FieldExpr(0, type)};
     auto bitNotExpr2 = new FuncExpr("bitwise_not", args2, type);
     
-    auto context2 = new ExecutionContext();
+    auto context2 = new ExecutionContext(4096, nullptr);
     context2->SetResultRowSize(rowSize);
     ExprEval e2(input2, context2);
     e2.Visit(*bitNotExpr2);
@@ -1160,7 +1160,7 @@ TEST(VectorizationTest, BitwiseNotAllNulls) {
         input->Get(0)->SetNull(i);
     }
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitNotExpr);
@@ -1203,7 +1203,7 @@ TEST(VectorizationTest, ShiftLeftInt32) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(3);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*shiftLeftExpr);
@@ -1255,7 +1255,7 @@ TEST(VectorizationTest, ShiftRightInt32) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(6);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*shiftRightExpr);
@@ -1302,7 +1302,7 @@ TEST(VectorizationTest, ShiftRightInt64) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(1)->SetNull(4);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*shiftRightExpr);
@@ -1346,7 +1346,7 @@ TEST(VectorizationTest, ShiftRightNegativeShiftAmount) {
     int32_t col2[rowSize] = {-1, -2, -31, -32};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*shiftRightExpr);
@@ -1390,7 +1390,7 @@ TEST(VectorizationTest, ShiftRightOverflowShiftAmount) {
     int32_t col2[rowSize] = {32, 33, 64, 100};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*shiftRightExpr);
@@ -1434,7 +1434,7 @@ TEST(VectorizationTest, ShiftRightAllNulls) {
         input->Get(0)->SetNull(i);
     }
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*shiftRightExpr);
@@ -1474,7 +1474,7 @@ TEST(VectorizationTest, ShiftRightArithmeticPreservesSign) {
     int32_t col2[rowSize] = {1, 1, 2, 4, 63, 63};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*shiftRightExpr);
@@ -1529,7 +1529,7 @@ TEST(VectorizationTest, BitGetByte) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(5);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitGetExpr);
@@ -1578,7 +1578,7 @@ TEST(VectorizationTest, BitGetShort) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(1)->SetNull(4);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitGetExpr);
@@ -1625,7 +1625,7 @@ TEST(VectorizationTest, BitGetInt) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(6);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitGetExpr);
@@ -1674,7 +1674,7 @@ TEST(VectorizationTest, BitGetLong) {
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(1)->SetNull(5);  // Set one value to NULL to test NULL handling
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitGetExpr);
@@ -1722,7 +1722,7 @@ TEST(VectorizationTest, BitGetAllZeros) {
     int32_t col2[rowSize] = {0, 15, 30, 31};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitGetExpr);
@@ -1762,7 +1762,7 @@ TEST(VectorizationTest, BitGetAllOnes) {
     int32_t col2[rowSize] = {0, 15, 30, 31};
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitGetExpr);
@@ -1807,7 +1807,7 @@ TEST(VectorizationTest, BitGetAllNulls) {
         input->Get(0)->SetNull(i);
     }
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.Visit(*bitGetExpr);

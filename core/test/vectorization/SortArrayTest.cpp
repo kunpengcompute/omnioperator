@@ -63,7 +63,7 @@ TEST_F(SortArrayTest, IntArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -117,7 +117,7 @@ TEST_F(SortArrayTest, IntArrayDescending)
         new LiteralExpr(false, boolType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -167,7 +167,7 @@ TEST_F(SortArrayTest, IntArrayDefaultAscending)
         new FieldExpr(0, arrayIntType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -219,7 +219,7 @@ TEST_F(SortArrayTest, ByteArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayByteType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -269,7 +269,7 @@ TEST_F(SortArrayTest, ShortArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayShortType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -319,7 +319,7 @@ TEST_F(SortArrayTest, LongArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayLongType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -369,7 +369,7 @@ TEST_F(SortArrayTest, FloatArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayFloatType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -418,7 +418,7 @@ TEST_F(SortArrayTest, FloatArrayWithNaN)
         new LiteralExpr(true, boolType)
     }, arrayFloatType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -470,7 +470,7 @@ TEST_F(SortArrayTest, DoubleArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayDoubleType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -519,7 +519,7 @@ TEST_F(SortArrayTest, DoubleArrayWithNaN)
         new LiteralExpr(false, boolType)
     }, arrayDoubleType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -570,7 +570,7 @@ TEST_F(SortArrayTest, BooleanArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayBoolType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -622,7 +622,7 @@ TEST_F(SortArrayTest, VarcharArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayVarcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -671,7 +671,7 @@ TEST_F(SortArrayTest, VarcharArrayDescending)
         new LiteralExpr(false, boolType)
     }, arrayVarcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -721,7 +721,7 @@ TEST_F(SortArrayTest, Decimal128ArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayDecimal128Type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -771,7 +771,7 @@ TEST_F(SortArrayTest, Date32ArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayDate32Type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -821,7 +821,7 @@ TEST_F(SortArrayTest, TimestampArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayTimestampType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -871,7 +871,7 @@ TEST_F(SortArrayTest, Decimal64ArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayDecimal64Type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -916,7 +916,7 @@ TEST_F(SortArrayTest, NullArraySort)
         new LiteralExpr(true, boolType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -952,7 +952,7 @@ TEST_F(SortArrayTest, EmptyArraySort)
         new LiteralExpr(true, boolType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -991,7 +991,7 @@ TEST_F(SortArrayTest, SingleElementArraySort)
         new LiteralExpr(true, boolType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1040,7 +1040,7 @@ TEST_F(SortArrayTest, ArrayWithNullElementsAscending)
         new LiteralExpr(true, boolType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1093,7 +1093,7 @@ TEST_F(SortArrayTest, ArrayWithNullElementsDescending)
         new LiteralExpr(false, boolType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1153,7 +1153,7 @@ TEST_F(SortArrayTest, MultipleRows)
         new LiteralExpr(true, boolType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1224,7 +1224,7 @@ TEST_F(SortArrayTest, MultipleRowsWithNullRow)
         new LiteralExpr(true, boolType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1289,7 +1289,7 @@ TEST_F(SortArrayTest, VarbinaryArrayAscending)
         new LiteralExpr(true, boolType)
     }, arrayVarbinaryType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);

@@ -48,7 +48,7 @@ void FusedMd5ConcatWsFunction::Apply(std::stack<BaseVector *> &args, const DataT
 
     const int32_t rowSize = context->GetResultRowSize();
     auto *output = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-        VectorHelper::CreateStringVector(rowSize));
+        VectorHelper::CreateStringVector(context->GetPool(), rowSize));
     StreamingMd5Context md5;
 
     for (int32_t row = 0; row < rowSize; ++row) {

@@ -45,7 +45,7 @@ TEST_F(ArrayPositionTest, IntegerArrayPositionFound)
         new LiteralExpr(static_cast<int32_t>(2), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -81,7 +81,7 @@ TEST_F(ArrayPositionTest, IntegerArrayPositionNotFound)
         new LiteralExpr(static_cast<int32_t>(99), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -116,7 +116,7 @@ TEST_F(ArrayPositionTest, EmptyArray)
         new LiteralExpr(static_cast<int32_t>(1), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -163,7 +163,7 @@ TEST_F(ArrayPositionTest, ArrayWithNullElements)
         new LiteralExpr(static_cast<int32_t>(3), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -198,7 +198,7 @@ TEST_F(ArrayPositionTest, LongArrayPosition)
         new LiteralExpr(static_cast<int64_t>(300L), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -233,7 +233,7 @@ TEST_F(ArrayPositionTest, DoubleArrayPosition)
         new LiteralExpr(2.2, type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -277,7 +277,7 @@ TEST_F(ArrayPositionTest, DoubleNaNPosition)
         new LiteralExpr(nan, type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -311,7 +311,7 @@ TEST_F(ArrayPositionTest, BooleanArrayPosition)
         new LiteralExpr(true, type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -346,7 +346,7 @@ TEST_F(ArrayPositionTest, FirstElementMatch)
         new LiteralExpr(static_cast<int32_t>(42), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -380,7 +380,7 @@ TEST_F(ArrayPositionTest, LastElementMatch)
         new LiteralExpr(static_cast<int32_t>(30), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -414,7 +414,7 @@ TEST_F(ArrayPositionTest, DuplicateValuesReturnsFirstOccurrence)
         new LiteralExpr(static_cast<int32_t>(3), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -451,7 +451,7 @@ TEST_F(ArrayPositionTest, BoundaryValues)
         new LiteralExpr(kMax, type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -485,7 +485,7 @@ TEST_F(ArrayPositionTest, NegativeNumbers)
         new LiteralExpr(static_cast<int32_t>(-3), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -520,7 +520,7 @@ TEST_F(ArrayPositionTest, FloatArrayPosition)
         new LiteralExpr(2.5f, type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -555,7 +555,7 @@ TEST_F(ArrayPositionTest, ByteArrayPosition)
         new LiteralExpr(static_cast<int8_t>(20), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -590,7 +590,7 @@ TEST_F(ArrayPositionTest, ShortArrayPosition)
         new LiteralExpr(static_cast<int16_t>(2000), type)
     }, std::make_shared<DataType>(OMNI_LONG));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

@@ -26,7 +26,7 @@ namespace omniruntime::vectorization {
 
     private:
         template<typename T>
-        void ProcessIntegral(BaseVector *input, BaseVector *&result) const;
+        void ProcessIntegral(omniruntime::mem::OmniTaskMemoryPool *pool, BaseVector *input, BaseVector *&result) const;
     };
 
     class TimestampMillisFunction : public VectorFunction {
@@ -38,7 +38,7 @@ namespace omniruntime::vectorization {
 
     private:
         template<typename T>
-        void ProcessIntegral(BaseVector *input, BaseVector *&result) const;
+        void ProcessIntegral(omniruntime::mem::OmniTaskMemoryPool *pool, BaseVector *input, BaseVector *&result) const;
     };
 
     class TimestampSecondsFunction : public VectorFunction {
@@ -50,10 +50,10 @@ namespace omniruntime::vectorization {
 
     private:
         template<typename T>
-        void ProcessIntegral(BaseVector *input, BaseVector *&result) const;
+        void ProcessIntegral(omniruntime::mem::OmniTaskMemoryPool *pool, BaseVector *input, BaseVector *&result) const;
 
         template<typename T>
-        void ProcessFloatingPoint(BaseVector *input, BaseVector *&result) const;
+        void ProcessFloatingPoint(omniruntime::mem::OmniTaskMemoryPool *pool, BaseVector *input, BaseVector *&result) const;
     };
 
     // Registration functions

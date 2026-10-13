@@ -60,7 +60,7 @@ TEST(ExistsTest, BasicAnyMatch)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -105,7 +105,7 @@ TEST(ExistsTest, BasicNoMatch)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -150,7 +150,7 @@ TEST(ExistsTest, EmptyArrayReturnsFalse)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -194,7 +194,7 @@ TEST(ExistsTest, NullArrayRowReturnsNull)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -241,7 +241,7 @@ TEST(ExistsTest, NullElementsInArray)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -289,7 +289,7 @@ TEST(ExistsTest, AllNullArrayRows)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -328,7 +328,7 @@ TEST(ExistsTest, MixedMatchAndNonMatch)
         new LambdaExpr(gteExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -376,7 +376,7 @@ TEST(ExistsTest, SingleElementArray)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -421,7 +421,7 @@ TEST(ExistsTest, NullElementNoMatchReturnsNull)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -465,7 +465,7 @@ TEST(ExistsTest, NullElementWithMatchReturnsTrue)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, BooleanType());
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);

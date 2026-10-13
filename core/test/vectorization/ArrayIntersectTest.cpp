@@ -69,7 +69,7 @@ TEST_F(ArrayIntersectTest, BasicIntIntersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -128,7 +128,7 @@ TEST_F(ArrayIntersectTest, NoOverlap)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -180,7 +180,7 @@ TEST_F(ArrayIntersectTest, FullOverlap)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -241,7 +241,7 @@ TEST_F(ArrayIntersectTest, DuplicateElements)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -299,7 +299,7 @@ TEST_F(ArrayIntersectTest, NullElements)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -354,7 +354,7 @@ TEST_F(ArrayIntersectTest, NullArray)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -400,7 +400,7 @@ TEST_F(ArrayIntersectTest, EmptyLeftArray)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -451,7 +451,7 @@ TEST_F(ArrayIntersectTest, DoubleIntersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -505,7 +505,7 @@ TEST_F(ArrayIntersectTest, DoubleNaNHandling)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -560,7 +560,7 @@ TEST_F(ArrayIntersectTest, FloatIntersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -613,7 +613,7 @@ TEST_F(ArrayIntersectTest, BooleanIntersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -670,7 +670,7 @@ TEST_F(ArrayIntersectTest, VarcharIntersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -725,7 +725,7 @@ TEST_F(ArrayIntersectTest, LongIntersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -780,7 +780,7 @@ TEST_F(ArrayIntersectTest, ShortIntersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -835,7 +835,7 @@ TEST_F(ArrayIntersectTest, ByteIntersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -905,7 +905,7 @@ TEST_F(ArrayIntersectTest, MultipleRows)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -973,7 +973,7 @@ TEST_F(ArrayIntersectTest, NegativeIntegers)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1030,7 +1030,7 @@ TEST_F(ArrayIntersectTest, Date32Intersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1085,7 +1085,7 @@ TEST_F(ArrayIntersectTest, TimestampIntersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1145,7 +1145,7 @@ TEST_F(ArrayIntersectTest, Decimal128Intersection)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1193,7 +1193,7 @@ TEST_F(ArrayIntersectTest, BothEmptyArrays)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1244,7 +1244,7 @@ TEST_F(ArrayIntersectTest, NullOnlyInLeft)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1301,7 +1301,7 @@ TEST_F(ArrayIntersectTest, FloatInfinity)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1371,7 +1371,7 @@ TEST_F(ArrayIntersectTest, MultipleRowsMixedNulls)
         new FieldExpr(1, arrayType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);

@@ -120,7 +120,7 @@ public:
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
         op::ExecutionContext *context) const override
     {
-        result = VectorHelper::CreateFlatVector(outputType->GetId(), context->GetResultRowSize());
+        result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), context->GetResultRowSize());
         auto rows = std::make_shared<SelectivityVector>(context->GetResultRowSize());
         ApplyContext applyContext(rows.get(), outputType, context);
         unpackSpecializeForAllEncodings<0>(applyContext, result, args);

@@ -92,7 +92,7 @@ protected:
             {config::QueryConfig::kSessionTimezone, timezone},
             {config::QueryConfig::kAdjustTimestampToTimezone, "true"}
         };
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetConfig(config::QueryConfig(configValues));
         context.SetResultRowSize(rowSize);
 

@@ -74,7 +74,7 @@ BaseVector *SliceImpl::applySliceTyped(const SelectivityVector &rows, BaseVector
     auto elementVector = arrayVector->GetElementVector();
 
     // Create result array vector
-    auto result = new ArrayVector(rowSize);
+    auto result = new ArrayVector(rowSize, context->GetPool());
     auto resultOffsets = result->GetOffsets();
 
     // Helper function to adjust start index (1-based to 0-based, handle negative indices)
@@ -171,7 +171,7 @@ BaseVector *SliceImpl::applySliceTyped(const SelectivityVector &rows, BaseVector
         // Create empty element vector with the same type
         auto elementDataType = VectorHelper::GetDataType(elementVector.get());
         result->SetElementVector(std::shared_ptr<BaseVector>(
-            VectorHelper::CreateComplexVector(elementDataType.get(), 0)));
+            VectorHelper::CreateComplexVector(context->GetPool(), elementDataType.get(), 0)));
     } else {
         // Copy elements from original element vector
         auto newElementVector = VectorHelper::CopyPositionsVector(

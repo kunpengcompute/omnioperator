@@ -78,7 +78,7 @@ TEST(FunctionTest, AddDec128)
     Decimal128 expected;
     int64_t zHigh = 0;
     uint64_t zLow = 0;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     op1 = Decimal128(0);
@@ -126,7 +126,7 @@ TEST(FunctionTest, SubDec128)
     int64_t zHigh = 0;
     uint64_t zLow = 0;
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     op1 = Decimal128(0);
@@ -174,7 +174,7 @@ TEST(FunctionTest, MulDec128)
     int64_t zHigh = 0;
     uint64_t zLow = 0;
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     op1 = Decimal128(0);
     op2 = Decimal128(500);
@@ -229,7 +229,7 @@ TEST(FunctionTest, DivDec128)
     int64_t zHigh = 0;
     uint64_t zLow = 0;
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     // for simplicity using precision = 0 scale = 0
     int32_t precision = 18;
@@ -309,7 +309,7 @@ TEST(FunctionTest, RoundDecimal)
     int64_t outHigh = 0;
     uint64_t outLow = 0;
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     Decimal128 test;
     Decimal128 expected;
@@ -350,7 +350,7 @@ TEST(FunctionTest, RoundDecimal)
 
 TEST(FunctionTest, CastDecimal64To64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t input = 12345;
     int64_t result = CastDecimal64To64(contextPtr, input, 18, 0, false, 18, 3);
@@ -375,7 +375,7 @@ TEST(FunctionTest, CastDecimal128To128)
 {
     int64_t high = 0;
     uint64_t low = 0;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     CastDecimal128To128(contextPtr, 0, 123, 38, 0, false, 20, 0, &high, &low);
     EXPECT_EQ(high, 0);
@@ -396,7 +396,7 @@ TEST(FunctionTest, CastDecimal64To128)
 {
     int64_t high = 0;
     uint64_t low = 0;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     CastDecimal64To128(contextPtr, 123123, 17, 3, false, 38, 4, &high, &low);
     EXPECT_EQ(high, 0);
@@ -418,7 +418,7 @@ TEST(FunctionTest, CastDecimal64To128)
 
 TEST(FunctionTest, CastDecimal128To64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t result = CastDecimal128To64(contextPtr, 0, 123, 38, 1, false, 18, 3);
     EXPECT_EQ(result, 12300);
@@ -438,7 +438,7 @@ TEST(FunctionTest, CastDecimal128To64)
 
 TEST(FunctionTest, CastInt8ToDecimal64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int8_t s = 111;
     int64_t result = CastInt8ToDecimal64(contextPtr, s, false, 17, 0);
@@ -463,7 +463,7 @@ TEST(FunctionTest, CastInt8ToDecimal64)
 
 TEST(FunctionTest, CastInt16ToDecimal64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int16_t s = 9123;
     int64_t result = CastInt16ToDecimal64(contextPtr, s, false, 17, 0);
@@ -488,7 +488,7 @@ TEST(FunctionTest, CastInt16ToDecimal64)
 
 TEST(FunctionTest, CastIntToDecimal64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t s = 9123;
     int64_t result = CastIntToDecimal64(contextPtr, s, false, 17, 0);
@@ -513,7 +513,7 @@ TEST(FunctionTest, CastIntToDecimal64)
 
 TEST(FunctionTest, CastLongToDecimal64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t s = 9123;
     int64_t result = CastLongToDecimal64(contextPtr, s, false, 17, 0);
@@ -541,7 +541,7 @@ TEST(FunctionTest, CastLongToDecimal64)
 
 TEST(FunctionTest, CastDoubleToDecimal64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     double s = 9123;
     int64_t result = CastDoubleToDecimal64(contextPtr, s, false, 18, 0);
@@ -571,7 +571,7 @@ TEST(FunctionTest, CastInt8ToDecimal128)
     int64_t high = 0;
     uint64_t low = 0;
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int8_t s = 123;
     CastInt8ToDecimal128(contextPtr, s, false, 38, 0, &high, &low);
@@ -593,7 +593,7 @@ TEST(FunctionTest, CastInt16ToDecimal128)
     int64_t high = 0;
     uint64_t low = 0;
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int16_t s = 9123;
     CastInt16ToDecimal128(contextPtr, s, false, 38, 0, &high, &low);
@@ -615,7 +615,7 @@ TEST(FunctionTest, CastIntToDecimal128)
     int64_t high = 0;
     uint64_t low = 0;
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t s = 9123;
     CastIntToDecimal128(contextPtr, s, false, 38, 0, &high, &low);
@@ -638,7 +638,7 @@ TEST(FunctionTest, CastLongToDecimal128)
     uint64_t outLow = 0;
     Decimal128 expected;
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     int64_t x = 999;
@@ -656,7 +656,7 @@ TEST(FunctionTest, CastDoubleToDecimal128)
     int64_t high = 0;
     uint64_t low = 0;
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     double s = 9123;
     CastDoubleToDecimal128(contextPtr, s, false, 18, 0, &high, &low);
@@ -679,7 +679,7 @@ TEST(FunctionTest, CastDoubleToDecimal128)
 
 TEST(FunctionTest, CastDecimal64ToInt16)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int16_t result = CastDecimal64ToInt16Down(contextPtr, 100, 38, 0, false);
     EXPECT_EQ(result, 100);
@@ -694,7 +694,7 @@ TEST(FunctionTest, CastDecimal64ToInt16)
 
 TEST(FunctionTest, CastDecimal64ToInt8)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int8_t result = CastDecimal64ToInt8Down(contextPtr, 100, 38, 0, false);
     EXPECT_EQ(result, 100);
@@ -709,7 +709,7 @@ TEST(FunctionTest, CastDecimal64ToInt8)
 
 TEST(FunctionTest, CastDecimal128ToInt16)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int16_t result = CastDecimal128ToInt16HalfUp(contextPtr, 0, 100, 38, 0, false);
     EXPECT_EQ(result, 100);
@@ -724,7 +724,7 @@ TEST(FunctionTest, CastDecimal128ToInt16)
 
 TEST(FunctionTest, CastDecimal128ToInt8)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int8_t result = CastDecimal128ToInt8HalfUp(contextPtr, 0, 100, 38, 0, false);
     EXPECT_EQ(result, 100);
@@ -739,7 +739,7 @@ TEST(FunctionTest, CastDecimal128ToInt8)
 
 TEST(FunctionTest, CastDecimal64ToInt)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t result = CastDecimal64ToIntDown(contextPtr, 100, 38, 0, false);
     EXPECT_EQ(result, 100);
@@ -784,7 +784,7 @@ TEST(FunctionTest, CastDecimal64ToDouble)
 
 TEST(FunctionTest, CastDecimal128ToInt)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t result = CastDecimal128ToIntHalfUp(contextPtr, 0, 100, 38, 0, false);
     EXPECT_EQ(result, 100);
@@ -799,7 +799,7 @@ TEST(FunctionTest, CastDecimal128ToInt)
 
 TEST(FunctionTest, CastDecimal128ToLong)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t result = CastDecimal128ToLongDown(contextPtr, 0, 100, 38, 0, false);
     EXPECT_EQ(result, 100);
@@ -832,7 +832,7 @@ TEST(FunctionTest, CastDecimal128ToDouble)
 
 TEST(FunctionTest, CastStringToDecimal64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string s = "23423";
     int64_t result = CastStringToDecimal64(contextPtr, s.c_str(), static_cast<int32_t>(s.size()), false, 17, 0);
@@ -870,7 +870,7 @@ TEST(FunctionTest, CastStringToDecimal128)
 {
     int64_t high = 0;
     uint64_t low = 0;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     bool *isNull = new bool(false);
     std::string s = "23423";
@@ -914,7 +914,7 @@ TEST(FunctionTest, CastStringToDecimal128RoundUp)
 {
     int64_t high = 0;
     uint64_t low = 0;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     bool *isNull = new bool(false);
     std::string s = "312423423423542352333243423423.123412342";
     CastStringToDecimal128RoundUpRetNull(isNull, s.c_str(), static_cast<int32_t>(s.size()), 38, 8, &high, &low);
@@ -965,7 +965,7 @@ TEST(FunctionTest, CastStringToDecimal128RoundUp)
 
 TEST(FunctionTest, CastStringToDecimal64RoundUp)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     bool *isNull = new bool(false);
     std::string s = "-97179.3541993373211719314416";
     int64_t res = CastStringToDecimal64RoundUpRetNull(isNull, s.c_str(), static_cast<int32_t>(s.size()), 7, 0);
@@ -1000,7 +1000,7 @@ TEST(FunctionTest, CastStringToDecimal64RoundUp)
 
 TEST(FunctionTest, CastDecimal64ToString)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t input = 123;
     int32_t outLen = 0;
@@ -1017,7 +1017,7 @@ TEST(FunctionTest, CastDecimal64ToString)
 
 TEST(FunctionTest, CastDecimal128ToString)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     int32_t outLen = 0;
@@ -1037,7 +1037,7 @@ TEST(FunctionTest, DecimalAddOpeartion)
 {
     ConfigUtil::SetCheckReScaleRule(CheckReScaleRule::CHECK_RESCALE);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t high;
     uint64_t low;
@@ -1086,7 +1086,7 @@ TEST(FunctionTest, DecimalMulOpeartion)
 {
     ConfigUtil::SetCheckReScaleRule(CheckReScaleRule::CHECK_RESCALE);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t high;
     uint64_t low;
@@ -1147,7 +1147,7 @@ TEST(FunctionTest, DecimalModOpeartion)
 {
     ConfigUtil::SetCheckReScaleRule(CheckReScaleRule::CHECK_RESCALE);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     // dec64 mod dec64 return dec64
     int64_t result = ModDec64Dec64Dec64ReScale(contextPtr, -1234500, 7, 2, 1234512, 7, 2, 7, 2);
@@ -1174,7 +1174,7 @@ TEST(FunctionTest, DecimalDivOpeartion)
 {
     ConfigUtil::SetCheckReScaleRule(CheckReScaleRule::CHECK_RESCALE);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     Decimal128 right = Decimal128("9999999999999999999999");
     Decimal128 left = Decimal128("99999999999999999999999999999999999999");
@@ -1209,7 +1209,7 @@ TEST(FunctionTest, DecimalAddOpeartionForSpark)
 {
     ConfigUtil::SetCheckReScaleRule(CheckReScaleRule::NOT_CHECK_RESCALE);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t high;
     uint64_t low;
@@ -1258,7 +1258,7 @@ TEST(FunctionTest, DecimalMulOpeartionForSpark)
 {
     ConfigUtil::SetCheckReScaleRule(CheckReScaleRule::NOT_CHECK_RESCALE);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t high;
     uint64_t low;
@@ -1313,7 +1313,7 @@ TEST(FunctionTest, DecimalModOpeartionForSpark)
 {
     ConfigUtil::SetCheckReScaleRule(CheckReScaleRule::NOT_CHECK_RESCALE);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     // dec64 mod dec64 return dec64
     int64_t result = ModDec64Dec64Dec64NotReScale(contextPtr, -1234500, 7, 2, 1234512, 7, 2, 7, 2);
@@ -1341,7 +1341,7 @@ TEST(FunctionTest, DecimalDivOpeartionForSpark)
 {
     ConfigUtil::SetCheckReScaleRule(CheckReScaleRule::NOT_CHECK_RESCALE);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     Decimal128 right = Decimal128("9999999999999999999999");
     Decimal128 left = Decimal128("99999999999999999999999999999999999999");
@@ -1417,7 +1417,7 @@ TEST(FunctionTest, CastDecimal64ToInt_roundingRule_is_down)
 {
     ConfigUtil::SetRoundingRule(RoundingRule::DOWN);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     bool isNull = false;
 
@@ -1450,7 +1450,7 @@ TEST(FunctionTest, CastDecimal64ToInt_roundingRule_is_down)
 TEST(FunctionTest, CastDecimal128ToInt_roundingRule_is_down)
 {
     ConfigUtil::SetRoundingRule(RoundingRule::DOWN);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     Decimal128 deci("1234.56");
@@ -1479,7 +1479,7 @@ TEST(FunctionTest, CastDecimal128ToInt_roundingRule_is_down)
 
 TEST(FunctionTest, GreatestDecimal64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t x64Value = 12708;
     int64_t y64Value = 12800;
@@ -1562,7 +1562,7 @@ TEST(FunctionTest, GreatestDecimal64RetNull)
 
 TEST(FunctionTest, GreatestDecimal128)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t high = 0;
     uint64_t low = 0;

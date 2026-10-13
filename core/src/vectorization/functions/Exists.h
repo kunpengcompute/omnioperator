@@ -44,7 +44,7 @@ namespace omniruntime::vectorization {
             }
 
             int32_t arrRowSize = srcArrVec->GetSize();
-            result = new Vector<bool>(arrRowSize);
+            result = new Vector<bool>(arrRowSize, context->GetPool());
             auto *boolResult = static_cast<Vector<bool> *>(result);
 
             if (arrRowSize == 0) {
@@ -77,11 +77,11 @@ namespace omniruntime::vectorization {
             BaseVector *lambdaInput = lambdaInputHolder.get();
             lambdaInput->SetIsField(true);
 
+            context->SetResultRowSize(lambdaInput->GetSize());
             ExprEval lambdaEval(context);
             lambdaEval.paramNameToIdxMap = lambdaExpr->paramNameToIdxMap_;
             lambdaEval.lambdaParams_.push_back(lambdaInput);
 
-            context->SetResultRowSize(lambdaInput->GetSize());
             lambdaBody->Accept(lambdaEval);
             context->SetResultRowSize(arrRowSize);
             std::unique_ptr<BaseVector> lambdaResultVecHolder(lambdaEval.GetResult());

@@ -63,7 +63,7 @@ TEST_F(ArrayCompactTest, IntegerArrayWithNulls)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -109,7 +109,7 @@ TEST_F(ArrayCompactTest, NoNullElements)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -153,7 +153,7 @@ TEST_F(ArrayCompactTest, AllNullElements)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -188,7 +188,7 @@ TEST_F(ArrayCompactTest, EmptyArray)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -237,7 +237,7 @@ TEST_F(ArrayCompactTest, LongArrayWithNulls)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -286,7 +286,7 @@ TEST_F(ArrayCompactTest, DoubleArrayWithNulls)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -326,7 +326,7 @@ TEST_F(ArrayCompactTest, MultipleRowsMixed)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -385,7 +385,7 @@ TEST_F(ArrayCompactTest, BooleanArrayWithNulls)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -448,7 +448,7 @@ TEST_F(ArrayCompactTest, NestedArrayOfIntRemovesNullOuterElements)
         new FieldExpr(0, outerArrTy)
     }, outerArrTy);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

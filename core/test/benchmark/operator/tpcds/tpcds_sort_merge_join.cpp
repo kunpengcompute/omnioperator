@@ -53,7 +53,7 @@ protected:
         bufferedTableWithExprOperatorFactory = new BufferedTableWithExprOperatorFactory(DataTypes(bufferTypes),
             bufferEqualKeyExprs, (int32_t)bufferEqualKeyExprs.size(), bufferOutputChannels.data(),
             (int32_t)bufferOutputChannels.size(), (int64_t)streamedTableWithExprOperatorFactory, new OverflowConfig());
-        bufferOperator = bufferedTableWithExprOperatorFactory->CreateOperator();
+        bufferOperator = bufferedTableWithExprOperatorFactory->CreateOperator(nullptr);
         for (const auto &vb : LoadVectorBatchFromPath(dataPath, bufferTypes)) {
             bufferOperator->AddInput(vb());
         }

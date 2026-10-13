@@ -63,7 +63,7 @@ namespace {
                                 size);
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
-        auto sliced = new RowVector(length);
+        auto sliced = new RowVector(length, GetPool());
         sliced->offset = offset + positionOffset; // update offset
         sliced->isSliced = true;
         for (int i = 0; i < length; ++i) {
@@ -95,9 +95,10 @@ namespace {
 
         int32_t newCapacity = std::max(capacity * 2, needCapacity);
         int32_t oldSize = size;
+        auto *expandAlloc = (pool_ != nullptr) ? pool_->getBoundAllocator() : nullptr;
 
         auto oldNullsBuffer = nullsBuffer;
-        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
+        nullsBuffer = std::make_shared<NullsBuffer>(newCapacity, nullptr, 0, expandAlloc);
         if (oldNullsBuffer != nullptr) {
             nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
         } else {
@@ -121,7 +122,7 @@ namespace {
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
 
-        RowVector* newRowVector = new RowVector(static_cast<int32_t>(length));
+        RowVector* newRowVector = new RowVector(static_cast<int32_t>(length), GetPool());
         const int* startPositions = positions + positionOffset;
         for (int32_t i = 0; i < length; i++) {
             int position = startPositions[i];

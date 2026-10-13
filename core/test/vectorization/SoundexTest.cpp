@@ -56,7 +56,7 @@ TEST_F(SoundexTest, BasicAndEdgeCases)
 
     BaseVector *resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector *> args;
     args.push(inputVec);

@@ -39,7 +39,7 @@ public:
 class UtcTimestampTestHelper {
 public:
     static BaseVector* CreateTimestampVector(const std::vector<int64_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_TIMESTAMP, values.size());
         auto* typedVec = static_cast<Vector<int64_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -48,7 +48,7 @@ public:
     }
 
     static BaseVector* CreateLongVector(const std::vector<int64_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_LONG, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, values.size());
         auto* typedVec = static_cast<Vector<int64_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -88,7 +88,7 @@ public:
         ASSERT_NE(function, nullptr) << funcName << " function not found for signature";
 
         auto outType = TimestampType();
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         int32_t sz = 0;
         if (!args.empty()) {
             std::stack<BaseVector*> tmpArgs = args;

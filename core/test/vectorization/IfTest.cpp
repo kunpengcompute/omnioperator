@@ -104,7 +104,7 @@ public:
         ASSERT_NE(function, nullptr) << "If function not found for type " << outputTypeId;
 
         auto outputType = std::make_shared<DataType>(outputTypeId);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(condVec->GetSize());
         std::stack<BaseVector*> args;
 

@@ -143,7 +143,7 @@ void CastExpr::apply(const SelectivityVector &rows, BaseVector *input, Execution
 
     VectorPtr localResult = nullptr;
     if (!newRows.hasSelections()) {
-        localResult = VectorHelper::CreateFlatVector(toType->GetId(), context.GetResultRowSize());
+        localResult = VectorHelper::CreateFlatVector(context.GetPool(), toType->GetId(), context.GetResultRowSize());
         localResult->GetNullsBuffer()->SetNulls(0, true, context.GetResultRowSize());
     } else if (input->GetEncoding() == OMNI_FLAT) {
         applyPeeled(newRows, input, context, fromType, toType, localResult);
@@ -177,7 +177,7 @@ VectorPtr CastExpr::applyArray(const SelectivityVector &rows, const ArrayVector 
 
     auto inputElementVector = input->GetElementVector();
     if (inputElementVector == nullptr) {
-        auto *resultArray = new ArrayVector(input->GetSize());
+        auto *resultArray = new ArrayVector(input->GetSize(), context.GetPool());
         for (int32_t row = 0; row < input->GetSize(); ++row) {
             if (input->IsNull(row)) {
                 resultArray->SetNull(row);
@@ -200,7 +200,7 @@ VectorPtr CastExpr::applyArray(const SelectivityVector &rows, const ArrayVector 
 
     context.SetResultRowSize(savedRowSize);
 
-    auto *resultArray = new ArrayVector(input->GetSize(), std::shared_ptr<BaseVector>(castedElements));
+    auto *resultArray = new ArrayVector(input->GetSize(), std::shared_ptr<BaseVector>(castedElements), context.GetPool());
     for (int32_t row = 0; row <= input->GetSize(); ++row) {
         resultArray->SetOffset(row, const_cast<ArrayVector *>(input)->GetOffset(row));
     }
@@ -223,7 +223,7 @@ template <typename toDecimalType>
 VectorPtr CastExpr::applyDecimal(const SelectivityVector &rows, BaseVector *input, ExecutionContext &context,
     const DataTypePtr &fromType, const DataTypePtr &toType)
 {
-    VectorPtr castResult = VectorHelper::CreateFlatVector(toType->GetId(), context.GetResultRowSize());
+    VectorPtr castResult = VectorHelper::CreateFlatVector(context.GetPool(), toType->GetId(), context.GetResultRowSize());
     // toType is a decimal
     switch (fromType->GetId()) {
         case OMNI_BOOLEAN:
@@ -274,7 +274,7 @@ CastOperatorPtr CastExpr::getCastOperator(const DataTypePtr &type)
 template <typename TInput>
 VectorPtr CastExpr::applyIntToBinaryCast(const SelectivityVector &rows, ExecutionContext &context, BaseVector *input)
 {
-    auto result = VectorHelper::CreateFlatVector(OMNI_VARBINARY, context.GetResultRowSize());
+    auto result = VectorHelper::CreateFlatVector(context.GetPool(), OMNI_VARBINARY, context.GetResultRowSize());
     const auto flatResult = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(result);
     const auto simpleInput = reinterpret_cast<const Vector<TInput> *>(input);
 
@@ -428,7 +428,7 @@ void CastExpr::applyPeeled(const SelectivityVector &rows, BaseVector *input, Exe
 VectorPtr CastExpr::castFromDate(const SelectivityVector &rows, BaseVector *input, ExecutionContext &context,
     const DataTypePtr &toType)
 {
-    auto *castResult = VectorHelper::CreateFlatVector(toType->GetId(), rows.size());
+    auto *castResult = VectorHelper::CreateFlatVector(context.GetPool(), toType->GetId(), rows.size());
     auto *inputFlatVector = reinterpret_cast<const Vector<int32_t> *>(input);
 
     switch (toType->GetId()) {
@@ -472,7 +472,7 @@ VectorPtr CastExpr::castFromDate(const SelectivityVector &rows, BaseVector *inpu
 VectorPtr CastExpr::castToDate(const SelectivityVector &rows, BaseVector *input, ExecutionContext &context,
     const DataTypePtr &fromType)
 {
-    VectorPtr castResult = VectorHelper::CreateFlatVector(OMNI_DATE32, context.GetResultRowSize());
+    VectorPtr castResult = VectorHelper::CreateFlatVector(context.GetPool(), OMNI_DATE32, context.GetResultRowSize());
     auto *resultFlatVector = reinterpret_cast<Vector<int32_t> *>(castResult);
     switch (fromType->GetId()) {
         case OMNI_VARCHAR: {
@@ -523,7 +523,7 @@ VectorPtr CastExpr::castToDate(const SelectivityVector &rows, BaseVector *input,
 VectorPtr CastExpr::castFromIntervalDayTime(const SelectivityVector &rows, BaseVector *input, ExecutionContext &context,
     const DataTypePtr &toType)
 {
-    VectorPtr castResult = VectorHelper::CreateFlatVector(toType->GetId(), context.GetResultRowSize());
+    VectorPtr castResult = VectorHelper::CreateFlatVector(context.GetPool(), toType->GetId(), context.GetResultRowSize());
 
     auto *inputFlatVector = reinterpret_cast<const Vector<int64_t> *>(input);
     switch (toType->GetId()) {
@@ -553,7 +553,7 @@ VectorPtr CastExpr::castFromIntervalDayTime(const SelectivityVector &rows, BaseV
 VectorPtr CastExpr::applyTimestampToVarcharCast(const DataTypePtr &toType, const SelectivityVector &rows,
     ExecutionContext &context, BaseVector *input)
 {
-    VectorPtr result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, context.GetResultRowSize());
+    VectorPtr result = VectorHelper::CreateFlatVector(context.GetPool(), OMNI_VARCHAR, context.GetResultRowSize());
     auto flatResult = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(result);
     auto simpleInput = reinterpret_cast<Vector<int64_t> *>(input);
 

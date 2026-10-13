@@ -528,7 +528,7 @@ public:
         const auto size = inputArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_VARCHAR, size);
         }
 
         bool formatIsConst = (formatArg->GetEncoding() == OMNI_ENCODING_CONST);

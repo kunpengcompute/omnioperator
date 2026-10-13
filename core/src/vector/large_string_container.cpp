@@ -3,20 +3,50 @@
  */
 
 #include "large_string_container.h"
-#include "memory/thread_memory_manager.h"
+
+#include <algorithm>
 
 namespace omniruntime::vec {
+// 2-arg ctor: ABI-preserving symbol; delegates to the pool-bound overload (no-pool path).
 template<typename RAW_DATA_TYPE>
-LargeStringContainer<RAW_DATA_TYPE>::LargeStringContainer(int valueSize, int capacityInBytes) : size(valueSize)
+LargeStringContainer<RAW_DATA_TYPE>::LargeStringContainer(int valueSize, int capacityInBytes)
+    : LargeStringContainer(valueSize, capacityInBytes, nullptr)
+{}
+
+template<typename RAW_DATA_TYPE>
+LargeStringContainer<RAW_DATA_TYPE>::LargeStringContainer(int valueSize, int capacityInBytes,
+    omniruntime::mem::OmniTaskMemoryPool *pool) : size(valueSize)
 {
     if (valueSize < 0) {
         // throw size exceeded exception
         throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "string container size invalid");
     }
-    bufferSupplier = std::make_unique<LargeStringBuffer>(capacityInBytes);
-    offsets.resize(valueSize + 1);
+    // When a pool is supplied, charge the content buffer to the per-task pool via the
+    // pool-bound LargeStringBuffer ctor (symmetric ctor/dtor accounting). The pool is NOT
+    // stored in LargeStringContainer (would change its cross-.so layout / ABI); it lives
+    // in LargeStringBuffer and is recovered on growth via bufferSupplier->GetPool().
+    if (pool != nullptr) {
+        bufferSupplier = std::make_unique<LargeStringBuffer>(capacityInBytes, pool);
+    } else {
+        bufferSupplier = std::make_unique<LargeStringBuffer>(capacityInBytes);
+    }
+    ResizeOffsets(valueSize);
     // Initialize offsets to zero to ensure correct string position calculations
     std::fill(offsets.begin(), offsets.end(), 0);
+}
+
+template<typename RAW_DATA_TYPE>
+LargeStringContainer<RAW_DATA_TYPE>::~LargeStringContainer()
+{
+    // Symmetric release of the offsets accounting charged in the ctor. The pool is not a
+    // member (ABI); recover it from bufferSupplier, which is still alive here (member
+    // dtors run after this body). Same capacity as the ctor charge -> balanced.
+    if (bufferSupplier != nullptr) {
+        auto *pool = bufferSupplier->GetPool();
+        if (pool != nullptr) {
+            pool->SubMemory(static_cast<int64_t>(offsets.capacity()) * static_cast<int64_t>(sizeof(int32_t)));
+        }
+    }
 }
 
 template<typename RAW_DATA_TYPE>
@@ -74,8 +104,42 @@ size_t LargeStringContainer<RAW_DATA_TYPE>::GetCapacityInBytes()
 template<typename RAW_DATA_TYPE>
 int64_t LargeStringContainer<RAW_DATA_TYPE>::GetContainerCapacity()
 {
-    int64_t containerCapacity = sizeof(LargeStringContainer) + (size + 1) * sizeof(int32_t);
-    return containerCapacity;
+    // offsets owns and reports its allocation independently so vector wrapper
+    // accounting must cover only the container object itself.
+    return sizeof(LargeStringContainer);
+}
+
+template<typename RAW_DATA_TYPE>
+void LargeStringContainer<RAW_DATA_TYPE>::ResizeOffsets(int32_t valueSize)
+{
+    if (valueSize < 0) {
+        throw omniruntime::exception::OmniException(
+            "STRING_CONTAINER_ERROR", "string container size invalid");
+    }
+    const size_t required = static_cast<size_t>(valueSize) + 1;
+    if (required <= offsets.capacity()) {
+        offsets.resize(required);
+        return;
+    }
+
+    auto *pool = bufferSupplier == nullptr ? nullptr : bufferSupplier->GetPool();
+    if (pool == nullptr) {
+        offsets.resize(required);
+        return;
+    }
+
+    // Allocate into a temporary first. If either allocation or pool admission
+    // fails, the live container and its existing accounting stay unchanged.
+    std::vector<int32_t> grown;
+    const size_t nextCapacity = offsets.capacity() <= offsets.max_size() / 2
+        ? std::max(required, offsets.capacity() * 2) : offsets.max_size();
+    grown.reserve(nextCapacity);
+    grown.resize(required, 0);
+    std::copy(offsets.begin(), offsets.end(), grown.begin());
+    const int64_t oldBytes = static_cast<int64_t>(offsets.capacity()) * sizeof(int32_t);
+    const int64_t newBytes = static_cast<int64_t>(grown.capacity()) * sizeof(int32_t);
+    pool->AddMemory(newBytes - oldBytes);
+    offsets.swap(grown);
 }
 
 template<typename RAW_DATA_TYPE>
@@ -100,12 +164,14 @@ char* LargeStringContainer<RAW_DATA_TYPE>::GetBufferWithSpace(uint32_t needCapac
 template<typename RAW_DATA_TYPE>
 char* LargeStringContainer<RAW_DATA_TYPE>::ExpandBufferToCapacity(size_t toCapacityInBytes)
 {
-    std::unique_ptr<LargeStringBuffer> oldBuffer = std::move(bufferSupplier);
-
-    // Allocate a new buffer.
-    std::unique_ptr<LargeStringBuffer> newBuffer = std::make_unique<LargeStringBuffer>(toCapacityInBytes);
-    if (oldBuffer->Capacity() > 0) {
-        memcpy(newBuffer->Data(), oldBuffer->Data(), oldBuffer->Capacity());
+    // Keep the original buffer and its pool binding alive until admission and
+    // allocation succeed. A denied growth must preserve both data and credits.
+    omniruntime::mem::OmniTaskMemoryPool *pool = bufferSupplier->GetPool();
+    std::unique_ptr<LargeStringBuffer> newBuffer = (pool != nullptr)
+        ? std::make_unique<LargeStringBuffer>(toCapacityInBytes, pool)
+        : std::make_unique<LargeStringBuffer>(toCapacityInBytes);
+    if (bufferSupplier->Capacity() > 0) {
+        memcpy(newBuffer->Data(), bufferSupplier->Data(), bufferSupplier->Capacity());
     }
     bufferSupplier = std::move(newBuffer);
     return bufferSupplier->Data();
@@ -114,23 +180,15 @@ char* LargeStringContainer<RAW_DATA_TYPE>::ExpandBufferToCapacity(size_t toCapac
 template<typename RAW_DATA_TYPE>
 void LargeStringContainer<RAW_DATA_TYPE>::Expand(int32_t needSize)
 {
-    // Vector construction reports GetContainerCapacity() once; each growth must
-    // report the delta so destructor reclaim matches total reported bytes (e.g.
-    // shuffle read-side merge appends multiple payloads into one VARCHAR column).
-    const int64_t capacityBefore = GetContainerCapacity();
+    ResizeOffsets(needSize);
     size = needSize;
-    offsets.resize(needSize + 1);
-    const int64_t capacityAfter = GetContainerCapacity();
-    if (capacityAfter > capacityBefore) {
-        omniruntime::mem::ThreadMemoryManager::ReportMemory(capacityAfter - capacityBefore);
-    }
 }
 
 template<typename RAW_DATA_TYPE>
 void LargeStringContainer<RAW_DATA_TYPE>::ResetForReuse(int32_t rowCount)
 {
     if (rowCount + 1 > static_cast<int32_t>(offsets.size())) {
-        offsets.resize(rowCount + 1);
+        ResizeOffsets(rowCount);
     }
     for (int32_t i = 0; i <= rowCount; i++) {
         offsets[i] = 0;

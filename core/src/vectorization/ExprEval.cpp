@@ -179,6 +179,8 @@ void ConstantColumnProjection(ExecutionContext *context, BaseVector *outVec, con
 
 ExprEval::ExprEval(VectorBatch *vectorBatch, ExecutionContext *context): context(context)
 {
+    // Bind allocator to the context pool.
+    allocator = context->GetAllocator();
     for (int i = 0; i < vectorBatch->GetVectorCount(); i++) {
         vecBatch_.push_back(vectorBatch->Get(i));
         typeIds.push_back(vectorBatch->Get(i)->GetTypeId());
@@ -187,7 +189,10 @@ ExprEval::ExprEval(VectorBatch *vectorBatch, ExecutionContext *context): context
 }
 
 ExprEval::ExprEval(ExecutionContext *context): context(context), rowSize(0)
-{}
+{
+    // Bind allocator to the context pool.
+    allocator = context->GetAllocator();
+}
 
 void ExprEval::Reset(VectorBatch *vectorBatch, ExecutionContext *ctx)
 {
@@ -257,7 +262,8 @@ void ExprEval::Visit(const LiteralExpr &e)
                 // Construct it from (const char*, len) to avoid the deleted std::string_view rvalue
                 // overload and its resulting ambiguity.
                 constVec = new ConstVector<StringView>(
-                    StringView(e.stringVal->data(), static_cast<int32_t>(e.stringVal->size())), typeId, rowCount);
+                    StringView(e.stringVal->data(), static_cast<int32_t>(e.stringVal->size())),
+                    typeId, rowCount, context->GetPool());
                 break;
 #else
                 OMNI_THROW("STRING_VIEW_DISABLED", "StringView expression was requested but this native build was configured with STRINGVIEW_ENABLE=OFF");
@@ -266,32 +272,35 @@ void ExprEval::Visit(const LiteralExpr &e)
                 // Non-root null map literals (e.g. stack padding: array(col, null)) must match
                 // batch row count; size 1 would overrun in variadic functions like array()/named_struct().
                 if (e.isNull) {
-                    VectorHelper::CreateNullMapVector(rowCount, e.dataType, constVec);
+                    VectorHelper::CreateNullMapVector(context->GetPool(), rowCount, e.dataType, constVec);
                 } else {
-                    constVec = VectorHelper::CreateComplexVector(e.dataType.get(), rowCount);
+                    // Pool-bound overload (vector_helper.h:161).
+                    constVec = VectorHelper::CreateComplexVector(context->GetPool(), e.dataType.get(), rowCount);
                 }
                 break;
             }
             case OMNI_ARRAY: {
                 if (e.isNull) {
-                    VectorHelper::CreateNullArrayVector(rowCount, e.dataType, constVec);
+                    VectorHelper::CreateNullArrayVector(context->GetPool(), rowCount, e.dataType, constVec);
                 } else {
-                    constVec = VectorHelper::CreateComplexVector(e.dataType.get(), rowCount);
+                    // Pool-bound overload (vector_helper.h:161).
+                    constVec = VectorHelper::CreateComplexVector(context->GetPool(), e.dataType.get(), rowCount);
                 }
                 break;
             }
             case OMNI_ROW: {
                 if (e.isNull) {
-                    VectorHelper::CreateNullRowVector(rowCount, e.dataType, constVec);
+                    VectorHelper::CreateNullRowVector(context->GetPool(), rowCount, e.dataType, constVec);
                 } else {
-                    constVec = VectorHelper::CreateComplexVector(e.dataType.get(), rowCount);
+                    // Pool-bound overload (vector_helper.h:161).
+                    constVec = VectorHelper::CreateComplexVector(context->GetPool(), e.dataType.get(), rowCount);
                 }
                 break;
             }
             case OMNI_NONE: {
-                auto *nullArrayVec = new ArrayVector(rowCount);
+                auto *nullArrayVec = new ArrayVector(rowCount, context->GetPool());
                 auto emptyElements = std::shared_ptr<BaseVector>(
-                    VectorHelper::CreateFlatVector(static_cast<int32_t>(OMNI_INT), 0));
+                    VectorHelper::CreateFlatVector(context->GetPool(), static_cast<int32_t>(OMNI_INT), 0));
                 nullArrayVec->SetElementVector(emptyElements);
                 for (int32_t i = 0; i < rowCount; ++i) {
                     nullArrayVec->SetNull(i);
@@ -309,9 +318,9 @@ void ExprEval::Visit(const LiteralExpr &e)
     }
     auto typeId = e.dataType->GetId();
     if (typeId == OMNI_NONE) {
-        auto *arrayVec = new ArrayVector(rowCount);
+        auto *arrayVec = new ArrayVector(rowCount, context->GetPool());
         auto emptyElements = std::shared_ptr<BaseVector>(
-            VectorHelper::CreateFlatVector(static_cast<int32_t>(OMNI_INT), 0));
+            VectorHelper::CreateFlatVector(context->GetPool(), static_cast<int32_t>(OMNI_INT), 0));
         arrayVec->SetElementVector(emptyElements);
         for (int32_t i = 0; i < rowCount; ++i) {
             arrayVec->SetNull(i);
@@ -321,23 +330,23 @@ void ExprEval::Visit(const LiteralExpr &e)
     }
     if (typeId == OMNI_ARRAY) {
         BaseVector *arrayVec = nullptr;
-        VectorHelper::CreateNullArrayVector(rowCount, e.dataType, arrayVec);
+        VectorHelper::CreateNullArrayVector(context->GetPool(), rowCount, e.dataType, arrayVec);
         inputValues_.push(arrayVec);
         return;
     }
     if (typeId == OMNI_MAP) {
         BaseVector *mapVec = nullptr;
-        VectorHelper::CreateNullMapVector(rowCount, e.dataType, mapVec);
+        VectorHelper::CreateNullMapVector(context->GetPool(), rowCount, e.dataType, mapVec);
         inputValues_.push(mapVec);
         return;
     }
     if (typeId == OMNI_ROW) {
         BaseVector *rowVector = nullptr;
-        VectorHelper::CreateNullRowVector(rowCount, e.dataType, rowVector);
+        VectorHelper::CreateNullRowVector(context->GetPool(), rowCount, e.dataType, rowVector);
         inputValues_.push(rowVector);
         return;
     }
-    BaseVector *outVec = VectorHelper::CreateFlatVector(typeId, rowCount);
+    BaseVector *outVec = VectorHelper::CreateFlatVector(context->GetPool(), typeId, rowCount);
     ConstantColumnProjection(context, outVec, e);
     inputValues_.push(outVec);
 }
@@ -504,7 +513,7 @@ void ExprEval::Visit(const UnaryExpr &e)
     if (e.vectorFunction == nullptr) {
         OMNI_THROW("Vectorization Error:", "Vector function not found for unary expression");
     }
-    auto result = VectorHelper::CreateFlatVector(e.dataType->GetId(), CurrentRowCount());
+    auto result = VectorHelper::CreateFlatVector(context->GetPool(), e.dataType->GetId(), CurrentRowCount());
     e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
 }
@@ -560,8 +569,9 @@ void ExprEval::Visit(const InExpr &e)
     BaseVector *result = nullptr;
     const auto inputDataType = e.arguments[0]->dataType;
     ArrayType arrayType(inputDataType);
-    auto searchArray = VectorHelper::CreateComplexVectorShared(&arrayType, 1);
-    auto vector = VectorHelper::CreateFlatVectorShared(inputDataType->GetId(), e.arguments.size() - 1);
+    // Pool-bound overload (vector_helper.h:235).
+    auto searchArray = VectorHelper::CreateComplexVectorShared(context->GetPool(), &arrayType, 1);
+    auto vector = VectorHelper::CreateFlatVectorShared(context->GetPool(), inputDataType->GetId(), e.arguments.size() - 1);
     dynamic_cast<ArrayVector *>(searchArray.get())->SetValue(0, vector.get());
     inputValues_.push(searchArray.get());
     auto temp = inputValues_;
@@ -1808,7 +1818,7 @@ void ExprEval::Visit(const IfExpr &e)
             return;
         }
 
-        IfFunction::CreateResultVector(e.dataType->GetId(), n, trueVec, result);
+        IfFunction::CreateResultVector(context->GetPool(), e.dataType->GetId(), n, trueVec, result);
         std::vector<int32_t> truePos;
         std::vector<int32_t> falsePos;
         trueSel.applyToSelected([&](vector_size_t i) { truePos.push_back(i); });
@@ -1910,7 +1920,7 @@ void ExprEval::Visit(const CoalesceExpr &e)
                     delete argVec;
                 }
                 if (result == nullptr) {
-                    IfFunction::CreateResultVector(e.dataType->GetId(), n, branchVec, result);
+                    IfFunction::CreateResultVector(context->GetPool(), e.dataType->GetId(), n, branchVec, result);
                 }
                 branches.push_back({branchVec, std::move(decidedPos), branchCoversAll});
                 remaining.deselect(decidedSel);
@@ -1924,7 +1934,7 @@ void ExprEval::Visit(const CoalesceExpr &e)
             // result from the first argument's shape.
             SelectivityVector allSel(n, n > 0);
             BaseVector *sample = EvaluateBranch(e.arguments[0], allSel, false);
-            IfFunction::CreateResultVector(e.dataType->GetId(), n, sample, result);
+            IfFunction::CreateResultVector(context->GetPool(), e.dataType->GetId(), n, sample, result);
             delete sample;
         }
         // The k-way merge visits rows ascending and takes the first branch
@@ -1956,7 +1966,7 @@ void ExprEval::Visit(const IsNullExpr &e)
     if (e.vectorFunction == nullptr) {
         OMNI_THROW("Vectorization Error:", "Vector function not found for isnull expression");
     }
-    auto result = VectorHelper::CreateFlatVector(e.dataType->GetId(), CurrentRowCount());
+    auto result = VectorHelper::CreateFlatVector(context->GetPool(), e.dataType->GetId(), CurrentRowCount());
     e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
 }
@@ -2069,7 +2079,7 @@ void ExprEval::Visit(const SwitchExpr &e)
         // condition or result ever needs to run on them.
         SelectivityVector allSel(n, true);
         BaseVector *fieldVec = EvaluateBranch(e.whenClause[0].second, allSel, true);
-        IfFunction::CreateResultVector(e.dataType->GetId(), n, fieldVec, result);
+        IfFunction::CreateResultVector(context->GetPool(), e.dataType->GetId(), n, fieldVec, result);
         if (fieldVec->HasNull()) {
             auto *nulls = reinterpret_cast<const uint64_t *>(unsafe::UnsafeBaseVector::GetNulls(fieldVec));
             remaining.deselectNonNulls(nulls, 0, n);
@@ -2144,7 +2154,7 @@ void ExprEval::Visit(const SwitchExpr &e)
             bool falseCheap = IsCheapIfBranch(elseExpr);
             BaseVector *trueVec = EvaluateBranch(thenExpr, trueSel, trueCheap);
             BaseVector *falseVec = EvaluateBranch(elseExpr, falseSel, falseCheap);
-            IfFunction::CreateResultVector(e.dataType->GetId(), n, trueVec, result);
+            IfFunction::CreateResultVector(context->GetPool(), e.dataType->GetId(), n, trueVec, result);
             std::vector<int32_t> truePos;
             std::vector<int32_t> falsePos;
             trueSel.applyToSelected([&](vector_size_t row) { truePos.push_back(row); });
@@ -2226,7 +2236,7 @@ void ExprEval::Visit(const SwitchExpr &e)
         int32_t selCount = thenSel.countSelected();
         BaseVector *thenVec = EvaluateBranch(when.second, thenSel, cheap);
         if (result == nullptr) {
-            IfFunction::CreateResultVector(e.dataType->GetId(), n, thenVec, result);
+            IfFunction::CreateResultVector(context->GetPool(), e.dataType->GetId(), n, thenVec, result);
         }
         branches.push_back({thenVec, std::move(thenPos), cheap || selCount == n});
     }
@@ -2239,7 +2249,7 @@ void ExprEval::Visit(const SwitchExpr &e)
             int32_t selCount = remaining.countSelected();
             BaseVector *elseVec = EvaluateBranch(e.falseExpr, remaining, cheap);
             if (result == nullptr) {
-                IfFunction::CreateResultVector(e.dataType->GetId(), n, elseVec, result);
+                IfFunction::CreateResultVector(context->GetPool(), e.dataType->GetId(), n, elseVec, result);
             }
             SwitchBranch elseBranch;
             elseBranch.vec = elseVec;
@@ -2256,7 +2266,7 @@ void ExprEval::Visit(const SwitchExpr &e)
                 }
                 SelectivityVector allSel(n, true);
                 BaseVector *srcVec = EvaluateBranch(e.whenClause[0].second, allSel, true);
-                IfFunction::CreateResultVector(e.dataType->GetId(), n, srcVec, result);
+                IfFunction::CreateResultVector(context->GetPool(), e.dataType->GetId(), n, srcVec, result);
                 delete srcVec;
             }
             remaining.applyToSelected([&](vector_size_t row) { result->SetNull(row); });

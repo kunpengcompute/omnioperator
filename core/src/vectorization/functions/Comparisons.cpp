@@ -170,7 +170,7 @@ class ComparisonFunction final : public VectorFunction {
         auto leftArg = args.top();
         args.pop();
         auto rowSize = context->GetResultRowSize();
-        auto *flatResult = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowSize));
+        auto *flatResult = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, rowSize));
         auto alignedBuffer = unsafe::UnsafeVector::GetValues(flatResult)->GetBuffer();
         // Default false for rows that will be written; rows with unknown (NULL) result are marked via PropagateSqlComparisonNulls.
         memset(alignedBuffer, 0, rowSize);

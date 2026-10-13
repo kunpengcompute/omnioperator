@@ -599,7 +599,29 @@ public:
         return names_[idx];
     }
 
-    bool equivalent(const DataType& other) const {}
+    bool equivalent(const DataType& other) const
+    {
+        if (&other == this) {
+            return true;
+        }
+        if (other.GetId() != DataTypeId::OMNI_ROW) {
+            return false;
+        }
+        const auto& otherRow = static_cast<const RowType&>(other);
+        if (children.size() != otherRow.children.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < children.size(); ++i) {
+            if (children[i] == nullptr || otherRow.children[i] == nullptr) {
+                if (children[i] != otherRow.children[i]) {
+                    return false;
+                }
+            } else if (*children[i] != *otherRow.children[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     std::optional<uint32_t> getChildIdxIfExists(std::string_view name) const
     {

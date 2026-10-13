@@ -31,9 +31,11 @@ public:
         ExecutionContext *context) const override;
 
 private:
+    // Pool is threaded through to the implementation.
     template<typename T>
     void NanvlNumeric(BaseVector *expr1Vec, BaseVector *expr2Vec, BaseVector *&result,
-                        const DataTypePtr &outputType) const;
+                        const DataTypePtr &outputType,
+                        omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     template<typename T>
     T GetValueFromVector(BaseVector *vec, int32_t row) const;
