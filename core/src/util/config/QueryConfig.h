@@ -301,10 +301,11 @@ public:
         return get<bool>(kJoinSpillHandoffEnabled, true);
     }
 
-    /// Pool-driven passive reclaim. Default false.
+    /// Pool-driven passive reclaim: hash join spills only when the task pool
+    /// (i.e. Spark) asks it to reclaim. Default true.
     bool passiveReclaimEnabled() const
     {
-        return get<bool>(kPassiveReclaimEnabled, false);
+        return get<bool>(kPassiveReclaimEnabled, true);
     }
 
     /// Debug-only EOB group spill. Default false.

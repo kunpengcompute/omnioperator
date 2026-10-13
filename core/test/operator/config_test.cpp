@@ -303,6 +303,16 @@ TEST(ConfigTest, ForceBuildGroupSpillRequiresEffectiveHandoff)
     EXPECT_TRUE(handoffOn.forceBuildGroupSpillEffective());
 }
 
+TEST(ConfigTest, PassiveReclaimIsOnByDefault)
+{
+    const QueryConfig defaults({
+        {QueryConfig::kSpillEnabled, "true"},
+        {QueryConfig::kForceBuildGroupSpillAfterNoMoreInput, "false"}});
+    EXPECT_TRUE(defaults.passiveReclaimEnabled());
+    EXPECT_TRUE(defaults.passiveReclaimEffective());
+    EXPECT_FALSE(defaults.forceBuildGroupSpillEffective());
+}
+
 TEST(ConfigTest, PassiveReclaimAndForceEobAreIndependent)
 {
     const QueryConfig passiveOnly({
