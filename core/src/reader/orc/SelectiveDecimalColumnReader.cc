@@ -48,7 +48,7 @@ void SelectiveDecimalColumnReader::read(
     }
 
     decoded_ = makeNewVector(
-        rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId));
+        rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId), taskPool_);
     inner_->next(decoded_.get(), rowsToRead, nullptr, omniTypeId);
     decodedBase_ = 0;
     mat_ = Materialization::kBatchIndexed;

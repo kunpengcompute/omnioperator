@@ -26,7 +26,11 @@ public abstract class DecimalVec extends FixedWidthVec {
      * @param type the data type of this vector
      */
     public DecimalVec(int size, int typeLength, DataType type) {
-        super(size * typeLength, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, type);
+        this(size, typeLength, type, 0L);
+    }
+
+    public DecimalVec(int size, int typeLength, DataType type, long nmmHandle) {
+        super(size * typeLength, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, type, nmmHandle);
         this.typeWidth = getTypeWidth(typeLength);
     }
 

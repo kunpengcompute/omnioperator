@@ -28,8 +28,16 @@ public class VarcharVec extends VariableWidthVec {
         super(4 * 1024, size, VarcharDataType.VARCHAR);
     }
 
+    public VarcharVec(int size, long nmmHandle) {
+        super(4 * 1024, size, VarcharDataType.VARCHAR, nmmHandle);
+    }
+
     public VarcharVec(int capacityInBytes, int size) {
         super(capacityInBytes, size, VarcharDataType.VARCHAR);
+    }
+
+    public VarcharVec(int capacityInBytes, int size, long nmmHandle) {
+        super(capacityInBytes, size, VarcharDataType.VARCHAR, nmmHandle);
     }
 
     public VarcharVec(long nativeVector) {

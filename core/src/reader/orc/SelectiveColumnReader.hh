@@ -41,7 +41,8 @@ public:
         : spec_(spec),
           orcType_(orcType),
           owned_(std::move(inner)),
-          inner_(static_cast<OmniColumnReader *>(owned_.get()))
+          inner_(static_cast<OmniColumnReader *>(owned_.get())),
+          taskPool_(inner_ != nullptr ? inner_->taskPool_ : nullptr)
     {}
 
     virtual ~SelectiveColumnReader() = default;
@@ -57,7 +58,7 @@ public:
     virtual void skipBatch(uint64_t rowsToRead, int omniTypeId)
     {
         auto scratch = makeNewVector(rowsToRead, orcType_,
-                                     static_cast<type::DataTypeId>(omniTypeId));
+                                     static_cast<type::DataTypeId>(omniTypeId), taskPool_);
         inner_->next(scratch.get(), rowsToRead, /*incomingNulls*/nullptr, omniTypeId);
         decoded_.reset();
     }
@@ -79,6 +80,7 @@ protected:
     const ::orc::Type *orcType_;
     std::unique_ptr<::orc::ColumnReader> owned_;
     OmniColumnReader *inner_;
+    omniruntime::mem::OmniTaskMemoryPool *taskPool_;
 
     Materialization mat_ = Materialization::kBatchIndexed;
     std::unique_ptr<vec::BaseVector> decoded_;

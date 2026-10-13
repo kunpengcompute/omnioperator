@@ -31,7 +31,8 @@ public:
     SelectiveStructColumnReader(const ::orc::Type &rootType,
                                 ::orc::StripeStreams &stripe,
                                 codegen::ScanSpec *rootSpec,
-                                common::JulianGregorianRebase *julian);
+                                common::JulianGregorianRebase *julian,
+                                omniruntime::mem::OmniTaskMemoryPool *taskPool);
 
     uint64_t read(uint64_t rowsToRead, std::vector<vec::BaseVector *> &outBatch, int *omniTypeId);
 

@@ -13,7 +13,11 @@ import nova.hetu.omniruntime.type.DataType;
  */
 public abstract class FixedWidthVec extends Vec {
     public FixedWidthVec(int capacityInBytes, int size, VecEncoding encoding, DataType type) {
-        super(capacityInBytes, size, encoding, type);
+        this(capacityInBytes, size, encoding, type, 0L);
+    }
+
+    public FixedWidthVec(int capacityInBytes, int size, VecEncoding encoding, DataType type, long nmmHandle) {
+        super(capacityInBytes, size, encoding, type, nmmHandle);
     }
 
     public FixedWidthVec(Vec dictionary, int[] ids, int capacityInBytes, DataType type) {

@@ -52,8 +52,10 @@ public abstract class OmniOperatorFactory<T extends OmniOperatorFactoryContext> 
         }
     }
 
-    // createOperator
-    private static native long createOperatorNative(long factoryAddress);
+    // The native signature takes the per-task OmniTaskMemoryPool address (`nmmHandle`)
+    // so the C++ factory can construct a pool-bound Operator. nmmHandle==0L is the
+    // no-pool / test path — the native side passes nullptr through; per-task accounting skipped.
+    private static native long createOperatorNative(long factoryAddress, long nmmHandle);
 
     /**
      * Gets native operator factory.
@@ -67,10 +69,29 @@ public abstract class OmniOperatorFactory<T extends OmniOperatorFactoryContext> 
     /**
      * Create operator omni operator.
      *
+     * Backward-compatible no-arg overload. Passes nmmHandle=0L (no-pool path)
+     * so the native operator constructs with nullptr pool. Tests + legacy call
+     * sites that don't have a per-task pool use this form. Production callers
+     * (Gluten OmniShuffleUtil etc.) should call createOperator(long) directly.
+     *
      * @return the omni operator
      */
     public OmniOperator createOperator() {
-        long nativeOperator = createOperatorNative(nativeOperatorFactory);
+        return createOperator(0L);
+    }
+
+    /**
+     * Create operator omni operator with a per-task memory pool address.
+     *
+     * Pool address obtained Java-side via
+     * OmniNativeMemoryManagerJniWrapper.getPoolAddress(). 0L = no pool (test
+     * harness / mock); the native operator falls back to a nullptr-bound pool.
+     *
+     * @param nmmHandle raw address of the task-scoped OmniTaskMemoryPool, or 0
+     * @return the omni operator
+     */
+    public OmniOperator createOperator(long nmmHandle) {
+        long nativeOperator = createOperatorNative(nativeOperatorFactory, nmmHandle);
         return new OmniOperator(nativeOperator);
     }
 

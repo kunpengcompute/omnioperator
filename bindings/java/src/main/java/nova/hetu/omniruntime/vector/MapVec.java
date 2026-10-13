@@ -21,12 +21,23 @@ public class MapVec extends ComplexVec {
     protected OmniBuffer offsetsBuf;
 
     public MapVec(MapDataType type, int size) {
-        this(type, size, false);
+        this(type, size, false, 0L);
     }
 
     public MapVec(MapDataType type, int size, boolean isEmpty) {
-        this(isEmpty ? newEmptyComplexVectorNative(size, OMNI_ENCODING_MAP.ordinal(), new DataType[]{type.getKeyType(), type.getValueType()})
-                : newComplexVectorNative(size, OMNI_ENCODING_MAP.ordinal(), new DataType[]{type.getKeyType(), type.getValueType()}), type, size, isEmpty);
+        this(type, size, isEmpty, 0L);
+    }
+
+    // Pool-aware ctors. nmmHandle is the per-task OmniTaskMemoryPool address so the
+    // complex wrapper's top-level offsets + validity buffers are pool-accounted
+    // (0L = no pool). Mirrors Vec's nmmHandle convention.
+    public MapVec(MapDataType type, int size, long nmmHandle) {
+        this(type, size, false, nmmHandle);
+    }
+
+    public MapVec(MapDataType type, int size, boolean isEmpty, long nmmHandle) {
+        this(isEmpty ? newEmptyComplexVectorNative(size, OMNI_ENCODING_MAP.ordinal(), new DataType[]{type.getKeyType(), type.getValueType()}, nmmHandle)
+                : newComplexVectorNative(size, OMNI_ENCODING_MAP.ordinal(), new DataType[]{type.getKeyType(), type.getValueType()}, nmmHandle), type, size, isEmpty);
     }
 
     public MapVec(long nativeVector, MapDataType type) {

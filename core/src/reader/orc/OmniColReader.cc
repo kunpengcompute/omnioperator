@@ -122,15 +122,22 @@ namespace omniruntime::reader {
 
     /**
     * Create a reader for the given stripe.
+    *
+    * The trailing taskPool param is forwarded to recursive child constructions
+    * and stamped onto the returned reader via SetTaskPool so subsequent next()
+    * calls can allocate output Vectors via the per-task pool.
     */
     std::unique_ptr<ColumnReader> omniBuildReader(const Type& type,
-                                                 StripeStreams& stripe, common::JulianGregorianRebase *julianPtr) {
+                                                 StripeStreams& stripe, common::JulianGregorianRebase *julianPtr,
+                                                 omniruntime::mem::OmniTaskMemoryPool *taskPool) {
+        std::unique_ptr<ColumnReader> result;
         switch (static_cast<int64_t>(type.getKind())) {
             case ::orc::DATE:
             case ::orc::INT:
             case ::orc::LONG:
             case ::orc::SHORT:
-                return std::make_unique<OmniIntegerColumnReader>(type, stripe);
+                result = std::make_unique<OmniIntegerColumnReader>(type, stripe);
+                break;
             case ::orc::BINARY:
             case ::orc::CHAR:
             case ::orc::STRING:
@@ -138,51 +145,71 @@ namespace omniruntime::reader {
                 switch (static_cast<int64_t>(stripe.getEncoding(type.getColumnId()).kind())) {
                     case ::orc::proto::ColumnEncoding_Kind_DICTIONARY:
                     case ::orc::proto::ColumnEncoding_Kind_DICTIONARY_V2:
-                        return std::make_unique<OmniStringDictionaryColumnReader>(type, stripe);
+                        result = std::make_unique<OmniStringDictionaryColumnReader>(type, stripe);
+                        break;
                     case ::orc::proto::ColumnEncoding_Kind_DIRECT:
                     case ::orc::proto::ColumnEncoding_Kind_DIRECT_V2:
-                        return std::make_unique<OmniStringDirectColumnReader>(type, stripe);
+                        result = std::make_unique<OmniStringDirectColumnReader>(type, stripe);
+                        break;
                     default:
                         throw omniruntime::exception::OmniException(
                             "EXPRESSION_NOT_SUPPORT", "omniBuildReader unhandled string encoding");
                 }
+                break;
 
             case ::orc::BOOLEAN:
-                return std::make_unique<OmniBooleanColumnReader>(type, stripe);
+                result = std::make_unique<OmniBooleanColumnReader>(type, stripe);
+                break;
 
             case ::orc::BYTE:
-                return std::make_unique<OmniByteColumnReader>(type, stripe);
+                result = std::make_unique<OmniByteColumnReader>(type, stripe);
+                break;
 
             case ::orc::STRUCT:
-                return std::make_unique<OmniStructColumnReader>(type, stripe, julianPtr);
+                result = std::make_unique<OmniStructColumnReader>(type, stripe, julianPtr);
+                break;
 
             case ::orc::TIMESTAMP:
-                return std::make_unique<OmniTimestampColumnReader>(type, stripe, false, julianPtr);
+                result = std::make_unique<OmniTimestampColumnReader>(type, stripe, false, julianPtr);
+                break;
 
             case ::orc::TIMESTAMP_INSTANT:
-                return std::make_unique<OmniTimestampColumnReader>(type, stripe, true, julianPtr);
+                result = std::make_unique<OmniTimestampColumnReader>(type, stripe, true, julianPtr);
+                break;
 
             case ::orc::DECIMAL:
                 // Is this a Hive 0.11 or 0.12 file?
                 if (type.getPrecision() == 0) {
-                    return std::make_unique<OmniDecimalHive11ColumnReader>(type, stripe);
+                    result = std::make_unique<OmniDecimalHive11ColumnReader>(type, stripe);
                 } else if (type.getPrecision() <= OmniDecimal64ColumnReader::MAX_PRECISION_64) {
-                    return std::make_unique<OmniDecimal64ColumnReader>(type, stripe);
+                    result = std::make_unique<OmniDecimal64ColumnReader>(type, stripe);
                 } else {
-                    return std::make_unique<OmniDecimal128ColumnReader>(type, stripe);
+                    result = std::make_unique<OmniDecimal128ColumnReader>(type, stripe);
                 }
+                break;
             case ::orc::MAP:
-                return std::make_unique<OmniMapColumnReader>(type, stripe, julianPtr);
+                result = std::make_unique<OmniMapColumnReader>(type, stripe, julianPtr);
+                break;
             case ::orc::LIST:
-                return std::make_unique<OmniListColumnReader>(type, stripe, julianPtr);
+                result = std::make_unique<OmniListColumnReader>(type, stripe, julianPtr);
+                break;
             case ::orc::FLOAT:
-                return std::make_unique<OmniFloatColumnReader>(type, stripe);
+                result = std::make_unique<OmniFloatColumnReader>(type, stripe);
+                break;
             case ::orc::DOUBLE:
-                return std::make_unique<OmniDoubleColumnReader>(type, stripe);
+                result = std::make_unique<OmniDoubleColumnReader>(type, stripe);
+                break;
 
             default:
                 throw omniruntime::exception::OmniException("EXPRESSION_NOT_SUPPORT", "omniBuildReader unhandled type");
         }
+        // Stamp the per-task pool on the leaf reader. Composite readers (Struct/List/Map)
+        // construct their child readers via recursive omniBuildReader calls — those
+        // receive taskPool too.
+        if (auto *omniReader = dynamic_cast<OmniColumnReader *>(result.get())) {
+            omniReader->SetTaskPool(taskPool);
+        }
+        return result;
     }
 
     inline void readNulls(OmniColumnReader *colReader, uint64_t numValues, uint64_t *incomingNulls,
@@ -278,6 +305,18 @@ namespace omniruntime::reader {
         }
     }
 
+    // Propagate the per-task pool to every child column reader. omniBuildReader
+    // stamps the parent reader after construction; this override fans the stamp out
+    // to children that were built recursively inside the parent ctor.
+    void OmniStructColumnReader::SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) {
+        OmniColumnReader::SetTaskPool(pool);
+        for (auto &c : children) {
+            if (auto *omniChild = dynamic_cast<OmniColumnReader *>(c.get())) {
+                omniChild->SetTaskPool(pool);
+            }
+        }
+    }
+
     uint64_t OmniStructColumnReader::skip(uint64_t numValues) {
         numValues = OmniColumnReader::skip(numValues);
         for(auto& ptr : children) {
@@ -313,7 +352,7 @@ namespace omniruntime::reader {
                     numValues, hasNull ? reinterpret_cast<uint64_t*>(nulls) : nullptr, dataTypeId);
                 rowVector->AddChild(std::shared_ptr<omniruntime::vec::BaseVector>(dictVec));
             } else {
-                auto childVec = std::shared_ptr<omniruntime::vec::BaseVector>(makeNewVector(numValues, child, dataTypeId).release());
+                auto childVec = std::shared_ptr<omniruntime::vec::BaseVector>(makeNewVector(numValues, child, dataTypeId, this->taskPool_).release());
                 omniReader->next(childVec.get(), numValues,
                     hasNull ? reinterpret_cast<uint64_t*>(nulls) : nullptr, dataTypeId);
                 rowVector->AddChild(childVec);
@@ -338,7 +377,10 @@ namespace omniruntime::reader {
             throw omniruntime::exception::OmniException("EXPRESSION_NOT_SUPPORT", message);
         }
         bool hasNull = false;
-        auto nulls = std::make_shared<NullsBuffer>(numValues);
+        // Pool-account the per-batch struct null scratch. taskPool_ is set
+        // post-ctor via SetTaskPool.
+        auto nulls = std::make_shared<NullsBuffer>(numValues, nullptr, 0,
+            this->taskPool_ != nullptr ? this->taskPool_->getBoundAllocator() : nullptr);
         readNulls(this, numValues, incomingNulls, reinterpret_cast<uint8_t*>(nulls->GetNulls()));
         uint64_t i = 0;
 
@@ -375,7 +417,7 @@ namespace omniruntime::reader {
 #endif
                 vecs.push_back(dictVec);
             } else {
-                auto omnivector = omniruntime::reader::makeNewVector(numValues, orcType, dataTypeId);
+                auto omnivector = omniruntime::reader::makeNewVector(numValues, orcType, dataTypeId, this->taskPool_);
                 omniReader->next(omnivector.get(), numValues,
                     hasNull ? nulls->GetNulls() : nullptr, dataTypeId);
                 vecs.push_back(omnivector.release());
@@ -399,6 +441,14 @@ namespace omniruntime::reader {
         const Type& childType = *type.getSubtype(0);
         if (selectedColumns[static_cast<uint64_t>(childType.getColumnId())]) {
             child = omniBuildReader(childType, stripe, julianPtr);
+        }
+    }
+
+    // Fan the task pool to the single child reader.
+    void OmniListColumnReader::SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) {
+        OmniColumnReader::SetTaskPool(pool);
+        if (auto *omniChild = dynamic_cast<OmniColumnReader *>(child.get())) {
+            omniChild->SetTaskPool(pool);
         }
     }
 
@@ -479,7 +529,7 @@ namespace omniruntime::reader {
         if (childReader) {
             const Type* childOrcType = orcType->getSubtype(0);
             auto childDataTypeId = getDefaultOmniType(childOrcType);
-            std::shared_ptr<BaseVector> childVector = std::move(makeNewVector(totalChildren, childOrcType, childDataTypeId));
+            std::shared_ptr<BaseVector> childVector = std::move(makeNewVector(totalChildren, childOrcType, childDataTypeId, this->taskPool_));
             arrayVector->SetElementVector(childVector);
             reinterpret_cast<OmniColumnReader*>(childReader)->next((arrayVector->GetElementVector().get()), totalChildren, nullptr, childDataTypeId);
         }
@@ -500,6 +550,17 @@ namespace omniruntime::reader {
         const Type* valueType = type.getSubtype(1);
         if (selectedColumns[static_cast<uint64_t>(valueType->getColumnId())]) {
             valueReader = omniBuildReader(*valueType, stripe, julianPtr);
+        }
+    }
+
+    // Fan the task pool to both key and value readers.
+    void OmniMapColumnReader::SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) {
+        OmniColumnReader::SetTaskPool(pool);
+        if (auto *omniKey = dynamic_cast<OmniColumnReader *>(keyReader.get())) {
+            omniKey->SetTaskPool(pool);
+        }
+        if (auto *omniVal = dynamic_cast<OmniColumnReader *>(valueReader.get())) {
+            omniVal->SetTaskPool(pool);
         }
     }
 
@@ -579,7 +640,7 @@ namespace omniruntime::reader {
         if (rawKeyReader) {
             const Type* keyOrcType = orcType->getSubtype(0);
             auto keyDataTypeId = getDefaultOmniType(keyOrcType);
-            std::shared_ptr<BaseVector> keyVector = std::move(makeNewVector(totalChildren, keyOrcType, keyDataTypeId));
+            std::shared_ptr<BaseVector> keyVector = std::move(makeNewVector(totalChildren, keyOrcType, keyDataTypeId, this->taskPool_));
             mapvector->SetKeyVector(keyVector);
             reinterpret_cast<OmniColumnReader*>(rawKeyReader)->next((mapvector->GetKeyVector().get()), totalChildren, nullptr, keyDataTypeId);
         }
@@ -587,7 +648,7 @@ namespace omniruntime::reader {
         if (rawValueReader) {
             const Type* valueOrcType = orcType->getSubtype(1);
             auto valueDataTypeId= getDefaultOmniType(valueOrcType);
-            std::shared_ptr<BaseVector> valueVector = std::move(makeNewVector(totalChildren, valueOrcType, valueDataTypeId));
+            std::shared_ptr<BaseVector> valueVector = std::move(makeNewVector(totalChildren, valueOrcType, valueDataTypeId, this->taskPool_));
             mapvector->SetValueVector(valueVector);
             reinterpret_cast<OmniColumnReader*>(rawValueReader)->next((mapvector->GetValueVector().get()), totalChildren, nullptr, valueDataTypeId);
         }
@@ -911,8 +972,11 @@ namespace omniruntime::reader {
 
     BaseVector* OmniStringDictionaryColumnReader::nextAsDictionary(
         uint64_t numValues, uint64_t *incomingNulls, int omniTypeId) {
+        ensureOmniDictionary();
         // Decode indices and return DictionaryVector (indices + shared dictionary).
-        auto nullsBuf = std::make_unique<NullsBuffer>(numValues);
+        // Pool-account the per-batch dictionary null scratch.
+        auto nullsBuf = std::make_unique<NullsBuffer>(numValues, nullptr, 0,
+            this->taskPool_ != nullptr ? this->taskPool_->getBoundAllocator() : nullptr);
         auto nullsRaw = reinterpret_cast<uint8_t*>(nullsBuf->GetNulls());
         readNulls(this, numValues, incomingNulls, nullsRaw);
         bool hasNull = nullsBuf->HasNull();
@@ -939,7 +1003,7 @@ namespace omniruntime::reader {
 
         auto dataTypeId = static_cast<omniruntime::type::DataTypeId>(omniTypeId);
         return new omniruntime::vec::Vector<omniruntime::vec::DictionaryContainer<std::string_view>>(
-            static_cast<int>(numValues), container, nullsBuf.get(), dataTypeId);
+            static_cast<int>(numValues), container, nullsBuf.get(), this->taskPool_, dataTypeId);
     }
 
     bool OmniStringDictionaryColumnReader::readNullsForBatch(uint64_t rowsToRead, uint64_t *nullsScratch)
@@ -1616,9 +1680,16 @@ namespace omniruntime::reader {
 
         // Convert ORC dictionary to Omni format once per stripe; reused by DictionaryVector batches.
         omniDictSize_ = static_cast<int32_t>(dictSize);
+    }
+
+    void OmniStringDictionaryColumnReader::ensureOmniDictionary() const {
+        if (omniDict_) return;
+        // SetTaskPool propagates through composite readers after construction.
+        // Build only on first use, and publish only after conversion succeeds.
+        const int64_t blobSize = dictionary->dictionaryOffset.data()[omniDictSize_];
         int estimatedCapacity = (blobSize > 0) ? static_cast<int>(blobSize) : 1;
-        omniDict_ = std::make_shared<omniruntime::vec::LargeStringContainer<std::string_view>>(
-            omniDictSize_, estimatedCapacity);
+        auto converted = std::make_shared<omniruntime::vec::LargeStringContainer<std::string_view>>(
+            omniDictSize_, estimatedCapacity, taskPool_);
 
         char *blob = dictionary->dictionaryBlob.data();
         int64_t *offsets = dictionary->dictionaryOffset.data();
@@ -1628,8 +1699,9 @@ namespace omniruntime::reader {
             if (isChar) {
                 FindLastNotEmpty(ptr, len);
             }
-            omniDict_->SetValue(i, std::string_view(ptr, static_cast<size_t>(len)));
+            converted->SetValue(i, std::string_view(ptr, static_cast<size_t>(len)));
         }
+        omniDict_ = std::move(converted);
     }
 
     OmniStringDictionaryColumnReader::~OmniStringDictionaryColumnReader() {

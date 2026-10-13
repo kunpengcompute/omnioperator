@@ -29,6 +29,15 @@
 #include "codegen/expr_evaluator.h"
 #include "util/format.h"
 
+// Forward-declare OmniTaskMemoryPool so the connector interface can accept a
+// per-task pool without pulling in the heavy memory_pool header here. The pool
+// is threaded TableScanOperator → Connector → DataSource → SplitReader to fix
+// the cross-pool-system bridge at SplitReader.cpp:79 (partition columns +
+// missing-field vectors).
+namespace omniruntime::mem {
+class OmniTaskMemoryPool;
+} // namespace omniruntime::mem
+
 namespace omniruntime::connector {
 
 class DataSource;
@@ -318,12 +327,17 @@ public:
         return false;
     }
 
+    // Per-task pool is an optional trailing parameter. nullptr falls back to
+    // omniruntime::mem::GetMemoryPool() (legacy global path) inside the
+    // concrete impl; production callers (TableScanOperator::getSplit()) thread
+    // Operator::pool() here.
     virtual std::unique_ptr <DataSource> createDataSource(
         const type::RowTypePtr &outputType,
         const std::shared_ptr <ConnectorTableHandle> &tableHandle,
         const std::unordered_map <
         std::string,
-        std::shared_ptr<connector::ColumnHandle>> &columnHandles) = 0;
+        std::shared_ptr<connector::ColumnHandle>> &columnHandles,
+        omniruntime::mem::OmniTaskMemoryPool *taskPool = nullptr) = 0;
 
     // Returns true if addSplit of DataSource can use 'dataSource' from
     // ConnectorSplit in addSplit(). If so, TableScan can preload splits

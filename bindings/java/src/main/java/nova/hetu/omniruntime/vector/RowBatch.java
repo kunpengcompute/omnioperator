@@ -40,32 +40,55 @@ public class RowBatch implements AutoCloseable {
     }
 
     /**
-     * construct row batch from vector batch
+     * construct row batch from vector batch (legacy: passes nmmHandle=0 → nullBridge)
      *
      * @param vb vector batch
      */
     public RowBatch(VecBatch vb) {
-        long rb = transFromVectorBatch(vb.getNativeVectorBatch());
+        this(vb, 0L);
+    }
+
+    /**
+     * construct row batch from vector batch with a per-task memory pool address.
+     *
+     * @param vb vector batch
+     * @param nmmHandle per-task pool address (jlong); 0L = legacy nullBridge path
+     */
+    public RowBatch(VecBatch vb, long nmmHandle) {
+        long rb = transFromVectorBatch(vb.getNativeVectorBatch(), nmmHandle);
         this.rowCount = vb.getRowCount();
         this.nativeRowBatch = rb;
     }
 
     /**
-     * construct row batch from rows
+     * construct row batch from rows (legacy: passes nmmHandle=0 → nullBridge)
      *
      * @param rows all rows of batch
      * @param rowCount row count of row batch
      */
     public RowBatch(Row[] rows, int rowCount) {
-        this(newRowBatchNative(rows, rowCount), rows, rowCount);
+        this(rows, rowCount, 0L);
+    }
+
+    /**
+     * construct row batch from rows with a per-task memory pool address.
+     *
+     * @param rows all rows of batch
+     * @param rowCount row count of row batch
+     * @param nmmHandle per-task pool address (jlong); 0L = legacy nullBridge path
+     */
+    public RowBatch(Row[] rows, int rowCount, long nmmHandle) {
+        this(newRowBatchNative(rows, rowCount, nmmHandle), rows, rowCount);
     }
 
     // only release rowBatch
     private static native void freeRowBatchNative(long nativeVectorBatch);
 
-    private static native long newRowBatchNative(Row[] rows, int rowCount);
+    // The trailing `nmmHandle` is a raw OmniTaskMemoryPool* address as jlong.
+    // 0L = legacy nullBridge path.
+    private static native long newRowBatchNative(Row[] rows, int rowCount, long nmmHandle);
 
-    private static native long transFromVectorBatch(long vbAddress);
+    private static native long transFromVectorBatch(long vbAddress, long nmmHandle);
 
     public long getNativeRowBatch() {
         return nativeRowBatch;

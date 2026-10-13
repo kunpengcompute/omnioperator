@@ -65,6 +65,13 @@ public:
 
     uint64_t Next(std::vector<BaseVector *> **batch, int *omniTypeId, uint64_t batchLen) override;
 
+    // Expose the per-task pool stashed on ReaderOptions so the file-scope
+    // FilterData/ReadAndFilterData helpers can thread it through
+    // common::GetFlatBaseVectorsFromBitMark. Symmetric with OrcRowReader::GetTaskPool().
+    // Defined out-of-line below ParquetReader because parquetReader_.GetOptions()
+    // needs the ParquetReader full definition (only forward-declared above this class).
+    omniruntime::mem::OmniTaskMemoryPool *GetTaskPool();
+
 private:
     ParquetReader &parquetReader_;
 };
@@ -138,6 +145,14 @@ private:
 
     std::shared_ptr<arrow::io::RandomAccessFile> file;
 };
+
+// Out-of-line definition — ParquetReader is now complete at this point in the
+// header, so parquetReader_.GetOptions() can be resolved.
+inline omniruntime::mem::OmniTaskMemoryPool *ParquetRowReader::GetTaskPool()
+{
+    auto opts = parquetReader_.GetOptions();
+    return opts != nullptr ? opts->GetTaskPool() : nullptr;
+}
 
 class Filesystem {
 public:

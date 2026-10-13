@@ -24,6 +24,11 @@
 #include "HiveConnectorUtil.h"
 #include <orc/sargs/SearchArgument.hh>
 
+// Forward decl — full definition pulled in by reader/orc/OrcReader.h above,
+// but we keep this here to make the dependency explicit for the optional
+// orcMemoryPool parameter on configureReaderOptions().
+namespace orc { class MemoryPool; }
+
 namespace omniruntime::connector::hive {
 
 class HiveColumnHandle;
@@ -48,10 +53,16 @@ std::shared_ptr<codegen::ScanSpec> makeScanSpec(
     infoColumns,
     const SpecialColumnNames& specialColumns);
 
+// orcMemoryPool, when non-null, is used by the ORC branch instead of
+// orc::getDefaultPool() so internal ORC allocations route through per-task
+// accounting. Caller (SplitReader) owns the lifetime — typically a
+// SplitReader-member OmniOrcPoolAdapter bound to the per-task pool threaded
+// down from TableScanOperator.
 void configureReaderOptions(
     const std::shared_ptr<const HiveConfig> &hiveConfig,
     const std::shared_ptr<const HiveConnectorSplit> &hiveSplit,
-    std::shared_ptr<ReaderOptions> &baseReaderOpts);
+    std::shared_ptr<ReaderOptions> &baseReaderOpts,
+    ::orc::MemoryPool *orcMemoryPool = nullptr);
 
 void configureRowReaderOptions(
     const std::shared_ptr<const HiveTableHandle>  &hiveTableHandle,

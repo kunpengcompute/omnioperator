@@ -20,6 +20,10 @@ public class LongVec extends FixedWidthVec {
         super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, LongDataType.LONG);
     }
 
+    public LongVec(int size, long nmmHandle) {
+        super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, LongDataType.LONG, nmmHandle);
+    }
+
     public LongVec(long nativeVector) {
         super(nativeVector, LongDataType.LONG, BYTES);
     }

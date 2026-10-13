@@ -22,6 +22,10 @@ public class Decimal128Vec extends DecimalVec {
         super(size, BYTES, Decimal128DataType.DECIMAL128);
     }
 
+    public Decimal128Vec(int size, long nmmHandle) {
+        super(size, BYTES, Decimal128DataType.DECIMAL128, nmmHandle);
+    }
+
     public Decimal128Vec(long nativeVector) {
         super(nativeVector, BYTES, Decimal128DataType.DECIMAL128);
     }

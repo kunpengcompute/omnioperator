@@ -5,6 +5,7 @@
 
 #include "jni_operator_factory.h"
 #include "operator/operator_factory.h"
+#include "memory/omni_task_memory_pool.h"   // decode nmmHandle -> OmniTaskMemoryPool*
 #include "operator/sort/sort.h"
 #include "operator/sort/sort_expr.h"
 #include "operator/aggregation/aggregator/aggregator_util.h"
@@ -151,16 +152,24 @@ void DeserializeJsonToArray(const char *str, std::vector<string> &arr)
 /*
  * Class:     nova_hetu_omniruntime_operator_OmniOperatorFactory
  * Method:    createOperatorNative
- * Signature: (J)JJ
+ * Signature: (JJ)J
+ *
+ * The trailing `jlong nmmHandle` is a raw `omniruntime::mem::OmniTaskMemoryPool*`
+ * address, decoded Java-side via OmniNativeMemoryManagerJniWrapper.getPoolAddress().
+ * nmmHandle==0 signals the no-pool / test-harness path — the factory builds a
+ * nullptr-pool Operator.
  */
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_operator_OmniOperatorFactory_createOperatorNative(JNIEnv *env,
-    jobject jObj, jlong jNativeFactoryObj)
+    jobject jObj, jlong jNativeFactoryObj, jlong nmmHandle)
 {
     auto operatorFactory = (OperatorFactory *)jNativeFactoryObj;
     omniruntime::op::Operator *nativeOperator = nullptr;
 
     JNI_METHOD_START
-    nativeOperator = operatorFactory->CreateOperator();
+    // Decode the pool address. nmmHandle==0 -> nullptr pool;
+    // the subclass CreateOperator(pool) override constructs a nullptr-bound Operator.
+    auto *taskPool = reinterpret_cast<omniruntime::mem::OmniTaskMemoryPool *>(nmmHandle);
+    nativeOperator = operatorFactory->CreateOperator(taskPool);
     if (nativeOperator == nullptr) {
         throw omniruntime::exception::OmniException("CREATE_OPERATOR_FAILED",
             "return a null pointer when creating operator");

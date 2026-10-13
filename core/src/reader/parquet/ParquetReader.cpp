@@ -53,11 +53,16 @@ void ClearRecordBatch(std::vector<BaseVector*>& recordBatch)
     recordBatch.clear();
 }
 
+// Trailing pool param forwards the per-task pool from ParquetReader's
+// options_->GetTaskPool() through to the hot CreateVector allocation inside
+// common::GetFlatBaseVectorsFromBitMark. Symmetric with OrcReader.cpp.
 uint64_t FilterData(uint8_t *bitMark, std::vector<BaseVector*> *recordBatch, int32_t vectorSize,
-                    const std::set<int32_t>& isNullSet, const std::set<int32_t>& isNotNullSet)
+                    const std::set<int32_t>& isNullSet, const std::set<int32_t>& isNotNullSet,
+                    omniruntime::mem::OmniTaskMemoryPool *taskPool)
 {
     std::vector<BaseVector*> resultBatch;
-    if (common::GetFlatBaseVectorsFromBitMark(*recordBatch, resultBatch, bitMark, vectorSize, isNullSet, isNotNullSet)) {
+    if (common::GetFlatBaseVectorsFromBitMark(*recordBatch, resultBatch, bitMark, vectorSize, isNullSet, isNotNullSet,
+                                              taskPool)) {
         ClearRecordBatch(*recordBatch);
         *recordBatch = std::move(resultBatch);
         return (*recordBatch)[0]->GetSize();
@@ -83,8 +88,11 @@ bool ReadAndFilterData(ParquetRowReader& rowReaderPtr,
             ClearRecordBatch(*recordBatch);
             return true;
         }
+        // Thread the per-task pool from ParquetReader's options_->GetTaskPool()
+        // (same source as OrcRowReader).
+        auto* taskPool = rowReaderPtr.GetTaskPool();
         batchRowSize = FilterData(bitMark, recordBatch, vectorSize, predicateCondition->getIsAllNullColumns(),
-                                  predicateCondition->getIsAllNotNullColumns());
+                                  predicateCondition->getIsAllNotNullColumns(), taskPool);
     } catch (const std::exception &e) {
         ClearRecordBatch(*recordBatch);
         throw OmniException("OPERATOR_RUNTIME_ERROR", std::string("Parquet predicate filtering failed: ") + e.what());
@@ -281,6 +289,16 @@ Status ParquetReader::GetRecordBatchReader(const std::vector<int> &row_group_ind
 {
     std::shared_ptr<::arrow::Schema> batch_schema;
     RETURN_NOT_OK(GetFieldReaders(row_group_indices, column_indices, &columnReaders, &batch_schema));
+
+    // Thread the per-task pool down to every column reader's leaf record reader so the
+    // bulk decode in ParquetTypedRecordReader::InitVec allocates pool-accounted output
+    // Vectors. nullptr is tolerated by the pool-bound Vector ctor. Symmetric with ORC.
+    auto* taskPool = options_ != nullptr ? options_->GetTaskPool() : nullptr;
+    for (const auto& columnReader : columnReaders) {
+        if (columnReader != nullptr) {
+            columnReader->SetTaskPool(taskPool);
+        }
+    }
 
     int64_t num_rows = 0;
     for(int row_group : row_group_indices) {

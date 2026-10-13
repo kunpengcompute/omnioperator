@@ -28,11 +28,16 @@ void ClearRecordBatch(std::vector<BaseVector*>& recordBatch)
     recordBatch.clear();
 }
 
+// The trailing pool param forwards the
+// per-task pool from OrcRowReader's options_->GetTaskPool() through to the hot
+// CreateVector allocation inside common::GetFlatBaseVectorsFromBitMark.
 uint64_t FilterData(uint8_t *bitMark, std::vector<BaseVector*> *recordBatch, int32_t vectorSize,
-    const std::set<int32_t>& isNullSet, const std::set<int32_t>& isNotNullSet)
+    const std::set<int32_t>& isNullSet, const std::set<int32_t>& isNotNullSet,
+    omniruntime::mem::OmniTaskMemoryPool *taskPool)
 {
     std::vector<BaseVector*> resultBatch;
-    if (common::GetFlatBaseVectorsFromBitMark(*recordBatch, resultBatch, bitMark, vectorSize, isNullSet, isNotNullSet)) {
+    if (common::GetFlatBaseVectorsFromBitMark(*recordBatch, resultBatch, bitMark, vectorSize, isNullSet, isNotNullSet,
+        taskPool)) {
         ClearRecordBatch(*recordBatch);
         *recordBatch = std::move(resultBatch);
         return (*recordBatch)[0]->GetSize();
@@ -59,8 +64,11 @@ std::vector<BaseVector*> *recordBatch, uint64_t &batchRowSize, int *omniTypeId, 
             ClearRecordBatch(*recordBatch);
             return true;
         }
+        // Thread the per-task pool from OrcRowReader::options_->GetTaskPool(),
+        // as the omniBuildReader call does.
+        auto* taskPool = rowReaderPtr.GetTaskPool();
         batchRowSize = FilterData(bitMark, recordBatch, vectorSize, predicateCondition->getIsAllNullColumns(),
-            predicateCondition->getIsAllNotNullColumns());
+            predicateCondition->getIsAllNotNullColumns(), taskPool);
     } catch (const std::exception &e) {
         ClearRecordBatch(*recordBatch);
         throw OmniException("OPERATOR_RUNTIME_ERROR", std::string("ORC predicate filtering failed: ") + e.what());
@@ -70,7 +78,8 @@ std::vector<BaseVector*> *recordBatch, uint64_t &batchRowSize, int *omniTypeId, 
 
 // Apply residual (unpushed) predicate on an already-compacted batch; reuse compute + FilterData.
 uint64_t ApplyResidualFilter(std::shared_ptr<common::PredicateCondition> &predicateCondition,
-                             std::vector<BaseVector *> *recordBatch, uint64_t rows)
+                             std::vector<BaseVector *> *recordBatch, uint64_t rows,
+                             omniruntime::mem::OmniTaskMemoryPool *taskPool)
 {
     if (predicateCondition == nullptr || rows == 0 || recordBatch->empty()) {
         return rows;
@@ -85,7 +94,7 @@ uint64_t ApplyResidualFilter(std::shared_ptr<common::PredicateCondition> &predic
             return 0;
         }
         return FilterData(bitMark, recordBatch, vectorSize, predicateCondition->getIsAllNullColumns(),
-                          predicateCondition->getIsAllNotNullColumns());
+                          predicateCondition->getIsAllNotNullColumns(), taskPool);
     } catch (const std::exception &e) {
         throw OmniException("OPERATOR_RUNTIME_ERROR", std::string("ApplyResidualFilter failed: ") + e.what());
     }
@@ -343,10 +352,12 @@ void OrcRowReader::StartNextStripe()
             reader.reset();
             selectiveStructReader_ = std::make_unique<SelectiveStructColumnReader>(
                 getSelectedType(), stripeStreams, scanSpec_.get(),
-                (julianPtr == nullptr) ? nullptr : julianPtr.get());
+                (julianPtr == nullptr) ? nullptr : julianPtr.get(),
+                options_ != nullptr ? options_->GetTaskPool() : nullptr);
         } else {
             reader = omniruntime::reader::omniBuildReader(getSelectedType(), stripeStreams,
-                (julianPtr == nullptr) ? nullptr : julianPtr.get());
+                (julianPtr == nullptr) ? nullptr : julianPtr.get(),
+                options_ != nullptr ? options_->GetTaskPool() : nullptr);
         }
 
         if (!includedRowGroups_.empty()) {
@@ -530,7 +541,7 @@ uint64_t OrcRowReader::NextSelective(std::vector<BaseVector *> *batch, int *omni
 
         uint64_t survivors = selectiveStructReader_->read(rowsToRead, *batch, omniTypeID);
         if (applyResidual_ && survivors > 0) {
-            survivors = ApplyResidualFilter(residualPredicate_, batch, survivors);
+            survivors = ApplyResidualFilter(residualPredicate_, batch, survivors, GetTaskPool());
         }
 
         previousRow = firstRowOfStripe[currentStripe] + currentRowInStripe;

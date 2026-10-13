@@ -12,6 +12,7 @@
 #include "operator/aggregation/group_aggregation_expr.h"
 #include "vector/omni_row.h"
 #include "jni_operator.h"
+#include "memory/omni_task_memory_pool.h"  // OmniTaskMemoryPool* decode for nmmHandle parameters
 
 using namespace omniruntime::op;
 using namespace omniruntime::vec;
@@ -279,13 +280,15 @@ JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_freeRowBatchNa
 }
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_newRowBatchNative(JNIEnv *env, jclass jcls,
-    jobjectArray rows, jint rowCount)
+    jobjectArray rows, jint rowCount, jlong nmmHandle)
 {
     jclass rowClass = env->FindClass("nova/hetu/omniruntime/vector/Row");
 
     jfieldID rowAddrId = env->GetFieldID(rowClass, "nativeRow", "J");
     jfieldID lengthId = env->GetFieldID(rowClass, "length", "I");
 
+    // Java Row objects borrow their storage from the original native batch.
+    // Keep the handle parameter for JNI compatibility; wrapping does not transfer ownership.
     auto *rowBatch = new RowBatch(rowCount);
 
     for (int i = 0; i < rowCount; ++i) {
@@ -298,7 +301,7 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_newRowBatchNa
 }
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_transFromVectorBatch(JNIEnv *env, jclass jcls,
-    jlong vectorBatch)
+    jlong vectorBatch, jlong nmmHandle)
 {
     auto *vecBatch = reinterpret_cast<VectorBatch *>(vectorBatch);
     int32_t vecCount = vecBatch->GetVectorCount();
@@ -311,17 +314,22 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_transFromVect
     }
 
     auto rowBuffer = std::make_unique<RowBuffer>(typeIds, encodings, typeIds.size() - 1);
+    // Decode the per-task pool address from the trailing nmmHandle. nmmHandle==0
+    // (legacy tests / pre-pool harness) falls back to nullBridge.
+    auto *taskPool = reinterpret_cast<omniruntime::mem::OmniTaskMemoryPool *>(nmmHandle);
+    static mem::Allocator nullBridge{nullptr};
+    mem::Allocator *bridgeAlloc = (taskPool != nullptr) ? taskPool->getBoundAllocator() : &nullBridge;
 
     auto rowBatch = std::make_unique<RowBatch>(vecBatch->GetRowCount(), typeIds);
     for (int32_t i = 0; i < vecBatch->GetRowCount(); ++i) {
         // 1.get value from vector batch
         rowBuffer->TransValueFromVectorBatch(vecBatch, i);
 
-        // 2.generate one buffer of one row
-        auto oneRowLen = rowBuffer->FillBuffer();
+        // 2.generate one buffer of one row (pool-bound path)
+        auto oneRowLen = rowBuffer->FillBuffer(bridgeAlloc);
 
-        // 3.set one row
-        rowBatch->SetRow(i, new RowInfo(rowBuffer->TakeRowBuffer(), oneRowLen, true));
+        // 3.set one row — pass same allocator for symmetric Free in ~RowInfo
+        rowBatch->SetRow(i, new RowInfo(rowBuffer->TakeRowBuffer(), oneRowLen, bridgeAlloc));
     }
     return reinterpret_cast<jlong>(rowBatch.release());
 }

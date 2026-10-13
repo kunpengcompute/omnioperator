@@ -31,9 +31,10 @@ namespace {
 
 std::unique_ptr<SelectiveColumnReader> MakeSelectiveChild(codegen::ScanSpec *childSpec, const ::orc::Type *childOrcType,
                                                           ::orc::StripeStreams &stripe,
-                                                          common::JulianGregorianRebase *julian)
+                                                          common::JulianGregorianRebase *julian,
+                                                          omniruntime::mem::OmniTaskMemoryPool *taskPool)
 {
-    auto inner = omniBuildReader(*childOrcType, stripe, julian);
+    auto inner = omniBuildReader(*childOrcType, stripe, julian, taskPool);
     switch (static_cast<int64_t>(childOrcType->getKind())) {
         case ::orc::DATE:
         case ::orc::INT:
@@ -80,7 +81,8 @@ std::unique_ptr<SelectiveColumnReader> MakeSelectiveChild(codegen::ScanSpec *chi
 
 SelectiveStructColumnReader::SelectiveStructColumnReader(const ::orc::Type &rootType, ::orc::StripeStreams &stripe,
                                                          codegen::ScanSpec *rootSpec,
-                                                         common::JulianGregorianRebase *julian)
+                                                         common::JulianGregorianRebase *julian,
+                                                         omniruntime::mem::OmniTaskMemoryPool *taskPool)
 {
     // Columns aligned by index i: getSelectedType subtype / omniTypeId[i] / ScanSpec children[i].
     const uint64_t n = rootType.getSubtypeCount();
@@ -94,7 +96,7 @@ SelectiveStructColumnReader::SelectiveStructColumnReader(const ::orc::Type &root
                 "SelectiveStructColumnReader: ScanSpec child missing at index " + std::to_string(i));
         }
 
-        auto reader = MakeSelectiveChild(childSpec, childOrcType, stripe, julian);
+        auto reader = MakeSelectiveChild(childSpec, childOrcType, stripe, julian, taskPool);
         if (childSpec->projectOut()) {
             numOutputChannels_ =
                 std::max(numOutputChannels_, static_cast<int>(childSpec->channel()) + 1);

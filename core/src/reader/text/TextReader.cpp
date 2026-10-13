@@ -282,7 +282,7 @@ uint64_t TextRowReader::NextDirect(
             return 0;
         }
         std::unique_ptr<vec::BaseVector> outputBase(
-            vec::VectorHelper::CreateStringVector(records.size()));
+            vec::VectorHelper::CreateStringVector(options_->GetTaskPool(), records.size()));
         auto* output = reinterpret_cast<vec::Vector<vec::LargeStringContainer<std::string_view>>*>(
             outputBase.get());
         DecodedTextRecord decoded;
@@ -308,7 +308,8 @@ uint64_t TextRowReader::NextDirect(
         writableColumns.reserve(rowType_->size());
         for (int32_t column = 0; column < rowType_->size(); ++column) {
             std::unique_ptr<vec::BaseVector> stringColumn(
-                vec::VectorHelper::CreateStringVector(static_cast<uint32_t>(batchLen)));
+                vec::VectorHelper::CreateStringVector(
+                    options_->GetTaskPool(), static_cast<uint32_t>(batchLen)));
             writableColumns.push_back(reinterpret_cast<StringVector*>(stringColumn.get()));
             stringColumns.emplace_back(std::move(stringColumn));
         }

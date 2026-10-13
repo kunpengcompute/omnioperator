@@ -43,7 +43,11 @@ target_link_libraries(${READER_TARGET} PUBLIC
         z
         snappy
         lz4
-        vectorization)
+        vectorization
+        z-ng)
+# z-ng:reader.cpp 间接 include zlib-ng.h(通过 Arrow/Parquet),源码内 deflate/inflate
+# 被 macro 替换为 zng_deflate/zng_inflate,必须显式 link libz-ng 解析 symbols。
+# 否则 runtime 撞 UnsatisfiedLinkError: undefined symbol: zng_deflate(known-issues #16)。
 install(TARGETS ${READER_TARGET} DESTINATION ${CMAKE_INSTALL_PREFIX})
 
 file(GLOB READER_HEAD_FILES  ${SOURCE_ROOT}/src/reader/*.h)

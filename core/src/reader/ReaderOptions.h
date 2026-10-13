@@ -19,6 +19,11 @@
 
 using omniruntime::codegen::FileFormat;
 
+// Forward declaration avoids dragging
+// the full omni_task_memory_pool.h into every TU that consumes ReaderOptions.
+// Definition needed only at the use sites (OrcRowReader.cpp, SplitReader.cpp).
+namespace omniruntime::mem { class OmniTaskMemoryPool; }
+
 namespace omniruntime::reader {
 
 enum class Operator {
@@ -95,8 +100,17 @@ private:
     // filterWhileDecode global switch (injected via enhancementJson, default false).
     bool enableFilterWhileDecode_ = false;
     std::shared_ptr<omniruntime::codegen::ScanSpec> scanSpec_;
+    // Per-task pool stash. SplitReader
+    // threads it from TableScanOperator::pool(); OrcRowReader picks it up via
+    // GetTaskPool() and forwards to makeNewVector for pool-bound Vector ctors.
+    // nullptr permitted: makeNewVector then uses the [[deprecated]] no-pool ctor
+    // (legacy/test contexts; per-task accounting skipped, no SIGSEGV).
+    omniruntime::mem::OmniTaskMemoryPool *taskPool_ = nullptr;
 
 public:
+    omniruntime::mem::OmniTaskMemoryPool *GetTaskPool() const { return taskPool_; }
+    void SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) { taskPool_ = pool; }
+
     bool EnableFilterWhileDecode() const
     {
         return enableFilterWhileDecode_;

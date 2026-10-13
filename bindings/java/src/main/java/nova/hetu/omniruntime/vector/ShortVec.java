@@ -18,6 +18,10 @@ public class ShortVec extends FixedWidthVec {
         super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, ShortDataType.SHORT);
     }
 
+    public ShortVec(int size, long nmmHandle) {
+        super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, ShortDataType.SHORT, nmmHandle);
+    }
+
     public ShortVec(long nativeVector) {
         super(nativeVector, ShortDataType.SHORT, BYTES);
     }

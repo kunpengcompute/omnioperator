@@ -307,6 +307,11 @@ public class ProtoVecBatchSerializer implements VecBatchSerializer {
 
     @Override
     public VecBatch deserialize(byte[] bytes) {
+        return deserialize(bytes, 0L);
+    }
+
+    @Override
+    public VecBatch deserialize(byte[] bytes, long nmmHandle) {
         VecBatchSerde.VecBatch protoVecBatch;
         try {
             protoVecBatch = VecBatchSerde.VecBatch.parseFrom(bytes);
@@ -318,129 +323,194 @@ public class ProtoVecBatchSerializer implements VecBatchSerializer {
         Vec[] vecs = new Vec[vecCount];
         try {
             for (int i = 0; i < vecCount; i++) {
-                vecs[i] = buildVec(protoVecBatch.getVectors(i));
+                vecs[i] = buildVec(protoVecBatch.getVectors(i), nmmHandle);
             }
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             for (Vec v : vecs) {
                 if (v == null) {
                     continue;
                 }
-                v.close();
+                try {
+                    v.close();
+                } catch (RuntimeException cleanupFailure) {
+                    e.addSuppressed(cleanupFailure);
+                }
             }
+            throw e;
         }
 
         return new VecBatch(vecs, rowCount);
     }
 
-    private Vec buildVec(VecBatchSerde.Vec protoVec) {
+    private static void closeAfterFailure(Vec vector, RuntimeException failure) {
+        if (vector == null) {
+            return;
+        }
+        try {
+            vector.close();
+        } catch (RuntimeException cleanupFailure) {
+            if (cleanupFailure != failure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+        }
+    }
+
+    private Vec buildVec(VecBatchSerde.Vec protoVec, long nmmHandle) {
         VecBatchSerde.DataTypeExt protoTypeExt = protoVec.getTypeExt();
         VecEncoding vecEncoding = VecEncoding.values()[protoVec.getVecEncoding().getEncodingId()];
         VecBatchSerde.DataTypeExt.DataTypeId dataTypeId = protoTypeExt.getId();
         int vecSize = protoVec.getSize();
-        Vec vec;
         switch (vecEncoding) {
-            case OMNI_VEC_ENCODING_FLAT:
-                vec = createFlatVec(vecSize, dataTypeId, protoVec);
-                vec.setValuesBuf(protoVec.getValues().toByteArray());
-                vec.setNullsBuf(protoVec.getNulls().toByteArray());
-                return vec;
-            case OMNI_VEC_ENCODING_CONTAINER:
+            case OMNI_VEC_ENCODING_FLAT: {
+                Vec vector = createFlatVec(vecSize, dataTypeId, protoVec, nmmHandle);
+                try {
+                    vector.setValuesBuf(protoVec.getValues().toByteArray());
+                    vector.setNullsBuf(protoVec.getNulls().toByteArray());
+                    return vector;
+                } catch (RuntimeException failure) {
+                    closeAfterFailure(vector, failure);
+                    throw failure;
+                }
+            }
+            case OMNI_VEC_ENCODING_CONTAINER: {
                 int vecCount = protoVec.getSubVectorsCount();
-                long[] subVecAddresses = new long[vecCount];
-                DataType[] subDataTypes = new DataType[vecCount];
-                for (int i = 0; i < vecCount; i++) {
-                    Vec subVec = buildVec(protoVec.getSubVectors(i));
-                    subVecAddresses[i] = subVec.getNativeVector();
-                    subDataTypes[i] = subVec.getType();
+                Vec[] children = new Vec[vecCount];
+                long[] addresses = new long[vecCount];
+                DataType[] types = new DataType[vecCount];
+                try {
+                    for (int i = 0; i < vecCount; i++) {
+                        children[i] = buildVec(protoVec.getSubVectors(i), nmmHandle);
+                        addresses[i] = children[i].getNativeVector();
+                        types[i] = children[i].getType();
+                    }
+                    // The existing container constructor takes ownership of all children.
+                    return new ContainerVec(vecCount, vecSize, addresses, types);
+                } catch (RuntimeException failure) {
+                    for (Vec child : children) {
+                        closeAfterFailure(child, failure);
+                    }
+                    throw failure;
                 }
-                return new ContainerVec(vecCount, vecSize, subVecAddresses, subDataTypes);
-            case OMNI_ENCODING_ARRAY:
-                Vec elementVec = buildVec(protoVec.getSubVectors(0));
-                DataType child = elementVec.getType();
-                ArrayDataType arrayDataType = new ArrayDataType(child);
-
-                ArrayVec arrayVec = new ArrayVec(arrayDataType, vecSize);
-                arrayVec.addElements(elementVec);
-                arrayVec.setNullsBuf(protoVec.getNulls().toByteArray());
-                arrayVec.setOffsetsBuf(protoVec.getOffsets().toByteArray());
-                return arrayVec;
-            case OMNI_ENCODING_STRUCT:
+            }
+            case OMNI_ENCODING_ARRAY: {
+                Vec element = null;
+                ArrayVec array = null;
+                boolean transferred = false;
+                try {
+                    element = buildVec(protoVec.getSubVectors(0), nmmHandle);
+                    array = new ArrayVec(new ArrayDataType(element.getType()), vecSize, nmmHandle);
+                    array.addElements(element);
+                    transferred = true;
+                    array.setNullsBuf(protoVec.getNulls().toByteArray());
+                    array.setOffsetsBuf(protoVec.getOffsets().toByteArray());
+                    return array;
+                } catch (RuntimeException failure) {
+                    closeAfterFailure(array, failure);
+                    if (!transferred) {
+                        closeAfterFailure(element, failure);
+                    }
+                    throw failure;
+                }
+            }
+            case OMNI_ENCODING_STRUCT: {
                 int fieldCount = protoVec.getSubVectorsCount();
-                Vec[] fieldVectors = new Vec[fieldCount];
-                DataType[] fieldTypes = new DataType[fieldCount];
-
-                for (int i = 0; i < fieldCount; i++) {
-                    fieldVectors[i] = buildVec(protoVec.getSubVectors(i));
-                    fieldTypes[i] = fieldVectors[i].getType();
+                Vec[] fields = new Vec[fieldCount];
+                DataType[] types = new DataType[fieldCount];
+                StructVec struct = null;
+                int transferred = 0;
+                try {
+                    for (int i = 0; i < fieldCount; i++) {
+                        fields[i] = buildVec(protoVec.getSubVectors(i), nmmHandle);
+                        types[i] = fields[i].getType();
+                    }
+                    struct = new StructVec(new StructDataType(types), vecSize, nmmHandle);
+                    for (; transferred < fieldCount; transferred++) {
+                        struct.setChild(transferred, fields[transferred]);
+                    }
+                    struct.setNullsBuf(protoVec.getNulls().toByteArray());
+                    return struct;
+                } catch (RuntimeException failure) {
+                    closeAfterFailure(struct, failure);
+                    for (int i = transferred; i < fieldCount; i++) {
+                        closeAfterFailure(fields[i], failure);
+                    }
+                    throw failure;
                 }
-
-                StructDataType structDataType = new StructDataType(fieldTypes);
-                StructVec structVec = new StructVec(structDataType, vecSize);
-
-                for (int i = 0; i < fieldCount; i++) {
-                    structVec.setChild(i, fieldVectors[i]);
-                }
-                structVec.setNullsBuf(protoVec.getNulls().toByteArray());
-                return structVec;
-            case OMNI_ENCODING_MAP:
+            }
+            case OMNI_ENCODING_MAP: {
                 if (protoVec.getSubVectorsCount() != 2) {
                     throw new IllegalStateException("MapVec must have exactly two subVectors");
                 }
-                Vec keyVec = buildVec(protoVec.getSubVectors(0));
-                Vec valueVec = buildVec(protoVec.getSubVectors(1));
-                DataType keyType = keyVec.getType();
-                DataType valueType = valueVec.getType();
-                MapDataType mapDataType = new MapDataType(keyType, valueType);
-
-                MapVec mapVec = new MapVec(mapDataType, vecSize);
-                mapVec.AddKeys(keyVec);
-                mapVec.AddValues(valueVec);
-                mapVec.setNullsBuf(protoVec.getNulls().toByteArray());
-                mapVec.setOffsetsBuf(protoVec.getOffsets().toByteArray());
-                return mapVec;
+                Vec key = null;
+                Vec value = null;
+                MapVec map = null;
+                boolean keyTransferred = false;
+                boolean valueTransferred = false;
+                try {
+                    key = buildVec(protoVec.getSubVectors(0), nmmHandle);
+                    value = buildVec(protoVec.getSubVectors(1), nmmHandle);
+                    map = new MapVec(new MapDataType(key.getType(), value.getType()), vecSize, nmmHandle);
+                    map.AddKeys(key);
+                    keyTransferred = true;
+                    map.AddValues(value);
+                    valueTransferred = true;
+                    map.setNullsBuf(protoVec.getNulls().toByteArray());
+                    map.setOffsetsBuf(protoVec.getOffsets().toByteArray());
+                    return map;
+                } catch (RuntimeException failure) {
+                    closeAfterFailure(map, failure);
+                    if (!keyTransferred) {
+                        closeAfterFailure(key, failure);
+                    }
+                    if (!valueTransferred) {
+                        closeAfterFailure(value, failure);
+                    }
+                    throw failure;
+                }
+            }
             default:
                 throw new IllegalStateException("Unexpected encoding: " + vecEncoding);
         }
     }
 
     private Vec createFlatVec(int vecSize, VecBatchSerde.DataTypeExt.DataTypeId dataTypeId,
-            VecBatchSerde.Vec protoVec) {
+            VecBatchSerde.Vec protoVec, long nmmHandle) {
         Vec vec;
         switch (dataTypeId) {
             case OMNI_BYTE:
-                vec = new ByteVec(vecSize);
+                vec = new ByteVec(vecSize, nmmHandle);
                 break;
             case OMNI_INT:
             case OMNI_DATE32:
-                vec = new IntVec(vecSize);
+                vec = new IntVec(vecSize, nmmHandle);
                 break;
             case OMNI_LONG:
             case OMNI_TIMESTAMP:
             case OMNI_DATE64:
             case OMNI_DECIMAL64:
-                vec = new LongVec(vecSize);
+                vec = new LongVec(vecSize, nmmHandle);
                 break;
             case OMNI_SHORT:
-                vec = new ShortVec(vecSize);
+                vec = new ShortVec(vecSize, nmmHandle);
                 break;
             case OMNI_BOOLEAN:
-                vec = new BooleanVec(vecSize);
+                vec = new BooleanVec(vecSize, nmmHandle);
                 break;
             case OMNI_FLOAT:
-                vec = new FloatVec(vecSize);
+                vec = new FloatVec(vecSize, nmmHandle);
                 break;
             case OMNI_DOUBLE:
-                vec = new DoubleVec(vecSize);
+                vec = new DoubleVec(vecSize, nmmHandle);
                 break;
             case OMNI_VARBINARY:
             case OMNI_VARCHAR:
             case OMNI_CHAR:
-                VarcharVec varcharVec = new VarcharVec(protoVec.getValues().size(), vecSize);
+                VarcharVec varcharVec = new VarcharVec(protoVec.getValues().size(), vecSize, nmmHandle);
                 varcharVec.setOffsetsBuf(protoVec.getOffsets().toByteArray());
                 vec = varcharVec;
                 break;
             case OMNI_DECIMAL128:
-                vec = new Decimal128Vec(vecSize);
+                vec = new Decimal128Vec(vecSize, nmmHandle);
                 break;
             case OMNI_TIME32:
             case OMNI_TIME64:

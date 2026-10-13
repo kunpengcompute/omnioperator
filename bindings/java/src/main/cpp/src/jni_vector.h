@@ -14,9 +14,10 @@ extern "C" {
 /*
  * Class:     nova_hetu_omniruntime_vector_Vec
  * Method:    newVectorNative
- * Signature: (IIII)J
+ * Signature: (IIIIJ)J
  */
-JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_Vec_newVectorNative(JNIEnv *, jclass, jint, jint, jint, jint);
+JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_Vec_newVectorNative(JNIEnv *, jclass, jint, jint, jint, jint,
+    jlong);
 
 /*
  * Class:     nova_hetu_omniruntime_vector_Vec
@@ -229,10 +230,10 @@ JNIEXPORT jint JNICALL Java_nova_hetu_omniruntime_vector_ComplexVec_getComplexCa
 /*
  * Class:     nova_hetu_omniruntime_vector_ComplexVec
  * Method:    newComplexVectorNative
- * Signature: (II[Lnova/hetu/omniruntime/type/DataType;)J
+ * Signature: (II[Lnova/hetu/omniruntime/type/DataType;J)J
  */
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_ComplexVec_newComplexVectorNative
-        (JNIEnv *, jclass, jint, jint, jobjectArray);
+        (JNIEnv *, jclass, jint, jint, jobjectArray, jlong);
 
 /*
 * Class:     nova_hetu_omniruntime_vector_StructVec
@@ -269,7 +270,7 @@ JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_MapVec_AddOffsetsNative
 
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_ComplexVec_newEmptyComplexVectorNative
-        (JNIEnv *env, jclass jcls, jint jSize, jint jVectorEncodingId, jobjectArray jDataTypes);
+        (JNIEnv *env, jclass jcls, jint jSize, jint jVectorEncodingId, jobjectArray jDataTypes, jlong nmmHandle);
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_StructVec_getChildAddrNative
         (JNIEnv *env, jclass jcls, jlong jNativeVector, jint index);

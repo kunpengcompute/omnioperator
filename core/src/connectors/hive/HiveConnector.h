@@ -46,7 +46,8 @@ public:
             const std::shared_ptr <ConnectorTableHandle> &tableHandle,
             const std::unordered_map <
             std::string,
-            std::shared_ptr<connector::ColumnHandle>> &columnHandles) override;
+            std::shared_ptr<connector::ColumnHandle>> &columnHandles,
+            omniruntime::mem::OmniTaskMemoryPool *taskPool = nullptr) override;
 
     bool supportsSplitPreload() override
     {

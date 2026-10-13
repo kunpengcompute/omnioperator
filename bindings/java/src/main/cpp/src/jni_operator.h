@@ -74,11 +74,13 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_getHash
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_freeRowBatchNative(JNIEnv *env, jclass jcls,
     jlong jVecBatchAddress);
 
+// The trailing `nmmHandle` is a raw OmniTaskMemoryPool* address as jlong.
+// nmmHandle==0 falls back to the legacy nullBridge path (tests / pre-pool harnesses).
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_transFromVectorBatch(JNIEnv *env, jclass jcls,
-    jlong vectorBatch);
+    jlong vectorBatch, jlong nmmHandle);
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_newRowBatchNative(JNIEnv *env, jclass jcls,
-    jobjectArray rows, jint rowCount);
+    jobjectArray rows, jint rowCount, jlong nmmHandle);
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeserializer_newOmniRowDeserializer(
     JNIEnv *env, jclass jcls, jintArray typeArray, jlongArray vecs);

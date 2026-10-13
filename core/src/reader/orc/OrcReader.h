@@ -50,6 +50,14 @@ public:
 
     void StartNextStripe();
 
+    // Expose the per-task pool stashed on ReaderOptions so the file-scope
+    // FilterData/ReadAndFilterData helpers can thread it through
+    // common::GetFlatBaseVectorsFromBitMark.
+    omniruntime::mem::OmniTaskMemoryPool *GetTaskPool() const
+    {
+        return options_ != nullptr ? options_->GetTaskPool() : nullptr;
+    }
+
 private:
     // Index streams are read on their own so that a stripe eliminated by statistics costs only
     // the index, not a prefetch of every data stream in it.

@@ -19,28 +19,47 @@
 #include "OmniRLEv2.hh"
 #include "orc/RLEV2Util.hh"
 #include "OrcDecodeUtils.hh"
+#include "memory/omni_task_memory_pool.h"  // required for pool-bound Vector ctor
 
 #include <string>
 
 using omniruntime::vec::VectorBatch;
 
+namespace {
+// Builds a Vector with the per-task pool when supplied; falls back to the
+// [[deprecated]] no-pool ctor when pool is null (legacy/test paths).
+template <typename T>
+std::unique_ptr<omniruntime::vec::Vector<T>> MakeVec(uint64_t n, omniruntime::mem::OmniTaskMemoryPool *pool,
+    omniruntime::type::DataTypeId tid)
+{
+    if (pool != nullptr) {
+        return std::make_unique<omniruntime::vec::Vector<T>>(n, pool, tid);
+    }
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    return std::make_unique<omniruntime::vec::Vector<T>>(n, tid);
+#pragma GCC diagnostic pop
+}
+} // namespace
+
 namespace omniruntime::reader {
     std::unique_ptr<omniruntime::vec::BaseVector> makeFixedLengthVector(uint64_t numValues,
-        omniruntime::type::DataTypeId dataTypeId) {
+        omniruntime::type::DataTypeId dataTypeId,
+        omniruntime::mem::OmniTaskMemoryPool *pool) {
         switch (dataTypeId) {
             case omniruntime::type::OMNI_BOOLEAN:
-                return std::make_unique<omniruntime::vec::Vector<bool>>(numValues);
+                return MakeVec<bool>(numValues, pool, dataTypeId);
             case omniruntime::type::OMNI_BYTE:
-                return std::make_unique<omniruntime::vec::Vector<int8_t>>(numValues);
+                return MakeVec<int8_t>(numValues, pool, dataTypeId);
             case omniruntime::type::OMNI_SHORT:
-                return std::make_unique<omniruntime::vec::Vector<int16_t>>(numValues);
+                return MakeVec<int16_t>(numValues, pool, dataTypeId);
             case omniruntime::type::OMNI_INT:
             case omniruntime::type::OMNI_DATE32:
-                return std::make_unique<omniruntime::vec::Vector<int32_t>>(numValues);
+                return MakeVec<int32_t>(numValues, pool, dataTypeId);
             case omniruntime::type::OMNI_LONG:
             case omniruntime::type::OMNI_DATE64:
             case omniruntime::type::OMNI_TIMESTAMP:
-                return std::make_unique<omniruntime::vec::Vector<int64_t>>(numValues);
+                return MakeVec<int64_t>(numValues, pool, dataTypeId);
             default:
                 throw std::runtime_error(
                     "MakeFixedLengthVector Not support for this type: " +
@@ -49,10 +68,11 @@ namespace omniruntime::reader {
     }
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeDoubleVector(uint64_t numValues,
-        omniruntime::type::DataTypeId dataTypeId) {
+        omniruntime::type::DataTypeId dataTypeId,
+        omniruntime::mem::OmniTaskMemoryPool *pool) {
         switch (dataTypeId) {
             case omniruntime::type::OMNI_DOUBLE:
-            	return std::make_unique<omniruntime::vec::Vector<double>>(numValues);
+                return MakeVec<double>(numValues, pool, dataTypeId);
             default:
                 throw std::runtime_error(
                     "MakeDoubleVector Not support double vector for this type: " +
@@ -61,10 +81,11 @@ namespace omniruntime::reader {
     }
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeFloatVector(uint64_t numValues,
-                                                                  omniruntime::type::DataTypeId dataTypeId) {
+                                                                  omniruntime::type::DataTypeId dataTypeId,
+                                                                  omniruntime::mem::OmniTaskMemoryPool *pool = nullptr) {
         switch (dataTypeId) {
             case omniruntime::type::OMNI_FLOAT:
-                return std::make_unique<omniruntime::vec::Vector<float>>(numValues);
+                return MakeVec<float>(numValues, pool, dataTypeId);
             default:
                 throw std::runtime_error(
                     "MakeFloatVector Not support float vector for this type: " +
@@ -73,12 +94,13 @@ namespace omniruntime::reader {
     }
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeDecimalVector(uint64_t numValues,
-        omniruntime::type::DataTypeId dataTypeId) {
+        omniruntime::type::DataTypeId dataTypeId,
+        omniruntime::mem::OmniTaskMemoryPool *pool) {
         switch (dataTypeId) {
             case omniruntime::type::OMNI_DECIMAL64:
-                return std::make_unique<omniruntime::vec::Vector<int64_t>>(numValues);
+                return MakeVec<int64_t>(numValues, pool, dataTypeId);
             case omniruntime::type::OMNI_DECIMAL128:
-                return std::make_unique<omniruntime::vec::Vector<omniruntime::vec::Decimal128>>(numValues);
+                return MakeVec<omniruntime::vec::Decimal128>(numValues, pool, dataTypeId);
             default:
                 throw std::runtime_error(
                     "makeDecimalVector Not support vector for this type: " +
@@ -87,15 +109,21 @@ namespace omniruntime::reader {
     }
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeVarcharVector(uint64_t numValues,
-        omniruntime::type::DataTypeId dataTypeId) {
+        omniruntime::type::DataTypeId dataTypeId,
+        omniruntime::mem::OmniTaskMemoryPool *pool) {
         switch (dataTypeId) {
             case omniruntime::type::OMNI_VARBINARY:
             case omniruntime::type::OMNI_CHAR:
             case omniruntime::type::OMNI_VARCHAR:
-                return std::make_unique<omniruntime::vec::Vector<
-                    omniruntime::vec::LargeStringContainer<std::string_view>>>(numValues);
+                // Varchar Vector wraps a LargeStringContainer; bind it to the
+                // task pool when one was supplied by the ORC row reader.
+                return MakeVec<omniruntime::vec::LargeStringContainer<std::string_view>>(
+                    numValues, pool, dataTypeId);
             case omniruntime::type::OMNI_STRING_VIEW:
 #ifdef STRINGVIEW_ENABLE
+                // StringView's upstream specialization does not yet expose a
+                // pool-bound constructor. Preserve the new reader path here;
+                // its allocator migration is handled with the specialization.
                 return std::make_unique<omniruntime::vec::Vector<omniruntime::vec::StringView>>(numValues);
 #else
                 throw std::runtime_error("StringView ORC reader was requested but this native build was configured with STRINGVIEW_ENABLE=OFF");
@@ -107,23 +135,31 @@ namespace omniruntime::reader {
         }
     }
 
+    // ArrayVector / MapVector / RowVector have a pool-bound primary ctor; thread the
+    // per-task pool through these helpers. Child-Vector ctors (created via makeNewVector
+    // below) continue to flow through the pool-aware MakeVec. The trailing pool=nullptr
+    // default preserves call-shape compatibility for callers that have no pool context.
     std::unique_ptr<omniruntime::vec::BaseVector> makeArrayVector(uint64_t numValues,
-                                                                  omniruntime::type::DataTypeId dataTypeId) {
-        return std::make_unique<omniruntime::vec::ArrayVector>(numValues);
+                                                                  omniruntime::type::DataTypeId dataTypeId,
+                                                                  omniruntime::mem::OmniTaskMemoryPool *pool = nullptr) {
+        return std::make_unique<omniruntime::vec::ArrayVector>(static_cast<int64_t>(numValues), pool);
     }
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeMapVector(uint64_t numValues,
-                                                                omniruntime::type::DataTypeId dataTypeId) {
-        return std::make_unique<omniruntime::vec::MapVector>(numValues);
+                                                                omniruntime::type::DataTypeId dataTypeId,
+                                                                omniruntime::mem::OmniTaskMemoryPool *pool = nullptr) {
+        return std::make_unique<omniruntime::vec::MapVector>(static_cast<int64_t>(numValues), pool);
     }
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeRowVector(uint64_t numValues, const orc::Type *structType,
-                                                                omniruntime::type::DataTypeId dataTypeId) {
-        return std::make_unique<omniruntime::vec::RowVector>(numValues);
+                                                                omniruntime::type::DataTypeId dataTypeId,
+                                                                omniruntime::mem::OmniTaskMemoryPool *pool = nullptr) {
+        return std::make_unique<omniruntime::vec::RowVector>(static_cast<int32_t>(numValues), pool);
     }
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeNewVector(uint64_t numValues, const ::orc::Type* baseTp,
-        omniruntime::type::DataTypeId dataTypeId) {
+        omniruntime::type::DataTypeId dataTypeId,
+        omniruntime::mem::OmniTaskMemoryPool *pool) {
         switch (baseTp->getKind()) {
             case ::orc::TypeKind::BOOLEAN:
             case ::orc::TypeKind::BYTE:
@@ -133,24 +169,25 @@ namespace omniruntime::reader {
             case ::orc::TypeKind::TIMESTAMP:
             case ::orc::TypeKind::TIMESTAMP_INSTANT:
             case ::orc::TypeKind::LONG:
-                return makeFixedLengthVector(numValues, dataTypeId);
+                return makeFixedLengthVector(numValues, dataTypeId, pool);
             case ::orc::TypeKind::DOUBLE:
-                return makeDoubleVector(numValues, dataTypeId);
+                return makeDoubleVector(numValues, dataTypeId, pool);
             case ::orc::TypeKind::FLOAT:
-                return makeFloatVector(numValues, dataTypeId);
+                return makeFloatVector(numValues, dataTypeId, pool);
             case ::orc::TypeKind::BINARY:
             case ::orc::TypeKind::CHAR:
             case ::orc::TypeKind::STRING:
             case ::orc::TypeKind::VARCHAR:
-                return makeVarcharVector(numValues, dataTypeId);
+                return makeVarcharVector(numValues, dataTypeId, pool);
             case ::orc::TypeKind::DECIMAL:
-                return makeDecimalVector(numValues, dataTypeId);
+                return makeDecimalVector(numValues, dataTypeId, pool);
             case ::orc::TypeKind::LIST:
-                return makeArrayVector(numValues, dataTypeId);
+                // Thread the pool through the container Vector ctor.
+                return makeArrayVector(numValues, dataTypeId, pool);
             case ::orc::TypeKind::MAP:
-                return makeMapVector(numValues, dataTypeId);
+                return makeMapVector(numValues, dataTypeId, pool);
             case ::orc::TypeKind::STRUCT:
-                return makeRowVector(numValues, baseTp, dataTypeId);
+                return makeRowVector(numValues, baseTp, dataTypeId, pool);
             default: {
                 throw std::runtime_error(
                     "Not support For This ORC Type: " +

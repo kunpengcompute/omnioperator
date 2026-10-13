@@ -142,13 +142,20 @@ std::shared_ptr <codegen::ScanSpec> makeScanSpec(
 void configureReaderOptions(
     const std::shared_ptr<const HiveConfig> &hiveConfig,
     const std::shared_ptr<const HiveConnectorSplit> &hiveSplit,
-    std::shared_ptr <ReaderOptions> &baseReaderOpts)
+    std::shared_ptr <ReaderOptions> &baseReaderOpts,
+    ::orc::MemoryPool *orcMemoryPool)
 {
     auto uri = stringToUriInfo(hiveSplit->getFilePath());
     switch (hiveSplit->getFileFormat()) {
         case FileFormat::ORC: {
             auto orcReaderOptions = std::make_unique<::orc::ReaderOptions>();
-            orc::MemoryPool *pool = orc::getDefaultPool();
+            // Route ORC internal allocations through the per-task pool when the
+            // caller (SplitReader) supplied an OmniOrcPoolAdapter; otherwise
+            // fall back to ORC's std::malloc-backed default
+            // (legacy / non-task contexts).
+            orc::MemoryPool *pool = (orcMemoryPool != nullptr)
+                ? orcMemoryPool
+                : orc::getDefaultPool();
             orcReaderOptions->setMemoryPool(*pool);
             orcReaderOptions->setTailLocation(std::numeric_limits<uint64_t>::max());
             const std::string SerializedFileTail = "";

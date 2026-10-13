@@ -24,12 +24,23 @@ public class ArrayVec extends ComplexVec {
     protected OmniBuffer offsetsBuf;
 
     public ArrayVec(ArrayDataType type, int size) {
-        this(type, size, false);
+        this(type, size, false, 0L);
     }
 
     public ArrayVec(ArrayDataType type, int size, boolean isEmpty) {
-        this(isEmpty ? newEmptyComplexVectorNative(size, OMNI_ENCODING_ARRAY.ordinal(), new DataType[]{type.getElementType()})
-                : newComplexVectorNative(size, OMNI_ENCODING_ARRAY.ordinal(), new DataType[]{type.getElementType()}), type, size, isEmpty);
+        this(type, size, isEmpty, 0L);
+    }
+
+    // Pool-aware ctors. nmmHandle is the per-task OmniTaskMemoryPool address so the
+    // complex wrapper's top-level offsets + validity buffers are pool-accounted
+    // (0L = no pool). Mirrors Vec's nmmHandle convention.
+    public ArrayVec(ArrayDataType type, int size, long nmmHandle) {
+        this(type, size, false, nmmHandle);
+    }
+
+    public ArrayVec(ArrayDataType type, int size, boolean isEmpty, long nmmHandle) {
+        this(isEmpty ? newEmptyComplexVectorNative(size, OMNI_ENCODING_ARRAY.ordinal(), new DataType[]{type.getElementType()}, nmmHandle)
+                : newComplexVectorNative(size, OMNI_ENCODING_ARRAY.ordinal(), new DataType[]{type.getElementType()}, nmmHandle), type, size, isEmpty);
     }
 
     public ArrayVec(long nativeVector, ArrayDataType type) {

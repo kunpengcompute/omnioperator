@@ -55,9 +55,24 @@ namespace omniruntime::reader {
             return field_;
         }
 
+        // Thread the per-task pool down to the leaf record reader so its InitVec
+        // allocates pool-accounted output Vectors. Fanned out by ParquetReader after
+        // the reader tree is built. ListReader/StructReader override to recurse into
+        // their children. Symmetric with ORC's OmniColumnReader::SetTaskPool.
+        virtual void SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) {
+            taskPool_ = pool;
+            if (record_reader_ != nullptr) {
+                record_reader_->SetTaskPool(pool);
+            }
+        }
+
     protected:
         std::shared_ptr<::parquet::arrow::ReaderContext> ctx_;
         std::shared_ptr<::arrow::Field> field_;
+        // Per-task pool delivered by SetTaskPool; threaded into the complex-vector
+        // (ArrayVector/MapVector/RowVector) wrappers built in ListReader/StructReader
+        // LoadBatch so their top-level offsets/validity buffers are pool-accounted.
+        omniruntime::mem::OmniTaskMemoryPool *taskPool_ = nullptr;
     private:
         void NextRowGroup();
         std::unique_ptr<::parquet::arrow::FileColumnIterator> input_;
@@ -76,6 +91,13 @@ namespace omniruntime::reader {
         ::arrow::Status GetRepLevels(const int16_t** data, int64_t* length) override;
 
         ::arrow::Status LoadBatch(int64_t records_to_read, BaseVector** out) override;
+
+        void SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) override {
+            ParquetColumnReader::SetTaskPool(pool);
+            if (item_reader_ != nullptr) {
+                item_reader_->SetTaskPool(pool);
+            }
+        }
     private:
         ::parquet::internal::LevelInfo level_info_;
         std::unique_ptr<ParquetColumnReader> item_reader_;
@@ -115,6 +137,15 @@ namespace omniruntime::reader {
         ::arrow::Status LoadBatch(int64_t records_to_read, BaseVector** out) override;
 
         const std::shared_ptr<Field> field() override { return filtered_field_; }
+
+        void SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) override {
+            ParquetColumnReader::SetTaskPool(pool);
+            for (const auto& child : children_) {
+                if (child != nullptr) {
+                    child->SetTaskPool(pool);
+                }
+            }
+        }
 
     private:
         const std::shared_ptr<::arrow::Field> filtered_field_;

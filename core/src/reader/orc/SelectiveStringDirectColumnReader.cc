@@ -106,7 +106,8 @@ void SelectiveStringDirectColumnReader::ReadProjectionDense(uint64_t rowsToRead,
     }
 
     if (projectOut() && activeRows.size() == rowsToRead) {
-        decoded_ = makeNewVector(rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId));
+        decoded_ = makeNewVector(
+            rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId), taskPool_);
         inner_->next(decoded_.get(), rowsToRead, nullptr, omniTypeId);
         mat_ = Materialization::kDense;
         visitedRows_ = activeRows;
@@ -119,7 +120,7 @@ void SelectiveStringDirectColumnReader::ReadProjectionDense(uint64_t rowsToRead,
 
     const int32_t outSize = static_cast<int32_t>(activeRows.size());
     decoded_ = makeNewVector(static_cast<uint64_t>(outSize), orcType_,
-                             static_cast<omniruntime::type::DataTypeId>(omniTypeId));
+                             static_cast<omniruntime::type::DataTypeId>(omniTypeId), taskPool_);
     auto *varcharVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(decoded_.get());
 
     const common::vector_size_t lastActive = activeRows.back();
@@ -216,7 +217,8 @@ void SelectiveStringDirectColumnReader::read(uint64_t rowsToRead, common::RowSet
     }
 
     // Null-only / Always*: full-batch next + post-filter.
-    decoded_ = makeNewVector(rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId));
+    decoded_ = makeNewVector(
+        rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId), taskPool_);
     inner_->next(decoded_.get(), rowsToRead, nullptr, omniTypeId);
     decodedBase_ = 0;
     mat_ = Materialization::kBatchIndexed;

@@ -18,6 +18,10 @@ public class DoubleVec extends FixedWidthVec {
         super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, DoubleDataType.DOUBLE);
     }
 
+    public DoubleVec(int size, long nmmHandle) {
+        super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, DoubleDataType.DOUBLE, nmmHandle);
+    }
+
     public DoubleVec(long nativeVector) {
         super(nativeVector, DoubleDataType.DOUBLE, BYTES);
     }
