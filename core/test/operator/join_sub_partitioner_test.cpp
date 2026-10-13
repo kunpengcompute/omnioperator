@@ -11,9 +11,11 @@
 #include "type/data_type.h"
 #include "type/data_types.h"
 #include "util/omni_exception.h"
+#include "vector/dictionary_container.h"
 #include "vector/large_string_container.h"
 #include "vector/vector.h"
 #include "vector/vector_batch.h"
+#include "vector/vector_helper.h"
 
 using namespace omniruntime::op;
 using namespace omniruntime::type;
@@ -34,6 +36,28 @@ VectorBatch *MakeLongBatch(const std::vector<int64_t> &values)
 {
     auto *batch = new VectorBatch(values.size());
     auto *vec = new Vector<int64_t>(static_cast<int32_t>(values.size()));
+    for (size_t i = 0; i < values.size(); ++i) {
+        vec->SetValue(static_cast<int32_t>(i), values[i]);
+    }
+    batch->Append(vec);
+    return batch;
+}
+
+VectorBatch *MakeIntBatch(const std::vector<int32_t> &values)
+{
+    auto *batch = new VectorBatch(values.size());
+    auto *vec = new Vector<int32_t>(static_cast<int32_t>(values.size()));
+    for (size_t i = 0; i < values.size(); ++i) {
+        vec->SetValue(static_cast<int32_t>(i), values[i]);
+    }
+    batch->Append(vec);
+    return batch;
+}
+
+VectorBatch *MakeBooleanBatch(const std::vector<bool> &values)
+{
+    auto *batch = new VectorBatch(values.size());
+    auto *vec = new Vector<bool>(static_cast<int32_t>(values.size()));
     for (size_t i = 0; i < values.size(); ++i) {
         vec->SetValue(static_cast<int32_t>(i), values[i]);
     }
@@ -104,6 +128,87 @@ TEST(JoinSubPartitionerTest, PartitionsLongRows)
     delete batch;
 }
 
+TEST(JoinSubPartitionerTest, PartitionsIntRows)
+{
+    auto *batch = MakeIntBatch({1, 2, 3, 4});
+    DataTypes types(std::vector<DataTypePtr>({ IntDataType::Instance() }));
+    JoinSubPartitioner partitioner(TestConfig());
+    auto partitions = partitioner.PartitionRowsByKeyColumns(batch, types, {0});
+
+    ASSERT_EQ(partitions.size(), 4U);
+    for (size_t i = 0; i < partitions.size(); ++i) {
+        const int32_t value = static_cast<int32_t>(i + 1);
+        EXPECT_EQ(partitions[i], partitioner.SubPartitionFromHash(HashUtil::HashValue(value)));
+    }
+    delete batch;
+}
+
+TEST(JoinSubPartitionerTest, PartitionsBooleanRows)
+{
+    const std::vector<bool> values {false, true, true, false};
+    auto *batch = MakeBooleanBatch(values);
+    DataTypes types(std::vector<DataTypePtr>({ BooleanDataType::Instance() }));
+    JoinSubPartitioner partitioner(TestConfig());
+    auto partitions = partitioner.PartitionRowsByKeyColumns(batch, types, {0});
+
+    ASSERT_EQ(partitions.size(), values.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        EXPECT_EQ(partitions[i], partitioner.SubPartitionFromHash(HashUtil::HashValue(values[i])));
+    }
+    delete batch;
+}
+
+/// Regression: DictionaryContainer inherits Vector<T>, so a naive dynamic_cast<Vector<T>*>
+/// + flat GetValue() SEGV'd (q14a Path A planNodeId=4, enc=OMNI_DICTIONARY).
+TEST(JoinSubPartitionerTest, PartitionsDictionaryIntRows)
+{
+    const int32_t dictSize = 4;
+    const int32_t rowCount = 8;
+    auto origin = std::make_unique<Vector<int32_t>>(dictSize);
+    for (int32_t i = 0; i < dictSize; ++i) {
+        origin->SetValue(i, (i + 1) * 10);
+    }
+    std::vector<int32_t> ids(static_cast<size_t>(rowCount));
+    for (int32_t i = 0; i < rowCount; ++i) {
+        ids[static_cast<size_t>(i)] = i % dictSize;
+    }
+    auto *dictVec = reinterpret_cast<Vector<DictionaryContainer<int32_t>> *>(
+        VectorHelper::CreateDictionary(ids.data(), rowCount, origin.get()));
+    ASSERT_EQ(dictVec->GetEncoding(), OMNI_DICTIONARY);
+
+    auto *batch = new VectorBatch(rowCount);
+    batch->Append(dictVec);
+    DataTypes types(std::vector<DataTypePtr>({ IntDataType::Instance() }));
+    JoinSubPartitioner partitioner(TestConfig());
+    auto partitions = partitioner.PartitionRowsByKeyColumns(batch, types, {0});
+
+    ASSERT_EQ(partitions.size(), static_cast<size_t>(rowCount));
+    for (int32_t i = 0; i < rowCount; ++i) {
+        const int32_t value = dictVec->GetValue(i);
+        EXPECT_EQ(partitions[static_cast<size_t>(i)],
+            partitioner.SubPartitionFromHash(HashUtil::HashValue(value)));
+    }
+    delete batch;
+}
+
+TEST(JoinSubPartitionerTest, PartitionsConstIntRows)
+{
+    const int32_t rowCount = 5;
+    const int32_t constValue = 42;
+    auto *batch = new VectorBatch(rowCount);
+    batch->Append(new ConstVector<int32_t>(constValue, OMNI_INT, rowCount));
+    DataTypes types(std::vector<DataTypePtr>({ IntDataType::Instance() }));
+    JoinSubPartitioner partitioner(TestConfig());
+    auto partitions = partitioner.PartitionRowsByKeyColumns(batch, types, {0});
+
+    ASSERT_EQ(partitions.size(), static_cast<size_t>(rowCount));
+    const uint32_t expected = partitioner.SubPartitionFromHash(HashUtil::HashValue(constValue));
+    for (int32_t i = 0; i < rowCount; ++i) {
+        EXPECT_EQ(partitions[static_cast<size_t>(i)], expected);
+    }
+    delete batch;
+}
+
 TEST(JoinSubPartitionerTest, PartitionsVarcharRows)
 {
     std::vector<std::string> values = {"a", "bb", "ccc"};
@@ -160,8 +265,34 @@ TEST(JoinSubPartitionerTest, PartitionsMultiLongKeys)
     delete batch;
 }
 
+TEST(JoinSubPartitionerTest, PartitionsMultiIntKeys)
+{
+    auto *batch = new VectorBatch(3);
+    auto *left = new Vector<int32_t>(3);
+    auto *right = new Vector<int32_t>(3);
+    for (int32_t i = 0; i < 3; ++i) {
+        left->SetValue(i, i + 1);
+        right->SetValue(i, 10 + i);
+    }
+    batch->Append(left);
+    batch->Append(right);
+    DataTypes types(std::vector<DataTypePtr>({ IntDataType::Instance(), IntDataType::Instance() }));
+    JoinSubPartitioner partitioner(TestConfig());
+    auto partitions = partitioner.PartitionRowsByKeyColumns(batch, types, {0, 1});
+
+    ASSERT_EQ(partitions.size(), 3U);
+    for (int32_t i = 0; i < 3; ++i) {
+        const auto h1 = HashUtil::HashValue(static_cast<int32_t>(i + 1));
+        const auto h2 = HashUtil::HashValue(static_cast<int32_t>(10 + i));
+        EXPECT_EQ(partitions[i], partitioner.SubPartitionFromHash(HashUtil::CombineHash(h1, h2)));
+    }
+    delete batch;
+}
+
 TEST(JoinSubPartitionerTest, RejectsUnsupportedKeyType)
 {
+    // OMNI_INT is now supported (G-1) — use OMNI_DOUBLE, which JoinSubPartitioner still doesn't
+    // handle, to keep this test meaningful.
     auto *batch = new VectorBatch(1);
     auto *vec = new Vector<double>(1);
     vec->SetValue(0, 1.0);

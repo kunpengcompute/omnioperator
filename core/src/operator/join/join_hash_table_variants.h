@@ -6,7 +6,7 @@
 #ifndef OMNI_RUNTIME_JOIN_HASH_TABLE_VARIANTS_H
 #define OMNI_RUNTIME_JOIN_HASH_TABLE_VARIANTS_H
 
-#include <memory>
+#include <cstdint>
 #include <variant>
 #include <vector>
 #include <thread>
@@ -14,6 +14,7 @@
 #include <exception>
 #include <unordered_map>
 
+#include "memory/omni_task_memory_pool.h"
 #include "operator/status.h"
 #include "operator/hashmap/crc_hasher.h"
 #include "operator/hashmap/base_hash_map.h"
@@ -35,6 +36,9 @@ constexpr int32_t BITS_OF_DECIMAL = 64;
 constexpr int32_t BITS_OF_LONGLONG = 128;
 constexpr int32_t NOT_EXPECTED_TYPE = 0;
 
+// POOL-BOUND (B): JoinHashMap ctrl/slots go through OmniHashmapAllocator. Today that defaults to
+// Allocator::GetAllocator() (uncovered). After task-pool SetPool, allocator must be task-pool bound so
+// Build / ReclaimBuildPartition GetAllocatedBytes and pool currentBytes stay aligned.
 template <typename KeyType, typename ValueType>
 using JoinHashMap =
     BaseHashMap<KeyType, ValueType, omniruntime::simdutil::HashCRC32<KeyType>, Grower, OmniHashmapAllocator>;
@@ -59,9 +63,97 @@ public:
 
     ~JoinHashTableVariants();
 
+    // Releases completed build state after the last lookup consumer reaches its terminal state.
+    // Idempotent so the owning factory/destructor can run normally afterwards.
+    uint64_t ReleaseBuildState();
+
+    ALWAYS_INLINE bool IsBuildStateReleased() const
+    {
+        return buildStateReleased;
+    }
+
+    // Bind the per-partition ExecutionContexts to this
+    // task's per-task pool so hash table arena allocations are visible to Spark
+    // TaskMemoryManager. Called by HashBuilderOperator ctor (where the per-task
+    // pool first becomes available). Idempotent for same pool — safe under future
+    // intra-task spill where multiple HashBuilderOperators share one JHTV.
+    //
+    // Destruction-order safety: HBO dtor → Factory dtor → ~JHTV → POOL dtor, all
+    // on the same thread/task, with the pool outliving the Factory. Therefore the implicit destruction of
+    // pool-bound ExecutionContexts inside ~JHTV always sees a live pool — no
+    // Detach hook needed.
+    void SetPool(omniruntime::mem::OmniTaskMemoryPool *pool);
+
     ALWAYS_INLINE uint32_t GetHashTableCount() const
     {
         return hashTableCount;
+    }
+
+    /// Free one sub-partition's build memory (table, arena, columns, input batches).
+    void ReclaimBuildPartition(int32_t partitionIndex);
+
+    // Number of sub-partitions whose build rows are currently resident in memory (not yet reclaimed).
+    // Used to assert the single-bucket restore memory invariant (peak 1 table per round).
+    ALWAYS_INLINE uint32_t GetResidentBuildPartitionCount() const
+    {
+        uint32_t resident = 0;
+        for (uint32_t partition = 0; partition < hashTableCount; ++partition) {
+            if (!inputVecBatches[partition].empty()) {
+                ++resident;
+            }
+        }
+        return resident;
+    }
+
+    /// Resident input batches still held for one sub-partition (for group spill).
+    ALWAYS_INLINE const std::vector<omniruntime::vec::VectorBatch *> &GetResidentInputVecBatches(
+        int32_t partitionIndex) const
+    {
+        return inputVecBatches[static_cast<size_t>(partitionIndex)];
+    }
+
+    /// Transfer ownership of resident batches out of \p partitionIndex and zero its row count.
+    /// Caller must FreeVecBatch each returned pointer; do not call ReclaimBuildPartition on the
+    /// same batches afterward (that would double-free). HT/arena/columns still need reclaim.
+    ALWAYS_INLINE std::vector<omniruntime::vec::VectorBatch *> TakeOwnershipOfResidentBatches(
+        int32_t partitionIndex)
+    {
+        auto &batches = inputVecBatches[static_cast<size_t>(partitionIndex)];
+        std::vector<omniruntime::vec::VectorBatch *> out;
+        out.swap(batches);
+        totalRowCount[static_cast<size_t>(partitionIndex)] = 0;
+        return out;
+    }
+
+    /// Read-only estimate of B+C+D incremental bytes for Prepare+BuildHashTable on one partition.
+    /// Does not include resident input batches (A). Used by EOB EnsureTableFits (R2).
+    uint64_t EstimateBuildReservation(int32_t partitionIndex) const;
+
+    /// Approximate bytes of hash-table / array-map buffers (reclaim estimate block B).
+    ALWAYS_INLINE uint64_t EstimateHashTableBytes() const
+    {
+        uint64_t bytes = 0;
+        for (uint32_t partition = 0; partition < hashTableCount; ++partition) {
+            if (hashTables[partition] != nullptr) {
+                bytes += hashTables[partition]->GetAllocatedBytes();
+            }
+            if (arrayTables[partition] != nullptr) {
+                bytes += arrayTables[partition]->GetAllocatedBytes();
+            }
+        }
+        return bytes;
+    }
+
+    /// Approximate bytes used by per-partition RowRefList arenas (reclaim estimate block C).
+    ALWAYS_INLINE uint64_t EstimateArenaBytes() const
+    {
+        uint64_t bytes = 0;
+        for (uint32_t partition = 0; partition < hashTableCount; ++partition) {
+            if (executionContexts[partition] != nullptr) {
+                bytes += executionContexts[partition]->GetArena()->UsedBytes();
+            }
+        }
+        return bytes;
     }
 
     ALWAYS_INLINE uint32_t GetHashTableSize() const
@@ -99,32 +191,21 @@ public:
         return hashTableTypes[partitionIndex];
     }
 
+    // POOL-BOUND (A): takes ownership of resident build VectorBatch*; payload must already be
+    // (or become) charged to the task pool. Pair with FreeVecBatches in ReclaimBuildPartition.
     ALWAYS_INLINE void AddVecBatch(int32_t partitionIndex, omniruntime::vec::VectorBatch *vecBatch)
     {
+        if (buildStateReleased) {
+            throw omniruntime::exception::OmniException("OPERATOR_RUNTIME_ERROR",
+                "Cannot add build input after releasing join build state");
+        }
         inputVecBatches[partitionIndex].emplace_back(vecBatch);
         totalRowCount[partitionIndex] += vecBatch->GetRowCount();
     }
 
     ALWAYS_INLINE uint32_t GetTotalRowCount(int32_t partitionIndex) const
     {
-        return totalRowCount[partitionIndex];
-    }
-
-    ALWAYS_INLINE std::vector<omniruntime::vec::VectorBatch *> TakeResidentBatches(int32_t partitionIndex)
-    {
-        std::vector<omniruntime::vec::VectorBatch *> taken;
-        taken.swap(inputVecBatches[partitionIndex]);
-        totalRowCount[partitionIndex] = 0;
-        return taken;
-    }
-
-    void ResetPartition(int32_t partitionIndex);
-
-    /// Drops HT / arena / resident batches after the last probe consumer is finished.
-    void ReleaseBuildState();
-    ALWAYS_INLINE bool IsBuildStateReleased() const
-    {
-        return buildStateReleased_;
+        return totalRowCount[static_cast<size_t>(partitionIndex)];
     }
 
     InsertResult<RowRefListType *> Find(std::vector<VectorSerializerIgnoreNull> &probeSerializers,
@@ -207,8 +288,8 @@ public:
         return hasDuplicateKeys_;
     }
 
-    /// Append a trailing BOOLEAN visited column to each resident batch. No-op when the
-    /// row-ref list type has no visited bit.
+    // Persist visited bits when Probe reclaims a held FULL/same-side outer table.
+    // The trailing column is peeled before the restored table is built again.
     void AppendVisitedFlagsToResident(int32_t partitionIndex)
     {
         if constexpr (std::is_same_v<RowRefListType, RowRefListWithFlags>) {
@@ -216,26 +297,65 @@ public:
                 return;
             }
             auto &batches = inputVecBatches[partitionIndex];
-            for (uint32_t i = 0; i < batches.size(); ++i) {
+            std::vector<std::unique_ptr<omniruntime::vec::Vector<bool>>> flags(batches.size());
+            for (size_t i = 0; i < batches.size(); ++i) {
                 if (batches[i] == nullptr) {
                     continue;
                 }
-                const int32_t rowCount = batches[i]->GetRowCount();
-                // Vector<bool> does not zero its buffer. Unvisited rows must be false;
-                // a leftover true bit makes restore skip the unmatched build row.
-                auto *flags = new omniruntime::vec::Vector<bool>(rowCount);
-                for (int32_t row = 0; row < rowCount; ++row) {
-                    flags->SetValue(row, false);
+                flags[i] = std::make_unique<omniruntime::vec::Vector<bool>>(
+                    batches[i]->GetRowCount(), pool_);
+                for (int32_t row = 0; row < flags[i]->GetSize(); ++row) {
+                    flags[i]->SetValue(row, false);
                 }
-                std::unique_ptr<omniruntime::vec::BaseVector> flagCol(flags);
-                FillVisitedFlagColumn(partitionIndex, i, flagCol.get());
-                batches[i]->Append(flagCol.release());
+            }
+            // Traverse row references once for all batches. Scanning the entire
+            // table separately for each batch makes pressure-driven spill quadratic.
+            auto writeFlags = [&](const auto &value) {
+                auto it = value->Begin();
+                while (it.IsOk()) {
+                    if (it->visited && it->vecBatchIdx < flags.size()) {
+                        auto *flag = flags[it->vecBatchIdx].get();
+                        if (flag != nullptr && it->rowIdx < static_cast<uint32_t>(flag->GetSize())) {
+                            flag->SetValue(it->rowIdx, true);
+                        }
+                    }
+                    ++it;
+                }
+            };
+            if (GetHashTableTypes(partitionIndex) == HashTableImplementationType::ARRAY_HASH_TABLE) {
+                auto &table = GetArrayTable(partitionIndex);
+                if (table) {
+                    table->ForEachValue([&](const auto &value, const auto &) { writeFlags(value); });
+                }
+            } else {
+                auto &table = GetHashTable(partitionIndex);
+                if (table) {
+                    table->hashmap.ForEachValue([&](const auto &value, const auto &) { writeFlags(value); });
+                }
+            }
+            size_t appendedThrough = 0;
+            try {
+                for (; appendedThrough < batches.size(); ++appendedThrough) {
+                    if (flags[appendedThrough] != nullptr) {
+                        batches[appendedThrough]->Append(flags[appendedThrough].get());
+                    }
+                }
+            } catch (...) {
+                // Append may allocate pointer metadata. Keep flag ownership
+                // until all batches commit, and undo earlier appends on failure.
+                for (size_t i = 0; i < appendedThrough; ++i) {
+                    if (flags[i] != nullptr) {
+                        batches[i]->ResizeVectorCount(batches[i]->GetVectorCount() - 1);
+                    }
+                }
+                throw;
+            }
+            for (auto &flag : flags) {
+                flag.release();
             }
         }
     }
 
-    /// Fill a pre-allocated OMNI_BOOLEAN column (default false) from HT visited bits for one
-    /// resident batch index. No-op for non-flag row-ref list types.
     void FillVisitedFlagColumn(int32_t partitionIndex, uint32_t vecBatchIdx,
         omniruntime::vec::BaseVector *flagCol)
     {
@@ -246,6 +366,11 @@ public:
             }
             auto *boolVec = reinterpret_cast<omniruntime::vec::Vector<bool> *>(flagCol);
             const int32_t flagSize = boolVec->GetSize();
+            // The flag vector is newly allocated and its value buffer is not initialized.
+            // Every unvisited build row must be written as false before setting matches.
+            for (int32_t row = 0; row < flagSize; ++row) {
+                boolVec->SetValue(row, false);
+            }
             auto writeFlags = [&](auto &value) {
                 auto it = value->Begin();
                 while (it.IsOk()) {
@@ -270,7 +395,6 @@ public:
         }
     }
 
-    /// Restore visited bits from peeled spill BOOLEAN columns (parallel to resident batches).
     void ApplyVisitedFlagsFromColumns(int32_t partitionIndex,
         const std::vector<omniruntime::vec::BaseVector *> &flags)
     {
@@ -335,11 +459,6 @@ public:
     }
 
     void BuildHashTable(int32_t partitionIndex);
-    void BuildHashTableAdaptive(int32_t partitionIndex);
-
-    /// Same open-cost as BuildHashTable + BaseHashMap::EstimateRehashAllocationFromEmpty.
-    int64_t EstimateHashTableInitBytes(int32_t partitionIndex) const;
-    int64_t EstimateRowRefArenaBytes(int32_t partitionIndex) const;
 
     /// Velox-style parallel build: single hash table, bucket-range partitioning, no probe-side changes.
     /// Returns true if parallel build was applied; false to fall back to serial BuildHashTable().
@@ -349,6 +468,10 @@ public:
     {
         return totalRowCount[partitionIndex];
     }
+
+    /// Build a normal hash table from the minimum capacity and grow with observed distinct keys.
+    /// Used only as the restore fallback when the row-count-sized table reservation is denied.
+    void BuildHashTableAdaptive(int32_t partitionIndex);
 
     void Prepare(int32_t partitionIndex);
 
@@ -368,15 +491,39 @@ private:
 
     template <typename T> void EmplaceKeyToArrayTable(T &min, T &max, int64_t rangeUpperBound, int32_t partitionIndex);
 
+    template <bool kGrowing>
     void BuildNormalHashTableWithFixedKey(int32_t partitionIndex, uint8_t initDegree);
 
+    template <bool kGrowing>
     void BuildNormalHashTableWithVariableKey(int32_t partitionIndex, uint8_t initDegree);
 
-    template <typename HashTableType>
+    // Insert dispatch: kGrowing selects the adaptive grow-on-insert hashmap entry point.
+    // Pre-sized builds keep the check-free fast path (kGrowing == false).
+    template <bool kGrowing, typename HashTableType, typename K>
+    static ALWAYS_INLINE auto EmplaceJoinKey(HashTableType &hashTable, K &key)
+    {
+        if constexpr (kGrowing) {
+            return hashTable->InsertJoinKeysToHashmapGrowing(key);
+        } else {
+            return hashTable->InsertJoinKeysToHashmap(key);
+        }
+    }
+
+    template <bool kGrowing, typename HashTableType, typename K>
+    static ALWAYS_INLINE auto EmplaceJoinKey(HashTableType &hashTable, K &key, size_t &hashValue)
+    {
+        if constexpr (kGrowing) {
+            return hashTable->InsertJoinKeysToHashmapGrowing(key, hashValue);
+        } else {
+            return hashTable->InsertJoinKeysToHashmap(key, hashValue);
+        }
+    }
+
+    template <typename HashTableType, bool kGrowing>
     void EmplaceFixedKey(HashTableType &hashTable, int32_t partitionIndex, VectorBatch *vecBatch, int32_t vecBatchIdx,
         BaseVector **buildVectors, int32_t buildColNum);
 
-    template <typename HashTableType>
+    template <typename HashTableType, bool kGrowing>
     void EmplaceFixedNotNullKeyToNormalHashTable(HashTableType &hashTable, int32_t partitionIndex,
         VectorBatch *vecBatch, int32_t vecBatchIdx, BaseVector **buildVectors, int32_t buildColNum);
 
@@ -384,44 +531,45 @@ private:
     void EmplaceFixedNotNullKeyToNormalHashTableSimd(HashTableType &hashTable, int32_t partitionIndex,
         VectorBatch *vecBatch, int32_t vecBatchIdx, BaseVector **buildVectors, int32_t buildColNum);
 
-    template <typename HashTableType>
+    template <typename HashTableType, bool kGrowing>
     void EmplaceFixedKeyToNormalHashTable(HashTableType &hashTable, int32_t partitionIndex, VectorBatch *vecBatch,
         int32_t vecBatchIdx, BaseVector **buildVectors, int32_t buildColNum);
 
-    template <typename HashTableType>
+    template <typename HashTableType, bool kGrowing>
     void EmplaceSingleKey(HashTableType &hashTable, int32_t partitionIndex, VectorBatch *vecBatch, int32_t vecBatchIdx,
         BaseVector **buildVectors);
 
-    template <bool isDic, typename HashTableType>
+    template <bool isDic, typename HashTableType, bool kGrowing>
     void EmplaceSingleNotNullKeyToNormalHashTable(HashTableType &hashTable, int32_t partitionIndex,
         VectorBatch *vecBatch, int32_t vecBatchIdx, BaseVector **buildVectors);
 
-    template <bool isDic, typename HashTableType>
+    template <bool isDic, typename HashTableType, bool kGrowing>
     void EmplaceSingleKeyToNormalHashTable(HashTableType &hashTable, int32_t partitionIndex, VectorBatch *vecBatch,
         int32_t vecBatchIdx, BaseVector **buildVectors);
 
-    template <typename HashTableType>
+    template <typename HashTableType, bool kGrowing>
     void EmplaceMultiKey(HashTableType &hashTable, int32_t partitionIndex, VectorBatch *vecBatch, int32_t vecBatchIdx,
         BaseVector **buildVectors);
 
-    template <typename HashTableType>
+    template <typename HashTableType, bool kGrowing>
     void EmplaceMultiNotNullKeyToNormalHashTable(HashTableType &hashTable, int32_t partitionIndex,
          VectorBatch *vecBatch, int32_t vecBatchIdx, BaseVector **buildVectors);
 
-    template <typename HashTableType>
+    template <typename HashTableType, bool kGrowing>
     void EmplaceMultiKeyToNormalHashTable(HashTableType &hashTable, int32_t partitionIndex, VectorBatch *vecBatch,
          int32_t vecBatchIdx, BaseVector **buildVectors);
 
-    template <typename HashTableType>
+    template <typename HashTableType, bool kGrowing>
     void EmplaceVariableKey(HashTableType &hashTable, int32_t partitionIndex, VectorBatch *vecBatch,
         int32_t vecBatchIdx, BaseVector **buildVectors, int32_t buildColNum, std::vector<int8_t> &isNotNullKeys,
         std::vector<size_t> &hashes, std::vector<KeyType> &tryRes);
 
-    template <typename HashTableType>
+    template <typename HashTableType, bool kGrowing>
     void EmplaceVariableNotNullKeyToNormalHashTable(HashTableType &hashTable, int32_t partitionIndex,
         VectorBatch *vecBatch, int32_t vecBatchIdx, BaseVector **buildVectors, int32_t buildColNum,
         std::vector<int8_t> &isNotNullKeys, std::vector<size_t> &hashes, std::vector<KeyType> &tryRes);
-    template <typename HashTableType>
+
+    template <typename HashTableType, bool kGrowing>
     void EmplaceVariableKeyToNormalHashTable(HashTableType &hashTable, int32_t partitionIndex, VectorBatch *vecBatch,
         int32_t vecBatchIdx, BaseVector **buildVectors, int32_t buildColNum, std::vector<int8_t> &isNotNullKeys,
         std::vector<size_t> &hashes, std::vector<KeyType> &tryRes);
@@ -436,7 +584,10 @@ private:
     DataTypes *buildTypes;
     std::vector<int32_t> &buildHashCols;
     std::vector<uint32_t> totalRowCount;
+    // POOL-BOUND (A): resident build column payloads until reclaim / handoff clear.
     std::vector<std::vector<omniruntime::vec::VectorBatch *>> inputVecBatches;
+    // POOL-BOUND (C): per-SP arena for RowRefList + serialized join keys. Must use a pool-bound
+    // Allocator (via SetPool / ExecutionContext(pool)); default GetAllocator() is uncovered.
     std::vector<std::unique_ptr<ExecutionContext>> executionContexts;
     uint32_t visitedCounts = 0;
     uint32_t totalVisitedCounts = 0;
@@ -448,11 +599,15 @@ private:
     size_t fixedKeysSize = 0;
     size_t sizeOfRowRefList = 0;
     bool isNeedNullKeyTable = false;
-    bool buildStateReleased_ = false;
     OmniStatus status = OmniStatus::OMNI_STATUS_NORMAL;
     std::unordered_map<int32_t, ::common::FilterPtr> dynamicFilters_;
     bool dynamicFiltersBuilt_ = false;
     bool hasDuplicateKeys_ = false;
+    bool buildStateReleased = false;
+    // Per-task pool bound at HBO ctor via SetPool;
+    // remembered for idempotency check on repeated SetPool calls (future spill
+    // multi-op case where N HBOs share one JHTV with the same task pool).
+    omniruntime::mem::OmniTaskMemoryPool *pool_ = nullptr;
 };
 
 using HashTableVariants =

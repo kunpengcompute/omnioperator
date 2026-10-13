@@ -80,14 +80,18 @@ LookupOuterJoinWithExprOperatorFactory::~LookupOuterJoinWithExprOperatorFactory(
     delete this->operatorFactory;
 }
 
-Operator *LookupOuterJoinWithExprOperatorFactory::CreateOperator()
+// Pool-bound override forwards pool to inner factory.
+Operator *LookupOuterJoinWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto lookupOuterJoinOperator = static_cast<LookupOuterJoinOperator *>(operatorFactory->CreateOperator());
-    return new LookupOuterJoinWithExprOperator(lookupOuterJoinOperator);
+    auto lookupOuterJoinOperator = static_cast<LookupOuterJoinOperator *>(operatorFactory->CreateOperator(pool));
+    return new LookupOuterJoinWithExprOperator(pool, lookupOuterJoinOperator);
 }
 
-LookupOuterJoinWithExprOperator::LookupOuterJoinWithExprOperator(LookupOuterJoinOperator *lookupJoinOperator)
-    : lookupOuterJoinOperator(lookupJoinOperator)
+// Pool-bound ctor — same body, chains Operator(pool).
+LookupOuterJoinWithExprOperator::LookupOuterJoinWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    LookupOuterJoinOperator *lookupJoinOperator)
+    : Operator(pool),
+      lookupOuterJoinOperator(lookupJoinOperator)
 {
     SetOperatorName(opNameForLookUpJoin);
 }

@@ -17,6 +17,7 @@
 #include "common_join.h"
 #include "join_sub_partitioner.h"
 #include "operator/spill/spill_merger.h"
+#include "operator/spillable_operator.h"
 
 namespace omniruntime {
 namespace op {
@@ -111,7 +112,8 @@ private:
             } else if (column->GetEncoding() == vec::OMNI_ENCODING_MAP) {
                 probeColumn = column->CopyPositions(probePositions, 0, rowCount);
             } else {
-                probeColumn = VectorHelper::CreateDictionaryVector(probePositions, rowCount, column, type);
+                probeColumn = VectorHelper::CreateDictionaryVector(probePositions, rowCount, column, type,
+                    false, pool_);
             }
             vectorBatch->Append(probeColumn);
         }
@@ -150,6 +152,9 @@ private:
     int32_t probeRowOffset = 0;
     std::vector<std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t>> probeBuildIndex;
     std::vector<bool> existJoinBuildIndex;
+    mem::OmniTaskMemoryPool *pool_ = nullptr;
+public:
+    void SetPool(mem::OmniTaskMemoryPool *pool) { pool_ = pool; }
 };
 
 class LookupJoinOperatorFactory : public OperatorFactory {
@@ -177,11 +182,16 @@ public:
         bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig, int32_t *outputList = nullptr);
     static LookupJoinOperatorFactory *CreateLookupJoinOperatorFactory(std::shared_ptr<const HashJoinNode> planNode,
         HashBuilderOperatorFactory* hashBuilderOperatorFactory, const config::QueryConfig &queryConfig);
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    Operator *CreateOperator(mem::OmniTaskMemoryPool *pool) override;
 
-    void SetJoinSpillPolicy(bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg = {});
+    void SetJoinSpillPolicy(bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg = {},
+        bool passiveReclaimEnabled = false);
     void SetJoinSpillState(std::shared_ptr<JoinSpillState> joinSpillState);
-    void SetRetainBroadcastHashTable(bool retain);
+    void SetEagerReleaseBuildState(bool enabled)
+    {
+        eagerReleaseBuildState_ = enabled;
+    }
 
 private:
     void CommonInitActions(const type::DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount,
@@ -203,19 +213,36 @@ private:
     // this is for lookup join with expression operator when join key and join filter both are expressions
     int32_t originalProbeColsCount;
     bool joinSpillEnabled_ = false;
-    bool retainBroadcastHashTable_ = false;
+    bool passiveReclaimEnabled_ = false;
+    bool eagerReleaseBuildState_ = true;
     JoinSubPartitionConfig joinSubPartCfg_;
     std::shared_ptr<JoinSpillState> joinSpillState_;
 };
 
-class LookupJoinOperator : public Operator {
+class LookupJoinOperator : public Operator, public SpillableOperator {
 public:
+    LookupJoinOperator(mem::OmniTaskMemoryPool *pool, const type::DataTypes &probeTypes,
+        std::vector<int32_t> &probeOutputCols, std::vector<int32_t> &probeHashCols,
+        std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
+        const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
+        int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan,
+        bool joinSpillEnabled = false, JoinSubPartitionConfig joinSubPartCfg = {},
+        JoinSpillState *joinSpillState = nullptr, bool passiveReclaimEnabled = false);
+    LookupJoinOperator(mem::OmniTaskMemoryPool *pool, const type::DataTypes &probeTypes,
+        std::vector<int32_t> &probeOutputCols, std::vector<int32_t> &probeHashCols,
+        std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
+        const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
+        int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan,
+        std::vector<int32_t> &outputList, bool joinSpillEnabled = false,
+        JoinSubPartitionConfig joinSubPartCfg = {}, JoinSpillState *joinSpillState = nullptr,
+        bool passiveReclaimEnabled = false);
     LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
         std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes,
         std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
         SimpleFilter *simpleFilter, int32_t originalProbeColsCount,
         int32_t outputRowSize, bool isShuffleExchangeBuildPlan, bool joinSpillEnabled = false,
-        JoinSubPartitionConfig joinSubPartCfg = {}, JoinSpillState *joinSpillState = nullptr);
+        JoinSubPartitionConfig joinSubPartCfg = {}, JoinSpillState *joinSpillState = nullptr,
+        bool passiveReclaimEnabled = false);
 
     LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
                        std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes,
@@ -223,13 +250,31 @@ public:
                        SimpleFilter *simpleFilter, int32_t originalProbeColsCount,
                        int32_t outputRowSize, bool isShuffleExchangeBuildPlan, std::vector<int32_t> &outputList,
                        bool joinSpillEnabled = false, JoinSubPartitionConfig joinSubPartCfg = {},
-                       JoinSpillState *joinSpillState = nullptr);
+                       JoinSpillState *joinSpillState = nullptr, bool passiveReclaimEnabled = false);
     ~LookupJoinOperator() override;
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override;
     int32_t GetOutput(omniruntime::vec::VectorBatch **outputVecBatch) override;
     OmniStatus Close() override;
     BlockingReason IsBlocked(ContinueFuture* future) override;
     bool needsInput() override;
+    void noMoreInput() override
+    {
+        Operator::noMoreInput();
+        RefreshHasMoreProbeInput();
+    }
+    void setNoMoreInput(bool value) override
+    {
+        Operator::setNoMoreInput(value);
+        RefreshHasMoreProbeInput();
+    }
+    uint64_t reclaimableBytes() const override;
+    int64_t reclaim(int64_t targetBytes) override;
+    bool isInNonReclaimableSection() const noexcept override
+    {
+        return Operator::isInNonReclaimableSection();
+    }
+    Operator *operatorBase() noexcept override { return this; }
+    const char *reclaimableName() const noexcept override { return "LookupJoinOperator"; }
 
     bool hasPendingDynamicFilters() const override;
 
@@ -260,14 +305,15 @@ public:
     void FinishFullTableProbeAfterOuter();
     void ReleaseSharedBuildState();
     void KeepJoinSpillState(std::shared_ptr<JoinSpillState> state);
-    void SetRetainBroadcastHashTable(bool retain);
+    void SetEagerReleaseBuildState(bool enabled)
+    {
+        eagerReleaseBuildState_ = enabled;
+    }
 
 private:
     void ReleaseThisJoinTableIfBothSidesDone();
     /// After Complete the build driver may already have deleted hashTables.
     bool HandoffComplete() const;
-    /// A held table with no resident rows has nothing to spill.
-    bool HeldTableEmpty() const;
     void RemoveProbeSpillFiles(const std::vector<std::string> &openWriterPaths);
 
 private:
@@ -321,7 +367,7 @@ private:
     bool DrainPendingOutput(VectorBatch **outputVecBatch);
     void FinishRestoreRound();
     void FinishRestoreRoundAfterHeldFlush();
-    bool MaybeTriggerHeldTableSpill(const char *site);
+    bool CanReclaimHeldTable() const;
     void RefreshHasMoreProbeInput();
     void PopulateProbeHashes();
     void PopulateProbeNulls();
@@ -401,7 +447,9 @@ private:
     size_t probeFilterColsSize = 0;
     size_t buildFilterColsSize = 0;
     bool joinSpillEnabled_ = false;
-    bool retainBroadcastHashTable_ = false;
+    bool passiveReclaimEnabled_ = false;
+    bool eagerReleaseBuildState_ = true;
+    bool spillableRegistered_ = false;
     JoinSubPartitionConfig joinSubPartCfg_;
     JoinSpillState *joinSpillState_ = nullptr;
     std::shared_ptr<JoinSpillState> joinSpillStateKeep_;

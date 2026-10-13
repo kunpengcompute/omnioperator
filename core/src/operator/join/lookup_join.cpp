@@ -9,6 +9,7 @@
 #include <sstream>
 #include <utility>
 #include "operator/spill/spiller.h"
+#include "operator/reclaim_context.h"
 #include "operator/util/operator_util.h"
 #include "operator/omni_id_type_vector_traits.h"
 #include "type/data_type.h"
@@ -20,7 +21,6 @@
 #include "lookup_join.h"
 #include "util/debug.h"
 #include "reader/common/Filter.h"
-#include "memory/memory_manager.h"
 #include "row_ref.h"
 
 
@@ -147,7 +147,8 @@ LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFa
     auto pOperatorFactory = new LookupJoinOperatorFactory(probeTypes, probeOutputCols, probeOutputColsCount,
         probeHashCols, probeHashColsCount, buildOutputCols, buildOutputColsCount, buildOutputTypes,
         hashBuilderFactory->GetHashTablesVariants(), filterExpr, isShuffleExchangeBuildPlan, overflowConfig);
-    pOperatorFactory->SetRetainBroadcastHashTable(!hashBuilderFactory->GetBroadcastHashTableId().empty());
+    pOperatorFactory->SetEagerReleaseBuildState(
+        !hashBuilderFactory->IsPrebuilt() && hashBuilderFactory->GetBroadcastHashTableId().empty());
     return pOperatorFactory;
 }
 
@@ -163,7 +164,8 @@ LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFa
         probeHashCols, probeHashColsCount, buildOutputCols, buildOutputColsCount, buildOutputTypes,
         hashBuilderFactory->GetHashTablesVariants(), filterExpr,
         originalProbeColsCount, isShuffleExchangeBuildPlan, overflowConfig, outputList);
-    pOperatorFactory->SetRetainBroadcastHashTable(!hashBuilderFactory->GetBroadcastHashTableId().empty());
+    pOperatorFactory->SetEagerReleaseBuildState(
+        !hashBuilderFactory->IsPrebuilt() && hashBuilderFactory->GetBroadcastHashTableId().empty());
     return pOperatorFactory;
 }
 
@@ -220,21 +222,22 @@ LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFa
     delete overflowConfig;
     overflowConfig = nullptr;
     pLookupJoinOperatorFactory->SetJoinSpillPolicy(queryConfig.spillEnabled() && queryConfig.joinSpillEnabled(),
-        JoinSubPartitionConfig::FromQueryConfig(queryConfig));
+        JoinSubPartitionConfig::FromQueryConfig(queryConfig), queryConfig.passiveReclaimEffective());
     pLookupJoinOperatorFactory->SetJoinSpillState(hashBuilderOperatorFactory->GetJoinSpillState());
-    pLookupJoinOperatorFactory->SetRetainBroadcastHashTable(
-        !hashBuilderOperatorFactory->GetBroadcastHashTableId().empty());
+    pLookupJoinOperatorFactory->SetEagerReleaseBuildState(
+        !hashBuilderOperatorFactory->IsPrebuilt() &&
+        hashBuilderOperatorFactory->GetBroadcastHashTableId().empty());
     return pLookupJoinOperatorFactory;
 }
 
-Operator *LookupJoinOperatorFactory::CreateOperator()
+Operator *LookupJoinOperatorFactory::CreateOperator(mem::OmniTaskMemoryPool *pool)
 {
-    auto pLookupJoinOperator = new LookupJoinOperator(probeTypes, probeOutputCols, probeHashCols, probeHashColTypes,
+    auto pLookupJoinOperator = new LookupJoinOperator(pool, probeTypes, probeOutputCols, probeHashCols, probeHashColTypes,
         buildOutputCols, buildOutputTypes, hashTables, simpleFilter,
         originalProbeColsCount, rowSize, isShuffleExchangeBuildPlan, outputList, joinSpillEnabled_,
-        joinSubPartCfg_, joinSpillState_.get());
+        joinSubPartCfg_, joinSpillState_.get(), passiveReclaimEnabled_);
     pLookupJoinOperator->KeepJoinSpillState(joinSpillState_);
-    pLookupJoinOperator->SetRetainBroadcastHashTable(retainBroadcastHashTable_);
+    pLookupJoinOperator->SetEagerReleaseBuildState(eagerReleaseBuildState_);
     return pLookupJoinOperator;
 }
 
@@ -246,25 +249,17 @@ void LookupJoinOperator::KeepJoinSpillState(std::shared_ptr<JoinSpillState> stat
     }
 }
 
-void LookupJoinOperatorFactory::SetJoinSpillPolicy(bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg)
+void LookupJoinOperatorFactory::SetJoinSpillPolicy(bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg,
+    bool passiveReclaimEnabled)
 {
     joinSpillEnabled_ = joinSpillEnabled;
     joinSubPartCfg_ = joinSubPartCfg;
+    passiveReclaimEnabled_ = passiveReclaimEnabled;
 }
 
 void LookupJoinOperatorFactory::SetJoinSpillState(std::shared_ptr<JoinSpillState> joinSpillState)
 {
     joinSpillState_ = std::move(joinSpillState);
-}
-
-void LookupJoinOperatorFactory::SetRetainBroadcastHashTable(bool retain)
-{
-    retainBroadcastHashTable_ = retain;
-}
-
-void LookupJoinOperator::SetRetainBroadcastHashTable(bool retain)
-{
-    retainBroadcastHashTable_ = retain;
 }
 
 void LookupJoinOperatorFactory::JoinFilterCodeGen(Expr *filterExpr, OverflowConfig *overflowConfig)
@@ -281,12 +276,14 @@ void LookupJoinOperatorFactory::JoinFilterCodeGen(Expr *filterExpr, OverflowConf
     }
 }
 
-LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
+LookupJoinOperator::LookupJoinOperator(mem::OmniTaskMemoryPool *pool, const type::DataTypes &probeTypes,
+    std::vector<int32_t> &probeOutputCols,
     std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
     const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
     int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan, bool joinSpillEnabled,
-    JoinSubPartitionConfig joinSubPartCfg, JoinSpillState *joinSpillState)
-    : probeTypes(probeTypes),
+    JoinSubPartitionConfig joinSubPartCfg, JoinSpillState *joinSpillState, bool passiveReclaimEnabled)
+    : Operator(pool),
+      probeTypes(probeTypes),
       probeOutputCols(probeOutputCols),
       probeHashCols(probeHashCols),
       probeHashColTypes(probeHashColTypes),
@@ -297,6 +294,7 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
       originalProbeColsCount(originalProbeColsCount),
       isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan),
       joinSpillEnabled_(joinSpillEnabled),
+      passiveReclaimEnabled_(passiveReclaimEnabled),
       joinSubPartCfg_(joinSubPartCfg),
       joinSpillState_(joinSpillState)
 {
@@ -313,6 +311,7 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
 
     this->outputBuilder = std::make_unique<LookupJoinOutputBuilder>(probeOutputCols, probeOutputTypes.GetIds(),
         buildOutputCols, buildOutputTypes, outputRowSize);
+    this->outputBuilder->SetPool(pool);
     this->probeHashColumns = new BaseVector *[probeHashCols.size()]();     // 2D array
     this->probeOutputColumns = new BaseVector *[probeOutputCols.size()](); // 2D array
     SetOperatorName(opNameForLookUpJoin);
@@ -346,26 +345,64 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
         }
     }
     InitIdentityProjections({});
+    if (pool != nullptr && joinSpillEnabled_ && passiveReclaimEnabled_ && joinSpillState_ != nullptr &&
+        joinSpillState_->IsHandoffSessionEnabled()) {
+        pool->registerSpillable(this);
+        spillableRegistered_ = true;
+        RefreshHasMoreProbeInput();
+    }
+}
+
+LookupJoinOperator::LookupJoinOperator(mem::OmniTaskMemoryPool *pool, const type::DataTypes &probeTypes,
+    std::vector<int32_t> &probeOutputCols,
+    std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
+    const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
+    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan, std::vector<int32_t> &outputList,
+    bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg,
+    JoinSpillState *joinSpillState, bool passiveReclaimEnabled)
+    : LookupJoinOperator(pool, probeTypes, probeOutputCols, probeHashCols, probeHashColTypes, buildOutputCols, buildOutputTypes,
+    hashTables, simpleFilter, originalProbeColsCount, outputRowSize, isShuffleExchangeBuildPlan, joinSpillEnabled,
+    joinSubPartCfg, joinSpillState, passiveReclaimEnabled)
+{
+	this->outputBuilder = std::make_unique<LookupJoinOutputBuilder>(probeOutputCols, probeOutputTypes.GetIds(),
+														buildOutputCols, buildOutputTypes,
+												    outputRowSize, outputList);
+    this->outputBuilder->SetPool(pool);
+    InitIdentityProjections(outputList);
 }
 
 LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
     std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
     const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
-    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan, std::vector<int32_t> &outputList,
-    bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg,
-    JoinSpillState *joinSpillState)
-    : LookupJoinOperator(probeTypes, probeOutputCols, probeHashCols, probeHashColTypes, buildOutputCols, buildOutputTypes,
-    hashTables, simpleFilter, originalProbeColsCount, outputRowSize, isShuffleExchangeBuildPlan, joinSpillEnabled,
-    joinSubPartCfg, joinSpillState)
-{
-	this->outputBuilder = std::make_unique<LookupJoinOutputBuilder>(probeOutputCols, probeOutputTypes.GetIds(),
-																	buildOutputCols, buildOutputTypes,
-																    outputRowSize, outputList);
-    InitIdentityProjections(outputList);
-}
+    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan, bool joinSpillEnabled,
+    JoinSubPartitionConfig joinSubPartCfg, JoinSpillState *joinSpillState, bool passiveReclaimEnabled)
+    : LookupJoinOperator(nullptr, probeTypes, probeOutputCols, probeHashCols, probeHashColTypes,
+        buildOutputCols, buildOutputTypes, hashTables, simpleFilter, originalProbeColsCount,
+        outputRowSize, isShuffleExchangeBuildPlan, joinSpillEnabled, joinSubPartCfg, joinSpillState,
+        passiveReclaimEnabled)
+{}
+
+LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
+    std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
+    const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
+    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan,
+    std::vector<int32_t> &outputList, bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg,
+    JoinSpillState *joinSpillState, bool passiveReclaimEnabled)
+    : LookupJoinOperator(nullptr, probeTypes, probeOutputCols, probeHashCols, probeHashColTypes,
+        buildOutputCols, buildOutputTypes, hashTables, simpleFilter, originalProbeColsCount,
+        outputRowSize, isShuffleExchangeBuildPlan, outputList, joinSpillEnabled, joinSubPartCfg,
+        joinSpillState, passiveReclaimEnabled)
+{}
 
 LookupJoinOperator::~LookupJoinOperator()
 {
+    if (joinSpillState_ != nullptr) {
+        joinSpillState_->AbandonProbe();
+    }
+    if (spillableRegistered_) {
+        pool()->unregisterSpillable(this);
+        spillableRegistered_ = false;
+    }
     delete[] probeHashColumns;
     delete[] probeOutputColumns;
     delete[] probeFilterColumns;
@@ -472,12 +509,9 @@ void LookupJoinOperator::ReleaseSharedBuildState()
 
 void LookupJoinOperator::ReleaseThisJoinTableIfBothSidesDone()
 {
-    if (joinSpillState_ != nullptr) {
+    if (joinSpillState_ != nullptr || !eagerReleaseBuildState_) {
         // Session HT is owned by HashBuilder factory (build driver).
-        return;
-    }
-    if (retainBroadcastHashTable_) {
-        // Executor cache owns this table. Another task may still be probing it.
+        // Cached BHJ HT is owned by its cache entry and may serve later tasks.
         return;
     }
     if (hashTables != nullptr && !unvisitedBuildOutputPending_) {
@@ -488,12 +522,6 @@ void LookupJoinOperator::ReleaseThisJoinTableIfBothSidesDone()
 bool LookupJoinOperator::HandoffComplete() const
 {
     return joinSpillState_ != nullptr && joinSpillState_->GetHandoffPhase() == JoinHandoffPhase::Complete;
-}
-
-bool LookupJoinOperator::HeldTableEmpty() const
-{
-    return hashTables != nullptr &&
-        std::visit([](auto &&arg) { return arg.GetTotalRowCount(0); }, *hashTables) == 0;
 }
 
 void LookupJoinOperator::RemoveProbeSpillFiles(const std::vector<std::string> &openWriterPaths)
@@ -730,7 +758,7 @@ bool LookupJoinOperator::TrySpillPathAProbeInput(omniruntime::vec::VectorBatch *
             const std::string path = joinSpillState_->ProbeSubPartitionDir(*pathARunId_, subPartition);
             pathAWriters_[subPartition] = std::make_unique<SpillWriter>(probeTypes, path);
         }
-        FlattenBatchForJoinSpill(subBatch.get());
+        FlattenBatchForJoinSpill(subBatch.get(), pool());
         const uint64_t vecBatchSize = Spiller::CollectVecBatchSize(probeTypes, subBatch.get());
         joinSpillState_->AccountSpilledBytes(vecBatchSize);
         auto status = pathAWriters_[subPartition]->WriteVecBatch(subBatch.get(), vecBatchSize);
@@ -820,7 +848,7 @@ bool LookupJoinOperator::LoadNextRestoreProbeInput()
             }
             const auto &record = files[probeSpillReadFileIndex_++];
             probeRestoreReader_ = std::make_unique<SpillReader>(probeTypes, record.file.filePath,
-                record.file.fileLength, record.file.totalRowCount, false);
+                record.file.fileLength, record.file.totalRowCount, false, pool());
         }
         std::unique_ptr<VectorBatch> spilledBatch = nullptr;
         bool isEnd = false;
@@ -899,7 +927,7 @@ void LookupJoinOperator::FinishRestoreRound()
         pendingRestoreProbeBatch_ = nullptr;
     }
     probeRestoreReader_.reset();
-    std::visit([&](auto &&arg) { arg.ResetPartition(0); }, *hashTables);
+    std::visit([&](auto &&arg) { arg.ReclaimBuildPartition(0); }, *hashTables);
     joinSpillState_->ProbeFinished(probeRestorePartitionId_);
     probeRestoreActive_ = false;
     probeSpillReadFileIndex_ = 0;
@@ -953,57 +981,62 @@ private:
 };
 } // namespace
 
-bool LookupJoinOperator::MaybeTriggerHeldTableSpill(const char *site)
+bool LookupJoinOperator::CanReclaimHeldTable() const
 {
-    const int64_t accounted = mem::MemoryManager::GetGlobalAccountedMemory();
-    const int64_t threshold =
-        joinSpillState_ != nullptr ? joinSpillState_->SpillMemThreshold() : 0;
-    const bool overThreshold =
-        joinSpillState_ != nullptr && joinSpillState_->AccountedMemoryOverThreshold();
+    if (!spillableRegistered_ || !joinSpillEnabled_ || joinSpillState_ == nullptr ||
+        hashTables == nullptr || !joinSpillState_->CanFlushHeldTable() ||
+        isInNonReclaimableSection() || isFinished() ||
+        outputBuilder == nullptr || !outputBuilder->IsEmpty() ||
+        !pendingProbeOutputs_.empty() || restoreUnvisitedEmitPending_ ||
+        canReplaceWithDynamicFilter_) {
+        return false;
+    }
+    // A full-table handoff may be flushed before the first row of a held probe
+    // batch is processed. ApplyProbeHandoffIfReady then moves that batch to Path A.
+    // A restore round may only flush at a batch boundary, preserving its reader cursor.
+    if (curInputBatch != nullptr &&
+        (curProbePosition != 0 ||
+         joinSpillState_->TableInHand().kind != JoinSpillTableInHandKind::FullTable)) {
+        return false;
+    }
+    return std::visit([&](auto &&arg) {
+        return !arg.GetResidentInputVecBatches(0).empty();
+    }, *hashTables);
+}
 
-    auto logHeldCheckpoint = [&](const char *action, const char *detail) {
-        if (!joinSpillEnabled_) {
-            return;
+uint64_t LookupJoinOperator::reclaimableBytes() const
+{
+    if (!CanReclaimHeldTable()) {
+        return 0;
+    }
+    return std::visit([&](auto &&arg) -> uint64_t {
+        uint64_t bytes = arg.EstimateHashTableBytes() + arg.EstimateArenaBytes();
+        for (auto *batch : arg.GetResidentInputVecBatches(0)) {
+            if (batch != nullptr) {
+                bytes += batch->EstimateFlatSize();
+            }
         }
-        LogJoinSpillMemCheckpoint(site, accounted, threshold, overThreshold, action, detail);
-    };
+        return bytes;
+    }, *hashTables);
+}
 
-    if (!joinSpillEnabled_ || joinSpillState_ == nullptr) {
-        return false;
+int64_t LookupJoinOperator::reclaim(int64_t targetBytes)
+{
+    if (targetBytes <= 0 || pool() == nullptr || reclaimableBytes() == 0) {
+        return 0;
     }
-    if (!joinSpillState_->CanFlushHeldTable()) {
-        if (UNLIKELY(IsDebugEnable())) {
-            const auto hand = joinSpillState_->TableInHand();
-            const auto phase = joinSpillState_->GetHandoffPhase();
-            const char *phaseName = phase == JoinHandoffPhase::RestoreRound ? "restore_round" :
-                phase == JoinHandoffPhase::ProbePathA              ? "probe_path_a" :
-                phase == JoinHandoffPhase::Complete                ? "complete" :
-                                                                     "idle";
-            const char *handName = hand.kind == JoinSpillTableInHandKind::FullTable ? "full_table" :
-                hand.kind == JoinSpillTableInHandKind::RestoreSmallTable       ? "restore_small" :
-                                                                                 "none";
-            const std::string detail = std::string("reason=can_flush_false handoff=") + phaseName +
-                " hand=" + handName + " probe_in_nrs=" + (joinSpillState_->ProbeInNrs() ? "1" : "0") +
-                " has_more_probe=" + (joinSpillState_->HasMoreProbeInput() ? "1" : "0");
-            logHeldCheckpoint("skip", detail.c_str());
-        }
-        return false;
-    }
-    if (!overThreshold) {
-        logHeldCheckpoint("check", "reason=under_threshold");
-        return false;
-    }
-    if (HeldTableEmpty()) {
-        return false;
-    }
+    NonReclaimableSection section(this);
     const auto hand = joinSpillState_->TableInHand();
-    const char *handName = hand.kind == JoinSpillTableInHandKind::FullTable ? "full_table" :
-        hand.kind == JoinSpillTableInHandKind::RestoreSmallTable       ? "restore_small" :
-                                                                         "none";
-    logHeldCheckpoint("held_flush", handName);
-    joinSpillState_->FlushHeldBuildTable(hashTables, joinSubPartCfg_);
-    ApplyProbeHandoffIfReady();
-    return hand.kind == JoinSpillTableInHandKind::RestoreSmallTable;
+    const int64_t before = pool()->currentBytes();
+    joinSpillState_->FlushHeldBuildTable(hashTables, joinSubPartCfg_, pool());
+    if (hand.kind == JoinSpillTableInHandKind::RestoreSmallTable) {
+        // The spill reader and its lookahead stay live for the next restore of this bucket.
+        FinishRestoreRoundAfterHeldFlush();
+    } else {
+        ApplyProbeHandoffIfReady();
+    }
+    RefreshHasMoreProbeInput();
+    return std::max<int64_t>(0, before - pool()->currentBytes());
 }
 
 void LookupJoinOperator::BeginRestoreUnvisitedEmit()
@@ -1055,7 +1088,7 @@ bool LookupJoinOperator::EmitRestoreUnvisitedBuildBatch(VectorBatch **outputVecB
     auto result = std::make_unique<VectorBatch>(rowCount);
     for (int32_t col = 0; col < probeOutputTypes.GetSize(); ++col) {
         const auto typeId = probeOutputTypes.GetType(col)->GetId();
-        auto *vector = VectorHelper::CreateVector(OMNI_FLAT, typeId, rowCount);
+        auto *vector = VectorHelper::CreateVector(pool(), OMNI_FLAT, typeId, rowCount);
         for (int32_t row = 0; row < rowCount; ++row) {
             if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR || typeId == type::OMNI_VARBINARY) {
                 static_cast<Vector<LargeStringContainer<std::string_view>> *>(vector)->SetNull(row);
@@ -1066,7 +1099,8 @@ bool LookupJoinOperator::EmitRestoreUnvisitedBuildBatch(VectorBatch **outputVecB
         result->Append(vector);
     }
     for (int32_t buildCol = 0; buildCol < buildOutputTypes.GetSize(); ++buildCol) {
-        result->Append(VectorHelper::CreateVector(OMNI_FLAT, buildOutputTypes.GetType(buildCol)->GetId(), rowCount));
+        result->Append(VectorHelper::CreateVector(pool(), OMNI_FLAT,
+            buildOutputTypes.GetType(buildCol)->GetId(), rowCount));
     }
 
     const auto *buildIds = buildOutputTypes.GetIds();
@@ -1091,6 +1125,8 @@ bool LookupJoinOperator::EmitRestoreUnvisitedBuildBatch(VectorBatch **outputVecB
     outputBuilder->ApplyOutputColumnOrder(result.get(), buildSide);
     *outputVecBatch = result.release();
     restoreUnvisitedEmitNext_ += static_cast<size_t>(rowCount);
+    // Both callers return immediately after emitting restored build rows.
+    UpdateGetOutputInfo(rowCount);
     return true;
 }
 
@@ -1162,7 +1198,7 @@ std::unordered_map<uint32_t, ::common::FilterPtr> LookupJoinOperator::getPending
 
 bool LookupJoinOperator::needsInput()
 {
-    if (probeRestoreActive_ || HasPendingRestoreProbeInput()) {
+    if (!pendingProbeOutputs_.empty() || probeRestoreActive_ || HasPendingRestoreProbeInput()) {
         return false;
     }
     return Operator::needsInput() && curInputBatch == nullptr;
@@ -1333,6 +1369,7 @@ void LookupJoinOperator::ProcessProbe()
 
 int32_t LookupJoinOperator::AddInput(VectorBatch *vecBatch)
 {
+    NonReclaimableSection section(this);
     if (vecBatch->GetRowCount() <= 0) {
         VectorHelper::FreeVecBatch(vecBatch);
         ResetInputVecBatch();
@@ -1363,9 +1400,6 @@ int32_t LookupJoinOperator::AddInput(VectorBatch *vecBatch)
     curInputBatch = vecBatch;
     curProbePosition = 0;
     RefreshHasMoreProbeInput();
-    // After the current probe batch is held, spill the in-memory build when accounted
-    // memory crosses the threshold.
-    MaybeTriggerHeldTableSpill("probe_addinput");
     if (probePathAActive_) {
         auto *held = curInputBatch;
         curInputBatch = nullptr;
@@ -1386,6 +1420,7 @@ int32_t LookupJoinOperator::AddInput(VectorBatch *vecBatch)
 
 int32_t LookupJoinOperator::GetOutput(VectorBatch **outputVecBatch)
 {
+    NonReclaimableSection section(this);
     ApplyProbeHandoffIfReady();
     MaybeFinishPathAIngest();
     if (DrainPendingOutput(outputVecBatch)) {
@@ -1393,10 +1428,6 @@ int32_t LookupJoinOperator::GetOutput(VectorBatch **outputVecBatch)
     }
     if (probeRestoreActive_ && curInputBatch == nullptr) {
         RefreshHasMoreProbeInput();
-        if (restoreRoundHasProbed_ && HasPendingRestoreProbeInput() && MaybeTriggerHeldTableSpill("probe_restore")) {
-            FinishRestoreRoundAfterHeldFlush();
-            return 0;
-        }
         if (LoadNextRestoreProbeInput()) {
             return GetOutput(outputVecBatch);
         }
@@ -1449,22 +1480,22 @@ int32_t LookupJoinOperator::GetOutput(VectorBatch **outputVecBatch)
         if (probeRestoreActive_) {
             restoreRoundHasProbed_ = true;
             RefreshHasMoreProbeInput();
-            if (HasPendingRestoreProbeInput() && MaybeTriggerHeldTableSpill("probe_restore")) {
-                FinishRestoreRoundAfterHeldFlush();
-                return 0;
-            }
-            if (!LoadNextRestoreProbeInput()) {
-                // Probe output from BuildOutput above must survive unvisited-build emit in the same call.
-                if (*outputVecBatch != nullptr) {
-                    pendingProbeOutputs_.push_back(*outputVecBatch);
-                    *outputVecBatch = nullptr;
-                }
-                if (EmitRestoreUnvisitedBuildBatch(outputVecBatch)) {
-                    return 0;
-                }
-                FinishRestoreRound();
-                if (DrainPendingOutput(outputVecBatch)) {
-                    return 0;
+            // Return a completed output batch before loading the next spilled probe batch.
+            // This leaves a safe pool-reclaim checkpoint with the restore reader cursor intact.
+            if (*outputVecBatch == nullptr || !HasPendingRestoreProbeInput()) {
+                if (!LoadNextRestoreProbeInput()) {
+                    // Probe output must survive unvisited-build emit in the same call.
+                    if (*outputVecBatch != nullptr) {
+                        pendingProbeOutputs_.push_back(*outputVecBatch);
+                        *outputVecBatch = nullptr;
+                    }
+                    if (EmitRestoreUnvisitedBuildBatch(outputVecBatch)) {
+                        return 0;
+                    }
+                    FinishRestoreRound();
+                    if (DrainPendingOutput(outputVecBatch)) {
+                        return 0;
+                    }
                 }
             }
         } else if (!probeRestoreActive_ && noMoreInput_ && !probePathAActive_) {

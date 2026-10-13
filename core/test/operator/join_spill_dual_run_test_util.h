@@ -4,80 +4,44 @@
  */
 #ifndef JOIN_SPILL_DUAL_RUN_TEST_UTIL_H
 #define JOIN_SPILL_DUAL_RUN_TEST_UTIL_H
+
 #include <algorithm>
 #include <cstdint>
-#include <memory>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <functional>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <tuple>
 #include <type_traits>
+#include <unistd.h>
 #include <utility>
 #include <vector>
-#include "operator/config/operator_config.h"
-#include "operator/join/hash_builder.h"
-#include "operator/join/join_sub_partitioner.h"
-#include "operator/join/lookup_join.h"
-#include "operator/join/lookup_outer_join.h"
+
+#include "gtest/gtest.h"
+#include "operator/join/join_spill_state.h"
 #include "type/data_type.h"
-#include "type/data_types.h"
-#include "vector/vector.h"
 #include "vector/vector_helper.h"
+
 namespace join_spill_dual_run {
-using omniruntime::op::JoinSubPartitionConfig;
-using omniruntime::op::JoinSubPartitioner;
-using omniruntime::op::SparkSpillConfig;
+
+using omniruntime::op::JoinHandoffPhase;
 using omniruntime::type::DataTypeId;
-using omniruntime::type::DataTypes;
-using omniruntime::type::LongType;
 using omniruntime::vec::BaseVector;
-using omniruntime::vec::Vector;
 using omniruntime::vec::VectorBatch;
 using omniruntime::vec::VectorHelper;
-inline JoinSubPartitionConfig JoinSpillTestSubPartitionConfig()
-{
-    JoinSubPartitionConfig cfg;
-    cfg.numSubPartitions = 4;
-    cfg.startPartitionBit = 0;
-    cfg.activeSubPartition = 0;
-    return cfg;
-}
-inline std::shared_ptr<SparkSpillConfig> MakeJoinSpillTestSparkConfig(const std::string &path)
-{
-    return std::make_shared<SparkSpillConfig>(true, path, 100UL << 30, INT32_MAX, 1.0, 0, false);
-}
-inline VectorBatch *MakeLongKeyValueBatch(const std::vector<int64_t> &keys, const std::vector<int64_t> &values)
-{
-    auto *batch = new VectorBatch(static_cast<int32_t>(keys.size()));
-    auto *keyVec = new Vector<int64_t>(static_cast<int32_t>(keys.size()));
-    auto *valueVec = new Vector<int64_t>(static_cast<int32_t>(values.size()));
-    for (size_t i = 0; i < keys.size(); ++i) {
-        keyVec->SetValue(static_cast<int32_t>(i), keys[i]);
-        valueVec->SetValue(static_cast<int32_t>(i), values[i]);
-    }
-    batch->Append(keyVec);
-    batch->Append(valueVec);
-    return batch;
-}
-inline int64_t FindLongKeyForSubPartition(uint32_t partition, int64_t exclude = -1)
-{
-    JoinSubPartitioner partitioner(JoinSpillTestSubPartitionConfig());
-    const DataTypes types({LongType(), LongType()});
-    for (int64_t key = 0; key < 20000; ++key) {
-        if (key == exclude) {
-            continue;
-        }
-        auto *batch = MakeLongKeyValueBatch({key}, {0});
-        const auto buckets = partitioner.PartitionRowsByKeyColumns(batch, types, {0});
-        VectorHelper::FreeVecBatch(batch);
-        if (!buckets.empty() && buckets[0] == partition) {
-            return key;
-        }
-    }
-    return -1;
-}
+
+enum class SpillMode {
+    NoSpill,
+    ForcedSpillPathA,
+};
+
+using BatchFactory = std::function<VectorBatch *()>;
+
 inline bool DualRunCellsPhysicallyEqual(DataTypeId leftType, DataTypeId rightType,
     const std::string &leftValue, const std::string &rightValue)
 {
@@ -94,10 +58,12 @@ inline bool DualRunCellsPhysicallyEqual(DataTypeId leftType, DataTypeId rightTyp
     }
     return false;
 }
+
 struct Cell {
     DataTypeId type;
     bool isNull;
     std::string exactValue;
+
     bool operator==(const Cell &other) const
     {
         if (isNull != other.isNull) {
@@ -108,19 +74,39 @@ struct Cell {
         }
         return DualRunCellsPhysicallyEqual(type, other.type, exactValue, other.exactValue);
     }
+
     bool operator<(const Cell &other) const
     {
         return std::tie(type, isNull, exactValue) < std::tie(other.type, other.isNull, other.exactValue);
     }
 };
+
 using Tuple = std::vector<Cell>;
 using TupleMultiset = std::vector<Tuple>;
+
+struct RunResult {
+    TupleMultiset rows;
+    size_t outputBatchCount = 0;
+    uint64_t buildSpilledRows = 0;
+    uint64_t probeSpilledRows = 0;
+    size_t spillFileCount = 0;
+    bool sawPathA = false;
+    bool sawRestore = false;
+    JoinHandoffPhase finalPhase = JoinHandoffPhase::Idle;
+};
+
+struct ScenarioScheduler {
+    std::function<RunResult(const BatchFactory &, const BatchFactory &)> residentFullTable;
+    std::function<RunResult(const BatchFactory &, const BatchFactory &)> forcedSpillPathARestore;
+};
+
 template <typename T>
 std::string ExactBytes(const T &value)
 {
     static_assert(std::is_trivially_copyable_v<T>);
     return std::string(reinterpret_cast<const char *>(&value), sizeof(T));
 }
+
 inline Cell CanonicalizeCell(BaseVector *vector, int32_t row)
 {
     if (vector == nullptr) {
@@ -133,11 +119,23 @@ inline Cell CanonicalizeCell(BaseVector *vector, int32_t row)
     switch (type) {
         case omniruntime::type::OMNI_BOOLEAN:
             return Cell{type, false, ExactBytes(VectorHelper::GetValueFromVector<bool>(vector, row))};
+        case omniruntime::type::OMNI_BYTE:
+            return Cell{type, false, ExactBytes(VectorHelper::GetValueFromVector<int8_t>(vector, row))};
+        case omniruntime::type::OMNI_SHORT:
+            return Cell{type, false, ExactBytes(VectorHelper::GetValueFromVector<int16_t>(vector, row))};
         case omniruntime::type::OMNI_INT:
         case omniruntime::type::OMNI_DATE32:
             return Cell{type, false, ExactBytes(VectorHelper::GetValueFromVector<int32_t>(vector, row))};
         case omniruntime::type::OMNI_LONG:
+        case omniruntime::type::OMNI_TIMESTAMP:
+        case omniruntime::type::OMNI_DATE64:
+        case omniruntime::type::OMNI_DECIMAL64:
             return Cell{type, false, ExactBytes(VectorHelper::GetValueFromVector<int64_t>(vector, row))};
+        case omniruntime::type::OMNI_FLOAT:
+            return Cell{type, false, ExactBytes(VectorHelper::GetValueFromVector<float>(vector, row))};
+        case omniruntime::type::OMNI_DOUBLE:
+            return Cell{type, false, ExactBytes(VectorHelper::GetValueFromVector<double>(vector, row))};
+        case omniruntime::type::OMNI_VARBINARY:
         case omniruntime::type::OMNI_VARCHAR:
         case omniruntime::type::OMNI_CHAR: {
             // Flat VARCHAR uses LargeStringContainer; do not cast via GetValueFromVector<string_view>.
@@ -149,6 +147,7 @@ inline Cell CanonicalizeCell(BaseVector *vector, int32_t row)
                 std::to_string(static_cast<int32_t>(type)));
     }
 }
+
 inline void AppendCanonicalRowsAndFree(VectorBatch *batch, TupleMultiset *rows)
 {
     if (batch == nullptr) {
@@ -169,10 +168,104 @@ inline void AppendCanonicalRowsAndFree(VectorBatch *batch, TupleMultiset *rows)
     }
     VectorHelper::FreeVecBatch(batch);
 }
+
 inline void SortTupleMultiset(TupleMultiset *rows)
 {
     std::sort(rows->begin(), rows->end());
 }
+
+inline RunResult RunResidentFullTableNoSpill(const ScenarioScheduler &scheduler,
+    const BatchFactory &buildFactory, const BatchFactory &probeFactory)
+{
+    if (!scheduler.residentFullTable) {
+        throw std::invalid_argument("resident full-table scheduler is not configured");
+    }
+    return scheduler.residentFullTable(buildFactory, probeFactory);
+}
+
+inline RunResult RunForcedSpillPathARestore(const ScenarioScheduler &scheduler,
+    const BatchFactory &buildFactory, const BatchFactory &probeFactory)
+{
+    if (!scheduler.forcedSpillPathARestore) {
+        throw std::invalid_argument("forced Path A spill scheduler is not configured");
+    }
+    return scheduler.forcedSpillPathARestore(buildFactory, probeFactory);
+}
+
+inline void AssertTupleMultisetEqual(RunResult expected, RunResult actual)
+{
+    SortTupleMultiset(&expected.rows);
+    SortTupleMultiset(&actual.rows);
+    ASSERT_EQ(expected.rows, actual.rows);
+}
+
+inline void AssertNoSpillEvidence(const RunResult &result)
+{
+    EXPECT_EQ(0u, result.buildSpilledRows);
+    EXPECT_EQ(0u, result.probeSpilledRows);
+    EXPECT_EQ(0u, result.spillFileCount);
+    EXPECT_FALSE(result.sawPathA);
+    EXPECT_FALSE(result.sawRestore);
+}
+
+// Path A protocol: build group-spill and probe mirror must both write.
+inline void AssertSpillEvidence(const RunResult &result)
+{
+    EXPECT_GT(result.buildSpilledRows, 0u);
+    EXPECT_GT(result.probeSpilledRows, 0u);
+    EXPECT_GT(result.spillFileCount, 0u);
+    EXPECT_TRUE(result.sawPathA);
+    EXPECT_TRUE(result.sawRestore);
+    EXPECT_EQ(JoinHandoffPhase::Complete, result.finalPhase);
+}
+
+// Empty probe: Path A + restore still run, but probe writes no rows.
+inline void AssertPathABuildSpillEmptyProbe(const RunResult &result)
+{
+    EXPECT_GT(result.buildSpilledRows, 0u);
+    EXPECT_EQ(0u, result.probeSpilledRows);
+    EXPECT_TRUE(result.sawPathA);
+    EXPECT_TRUE(result.sawRestore);
+    EXPECT_EQ(JoinHandoffPhase::Complete, result.finalPhase);
+}
+
+// Zero build rows: empty full-table handoff, no Path A, no files on either side.
+inline void AssertEmptyBuildNoPathA(const RunResult &result)
+{
+    EXPECT_EQ(0u, result.buildSpilledRows);
+    EXPECT_EQ(0u, result.probeSpilledRows);
+    EXPECT_FALSE(result.sawPathA);
+    EXPECT_EQ(JoinHandoffPhase::Complete, result.finalPhase);
+}
+
+inline size_t CountRegularFiles(const std::filesystem::path &root)
+{
+    if (!std::filesystem::exists(root)) {
+        return 0;
+    }
+    size_t count = 0;
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(root)) {
+        if (entry.is_regular_file()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+inline VectorBatch *MakeLongKeyValueBatch(const std::vector<int64_t> &keys, const std::vector<int64_t> &values)
+{
+    auto *batch = new VectorBatch(static_cast<int32_t>(keys.size()));
+    auto *keyVec = new Vector<int64_t>(static_cast<int32_t>(keys.size()));
+    auto *valueVec = new Vector<int64_t>(static_cast<int32_t>(values.size()));
+    for (size_t i = 0; i < keys.size(); ++i) {
+        keyVec->SetValue(static_cast<int32_t>(i), keys[i]);
+        valueVec->SetValue(static_cast<int32_t>(i), values[i]);
+    }
+    batch->Append(keyVec);
+    batch->Append(valueVec);
+    return batch;
+}
+
 class ScopedTempDirectory {
 public:
     explicit ScopedTempDirectory(std::string tag)
@@ -183,56 +276,48 @@ public:
         std::filesystem::remove_all(path_);
         std::filesystem::create_directories(path_);
     }
+
     ~ScopedTempDirectory()
     {
         std::error_code error;
         std::filesystem::remove_all(path_, error);
     }
+
     const std::filesystem::path &path() const
     {
         return path_;
     }
+
 private:
     std::filesystem::path path_;
 };
-inline void DrainProbeRows(omniruntime::op::Operator *builder, omniruntime::op::Operator *probe, TupleMultiset *rows,
-    omniruntime::op::HashBuilderOperatorFactory *hashFactory, omniruntime::BuildSide buildSide)
-{
-    builder->noMoreInput();
-    probe->noMoreInput();
-    auto *lookup = dynamic_cast<omniruntime::op::LookupJoinOperator *>(probe);
-    for (int32_t i = 0; i < 20000 && (builder->GetStatus() != ::OMNI_STATUS_FINISHED ||
-        probe->GetStatus() != ::OMNI_STATUS_FINISHED); ++i) {
-        VectorBatch *buildOut = nullptr;
-        builder->GetOutput(&buildOut);
-        if (buildOut != nullptr) VectorHelper::FreeVecBatch(buildOut);
-        VectorBatch *probeOut = nullptr;
-        probe->GetOutput(&probeOut);
-        if (probeOut != nullptr) AppendCanonicalRowsAndFree(probeOut, rows);
+
+class ScopedEnvironment {
+public:
+    ScopedEnvironment(std::string name, std::string value) : name_(std::move(name))
+    {
+        if (const char *current = std::getenv(name_.c_str()); current != nullptr) {
+            previous_ = current;
+        }
+        if (setenv(name_.c_str(), value.c_str(), 1) != 0) {
+            throw std::runtime_error("failed to set environment variable " + name_);
+        }
     }
-    if (lookup == nullptr || !lookup->NeedsUnvisitedBuildOutput() || hashFactory == nullptr) {
-        return;
+
+    ~ScopedEnvironment()
+    {
+        if (previous_.has_value()) {
+            (void)setenv(name_.c_str(), previous_->c_str(), 1);
+        } else {
+            (void)unsetenv(name_.c_str());
+        }
     }
-    const DataTypes &types = hashFactory->GetBuildTypes();
-    std::vector<int32_t> outputs(static_cast<size_t>(types.GetSize()));
-    for (int32_t i = 0; i < types.GetSize(); ++i) {
-        outputs[static_cast<size_t>(i)] = i;
-    }
-    auto *outerFactory = omniruntime::op::LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
-        types, outputs.data(), types.GetSize(), outputs.data(), types, reinterpret_cast<int64_t>(hashFactory),
-        buildSide);
-    auto *outer = outerFactory->CreateOperator();
-    for (int32_t i = 0; i < 100000 && !outer->isFinished(); ++i) {
-        VectorBatch *output = nullptr;
-        outer->GetOutput(&output);
-        if (output != nullptr) AppendCanonicalRowsAndFree(output, rows);
-    }
-    lookup->FinishFullTableProbeAfterOuter();
-    VectorBatch *buildOut = nullptr;
-    builder->GetOutput(&buildOut);
-    if (buildOut != nullptr) VectorHelper::FreeVecBatch(buildOut);
-    omniruntime::op::Operator::DeleteOperator(outer);
-    delete outerFactory;
-}
+
+private:
+    std::string name_;
+    std::optional<std::string> previous_;
+};
+
 } // namespace join_spill_dual_run
+
 #endif

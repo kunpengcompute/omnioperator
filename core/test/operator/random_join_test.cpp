@@ -165,7 +165,7 @@ void StressTestSingleHashBuilderForSingleKey(DataTypes buildTypes, JoinType join
     int32_t operatorCount = 1;
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -195,7 +195,7 @@ void StressTestTwoHashBuilderForSingleKey(DataTypes buildTypes, JoinType joinTyp
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
 
-    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -204,7 +204,7 @@ void StressTestTwoHashBuilderForSingleKey(DataTypes buildTypes, JoinType joinTyp
     }
     hashBuilderOperator1->GetOutput(&hashBuildOutput);
 
-    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -232,7 +232,7 @@ void StressTestSingleHashBuilderForTwoFixedKey(DataTypes buildTypes, JoinType jo
     int32_t operatorCount = 1;
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -262,7 +262,7 @@ void StressTestTwoHashBuilderForTwoFixedKey(DataTypes buildTypes, JoinType joinT
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
 
-    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -271,7 +271,7 @@ void StressTestTwoHashBuilderForTwoFixedKey(DataTypes buildTypes, JoinType joinT
     }
     hashBuilderOperator1->GetOutput(&hashBuildOutput);
 
-    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -298,7 +298,7 @@ void StressTestSingleHashBuilderForVariableKey(DataTypes buildTypes, JoinType jo
     int32_t operatorCount = 1;
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -327,7 +327,7 @@ void StressTestTwoHashBuilderForVariableKey(DataTypes buildTypes, JoinType joinT
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
 
-    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -336,7 +336,7 @@ void StressTestTwoHashBuilderForVariableKey(DataTypes buildTypes, JoinType joinT
     }
     hashBuilderOperator1->GetOutput(&hashBuildOutput);
 
-    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -396,7 +396,7 @@ void StressTestSingleHashBuilderForArrayTable(DataTypes buildTypes, JoinType joi
     int32_t operatorCount = 1;
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         hashBuilderOperator->AddInput(plainInput);
@@ -422,14 +422,14 @@ void StressTestTwoHashBuilderForArrayTable(DataTypes buildTypes, JoinType joinTy
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
 
-    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         hashBuilderOperator1->AddInput(plainInput);
     }
     hashBuilderOperator1->GetOutput(&hashBuildOutput);
 
-    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         hashBuilderOperator2->AddInput(plainInput);
@@ -456,14 +456,14 @@ void StressTestTwoHashBuilderForArrayTableCornerCase(DataTypes buildTypes, JoinT
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
 
-    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         hashBuilderOperator1->AddInput(plainInput);
     }
     hashBuilderOperator1->GetOutput(&hashBuildOutput);
 
-    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         hashBuilderOperator2->AddInput(plainInput);
@@ -590,7 +590,7 @@ void StressTestSingleHashBuilderForArrayTableCornerCase(DataTypes buildTypes, Jo
     int32_t operatorCount = 1;
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         hashBuilderOperator->AddInput(plainInput);
@@ -708,7 +708,7 @@ void StressTestSingleLookupJoinForArrayTable(DataTypes buildTypes, JoinType join
     int32_t operatorCount = 1;
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     int repeatTimes = 10;
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
@@ -726,7 +726,7 @@ void StressTestSingleLookupJoinForArrayTable(DataTypes buildTypes, JoinType join
     auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
-    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator(nullptr));
     lookupJoinOperator->AddInput(probeVecBatch);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
@@ -737,7 +737,7 @@ void StressTestSingleLookupJoinForArrayTable(DataTypes buildTypes, JoinType join
     if (joinType == OMNI_JOIN_TYPE_FULL) {
         auto lookupOuterJoinOperatorFactory = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
             buildTypes, buildJoinCols, joinColsCount, buildJoinCols, buildTypes, hashBuilderFactoryAddr);
-        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator();
+        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator(nullptr);
         while (lookupOuterJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
             VectorBatch *appendOutput = nullptr;
             lookupOuterJoinOperator->GetOutput(&appendOutput);
@@ -769,14 +769,14 @@ void StressTestTwoLookupJoinForArrayTable(DataTypes buildTypes, JoinType joinTyp
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
 
-    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         hashBuilderOperator1->AddInput(plainInput);
     }
     hashBuilderOperator1->GetOutput(&hashBuildOutput);
 
-    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         hashBuilderOperator2->AddInput(plainInput);
@@ -792,7 +792,7 @@ void StressTestTwoLookupJoinForArrayTable(DataTypes buildTypes, JoinType joinTyp
     auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
-    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator(nullptr));
     lookupJoinOperator->AddInput(probeVecBatch);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
@@ -803,7 +803,7 @@ void StressTestTwoLookupJoinForArrayTable(DataTypes buildTypes, JoinType joinTyp
     if (joinType == OMNI_JOIN_TYPE_FULL) {
         auto lookupOuterJoinOperatorFactory = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
             buildTypes, buildJoinCols, joinColsCount, buildJoinCols, buildTypes, hashBuilderFactoryAddr);
-        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator();
+        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator(nullptr);
         while (lookupOuterJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
             VectorBatch *appendOutput = nullptr;
             lookupOuterJoinOperator->GetOutput(&appendOutput);
@@ -924,7 +924,7 @@ void StressTestSingleLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinT
     int32_t operatorCount = 1;
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -944,7 +944,10 @@ void StressTestSingleLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinT
     auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
-    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    // These stress helpers feed the same probe again after it reaches FINISHED.
+    // The owning builder factory keeps the hash table until both inputs finish.
+    lookupJoinFactory->SetEagerReleaseBuildState(false);
+    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator(nullptr));
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
@@ -961,7 +964,7 @@ void StressTestSingleLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinT
     if (joinType == OMNI_JOIN_TYPE_FULL) {
         auto lookupOuterJoinOperatorFactory = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
             buildTypes, buildJoinCols, joinColsCount, buildJoinCols, buildTypes, hashBuilderFactoryAddr);
-        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator();
+        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator(nullptr);
         while (lookupOuterJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
             VectorBatch *appendOutput = nullptr;
             lookupOuterJoinOperator->GetOutput(&appendOutput);
@@ -1040,7 +1043,7 @@ void StressTestSingleLookupJoinForVariableKey(DataTypes buildTypes, JoinType joi
     int32_t operatorCount = 1;
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -1060,7 +1063,10 @@ void StressTestSingleLookupJoinForVariableKey(DataTypes buildTypes, JoinType joi
     auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
-    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    // These stress helpers feed the same probe again after it reaches FINISHED.
+    // The owning builder factory keeps the hash table until both inputs finish.
+    lookupJoinFactory->SetEagerReleaseBuildState(false);
+    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator(nullptr));
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
@@ -1077,7 +1083,7 @@ void StressTestSingleLookupJoinForVariableKey(DataTypes buildTypes, JoinType joi
     if (joinType == OMNI_JOIN_TYPE_FULL) {
         auto lookupOuterJoinOperatorFactory = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
             buildTypes, buildJoinCols, joinColsCount, buildJoinCols, buildTypes, hashBuilderFactoryAddr);
-        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator();
+        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator(nullptr);
         while (lookupOuterJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
             VectorBatch *appendOutput = nullptr;
             lookupOuterJoinOperator->GetOutput(&appendOutput);
@@ -1109,7 +1115,7 @@ void StressTestTwoLookupJoinForVariableKey(DataTypes buildTypes, JoinType joinTy
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
     VectorBatch *hashBuildOutput = nullptr;
 
-    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -1118,7 +1124,7 @@ void StressTestTwoLookupJoinForVariableKey(DataTypes buildTypes, JoinType joinTy
     }
     hashBuilderOperator1->GetOutput(&hashBuildOutput);
 
-    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -1137,7 +1143,10 @@ void StressTestTwoLookupJoinForVariableKey(DataTypes buildTypes, JoinType joinTy
     auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
-    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    // These stress helpers feed the same probe again after it reaches FINISHED.
+    // The owning builder factory keeps the hash table until both inputs finish.
+    lookupJoinFactory->SetEagerReleaseBuildState(false);
+    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator(nullptr));
     lookupJoinOperator->setNoMoreInput(false);
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (!lookupJoinOperator->needsInput() && lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -1156,7 +1165,7 @@ void StressTestTwoLookupJoinForVariableKey(DataTypes buildTypes, JoinType joinTy
     if (joinType == OMNI_JOIN_TYPE_FULL) {
         auto lookupOuterJoinOperatorFactory = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
             buildTypes, buildJoinCols, joinColsCount, buildJoinCols, buildTypes, hashBuilderFactoryAddr);
-        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator();
+        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator(nullptr);
         while (lookupOuterJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
             VectorBatch *appendOutput = nullptr;
             lookupOuterJoinOperator->GetOutput(&appendOutput);
@@ -1190,7 +1199,7 @@ void StressTestTwoLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinType
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
     VectorBatch *hashBuildOutput = nullptr;
 
-    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -1199,7 +1208,7 @@ void StressTestTwoLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinType
     }
     hashBuilderOperator1->GetOutput(&hashBuildOutput);
 
-    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -1218,7 +1227,10 @@ void StressTestTwoLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinType
     auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
-    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    // These stress helpers feed the same probe again after it reaches FINISHED.
+    // The owning builder factory keeps the hash table until both inputs finish.
+    lookupJoinFactory->SetEagerReleaseBuildState(false);
+    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator(nullptr));
     lookupJoinOperator->setNoMoreInput(false);
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (!lookupJoinOperator->needsInput() && lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -1237,7 +1249,7 @@ void StressTestTwoLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinType
     if (joinType == OMNI_JOIN_TYPE_FULL) {
         auto lookupOuterJoinOperatorFactory = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
             buildTypes, buildJoinCols, joinColsCount, buildJoinCols, buildTypes, hashBuilderFactoryAddr);
-        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator();
+        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator(nullptr);
         while (lookupOuterJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
             VectorBatch *appendOutput = nullptr;
             lookupOuterJoinOperator->GetOutput(&appendOutput);
@@ -1317,7 +1329,7 @@ void StressTestSingleLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joi
     int32_t operatorCount = 1;
     HashBuilderOperatorFactory *hashBuilderFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -1337,7 +1349,10 @@ void StressTestSingleLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joi
     auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
-    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    // These stress helpers feed the same probe again after it reaches FINISHED.
+    // The owning builder factory keeps the hash table until both inputs finish.
+    lookupJoinFactory->SetEagerReleaseBuildState(false);
+    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator(nullptr));
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
@@ -1354,7 +1369,7 @@ void StressTestSingleLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joi
     if (joinType == OMNI_JOIN_TYPE_FULL) {
         auto lookupOuterJoinOperatorFactory = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
             buildTypes, buildJoinCols, joinColsCount, buildJoinCols, buildTypes, hashBuilderFactoryAddr);
-        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator();
+        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator(nullptr);
         while (lookupOuterJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
             VectorBatch *appendOutput = nullptr;
             lookupOuterJoinOperator->GetOutput(&appendOutput);
@@ -1387,7 +1402,7 @@ void StressTestTwoLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joinTy
         joinType, buildTypes, buildJoinCols, joinColsCount, operatorCount);
     VectorBatch *hashBuildOutput = nullptr;
 
-    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator1 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -1396,7 +1411,7 @@ void StressTestTwoLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joinTy
     }
     hashBuilderOperator1->GetOutput(&hashBuildOutput);
 
-    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator());
+    auto *hashBuilderOperator2 = dynamic_cast<HashBuilderOperator *>(hashBuilderFactory->CreateOperator(nullptr));
     for (int i = 0; i < repeatTimes; ++i) {
         auto plainInput = DuplicateVectorBatch(plainVecBatch);
         auto dicInput = DuplicateVectorBatch(dicVecBatch);
@@ -1415,7 +1430,10 @@ void StressTestTwoLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joinTy
     auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
-    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    // These stress helpers feed the same probe again after it reaches FINISHED.
+    // The owning builder factory keeps the hash table until both inputs finish.
+    lookupJoinFactory->SetEagerReleaseBuildState(false);
+    auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator(nullptr));
     lookupJoinOperator->setNoMoreInput(false);
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (!lookupJoinOperator->needsInput() && lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -1434,7 +1452,7 @@ void StressTestTwoLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joinTy
     if (joinType == OMNI_JOIN_TYPE_FULL) {
         auto lookupOuterJoinOperatorFactory = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
             buildTypes, buildJoinCols, joinColsCount, buildJoinCols, buildTypes, hashBuilderFactoryAddr);
-        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator();
+        auto lookupOuterJoinOperator = lookupOuterJoinOperatorFactory->CreateOperator(nullptr);
         while (lookupOuterJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
             VectorBatch *appendOutput = nullptr;
             lookupOuterJoinOperator->GetOutput(&appendOutput);

@@ -68,16 +68,20 @@ struct JoinHandoffSnapshot {
 
 class JoinSpillState {
 public:
+    void SetHandoffSessionEnabled(bool enabled) { handoffSessionEnabled_ = enabled; }
+    bool IsHandoffSessionEnabled() const { return handoffSessionEnabled_; }
     JoinSpillState(const std::string &spillDir, const type::DataTypes &buildTypes,
         const type::DataTypes &probeTypes, uint32_t numSubPartitions);
     ~JoinSpillState();
 
     uint64_t NextRunId();
 
-    void SpillBuildSubPartition(uint64_t runId, uint32_t subPartition, vec::VectorBatch *batch);
+    void SpillBuildSubPartition(uint64_t runId, uint32_t subPartition, vec::VectorBatch *batch,
+        mem::OmniTaskMemoryPool *pool = nullptr);
     void CloseBuildWriters();
 
-    void RestoreBuildSubPartition(HashTableVariants *hashTables, uint32_t subPartition);
+    void RestoreBuildSubPartition(HashTableVariants *hashTables, uint32_t subPartition,
+        mem::OmniTaskMemoryPool *pool = nullptr);
     /// After RestoreBuildSubPartition + BuildHashTable, write peeled visited flags into the table.
     void ApplyPendingVisitedFlags(HashTableVariants *hashTables, uint32_t subPartition);
     bool HasPendingBuildSpill(uint32_t subPartition) const;
@@ -124,6 +128,8 @@ public:
     bool IsProbePathAFinished() const;
     std::optional<uint32_t> NextRestorePartitionId();
     void ProbeFinished(uint32_t partitionId);
+    // A downstream operator can stop consuming before the probe drains.
+    // Release the builder's handoff wait without restoring unused partitions.
     void AbandonProbe();
     void AppendSpilledHashTablePartitions(const std::vector<uint32_t> &newIds);
     std::vector<uint32_t> SpillPartitionIds() const;
@@ -150,16 +156,14 @@ public:
     bool CanFlushHeldTable() const;
     void PublishHeldTableFlush(const std::vector<uint32_t> &ids);
     /// Spill the probe-held build table and publish spilled partition ids.
-    void FlushHeldBuildTable(HashTableVariants *hashTables, const JoinSubPartitionConfig &cfg);
+    void FlushHeldBuildTable(HashTableVariants *hashTables, const JoinSubPartitionConfig &cfg,
+        mem::OmniTaskMemoryPool *pool = nullptr);
     bool WasRestorePartitionFlushed(uint32_t partitionId) const;
 
     void BindSpillConfig(std::shared_ptr<SparkSpillConfig> spillConfig);
     /// Counts build and probe spill bytes and throws once they pass maxSpillBytes.
     void AccountSpilledBytes(uint64_t bytes);
-    void SetSpillMemThresholdOverride(std::optional<int64_t> bytes);
     void SetBuildHashCols(std::vector<int32_t> hashCols);
-    bool AccountedMemoryOverThreshold() const;
-    int64_t SpillMemThreshold() const;
 
     const type::DataTypes &BuildTypes() const
     {
@@ -172,6 +176,7 @@ public:
     }
 
 private:
+    bool handoffSessionEnabled_ = false;
     void EnsureSessionDirLocked();
     std::string MakeSubPartitionDirLocked(const char *side, uint64_t runId, uint32_t subPartition);
     void CloseBuildWritersLocked();
@@ -228,11 +233,11 @@ private:
     std::unordered_set<uint32_t> flushedRestorePartitions_;
 
     std::shared_ptr<SparkSpillConfig> spillConfig_;
-    std::optional<int64_t> spillMemThresholdOverride_;
     std::vector<int32_t> buildHashCols_;
 };
 
-void FlattenBatchForJoinSpill(omniruntime::vec::VectorBatch *batch);
+void FlattenBatchForJoinSpill(omniruntime::vec::VectorBatch *batch,
+    mem::OmniTaskMemoryPool *pool = nullptr);
 /// Best-effort delete; a missing file is not an error.
 void RemoveJoinSpillFile(const std::string &path);
 
