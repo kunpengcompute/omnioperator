@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include "gtest/gtest.h"
+#include "expression/expressions.h"
 #include "memory/pool_listener.h"
 #include "memory/omni_task_memory_pool.h"
 #include "operator/join/hash_builder.h"
@@ -44,15 +45,19 @@ public:
     std::unique_ptr<LookupJoinOperator, void(*)(LookupJoinOperator *)> probe{
         nullptr, [](LookupJoinOperator *op) { if (op) omniruntime::op::Operator::DeleteOperator(op); }};
 
-    PoolProbeJoin()
+    explicit PoolProbeJoin(JoinType joinType = OMNI_JOIN_TYPE_INNER,
+        omniruntime::expressions::Expr *filterExpr = nullptr)
     {
         static std::atomic<uint64_t> id{0};
         cfg.numSubPartitions = 4;
         cfg.startPartitionBit = 0;
         cfg.activeSubPartition = 0;
         int32_t hashCol = 0;
-        hashFactory.reset(HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
-            OMNI_JOIN_TYPE_INNER, types, &hashCol, 1, 1));
+        hashFactory.reset(joinType == OMNI_JOIN_TYPE_INNER
+            ? HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
+                  joinType, types, &hashCol, 1, 1)
+            : HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
+                  joinType, OMNI_BUILD_RIGHT, types, &hashCol, 1, 1));
         state = std::make_shared<JoinSpillState>(
             "/tmp/join-pool-probe-" + std::to_string(id.fetch_add(1)), types, types, 4);
         state->SetHandoffSessionEnabled(true);
@@ -64,21 +69,21 @@ public:
         int32_t outputCols[] = {0, 1};
         lookupFactory.reset(LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
             types, outputCols, 2, &hashCol, 1, outputCols, 2, types,
-            reinterpret_cast<int64_t>(hashFactory.get()), nullptr, false, nullptr));
+            reinterpret_cast<int64_t>(hashFactory.get()), filterExpr, false, nullptr));
         lookupFactory->SetJoinSpillPolicy(true, cfg, true);
         lookupFactory->SetJoinSpillState(state);
         probe.reset(static_cast<LookupJoinOperator *>(lookupFactory->CreateOperator(&pool)));
         probe->setNoMoreInput(false);
     }
 
-    VectorBatch *Batch(int64_t start, int32_t rows)
+    VectorBatch *Batch(int64_t start, int32_t rows, int64_t valueOffset = 1000)
     {
         auto *batch = new VectorBatch(rows);
         auto *keys = new Vector<int64_t>(rows, &pool);
         auto *values = new Vector<int64_t>(rows, &pool);
         for (int32_t row = 0; row < rows; ++row) {
             keys->SetValue(row, start + row);
-            values->SetValue(row, start + row + 1000);
+            values->SetValue(row, start + row + valueOffset);
         }
         batch->Append(keys);
         batch->Append(values);
@@ -334,5 +339,104 @@ TEST(JoinSpillPoolProbeTest, RestoreSmallTableReclaimKeepsProbeReaderCursor)
     EXPECT_TRUE(h.build->isFinished());
     EXPECT_TRUE(h.probe->isFinished());
     EXPECT_EQ(outputRows, 128);
+}
+
+TEST(JoinSpillPoolProbeTest, LeftSemiBuildReclaimRestoresMatchingProbeRows)
+{
+    PoolProbeJoin h(OMNI_JOIN_TYPE_LEFT_SEMI);
+    h.build->AddInput(h.Batch(0, 64));
+    ASSERT_GT(h.build->reclaim(std::numeric_limits<int64_t>::max()), 0);
+    h.build->noMoreInput();
+    VectorBatch *unused = nullptr;
+    h.build->GetOutput(&unused);
+    ASSERT_EQ(h.state->GetHandoffPhase(), JoinHandoffPhase::ProbePathA);
+    ASSERT_GT(h.state->BuildSpilledRows(), 0U);
+
+    h.probe->AddInput(h.Batch(0, 64));
+    h.probe->AddInput(h.Batch(0, 64));
+    h.probe->AddInput(h.Batch(64, 32)); // no build match
+    h.probe->noMoreInput();
+
+    int64_t outputRows = 0;
+    for (int i = 0; i < 10000; ++i) {
+        h.build->GetOutput(&unused);
+        VectorBatch *out = nullptr;
+        h.probe->GetOutput(&out);
+        if (out != nullptr) {
+            outputRows += out->GetRowCount();
+            VectorHelper::FreeVecBatch(out);
+        }
+        if (h.build->isFinished() && h.probe->isFinished()) break;
+    }
+    EXPECT_TRUE(h.build->isFinished());
+    EXPECT_TRUE(h.probe->isFinished());
+    EXPECT_GT(h.probe->ProbeSpilledRows(), 0U);
+    EXPECT_EQ(outputRows, 128);
+}
+
+TEST(JoinSpillPoolProbeTest, LeftSemiSkipsProbeBucketsWithoutBuildRows)
+{
+    PoolProbeJoin h(OMNI_JOIN_TYPE_LEFT_SEMI);
+    h.build->AddInput(h.Batch(0, 1));
+    ASSERT_GT(h.build->reclaim(std::numeric_limits<int64_t>::max()), 0);
+    h.build->noMoreInput();
+    VectorBatch *unused = nullptr;
+    h.build->GetOutput(&unused);
+    ASSERT_EQ(h.state->GetHandoffPhase(), JoinHandoffPhase::ProbePathA);
+
+    h.probe->AddInput(h.Batch(0, 65)); // only key 0 has a build match
+    h.probe->noMoreInput();
+
+    int64_t outputRows = 0;
+    for (int i = 0; i < 10000; ++i) {
+        h.build->GetOutput(&unused);
+        VectorBatch *out = nullptr;
+        h.probe->GetOutput(&out);
+        if (out != nullptr) {
+            outputRows += out->GetRowCount();
+            VectorHelper::FreeVecBatch(out);
+        }
+        if (h.build->isFinished() && h.probe->isFinished()) break;
+    }
+    EXPECT_TRUE(h.build->isFinished());
+    EXPECT_TRUE(h.probe->isFinished());
+    EXPECT_GT(h.probe->ProbeSpilledRows(), 0U);
+    EXPECT_LT(h.probe->ProbeSpilledRows(), 65U);
+    EXPECT_EQ(outputRows, 1);
+}
+
+TEST(JoinSpillPoolProbeTest, LeftSemiRestoreHonorsAdditionalFilter)
+{
+    auto *filter = new omniruntime::expressions::BinaryExpr(
+        omniruntime::expressions::Operator::NEQ,
+        new omniruntime::expressions::FieldExpr(1, LongType()),
+        new omniruntime::expressions::FieldExpr(3, LongType()), BooleanType());
+    PoolProbeJoin h(OMNI_JOIN_TYPE_LEFT_SEMI, filter);
+    h.build->AddInput(h.Batch(0, 64));
+    ASSERT_GT(h.build->reclaim(std::numeric_limits<int64_t>::max()), 0);
+    h.build->noMoreInput();
+    VectorBatch *unused = nullptr;
+    h.build->GetOutput(&unused);
+    ASSERT_EQ(h.state->GetHandoffPhase(), JoinHandoffPhase::ProbePathA);
+
+    h.probe->AddInput(h.Batch(0, 32));       // equal values fail the extra predicate
+    h.probe->AddInput(h.Batch(32, 32, 2000)); // different values pass
+    h.probe->noMoreInput();
+
+    int64_t outputRows = 0;
+    for (int i = 0; i < 10000; ++i) {
+        h.build->GetOutput(&unused);
+        VectorBatch *out = nullptr;
+        h.probe->GetOutput(&out);
+        if (out != nullptr) {
+            outputRows += out->GetRowCount();
+            VectorHelper::FreeVecBatch(out);
+        }
+        if (h.build->isFinished() && h.probe->isFinished()) break;
+    }
+    EXPECT_TRUE(h.build->isFinished());
+    EXPECT_TRUE(h.probe->isFinished());
+    EXPECT_GT(h.probe->ProbeSpilledRows(), 0U);
+    EXPECT_EQ(outputRows, 32);
 }
 } // namespace
