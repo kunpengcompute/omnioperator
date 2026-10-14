@@ -583,7 +583,7 @@ class BloomFilterFuncExpr : public FuncExpr
 {
 public:
     BloomFilterFuncExpr(const std::string &fnName, const std::vector<Expr *> &args, DataTypePtr returnType,
-        std::unique_ptr<op::BloomFilter> bloomFilter)
+        std::shared_ptr<op::BloomFilter> bloomFilter)
      : FuncExpr(fnName, args, returnType),
        bloomFilter_(std::move(bloomFilter)) {}
    ~BloomFilterFuncExpr() = default;
@@ -592,7 +592,8 @@ public:
    BloomFilterFuncExpr(BloomFilterFuncExpr &&) = delete;
    BloomFilterFuncExpr &operator=(BloomFilterFuncExpr &&) = delete;
 private:
-    std::unique_ptr<op::BloomFilter> bloomFilter_;
+    // Shared with every plan probing the same filter: see BloomFilter::GetShared.
+    std::shared_ptr<op::BloomFilter> bloomFilter_;
 };
 
 class ITypedExpr;

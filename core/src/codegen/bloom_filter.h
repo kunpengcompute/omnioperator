@@ -5,6 +5,8 @@
 #ifndef OMNI_RUNTIME_BLOOM_FILTER_H
 #define OMNI_RUNTIME_BLOOM_FILTER_H
 
+#include <cstddef>
+#include <memory>
 #include "util/bit_array.h"
 #include "operator/operator_factory.h"
 
@@ -19,6 +21,15 @@ public:
     explicit BloomFilter(int32_t size, int32_t version);
 
     explicit BloomFilter(char *serialized, bool isRelease = false);
+
+    /**
+     * Returns the process-wide filter for these serialized bytes, creating it on first use.
+     * might_contain codegen embeds the filter address in the compiled function and in the
+     * filter cache key, so tasks probing the same runtime filter must share one object to
+     * reuse the compiled code. Entries are weak: a filter lives as long as the plans using
+     * it. The returned filter is shared and must not be modified.
+     */
+    static std::shared_ptr<BloomFilter> GetShared(const char *serialized, size_t length);
 
     void Serialize(char *serialized);
 
@@ -66,7 +77,7 @@ public:
 
     ~BloomFilterOperatorFactory() override;
 
-    static BloomFilterOperatorFactory *CreateBloomFilterOperatorFactory(int32_t version);
+    static BloomFilterOperatorFactory *CreateBloomFilterOperatorFactory(int32_t filterVersion);
 
     using OperatorFactory::CreateOperator;
     // Pool-bound override

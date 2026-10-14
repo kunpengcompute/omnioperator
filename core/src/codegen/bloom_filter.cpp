@@ -5,8 +5,14 @@
 
 #include "bloom_filter.h"
 #include "util/type_util.h"
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <functional>
+#include <iterator>
+#include <mutex>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
@@ -137,6 +143,80 @@ void CopyWordsFromSerialized(BitArray *bits, const char *serialized, const Seria
         std::memcpy(dst, serialized + layout.bitsOffset, sizeof(uint64_t) * layout.wordsNum);
     }
 }
+
+bool HasSerializedWords(BloomFilter &filter, const char *serialized, const SerializedLayout &layout)
+{
+    BitArray *bits = filter.GetBits();
+    if (filter.GetVersion() != layout.version || bits->GetWordsNum() != layout.wordsNum) {
+        return false;
+    }
+    const auto *words = reinterpret_cast<const uint64_t *>(bits->GetData());
+    if (!layout.bigEndian) {
+        return std::memcmp(words, serialized + layout.bitsOffset, sizeof(uint64_t) * layout.wordsNum) == 0;
+    }
+    for (int32_t i = 0; i < layout.wordsNum; i++) {
+        if (words[i] != ReadInt64BE(serialized, layout.bitsOffset + i * static_cast<int32_t>(sizeof(uint64_t)))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+struct SharedFilterRegistry {
+    std::mutex mutex;
+    std::unordered_multimap<size_t, std::weak_ptr<BloomFilter>> filters;
+    // Released filters are only dropped from buckets that are probed again, so sweep the
+    // whole map whenever it doubles to keep a long-lived executor from accumulating them.
+    size_t sweepAt = 64;
+};
+
+SharedFilterRegistry &GetSharedFilterRegistry()
+{
+    // Leaked on purpose: plans may still release filters during static destruction.
+    static auto *registry = new SharedFilterRegistry();
+    return *registry;
+}
+}
+
+std::shared_ptr<BloomFilter> BloomFilter::GetShared(const char *serialized, size_t length)
+{
+    if (serialized == nullptr || length < static_cast<size_t>(SPARK_WIRE_HEADER_SIZE)) {
+        throw omniruntime::exception::OmniException("ILLEGAL_INPUT", "BloomFilter serialized data is too short.");
+    }
+    const SerializedLayout layout = ParseSerializedHeader(serialized);
+    const size_t wordsBytes = sizeof(uint64_t) * static_cast<size_t>(layout.wordsNum);
+    if (length < static_cast<size_t>(layout.bitsOffset) + wordsBytes) {
+        throw omniruntime::exception::OmniException("ILLEGAL_INPUT", "BloomFilter serialized data is truncated.");
+    }
+    // Hash only the header and words: trailing bytes are not part of the filter.
+    const size_t hash = std::hash<std::string_view>{}(
+        std::string_view(serialized, static_cast<size_t>(layout.bitsOffset) + wordsBytes));
+
+    auto &registry = GetSharedFilterRegistry();
+    std::lock_guard<std::mutex> lock(registry.mutex);
+    auto range = registry.filters.equal_range(hash);
+    for (auto it = range.first; it != range.second;) {
+        auto filter = it->second.lock();
+        if (filter == nullptr) {
+            it = registry.filters.erase(it);
+            continue;
+        }
+        if (HasSerializedWords(*filter, serialized, layout)) {
+            return filter;
+        }
+        ++it;
+    }
+
+    // The constructor only reads the serialized bytes when it does not own them.
+    auto filter = std::make_shared<BloomFilter>(const_cast<char *>(serialized), false);
+    registry.filters.emplace(hash, filter);
+    if (registry.filters.size() >= registry.sweepAt) {
+        for (auto it = registry.filters.begin(); it != registry.filters.end();) {
+            it = it->second.expired() ? registry.filters.erase(it) : std::next(it);
+        }
+        registry.sweepAt = std::max<size_t>(64, registry.filters.size() * 2);
+    }
+    return filter;
 }
 
 /**
@@ -444,9 +524,9 @@ BloomFilterOperatorFactory::BloomFilterOperatorFactory(int32_t version) : versio
 
 BloomFilterOperatorFactory::~BloomFilterOperatorFactory() = default;
 
-BloomFilterOperatorFactory *BloomFilterOperatorFactory::CreateBloomFilterOperatorFactory(int32_t version)
+BloomFilterOperatorFactory *BloomFilterOperatorFactory::CreateBloomFilterOperatorFactory(int32_t filterVersion)
 {
-    auto pOperatorFactory = new BloomFilterOperatorFactory(version);
+    auto pOperatorFactory = new BloomFilterOperatorFactory(filterVersion);
     return pOperatorFactory;
 }
 
