@@ -306,6 +306,7 @@ TEST(NativeOmniJoinTest, TestInnerEqualityJoinWithOneBuildOp)
     omniruntime::op::Operator::DeleteOperator(lookupJoinOperator);
     DeleteJoinOperatorFactory(hashBuilderFactory, lookupJoinFactory);
 }
+
 // need calculate probe data partitionId
 TEST(NativeOmniJoinTest, DISABLED_TestInnerEqualityJoinWithTwoBuildOp)
 {

@@ -10,6 +10,7 @@
 #include "operator/operator_factory.h"
 #include "operator/projection/projection.h"
 #include "operator/join/lookup_join.h"
+#include "operator/join/join_spill_state.h"
 #include "operator/join/hash_builder_expr.h"
 #include "type/data_types.h"
 #include "operator/status.h"
@@ -45,6 +46,16 @@ public:
 
     omniruntime::op::Operator *CreateOperator() override;
 
+    void SetJoinSpillPolicy(bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg = {})
+    {
+        operatorFactory->SetJoinSpillPolicy(joinSpillEnabled, joinSubPartCfg);
+    }
+
+    void SetJoinSpillState(std::shared_ptr<JoinSpillState> joinSpillState)
+    {
+        operatorFactory->SetJoinSpillState(std::move(joinSpillState));
+    }
+
 private:
     std::unique_ptr<DataTypes> probeTypes; // all types for probe
     std::vector<int32_t> probeHashCols;    // join columns for probe
@@ -67,6 +78,13 @@ public:
     OmniStatus Close() override;
 
     BlockingReason IsBlocked(ContinueFuture* future) override;
+
+    bool needsInput() override;
+
+    LookupJoinOperator *GetLookupJoinOperator() const
+    {
+        return lookupJoinOperator;
+    }
 
     void noMoreInput() override
     {

@@ -172,6 +172,7 @@ LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(const DataT
         probeOutputColsCount, this->probeHashCols.data(), probeHashKeysCount, buildOutputCols, buildOutputColsCount,
         std::move(buildOutputTypes), (int64_t)(hashBuilderOperatorFactory),
         filterExpr, probeTypes.GetSize(), isShuffleExchangeBuildPlan, overflowConfig, outputList);
+    this->operatorFactory->SetJoinSpillState(hashBuilderOperatorFactory->GetJoinSpillState());
 }
 
 LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(const DataTypes &probeTypes,
@@ -186,6 +187,8 @@ LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(const DataT
 {
     this->queryConfig_ = queryConfig;
     operatorFactory->SetQueryConfig(queryConfig);
+    this->operatorFactory->SetJoinSpillPolicy(queryConfig.spillEnabled() && queryConfig.joinSpillEnabled(),
+        JoinSubPartitionConfig::FromQueryConfig(queryConfig));
 }
 
 LookupJoinWithExprOperatorFactory::~LookupJoinWithExprOperatorFactory()
@@ -228,6 +231,7 @@ int32_t LookupJoinWithExprOperator::AddInput(VectorBatch *vecBatch)
 
     lookupJoinOperator->AddInput(newInputVecBatch);
     SetStatus(lookupJoinOperator->GetStatus());
+    UpdateSpilledMetrics(lookupJoinOperator);
     return 0;
 }
 
@@ -235,12 +239,19 @@ int32_t LookupJoinWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 {
     int32_t status = lookupJoinOperator->GetOutput(outputVecBatch);
     SetStatus(lookupJoinOperator->GetStatus());
+    // Driver snapshots stats before Close(); copy after each GetOutput.
+    UpdateSpilledMetrics(lookupJoinOperator);
     return status;
 }
 
 BlockingReason LookupJoinWithExprOperator::IsBlocked(ContinueFuture* future)
 {
     return lookupJoinOperator->IsBlocked(future);
+}
+
+bool LookupJoinWithExprOperator::needsInput()
+{
+    return lookupJoinOperator->needsInput();
 }
 
 OmniStatus LookupJoinWithExprOperator::Close()

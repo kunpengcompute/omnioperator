@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <cstring>
+#include <string>
 #include <sys/stat.h>
 #include "vector/unsafe_vector.h"
 #include "spiller.h"
@@ -14,12 +15,7 @@ namespace omniruntime {
 namespace op {
 using namespace omniruntime::vec;
 using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-static std::string SPILL_TEMPLATE("spill-XXXXXX");
-static const char *SPILL_TEMPLATE_CHARS = SPILL_TEMPLATE.c_str();
-static int32_t SPILL_TEMPLATE_SIZE = static_cast<int32_t>(SPILL_TEMPLATE.size());
-// When PID and TID is converted into a character string, the maximum length is 10.
-constexpr int PID_LENGTH = 10;
-constexpr int TID_LENGTH = 10;
+static const char *SPILL_TEMPLATE_CHARS = "spill-XXXXXX";
 
 template <typename T>
 static bool AreSpillOffsetsValid(const T *offsets, int32_t rowCount, int64_t maxEnd)
@@ -60,7 +56,7 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
         VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount);
         auto spillVecBatchPtr = spillVecBatch.get();
         aggregationSort->SetSpillVectorBatch(spillVecBatchPtr, totalRowOffset, comapreWithHashVal);
-        auto vecBatchSize = CollectVecBatchSize(spillVecBatchPtr);
+        auto vecBatchSize = CollectVecBatchSize(dataTypes, spillVecBatchPtr);
         if (isSpillCompressEnabled) {
             if (writer->getTotalCompressBytes() + vecBatchSize> UINT64_MAX) {
                 spillFiles.emplace_back(writer->GetSpillFileInfo());
@@ -234,7 +230,7 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
 
         auto spillVecBatchPtr = spillVecBatch.get();
         pagesIndex->SetSpillVecBatch(spillVecBatchPtr, outputCols, totalRowOffset, canInplaceSort, canRadixSort);
-        auto vecBatchSize = CollectVecBatchSize(spillVecBatchPtr);
+        auto vecBatchSize = CollectVecBatchSize(dataTypes, spillVecBatchPtr);
         if (isSpillCompressEnabled) {
             if (writer->getTotalCompressBytes() + vecBatchSize> UINT64_MAX) {
                 spillFiles.emplace_back(writer->GetSpillFileInfo());
@@ -271,7 +267,7 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
 }
 
 
-uint64_t Spiller::CollectVecBatchSize(vec::VectorBatch *vectorBatch)
+uint64_t Spiller::CollectVecBatchSize(const type::DataTypes &dataTypes, vec::VectorBatch *vectorBatch)
 {
     uint64_t result = sizeof(int32_t); // for row count size
     int32_t rowCount = vectorBatch->GetRowCount();
@@ -434,41 +430,40 @@ template <typename T> uint64_t Spiller::CollectVectorSize(vec::BaseVector *vecto
 
 ErrorCode SpillWriter::CreateTempFile()
 {
-    // the spill directory will be created when CheckOperatorConfig if it does not exist
-    int32_t fileNameLen = dirPath.size() + SPILL_TEMPLATE_SIZE + PID_LENGTH + TID_LENGTH + 1;
-    auto dirPathChars = dirPath.c_str();
-    char filePathChars[fileNameLen];
-    auto pid = static_cast<int>(getpid());
-    auto tid = static_cast<uint32_t>(pthread_self());
-    LogDebug("Spill writer create temp file at dir: %s.", dirPathChars);
-    if (snprintf(filePathChars, fileNameLen, "%s/%d-%u-%s", dirPathChars, pid, tid,
-        SPILL_TEMPLATE_CHARS) < 0) {
-        auto errorNum = errno;
-        char errorBuf[ERROR_BUFFER_SIZE];
-        GetErrorMsg(errorNum, errorBuf, ERROR_BUFFER_SIZE);
-        LogError("Snprintf for %s and %s failed since %s.", dirPathChars, SPILL_TEMPLATE_CHARS, errorBuf);
-        return ErrorCode::WRITE_FAILED;
-    }
+    // Join spill nests gluten-spill/<uuid>/join-spill-<id>/build/run<N>/sp<M> under the
+    // YARN container local dir. The old VLA was dir.size()+12+10+10+1 and omitted the
+    // three separators in "{dir}/{pid}-{tid}-spill-XXXXXX", so snprintf truncated the
+    // XXXXXX suffix on long paths and mkstemp returned EINVAL ("Invalid argument").
+    const auto pid = static_cast<int>(getpid());
+    const auto tid = static_cast<uint32_t>(pthread_self());
+    std::string filePathBuf;
+    filePathBuf.reserve(dirPath.size() + 48);
+    filePathBuf.append(dirPath);
+    filePathBuf.push_back('/');
+    filePathBuf.append(std::to_string(pid));
+    filePathBuf.push_back('-');
+    filePathBuf.append(std::to_string(tid));
+    filePathBuf.push_back('-');
+    filePathBuf.append(SPILL_TEMPLATE_CHARS);
+    LogDebug("Spill writer create temp file at dir: %s.", dirPath.c_str());
 
-    // it will open the file and the file permission is 600
-    int32_t tempFd = mkstemp(const_cast<char *>(filePathChars));
+    int32_t tempFd = mkstemp(&filePathBuf[0]);
     if (tempFd == -1) {
         auto errorNum = errno;
         char errorBuf[ERROR_BUFFER_SIZE];
         GetErrorMsg(errorNum, errorBuf, ERROR_BUFFER_SIZE);
-        LogError("Mkstemp in %s for %s failed since %s.", dirPathChars, filePathChars, errorBuf);
+        LogError("Mkstemp in %s for %s failed since %s.", dirPath.c_str(), filePathBuf.c_str(), errorBuf);
         return ErrorCode::MKSTEMP_FAILED;
     }
-    // set the file permission to 600
     if (fchmod(tempFd, S_IRUSR | S_IWUSR) == -1) {
         auto errorNum = errno;
         char errorBuf[ERROR_BUFFER_SIZE];
         GetErrorMsg(errorNum, errorBuf, ERROR_BUFFER_SIZE);
-        LogError("Fchmod %s failed since %s.", filePathChars, errorBuf);
+        LogError("Fchmod %s failed since %s.", filePathBuf.c_str(), errorBuf);
         close(tempFd);
         return ErrorCode::WRITE_FAILED;
     }
-    filePath = filePathChars;
+    filePath = std::move(filePathBuf);
     fd = tempFd;
     return ErrorCode::SUCCESS;
 }

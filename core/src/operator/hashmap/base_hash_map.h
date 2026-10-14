@@ -304,12 +304,12 @@ public:
         return 1ULL << degree;
     }
 
-    uint64_t GetCurrentSize()
+    uint64_t GetCurrentSize() const
     {
         return 1ULL << degree;
     }
 
-    uint64_t GetThreshHold()
+    uint64_t GetThreshHold() const
     {
         return threshold;
     }
@@ -508,16 +508,89 @@ public:
         InitSlots(grower.GetCurrentSize());
     }
 
+    ALWAYS_INLINE static uint64_t CtrlAllocationBytes(uint64_t newCapacity)
+    {
+        return (newCapacity + Group::kWidth) * sizeof(ctrl_t);
+    }
+
+    ALWAYS_INLINE static uint64_t SlotAllocationBytes(uint64_t newCapacity)
+    {
+        return newCapacity * sizeof(Slot);
+    }
+
+    ALWAYS_INLINE static int64_t EstimateInitSlotsBytes(uint64_t newCapacity)
+    {
+        return static_cast<int64_t>(CtrlAllocationBytes(newCapacity) + SlotAllocationBytes(newCapacity));
+    }
+
+    ALWAYS_INLINE uint64_t EstimateAllocatedBytes() const
+    {
+        uint64_t bytes = 0;
+        if (capacity > 0) {
+            bytes += CtrlAllocationBytes(capacity) + SlotAllocationBytes(capacity);
+        }
+        if (nullSlot != nullptr) {
+            bytes += sizeof(Slot);
+        }
+        return bytes;
+    }
+
+    /// Project ctrl+slot bytes after inserting additionalElements (includes rehash growth).
+    uint64_t EstimateRehashAllocation(size_t additionalElements) const
+    {
+        const uint64_t targetElements = elementsSize + additionalElements;
+        uint64_t projectedCapacity = capacity == 0 ? grower.GetCurrentSize() : capacity;
+        uint8_t projectedDegree = static_cast<uint8_t>(63 - __builtin_clzll(projectedCapacity));
+        uint64_t threshold = static_cast<uint64_t>(
+            std::ceil(static_cast<double>(projectedCapacity) * MAX_LOAD_FACTOR));
+        if (targetElements <= threshold) {
+            if (capacity == 0 && targetElements > 0) {
+                return static_cast<uint64_t>(EstimateInitSlotsBytes(projectedCapacity));
+            }
+            return 0;
+        }
+        do {
+            projectedDegree += projectedDegree >= Grower::enlargeThreshold ? Grower::expandFactoryOne
+                                                                           : Grower::expandFactoryTwo;
+            projectedCapacity = 1ULL << projectedDegree;
+            threshold = static_cast<uint64_t>(
+                std::ceil(static_cast<double>(projectedCapacity) * MAX_LOAD_FACTOR));
+        } while (targetElements > threshold);
+        return static_cast<uint64_t>(EstimateInitSlotsBytes(projectedCapacity));
+    }
+
+    static uint64_t EstimateRehashAllocationFromEmpty(size_t targetElements, uint8_t initDegree)
+    {
+        if (targetElements == 0) {
+            return 0;
+        }
+        Grower projected(initDegree);
+        uint64_t projectedCapacity = projected.GetCurrentSize();
+        uint8_t projectedDegree = initDegree;
+        uint64_t threshold = projected.GetThreshHold();
+        if (targetElements <= threshold) {
+            return static_cast<uint64_t>(EstimateInitSlotsBytes(projectedCapacity));
+        }
+        do {
+            projectedDegree += projectedDegree >= Grower::enlargeThreshold ? Grower::expandFactoryOne
+                                                                           : Grower::expandFactoryTwo;
+            projectedCapacity = 1ULL << projectedDegree;
+            threshold = static_cast<uint64_t>(
+                std::ceil(static_cast<double>(projectedCapacity) * MAX_LOAD_FACTOR));
+        } while (targetElements > threshold);
+        return static_cast<uint64_t>(EstimateInitSlotsBytes(projectedCapacity));
+    }
+
     ALWAYS_INLINE void InitSlots(uint64_t newCapacity)
     {
         capacity = newCapacity;
 
-        allocator.Allocate((newCapacity + Group::kWidth) * sizeof(ctrl_t), &ctrlAddress);
+        allocator.Allocate(CtrlAllocationBytes(newCapacity), &ctrlAddress);
         identifiers = reinterpret_cast<ctrl_t *>(ctrlAddress);
         memset(identifiers, kEmpty, sizeof(ctrl_t) * newCapacity);
         memset(identifiers + newCapacity, kSentinel, sizeof(ctrl_t) * Group::kWidth);
 
-        allocator.Allocate(newCapacity * sizeof(Slot), &slotsAddress);
+        allocator.Allocate(SlotAllocationBytes(newCapacity), &slotsAddress);
         slots = reinterpret_cast<Slot *>(slotsAddress);
     }
 
@@ -587,6 +660,9 @@ public:
 
     template <typename T> ALWAYS_INLINE InsertResult<ValueType> EmplaceNotNullKey(T &&key)
     {
+        if (UNLIKELY(NeedRehash())) {
+            Rehash();
+        }
         bool inserted = false;
         auto hashValue = hasher(key);
         auto pos = FindPosition(key, hashValue, inserted);
@@ -602,6 +678,9 @@ public:
 
     template <typename T> ALWAYS_INLINE InsertResult<ValueType> EmplaceNotNullKey(T &&key, size_t &hashValue)
     {
+        if (UNLIKELY(NeedRehash())) {
+            Rehash();
+        }
         bool inserted = false;
         auto pos = FindPosition(key, hashValue, inserted);
 

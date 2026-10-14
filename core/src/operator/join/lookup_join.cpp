@@ -4,17 +4,68 @@
  */
 #include <vector>
 #include <memory>
+#include "operator/spill/spiller.h"
+#include "join_spill_state.h"
 #include "operator/util/operator_util.h"
+#include "operator/omni_id_type_vector_traits.h"
+#include "type/data_type.h"
+#include "vector/large_string_container.h"
 #include "vector/vector_helper.h"
 #include "simd/simd.h"
 #include "hash_builder.h"
 #include "lookup_join.h"
+#include "util/debug.h"
+#include "memory/memory_manager.h"
+#include "row_ref.h"
 
 
 static constexpr int8_t BUFFER_SIZE = 8;
 
 using namespace omniruntime::vec;
 namespace omniruntime::op {
+namespace {
+
+/// we get a positions vector after sub partition, and we do copy for geting one subBatch by rowIds from source VectorBatch
+VectorBatch *CopyRowsForJoinSpill(VectorBatch *source, const std::vector<int32_t> &positions)
+{
+    if (source == nullptr || positions.empty()) {
+        return nullptr;
+    }
+    UniqueVecBatch subBatch(new VectorBatch(static_cast<int32_t>(positions.size())));
+    const int32_t vectorCount = source->GetVectorCount();
+    subBatch->ResizeVectorCount(vectorCount);
+    for (int32_t col = 0; col < vectorCount; ++col) {
+        subBatch->SetVector(col, VectorHelper::CopyPositionsVector(
+            source->Get(col), positions.data(), 0, static_cast<int32_t>(positions.size())));
+    }
+    return subBatch.release();
+}
+
+template <DataTypeId typeId>
+void AppendUnvisitedBuildValue(VectorBatch *vectorBatch, int32_t destCol, int32_t destRowIndex, uint32_t srcRowIndex,
+    BaseVector *src)
+{
+    using Type = typename NativeAndVectorType<typeId>::type;
+    using VectorT = typename NativeAndVectorType<typeId>::vector;
+    using DictVector = typename NativeAndVectorType<typeId>::dictVector;
+
+    auto destVector = static_cast<VectorT *>(vectorBatch->Get(destCol));
+    if (src->IsNull(srcRowIndex)) {
+        destVector->SetNull(destRowIndex);
+        return;
+    }
+    Type value;
+    if (src->GetEncoding() == OMNI_ENCODING_CONST) {
+        value = static_cast<vec::ConstVector<Type> *>(src)->GetConstValue();
+    } else if (src->GetEncoding() == OMNI_DICTIONARY) {
+        value = static_cast<DictVector *>(src)->GetValue(srcRowIndex);
+    } else {
+        value = static_cast<VectorT *>(src)->GetValue(srcRowIndex);
+    }
+    destVector->SetValue(destRowIndex, value);
+}
+
+} // namespace
 
 void LookupJoinOperatorFactory::CommonInitActions(const type::DataTypes &probeTypes, int32_t *probeOutputCols,
     int32_t probeOutputColsCount, int32_t *probeHashCols, int32_t probeHashColsCount, int32_t *buildOutputCols,
@@ -165,6 +216,9 @@ LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFa
 
     delete overflowConfig;
     overflowConfig = nullptr;
+    pLookupJoinOperatorFactory->SetJoinSpillPolicy(queryConfig.spillEnabled() && queryConfig.joinSpillEnabled(),
+        JoinSubPartitionConfig::FromQueryConfig(queryConfig));
+    pLookupJoinOperatorFactory->SetJoinSpillState(hashBuilderOperatorFactory->GetJoinSpillState());
     return pLookupJoinOperatorFactory;
 }
 
@@ -172,8 +226,29 @@ Operator *LookupJoinOperatorFactory::CreateOperator()
 {
     auto pLookupJoinOperator = new LookupJoinOperator(probeTypes, probeOutputCols, probeHashCols, probeHashColTypes,
         buildOutputCols, buildOutputTypes, hashTables, simpleFilter,
-        originalProbeColsCount, rowSize, isShuffleExchangeBuildPlan, outputList, queryConfig_);
+        originalProbeColsCount, rowSize, isShuffleExchangeBuildPlan, outputList, joinSpillEnabled_,
+        joinSubPartCfg_, joinSpillState_.get(), queryConfig_);
+    pLookupJoinOperator->KeepJoinSpillState(joinSpillState_);
     return pLookupJoinOperator;
+}
+
+void LookupJoinOperator::KeepJoinSpillState(std::shared_ptr<JoinSpillState> state)
+{
+    joinSpillStateKeep_ = std::move(state);
+    if (joinSpillState_ == nullptr) {
+        joinSpillState_ = joinSpillStateKeep_.get();
+    }
+}
+
+void LookupJoinOperatorFactory::SetJoinSpillPolicy(bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg)
+{
+    joinSpillEnabled_ = joinSpillEnabled;
+    joinSubPartCfg_ = joinSubPartCfg;
+}
+
+void LookupJoinOperatorFactory::SetJoinSpillState(std::shared_ptr<JoinSpillState> joinSpillState)
+{
+    joinSpillState_ = std::move(joinSpillState);
 }
 
 void LookupJoinOperatorFactory::JoinFilterCodeGen(Expr *filterExpr, OverflowConfig *overflowConfig)
@@ -193,8 +268,8 @@ void LookupJoinOperatorFactory::JoinFilterCodeGen(Expr *filterExpr, OverflowConf
 LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
     std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
     const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
-    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan,
-    const config::QueryConfig &queryConfig)
+    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan, bool joinSpillEnabled,
+    JoinSubPartitionConfig joinSubPartCfg, JoinSpillState *joinSpillState, const config::QueryConfig &queryConfig)
     : probeTypes(probeTypes),
       probeOutputCols(probeOutputCols),
       probeHashCols(probeHashCols),
@@ -204,9 +279,17 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
       hashTables(hashTables),
       simpleFilter(simpleFilter),
       originalProbeColsCount(originalProbeColsCount),
-      isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan)
+      isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan),
+      joinSpillEnabled_(joinSpillEnabled),
+      joinSubPartCfg_(joinSubPartCfg),
+      joinSpillState_(joinSpillState)
 {
     executionContext->SetConfig(queryConfig);
+    joinType = std::visit([&](auto &&arg) { return arg.GetJoinType(); }, *hashTables);
+    buildSide = std::visit([&](auto &&arg) { return arg.GetBuildSide(); }, *hashTables);
+    unvisitedBuildOutputPending_ = NeedsUnvisitedBuildOutput();
+    probeSpillFiles_.resize(joinSubPartCfg_.numSubPartitions);
+    pathAWriters_.resize(joinSubPartCfg_.numSubPartitions);
     std::vector<DataTypePtr> tmpProbeOutputTypesVec;
     for (size_t i = 0; i < probeOutputCols.size(); i++) {
         tmpProbeOutputTypesVec.emplace_back(probeTypes.GetType(probeOutputCols[i]));
@@ -252,10 +335,12 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
 LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
     std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
     const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
-    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan,
-    std::vector<int32_t> &outputList, const config::QueryConfig &queryConfig)
+    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan, std::vector<int32_t> &outputList,
+    bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg,
+    JoinSpillState *joinSpillState, const config::QueryConfig &queryConfig)
     : LookupJoinOperator(probeTypes, probeOutputCols, probeHashCols, probeHashColTypes, buildOutputCols, buildOutputTypes,
-    hashTables, simpleFilter, originalProbeColsCount, outputRowSize, isShuffleExchangeBuildPlan, queryConfig)
+    hashTables, simpleFilter, originalProbeColsCount, outputRowSize, isShuffleExchangeBuildPlan, joinSpillEnabled,
+    joinSubPartCfg, joinSpillState, queryConfig)
 {
 	this->outputBuilder = std::make_unique<LookupJoinOutputBuilder>(probeOutputCols, probeOutputTypes.GetIds(),
 																	buildOutputCols, buildOutputTypes,
@@ -272,15 +357,690 @@ LookupJoinOperator::~LookupJoinOperator()
     delete[] lengths;
     delete[] probeFilterTypeIds;
     delete[] buildFilterTypeIds;
+    if (curInputBatch != nullptr) {
+        VectorHelper::FreeVecBatch(curInputBatch);
+        curInputBatch = nullptr;
+    }
+    if (pendingRestoreProbeBatch_ != nullptr) {
+        VectorHelper::FreeVecBatch(pendingRestoreProbeBatch_);
+        pendingRestoreProbeBatch_ = nullptr;
+    }
+    for (auto *pending : pendingProbeOutputs_) {
+        VectorHelper::FreeVecBatch(pending);
+    }
+    pendingProbeOutputs_.clear();
+    try {
+        ClosePathASpillWriters();
+    } catch (...) {
+    }
+    probeRestoreReader_.reset();
+}
+
+bool LookupJoinOperator::UsesHandoffRestorePath() const
+{
+    return joinSpillState_ != nullptr;
+}
+
+bool LookupJoinOperator::UsedPathARestore() const
+{
+    return UsesHandoffRestorePath() && !joinSpillState_->SpillPartitionIds().empty();
+}
+
+bool LookupJoinOperator::NeedsUnvisitedBuildOutput() const
+{
+    return joinType == OMNI_JOIN_TYPE_FULL ||
+        (joinType == OMNI_JOIN_TYPE_LEFT && buildSide == OMNI_BUILD_LEFT) ||
+        (joinType == OMNI_JOIN_TYPE_RIGHT && buildSide == OMNI_BUILD_RIGHT);
+}
+
+void LookupJoinOperator::FinishFullTableProbeOnce()
+{
+    if (probeFullTableFinishedMarked_ || joinSpillState_ == nullptr) {
+        return;
+    }
+    JoinHandoffSnapshot snap;
+    if (!joinSpillState_->TryGetHandoffForProbe(&snap) || !snap.spillPartitionIds.empty() ||
+        snap.restoredPartitionId.has_value()) {
+        return;
+    }
+    probeFullTableFinishedMarked_ = true;
+    joinSpillState_->ProbeFinished(0);
+}
+
+void LookupJoinOperator::ReleaseSharedBuildState()
+{
+    (void)hashTables;
+}
+
+void LookupJoinOperator::ReleaseThisJoinTableIfBothSidesDone()
+{
+    if (joinSpillState_ != nullptr) {
+        // Session HT is owned by HashBuilder factory (build driver).
+        return;
+    }
+    if (hashTables != nullptr && !unvisitedBuildOutputPending_) {
+        std::visit([](auto &&arg) { arg.ReleaseBuildState(); }, *hashTables);
+    }
+}
+
+bool LookupJoinOperator::HandoffComplete() const
+{
+    return joinSpillState_ != nullptr && joinSpillState_->GetHandoffPhase() == JoinHandoffPhase::Complete;
+}
+
+bool LookupJoinOperator::HeldTableEmpty() const
+{
+    return hashTables != nullptr &&
+        std::visit([](auto &&arg) { return arg.GetTotalRowCount(0); }, *hashTables) == 0;
+}
+
+void LookupJoinOperator::RemoveProbeSpillFiles(const std::vector<std::string> &openWriterPaths)
+{
+    for (const auto &path : openWriterPaths) {
+        RemoveJoinSpillFile(path);
+    }
+    for (auto &files : probeSpillFiles_) {
+        for (const auto &record : files) {
+            RemoveJoinSpillFile(record.file.filePath);
+        }
+        files.clear();
+    }
+}
+
+void LookupJoinOperator::MaybeReleaseBuildStateAfterProbe()
+{
+    if (unvisitedBuildOutputPending_ || probePathAActive_ || probeRestoreActive_ || restoreUnvisitedEmitPending_) {
+        return;
+    }
+    ReleaseSharedBuildState();
+    ReleaseThisJoinTableIfBothSidesDone();
+}
+
+void LookupJoinOperator::MaybeFinishAfterProbeDrained()
+{
+    if (!noMoreInput_ || probePathAActive_ || probeRestoreActive_ || curInputBatch != nullptr) {
+        return;
+    }
+    if (joinSpillState_ == nullptr) {
+        SetStatus(OMNI_STATUS_FINISHED);
+        MaybeReleaseBuildStateAfterProbe();
+        return;
+    }
+    const auto phase = joinSpillState_->GetHandoffPhase();
+    if (phase == JoinHandoffPhase::Complete) {
+        SetStatus(OMNI_STATUS_FINISHED);
+        MaybeReleaseBuildStateAfterProbe();
+        return;
+    }
+    if (phase != JoinHandoffPhase::RestoreRound) {
+        return;
+    }
+    JoinHandoffSnapshot snap;
+    if (!joinSpillState_->TryGetHandoffForProbe(&snap) || !snap.spillPartitionIds.empty() ||
+        snap.restoredPartitionId.has_value()) {
+        return;
+    }
+    if (!NeedsUnvisitedBuildOutput()) {
+        FinishFullTableProbeOnce();
+    }
+    SetStatus(OMNI_STATUS_FINISHED);
+    MaybeReleaseBuildStateAfterProbe();
+}
+
+void LookupJoinOperator::ApplyProbeHandoffIfReady()
+{
+    if (joinSpillState_ == nullptr) {
+        return;
+    }
+    JoinHandoffSnapshot snap;
+    if (!joinSpillState_->TryGetHandoffForProbe(&snap)) {
+        return;
+    }
+    if (snap.handoffGeneration == lastSeenHandoffGeneration_) {
+        return;
+    }
+    lastSeenHandoffGeneration_ = snap.handoffGeneration;
+    if (snap.restoredPartitionId.has_value()) {
+        probePathAActive_ = false;
+        probeRestoreActive_ = true;
+        restoreRoundHasProbed_ = false;
+        probeRestorePartitionId_ = *snap.restoredPartitionId;
+        restoreUnvisitedEmitPending_ = false;
+        restoreUnvisitedEmitNext_ = 0;
+        restoreUnvisitedEmitAddrs_.clear();
+        // Empty-table probe ingest may call InitFirst while slot 0 is still empty; refresh
+        // build-side filter column pointers after this partition is restored into the hash table.
+        if (simpleFilter != nullptr) {
+            std::visit(
+                [&](auto &&arg) {
+                    arg.InitBuildFilterCols(buildFilterCols, originalProbeColsCount, tableBuildFilterColPtrs);
+                },
+                *hashTables);
+        }
+        // The probe now holds this restore round's small table; it may be flushed on a checkpoint.
+        joinSpillState_->SetTableInHandRestoreSmallTable(probeRestorePartitionId_);
+        // A restore partition flushed once keeps its probe read cursor so replay does not
+        // re-read batches that were already consumed before the flush.
+        if (!joinSpillState_->WasRestorePartitionFlushed(probeRestorePartitionId_)) {
+            probeSpillReadFileIndex_ = 0;
+            probeRestoreReader_.reset();
+            if (pendingRestoreProbeBatch_ != nullptr) {
+                VectorHelper::FreeVecBatch(pendingRestoreProbeBatch_);
+                pendingRestoreProbeBatch_ = nullptr;
+            }
+        }
+        return;
+    }
+    if (!snap.spillPartitionIds.empty() && snap.numDistinct == 0) {
+        joinSpillState_->SetTableInHandNone();
+        probePathAActive_ = true;
+        probeRestoreActive_ = false;
+        pathASpillPartitionIds_ = snap.spillPartitionIds;
+        if (!pathARunId_.has_value()) {
+            pathARunId_ = joinSpillState_->NextRunId();
+        }
+        if (curInputBatch != nullptr) {
+            auto *leftover = curInputBatch;
+            curInputBatch = nullptr;
+            TrySpillPathAProbeInput(leftover);
+        }
+        return;
+    }
+    probePathAActive_ = false;
+    probeRestoreActive_ = false;
+    // Full-table (or empty build) handoff: the probe now holds the in-memory table.
+    joinSpillState_->SetTableInHandFullTable();
+}
+
+void LookupJoinOperator::ClosePathASpillWriters()
+{
+    if (pathAWriters_.empty()) {
+        return;
+    }
+    bool closeFailed = false;
+    for (uint32_t sp = 0; sp < pathAWriters_.size(); ++sp) {
+        if (pathAWriters_[sp] == nullptr) {
+            continue;
+        }
+        ErrorCode status = ErrorCode::WRITE_FAILED;
+        try {
+            status = pathAWriters_[sp]->Close();
+        } catch (...) {
+            closeFailed = true;
+            pathAWriters_[sp].reset();
+            continue;
+        }
+        if (status == ErrorCode::SUCCESS) {
+            auto file = pathAWriters_[sp]->GetSpillFileInfo();
+            if (probeSpillFiles_.size() <= sp) {
+                probeSpillFiles_.resize(sp + 1);
+            }
+            probeSpillFiles_[sp].push_back(ProbeSpillFile{pathARunId_.value_or(0), sp, file});
+            ++stats_.spilledFiles;
+        } else {
+            closeFailed = true;
+        }
+        pathAWriters_[sp].reset();
+    }
+    if (closeFailed) {
+        throw OmniException("JOIN_SPILL_WRITE_FAILED", "Failed to close one or more probe spill writers.");
+    }
+}
+
+void LookupJoinOperator::MaybeFinishPathAIngest()
+{
+    if (!probePathAActive_ || !noMoreInput_ || curInputBatch != nullptr) {
+        return;
+    }
+    ClosePathASpillWriters();
+    joinSpillState_->MarkProbePathAFinished();
+    probePathAActive_ = false;
+}
+
+bool LookupJoinOperator::TrySpillPathAProbeInput(omniruntime::vec::VectorBatch *vecBatch)
+{
+    if (joinSpillState_ == nullptr || vecBatch == nullptr) {
+        return false;
+    }
+    UniqueVecBatch owned(vecBatch);
+    if (firstVecBatch) {
+        firstVecBatch = false;
+        InitFirst();
+    }
+    if (probeSpillFiles_.size() != joinSubPartCfg_.numSubPartitions) {
+        probeSpillFiles_.assign(joinSubPartCfg_.numSubPartitions, {});
+    }
+    if (pathAWriters_.size() != joinSubPartCfg_.numSubPartitions) {
+        pathAWriters_.resize(joinSubPartCfg_.numSubPartitions);
+    }
+    if (!pathARunId_.has_value()) {
+        pathARunId_ = joinSpillState_->NextRunId();
+    }
+    JoinSubPartitioner partitioner(joinSubPartCfg_);
+    const auto buckets = partitioner.PartitionRowsByKeyColumns(owned.get(), probeTypes, probeHashCols);
+    std::vector<std::vector<int32_t>> positions(joinSubPartCfg_.numSubPartitions);
+    for (size_t row = 0; row < buckets.size(); ++row) {
+        positions[buckets[row]].push_back(static_cast<int32_t>(row));
+    }
+    const bool oppositeOuter = (joinType == OMNI_JOIN_TYPE_LEFT && buildSide == OMNI_BUILD_RIGHT) ||
+        (joinType == OMNI_JOIN_TYPE_RIGHT && buildSide == OMNI_BUILD_LEFT) ||
+        joinType == OMNI_JOIN_TYPE_FULL;
+    for (uint32_t subPartition = 0; subPartition < positions.size(); ++subPartition) {
+        if (positions[subPartition].empty()) {
+            continue;
+        }
+        const bool inIds = std::find(pathASpillPartitionIds_.begin(), pathASpillPartitionIds_.end(),
+            subPartition) != pathASpillPartitionIds_.end();
+        if (!inIds) {
+            if (oppositeOuter) {
+                UniqueVecBatch nullPad(CopyRowsForJoinSpill(owned.get(), positions[subPartition]));
+                if (nullPad != nullptr) {
+                    if (firstVecBatch) {
+                        firstVecBatch = false;
+                        InitFirst();
+                    }
+                    if (curInputBatch != nullptr) {
+                        VectorHelper::FreeVecBatch(curInputBatch);
+                    }
+                    curInputBatch = nullPad.release();
+                    curProbePosition = 0;
+                    PrepareCurrentProbe();
+                    PrepareSerializers();
+                    for (int32_t i = 0; i < curInputBatch->GetRowCount(); ++i) {
+                        outputBuilder->AppendRow(i, nullptr, 0);
+                    }
+                    EnqueueCurrentOutput();
+                    VectorHelper::FreeVecBatch(curInputBatch);
+                    curInputBatch = nullptr;
+                }
+            }
+            continue;
+        }
+        UniqueVecBatch subBatch(CopyRowsForJoinSpill(owned.get(), positions[subPartition]));
+        if (subBatch == nullptr) {
+            continue;
+        }
+        if (pathAWriters_[subPartition] == nullptr) {
+            const std::string path = joinSpillState_->ProbeSubPartitionDir(*pathARunId_, subPartition);
+            pathAWriters_[subPartition] = std::make_unique<SpillWriter>(probeTypes, path);
+        }
+        FlattenBatchForJoinSpill(subBatch.get());
+        const uint64_t vecBatchSize = Spiller::CollectVecBatchSize(probeTypes, subBatch.get());
+        joinSpillState_->AccountSpilledBytes(vecBatchSize);
+        auto status = pathAWriters_[subPartition]->WriteVecBatch(subBatch.get(), vecBatchSize);
+        if (status != ErrorCode::SUCCESS) {
+            throw OmniException("JOIN_SPILL_WRITE_FAILED", "Failed to spill probe side input.");
+        }
+        const uint64_t rowCount = static_cast<uint64_t>(subBatch->GetRowCount());
+        probeSpilledRows_ += rowCount;
+        stats_.AddSpilledBytes(vecBatchSize, rowCount, 0);
+    }
+    ResetInputVecBatch();
+    SetStatus(OMNI_STATUS_NORMAL);
+    return true;
+}
+
+namespace {
+void PeekNextRestoreProbeBatch(std::unique_ptr<SpillReader> &reader, VectorBatch *&pending)
+{
+    if (reader == nullptr) {
+        return;
+    }
+    std::unique_ptr<VectorBatch> peek = nullptr;
+    bool peekEnd = false;
+    const auto status = reader->ReadVecBatch(peek, peekEnd);
+    if (status != ErrorCode::SUCCESS) {
+        throw OmniException("JOIN_SPILL_READ_FAILED", "Failed to restore probe side spill file.");
+    }
+    if (peekEnd || peek == nullptr) {
+        reader.reset();
+        return;
+    }
+    if (pending != nullptr) {
+        VectorHelper::FreeVecBatch(pending);
+    }
+    pending = peek.release();
+}
+} // namespace
+
+bool LookupJoinOperator::LoadNextRestoreProbeInput()
+{
+    if (!probeRestoreActive_ || probeRestorePartitionId_ >= probeSpillFiles_.size()) {
+        return false;
+    }
+    auto &files = probeSpillFiles_[probeRestorePartitionId_];
+    while (true) {
+        if (pendingRestoreProbeBatch_ != nullptr) {
+            curInputBatch = pendingRestoreProbeBatch_;
+            pendingRestoreProbeBatch_ = nullptr;
+            curProbePosition = 0;
+            PrepareCurrentProbe();
+            PrepareSerializers();
+            SetStatus(OMNI_STATUS_NORMAL);
+            // Stash the next unread batch (or close the reader at EOF) so the last
+            // probe batch of a partition does not look like more input is pending.
+            PeekNextRestoreProbeBatch(probeRestoreReader_, pendingRestoreProbeBatch_);
+            return true;
+        }
+        if (probeRestoreReader_ == nullptr) {
+            if (probeSpillReadFileIndex_ >= files.size()) {
+                return false;
+            }
+            const auto &record = files[probeSpillReadFileIndex_++];
+            probeRestoreReader_ = std::make_unique<SpillReader>(probeTypes, record.file.filePath,
+                record.file.fileLength, record.file.totalRowCount, false);
+        }
+        std::unique_ptr<VectorBatch> spilledBatch = nullptr;
+        bool isEnd = false;
+        auto status = probeRestoreReader_->ReadVecBatch(spilledBatch, isEnd);
+        if (status != ErrorCode::SUCCESS) {
+            throw OmniException("JOIN_SPILL_READ_FAILED", "Failed to restore probe side spill file.");
+        }
+        if (isEnd || spilledBatch == nullptr) {
+            probeRestoreReader_.reset();
+            continue;
+        }
+        if (firstVecBatch) {
+            firstVecBatch = false;
+            InitFirst();
+        }
+        curInputBatch = spilledBatch.release();
+        curProbePosition = 0;
+        PrepareCurrentProbe();
+        PrepareSerializers();
+        SetStatus(OMNI_STATUS_NORMAL);
+        PeekNextRestoreProbeBatch(probeRestoreReader_, pendingRestoreProbeBatch_);
+        return true;
+    }
+}
+
+bool LookupJoinOperator::HasPendingRestoreProbeInput() const
+{
+    if (!probeRestoreActive_ || probeRestorePartitionId_ >= probeSpillFiles_.size()) {
+        return false;
+    }
+    if (pendingRestoreProbeBatch_ != nullptr || probeRestoreReader_ != nullptr) {
+        return true;
+    }
+    return probeSpillReadFileIndex_ < probeSpillFiles_[probeRestorePartitionId_].size();
+}
+
+void LookupJoinOperator::EnqueueCurrentOutput()
+{
+    while (!outputBuilder->IsEmpty()) {
+        VectorBatch *output = nullptr;
+        outputBuilder->BuildOutput(probeOutputColumns, joinType, isShuffleExchangeBuildPlan, &output, buildSide);
+        if (output != nullptr) {
+            pendingProbeOutputs_.push_back(output);
+        }
+    }
+    outputBuilder->Clear();
+}
+
+bool LookupJoinOperator::DrainPendingOutput(VectorBatch **outputVecBatch)
+{
+    if (pendingProbeOutputs_.empty()) {
+        return false;
+    }
+    *outputVecBatch = pendingProbeOutputs_.front();
+    pendingProbeOutputs_.erase(pendingProbeOutputs_.begin());
+    UpdateGetOutputInfo((*outputVecBatch)->GetRowCount());
+    return true;
+}
+
+void LookupJoinOperator::FinishFullTableProbeAfterOuter()
+{
+    unvisitedBuildOutputPending_ = false;
+    FinishFullTableProbeOnce();
+    MaybeReleaseBuildStateAfterProbe();
+}
+
+void LookupJoinOperator::FinishRestoreRound()
+{
+    if (joinSpillState_ == nullptr) {
+        return;
+    }
+    // The restore small table is released here; no held table remains to flush.
+    joinSpillState_->SetTableInHandNone();
+    if (pendingRestoreProbeBatch_ != nullptr) {
+        VectorHelper::FreeVecBatch(pendingRestoreProbeBatch_);
+        pendingRestoreProbeBatch_ = nullptr;
+    }
+    probeRestoreReader_.reset();
+    std::visit([&](auto &&arg) { arg.ResetPartition(0); }, *hashTables);
+    joinSpillState_->ProbeFinished(probeRestorePartitionId_);
+    probeRestoreActive_ = false;
+    probeSpillReadFileIndex_ = 0;
+    restoreUnvisitedEmitPending_ = false;
+    restoreUnvisitedEmitNext_ = 0;
+    restoreUnvisitedEmitAddrs_.clear();
+}
+
+void LookupJoinOperator::FinishRestoreRoundAfterHeldFlush()
+{
+    if (joinSpillState_ == nullptr) {
+        return;
+    }
+    // The held table is already cleared; keep the probe read cursor for the re-run.
+    joinSpillState_->ProbeFinished(probeRestorePartitionId_);
+    probeRestoreActive_ = false;
+    restoreRoundHasProbed_ = false;
+    restoreUnvisitedEmitPending_ = false;
+    restoreUnvisitedEmitNext_ = 0;
+    restoreUnvisitedEmitAddrs_.clear();
+}
+
+void LookupJoinOperator::RefreshHasMoreProbeInput()
+{
+    if (joinSpillState_ == nullptr) {
+        return;
+    }
+    const bool hasMore = curInputBatch != nullptr || HasPendingRestoreProbeInput() ||
+        (probePathAActive_ && !noMoreInput_);
+    joinSpillState_->SetHasMoreProbeInput(hasMore || !noMoreInput_);
+}
+
+namespace {
+class ProbeInNrsGuard {
+public:
+    explicit ProbeInNrsGuard(JoinSpillState *state) : state_(state)
+    {
+        if (state_ != nullptr) {
+            state_->SetProbeInNrs(true);
+        }
+    }
+    ~ProbeInNrsGuard()
+    {
+        if (state_ != nullptr) {
+            state_->SetProbeInNrs(false);
+        }
+    }
+
+private:
+    JoinSpillState *state_;
+};
+} // namespace
+
+bool LookupJoinOperator::MaybeTriggerHeldTableSpill(const char *site)
+{
+    const int64_t accounted = mem::MemoryManager::GetGlobalAccountedMemory();
+    const int64_t threshold =
+        joinSpillState_ != nullptr ? joinSpillState_->SpillMemThreshold() : 0;
+    const bool overThreshold =
+        joinSpillState_ != nullptr && joinSpillState_->AccountedMemoryOverThreshold();
+
+    auto logHeldCheckpoint = [&](const char *action, const std::string &detail) {
+        if (!joinSpillEnabled_) {
+            return;
+        }
+        LogJoinSpillMemCheckpoint(site, accounted, threshold, overThreshold, action,
+            detail.empty() ? nullptr : detail.c_str());
+    };
+
+    if (!joinSpillEnabled_ || joinSpillState_ == nullptr) {
+        return false;
+    }
+    if (!joinSpillState_->CanFlushHeldTable()) {
+        const auto hand = joinSpillState_->TableInHand();
+        const auto phase = joinSpillState_->GetHandoffPhase();
+        const char *phaseName = phase == JoinHandoffPhase::RestoreRound ? "restore_round" :
+            phase == JoinHandoffPhase::ProbePathA              ? "probe_path_a" :
+            phase == JoinHandoffPhase::Complete                ? "complete" :
+                                                                 "idle";
+        const char *handName = hand.kind == JoinSpillTableInHandKind::FullTable ? "full_table" :
+            hand.kind == JoinSpillTableInHandKind::RestoreSmallTable       ? "restore_small" :
+                                                                             "none";
+        logHeldCheckpoint("skip",
+            std::string("reason=can_flush_false handoff=") + phaseName + " hand=" + handName +
+                " probe_in_nrs=" + (joinSpillState_->ProbeInNrs() ? "1" : "0") +
+                " has_more_probe=" + (joinSpillState_->HasMoreProbeInput() ? "1" : "0"));
+        return false;
+    }
+    if (!overThreshold) {
+        logHeldCheckpoint("check", "reason=under_threshold");
+        return false;
+    }
+    if (HeldTableEmpty()) {
+        return false;
+    }
+    const auto hand = joinSpillState_->TableInHand();
+    const char *handName = hand.kind == JoinSpillTableInHandKind::FullTable ? "full_table" :
+        hand.kind == JoinSpillTableInHandKind::RestoreSmallTable       ? "restore_small" :
+                                                                         "none";
+    logHeldCheckpoint("held_flush", handName);
+    joinSpillState_->FlushHeldBuildTable(hashTables, joinSubPartCfg_);
+    ApplyProbeHandoffIfReady();
+    return hand.kind == JoinSpillTableInHandKind::RestoreSmallTable;
+}
+
+void LookupJoinOperator::BeginRestoreUnvisitedEmit()
+{
+    if (restoreUnvisitedEmitPending_ || !NeedsUnvisitedBuildOutput()) {
+        return;
+    }
+    restoreUnvisitedEmitAddrs_.clear();
+    restoreUnvisitedEmitNext_ = 0;
+    std::visit(
+        [&](auto &&arg) {
+            using Mapped = typename std::decay_t<decltype(arg)>::Mapped;
+            if constexpr (std::is_same_v<Mapped, RowRefListWithFlags>) {
+                auto collectFromList = [&](const auto &value) {
+                    auto it = value->Begin();
+                    while (it.IsOk()) {
+                        if (!it->visited) {
+                            restoreUnvisitedEmitAddrs_.emplace_back(it->vecBatchIdx, it->rowIdx);
+                        }
+                        ++it;
+                    }
+                };
+                // Walk the live table pointer, not GetHashTableTypes(): ResetPartition
+                // leaves the last type behind after a prior restore round.
+                if (auto &arrayTable = arg.GetArrayTable(0); arrayTable != nullptr) {
+                    arrayTable->ForEachValue(
+                        [&](const auto &value, const auto &) { collectFromList(value); });
+                }
+                if (auto &hashTable = arg.GetHashTable(0); hashTable != nullptr) {
+                    hashTable->hashmap.ForEachValue(
+                        [&](const auto &value, const auto &) { collectFromList(value); });
+                }
+            }
+        },
+        *hashTables);
+    restoreUnvisitedEmitPending_ = true;
+}
+
+bool LookupJoinOperator::EmitRestoreUnvisitedBuildBatch(VectorBatch **outputVecBatch)
+{
+    ProbeInNrsGuard nrs(joinSpillState_);
+    BeginRestoreUnvisitedEmit();
+    if (!restoreUnvisitedEmitPending_ || restoreUnvisitedEmitNext_ >= restoreUnvisitedEmitAddrs_.size()) {
+        return false;
+    }
+    const int32_t maxRows = outputBuilder->GetMaxRowCount();
+    const int32_t rowCount = std::min(maxRows,
+        static_cast<int32_t>(restoreUnvisitedEmitAddrs_.size() - restoreUnvisitedEmitNext_));
+    auto result = std::make_unique<VectorBatch>(rowCount);
+    for (int32_t col = 0; col < probeOutputTypes.GetSize(); ++col) {
+        const auto typeId = probeOutputTypes.GetType(col)->GetId();
+        auto *vector = VectorHelper::CreateVector(OMNI_FLAT, typeId, rowCount);
+        for (int32_t row = 0; row < rowCount; ++row) {
+            if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR || typeId == type::OMNI_VARBINARY) {
+                static_cast<Vector<LargeStringContainer<std::string_view>> *>(vector)->SetNull(row);
+            } else {
+                vector->SetNull(row);
+            }
+        }
+        result->Append(vector);
+    }
+    for (int32_t buildCol = 0; buildCol < buildOutputTypes.GetSize(); ++buildCol) {
+        result->Append(VectorHelper::CreateVector(OMNI_FLAT, buildOutputTypes.GetType(buildCol)->GetId(), rowCount));
+    }
+
+    const auto *buildIds = buildOutputTypes.GetIds();
+    std::visit(
+        [&](auto &&arg) {
+            auto ***columns = arg.GetColumns(0);
+            if (columns == nullptr) {
+                return;
+            }
+            for (int32_t i = 0; i < rowCount; ++i) {
+                const auto &addr = restoreUnvisitedEmitAddrs_[restoreUnvisitedEmitNext_ + static_cast<size_t>(i)];
+                for (size_t col = 0; col < buildOutputCols.size(); ++col) {
+                    const auto destCol = static_cast<int32_t>(col + probeOutputCols.size());
+                    auto *src = columns[buildOutputCols[col]][addr.first];
+                    DYNAMIC_TYPE_DISPATCH(AppendUnvisitedBuildValue, buildIds[col], result.get(), destCol, i,
+                        addr.second, src);
+                }
+            }
+        },
+        *hashTables);
+
+    outputBuilder->ApplyOutputColumnOrder(result.get(), buildSide);
+    *outputVecBatch = result.release();
+    restoreUnvisitedEmitNext_ += static_cast<size_t>(rowCount);
+    return true;
 }
 
 BlockingReason LookupJoinOperator::IsBlocked(ContinueFuture* future)
 {
+    (void)future;
+    ApplyProbeHandoffIfReady();
+    if (probePathAActive_ || probeRestoreActive_) {
+        return BlockingReason::kNotBlocked;
+    }
+    if (HandoffComplete()) {
+        return BlockingReason::kNotBlocked;
+    }
     OmniStatus tableStatus = std::visit([&](auto&& arg) { return arg.GetStatus(); }, *hashTables);
     if (tableStatus == OmniStatus::OMNI_STATUS_NORMAL) {
         return BlockingReason::kWaitForJoinBuild;
     }
+    if (joinSpillEnabled_ && joinSpillState_ != nullptr) {
+        const auto phase = joinSpillState_->GetHandoffPhase();
+        if (phase == JoinHandoffPhase::ProbePathA || phase == JoinHandoffPhase::RestoreRound) {
+            JoinHandoffSnapshot snap;
+            if (!joinSpillState_->TryGetHandoffForProbe(&snap)) {
+                return BlockingReason::kWaitForJoinBuild;
+            }
+            if (snap.handoffGeneration != lastSeenHandoffGeneration_) {
+                return BlockingReason::kNotBlocked;
+            }
+            // A handoff for this generation was already applied; spill/restore stay unblocked above.
+            if (snap.restoredPartitionId.has_value() ||
+                (!snap.spillPartitionIds.empty() && snap.numDistinct == 0)) {
+                return BlockingReason::kWaitForJoinBuild;
+            }
+        }
+    }
     return BlockingReason::kNotBlocked;
+}
+
+bool LookupJoinOperator::needsInput()
+{
+    if (probeRestoreActive_ || HasPendingRestoreProbeInput()) {
+        return false;
+    }
+    return Operator::needsInput() && curInputBatch == nullptr;
 }
 
 void LookupJoinOperator::PrepareCurrentProbe()
@@ -318,6 +1078,17 @@ void LookupJoinOperator::PrepareCurrentProbe()
             probeFilterColumns[index++] = probeAllColumns[col];
         }
     }
+
+    subPartitionProbePermutation_.clear();
+    curProbeSubPartitions.clear();
+}
+
+uint32_t LookupJoinOperator::GetProbePartition(int32_t probePosition) const
+{
+    if (probeRestoreActive_) {
+        return 0;
+    }
+    return HashUtil::GetRawHashPartition(curProbeHashes[probePosition], partitionMask);
 }
 
 void LookupJoinOperator::PrepareSerializers()
@@ -444,12 +1215,30 @@ int32_t LookupJoinOperator::AddInput(VectorBatch *vecBatch)
         return 0;
     }
     UpdateAddInputInfo(vecBatch->GetRowCount());
+
+    ApplyProbeHandoffIfReady();
+    if (probePathAActive_) {
+        TrySpillPathAProbeInput(vecBatch);
+        return 0;
+    }
     if (firstVecBatch) {
         firstVecBatch = false;
         InitFirst();
     }
     curInputBatch = vecBatch;
     curProbePosition = 0;
+    RefreshHasMoreProbeInput();
+    // After the current probe batch is held, spill the in-memory build when accounted
+    // memory crosses the threshold.
+    MaybeTriggerHeldTableSpill("probe_addinput");
+    if (probePathAActive_) {
+        auto *held = curInputBatch;
+        curInputBatch = nullptr;
+        if (held != nullptr) {
+            TrySpillPathAProbeInput(held);
+        }
+        return 0;
+    }
 
     PrepareCurrentProbe();
     PrepareSerializers();
@@ -462,23 +1251,55 @@ int32_t LookupJoinOperator::AddInput(VectorBatch *vecBatch)
 
 int32_t LookupJoinOperator::GetOutput(VectorBatch **outputVecBatch)
 {
-    if (curInputBatch == nullptr) {
-        if (noMoreInput_) {
-            SetStatus(OMNI_STATUS_FINISHED);
+    ApplyProbeHandoffIfReady();
+    MaybeFinishPathAIngest();
+    if (DrainPendingOutput(outputVecBatch)) {
+        return 0;
+    }
+    if (probeRestoreActive_ && curInputBatch == nullptr) {
+        RefreshHasMoreProbeInput();
+        if (restoreRoundHasProbed_ && HasPendingRestoreProbeInput() && MaybeTriggerHeldTableSpill("probe_restore")) {
+            FinishRestoreRoundAfterHeldFlush();
+            return 0;
         }
+        if (LoadNextRestoreProbeInput()) {
+            return GetOutput(outputVecBatch);
+        }
+        if (EmitRestoreUnvisitedBuildBatch(outputVecBatch)) {
+            return 0;
+        }
+        FinishRestoreRound();
+        if (joinSpillState_ != nullptr && joinSpillState_->GetHandoffPhase() == JoinHandoffPhase::Complete) {
+            // FULL/SameSide: do not clear unvisitedBuildOutputPending_ here.
+            // Wrapper still runs LookupOuterJoin on the same hashTables.
+            SetStatus(OMNI_STATUS_FINISHED);
+            MaybeReleaseBuildStateAfterProbe();
+        }
+        return 0;
+    }
+    if (curInputBatch == nullptr) {
+        MaybeFinishAfterProbeDrained();
         return 0;
     }
 
     auto inputRowCount = curInputBatch->GetRowCount();
     if (curProbePosition < inputRowCount) {
         // start probe
-        ProcessProbe();
+        {
+            ProbeInNrsGuard nrs(joinSpillState_);
+            ProcessProbe();
+        }
         executionContext->GetArena()->Reset();
     }
 
     // handle the output
     if (!outputBuilder->IsEmpty()) {
         outputBuilder->BuildOutput(probeOutputColumns, joinType, isShuffleExchangeBuildPlan, outputVecBatch, buildSide);
+        if (UNLIKELY(IsDebugEnable()) && *outputVecBatch != nullptr) {
+            std::cout << "[OmniRuntime][JoinSubPartitioner][probe] merged_subpartition_output_rows="
+                      << (*outputVecBatch)->GetRowCount() << "\n";
+            std::cout.flush();
+        }
     }
     if (curProbePosition >= inputRowCount && outputBuilder->IsEmpty()) {
         VectorHelper::FreeVecBatch(curInputBatch);
@@ -486,8 +1307,29 @@ int32_t LookupJoinOperator::GetOutput(VectorBatch **outputVecBatch)
         curProbePosition = 0;
         outputBuilder->Clear();
 
-        if (noMoreInput_) {
-            SetStatus(OMNI_STATUS_FINISHED);
+        if (probeRestoreActive_) {
+            restoreRoundHasProbed_ = true;
+            RefreshHasMoreProbeInput();
+            if (HasPendingRestoreProbeInput() && MaybeTriggerHeldTableSpill("probe_restore")) {
+                FinishRestoreRoundAfterHeldFlush();
+                return 0;
+            }
+            if (!LoadNextRestoreProbeInput()) {
+                // Probe output from BuildOutput above must survive unvisited-build emit in the same call.
+                if (*outputVecBatch != nullptr) {
+                    pendingProbeOutputs_.push_back(*outputVecBatch);
+                    *outputVecBatch = nullptr;
+                }
+                if (EmitRestoreUnvisitedBuildBatch(outputVecBatch)) {
+                    return 0;
+                }
+                FinishRestoreRound();
+                if (DrainPendingOutput(outputVecBatch)) {
+                    return 0;
+                }
+            }
+        } else if (!probeRestoreActive_ && noMoreInput_ && !probePathAActive_) {
+            MaybeFinishAfterProbeDrained();
         }
     }
     if ((*outputVecBatch != nullptr)) {
@@ -500,10 +1342,33 @@ int32_t LookupJoinOperator::GetOutput(VectorBatch **outputVecBatch)
 
 OmniStatus LookupJoinOperator::Close()
 {
+    if (joinSpillState_ != nullptr) {
+        joinSpillState_->AbandonProbe();
+    }
     if (curInputBatch != nullptr) {
         VectorHelper::FreeVecBatch(curInputBatch);
         curInputBatch = nullptr;
     }
+    if (pendingRestoreProbeBatch_ != nullptr) {
+        VectorHelper::FreeVecBatch(pendingRestoreProbeBatch_);
+        pendingRestoreProbeBatch_ = nullptr;
+    }
+    for (auto *pending : pendingProbeOutputs_) {
+        VectorHelper::FreeVecBatch(pending);
+    }
+    pendingProbeOutputs_.clear();
+    std::vector<std::string> openWriterPaths;
+    for (const auto &writer : pathAWriters_) {
+        if (writer != nullptr) {
+            openWriterPaths.push_back(writer->GetSpillFileInfo().filePath);
+        }
+    }
+    try {
+        ClosePathASpillWriters();
+    } catch (...) {
+    }
+    probeRestoreReader_.reset();
+    RemoveProbeSpillFiles(openWriterPaths);
     UpdateCloseInfo();
     return OMNI_STATUS_NORMAL;
 }
@@ -955,7 +1820,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
             typename std::decay_t<decltype(arg)>::Mapped *rowRefList = nullptr;
             // get KeyType from hashmap
             using KeyType = decltype(arg.keyType);
-            KeyType cacheKeyValue;
+            KeyType cacheKeyValue{};
             if constexpr (singleHT && std::remove_reference<decltype(arg)>::type::IS_SIMPLE_KEY) {
                 if (probeSimd) {
                     if (probeHashColumns[0]->HasNull()) {
@@ -1817,18 +2682,14 @@ void NO_INLINE LookupJoinOutputBuilder::AppendRow(int32_t probePosition, BaseVec
 }
 
 template <typename T, bool isShuffleExchangeBuildPlan>
-static ALWAYS_INLINE T GetBuildValue(BaseVector *vec, T rowIdx)
+static ALWAYS_INLINE T GetBuildValue(BaseVector *vec, int32_t rowIdx)
 {
-    if constexpr (isShuffleExchangeBuildPlan) {
-        return static_cast<Vector<T> *>(vec)->GetValue(rowIdx);
+    if (vec->GetEncoding() == OMNI_ENCODING_CONST) {
+        return static_cast<ConstVector<T> *>(vec)->GetConstValue();
+    } else if (vec->GetEncoding() == OMNI_DICTIONARY) {
+        return static_cast<Vector<DictionaryContainer<T>> *>(vec)->GetValue(rowIdx);
     } else {
-        if (vec->GetEncoding() == OMNI_ENCODING_CONST) {
-            return static_cast<ConstVector<T> *>(vec)->GetConstValue();
-        } else if (vec->GetEncoding() == OMNI_DICTIONARY) {
-            return static_cast<Vector<DictionaryContainer<T>> *>(vec)->GetValue(rowIdx);
-        } else {
-            return static_cast<Vector<T> *>(vec)->GetValue(rowIdx);
-        }
+        return static_cast<Vector<T> *>(vec)->GetValue(rowIdx);
     }
 }
 
@@ -1874,18 +2735,16 @@ static NO_INLINE BaseVector *ConstructBuildColumn(
             rowIdxes[parallelNum] = rowIdx;
             parallelNum++;
             if (parallelNum == parallelism) {
-                if constexpr (!isShuffleExchangeBuildPlan) {
-                    if (buildVector->GetEncoding() == OMNI_ENCODING_CONST) {
-                        value = static_cast<ConstVector<T> *>(buildVector)->GetConstValue();
-                        for (int j = 0; j < parallelNum; ++j) {
-                            getResult[j] = value;
-                        }
-                        ret->SetValues(i - parallelNum + 1, static_cast<void *>(getResult), parallelNum);
-                        parallelNum = 0;
-                        preVecBatchIdx = vecBatchIdx;
-                        preVector = buildVector;
-                        continue;
+                if (buildVector->GetEncoding() == OMNI_ENCODING_CONST) {
+                    value = static_cast<ConstVector<T> *>(buildVector)->GetConstValue();
+                    for (int j = 0; j < parallelNum; ++j) {
+                        getResult[j] = value;
                     }
+                    ret->SetValues(i - parallelNum + 1, static_cast<void *>(getResult), parallelNum);
+                    parallelNum = 0;
+                    preVecBatchIdx = vecBatchIdx;
+                    preVector = buildVector;
+                    continue;
                 }
                 T *buildVecSrc;
                 if (buildVector->GetEncoding() == OMNI_DICTIONARY) {
@@ -1956,17 +2815,7 @@ static NO_INLINE BaseVector *ConstructBuildColumn(
             ret->SetNull(i);
             continue;
         }
-        if constexpr (isShuffleExchangeBuildPlan) {
-            value = static_cast<Vector<T> *>(buildVector)->GetValue(buildRowIdx);
-        } else {
-            if (buildVector->GetEncoding() == OMNI_ENCODING_CONST) {
-                value = static_cast<ConstVector<T> *>(buildVector)->GetConstValue();
-            } else if (buildVector->GetEncoding() == OMNI_DICTIONARY) {
-                value = static_cast<Vector<DictionaryContainer<T>> *>(buildVector)->GetValue(buildRowIdx);
-            } else {
-                value = static_cast<Vector<T> *>(buildVector)->GetValue(buildRowIdx);
-            }
-        }
+        value = GetBuildValue<T, isShuffleExchangeBuildPlan>(buildVector, buildRowIdx);
         ret->SetValue(i, value);
     }
     return ret;
@@ -1995,16 +2844,12 @@ static NO_INLINE BaseVector *ConstructBuildVarcharColumn(
             ret->SetNull(i);
             continue;
         }
-        if constexpr (isShuffleExchangeBuildPlan) {
-            value = static_cast<VarcharVector *>(buildVector)->GetValue(buildRowIdx);
+        if (buildVector->GetEncoding() == OMNI_ENCODING_CONST) {
+            value = static_cast<ConstVector<std::string_view> *>(buildVector)->GetConstValue();
+        } else if (buildVector->GetEncoding() == OMNI_DICTIONARY) {
+            value = static_cast<DictionaryVector *>(buildVector)->GetValue(buildRowIdx);
         } else {
-            if (buildVector->GetEncoding() == OMNI_ENCODING_CONST) {
-                value = static_cast<ConstVector<std::string_view> *>(buildVector)->GetConstValue();
-            } else if (buildVector->GetEncoding() == OMNI_DICTIONARY) {
-                value = static_cast<DictionaryVector *>(buildVector)->GetValue(buildRowIdx);
-            } else {
-                value = static_cast<VarcharVector *>(buildVector)->GetValue(buildRowIdx);
-            }
+            value = static_cast<VarcharVector *>(buildVector)->GetValue(buildRowIdx);
         }
         ret->SetValue(i, value);
     }
@@ -2273,32 +3118,41 @@ void LookupJoinOutputBuilder::BuildOutput(
             }
         }
     }
-    if (buildSide == OMNI_BUILD_LEFT) {
-    	BaseVector **pVector = output->GetVectors();
-    	std::rotate(pVector, pVector + probeOutputCols.size(), pVector + output->GetVectorCount());
-    }
-    std::vector<int32_t> tmpVec(outputList);
-    if (!tmpVec.empty()) {
-    	BaseVector **pVector = output->GetVectors();
-    	for (int i =0; i < tmpVec.size(); i++) {
-    		if (tmpVec[i] != i) {
-    			auto temp = pVector[i];
-    			int src = tmpVec[i];
-    			int dst = i;
-    			do {
-    				pVector[dst] = pVector[src];
-    				tmpVec[dst] = dst;
-    				dst = src;
-    				src = tmpVec[dst];
-    			} while (src != i);
-    			pVector[dst] = temp;
-    			tmpVec[dst] = dst;
-    		}
-    	}
-    }
+    ApplyOutputColumnOrder(output.get(), buildSide);
     probeRowOffset += rowCount;
     probeRowCount -= rowCount;
     *outputVecBatch = output.release();
+}
+
+void LookupJoinOutputBuilder::ApplyOutputColumnOrder(VectorBatch *output, BuildSide buildSide)
+{
+    if (output == nullptr) {
+        return;
+    }
+    if (buildSide == OMNI_BUILD_LEFT) {
+        BaseVector **pVector = output->GetVectors();
+        std::rotate(pVector, pVector + probeOutputCols.size(), pVector + output->GetVectorCount());
+    }
+    std::vector<int32_t> tmpVec(outputList);
+    if (tmpVec.empty()) {
+        return;
+    }
+    BaseVector **pVector = output->GetVectors();
+    for (size_t i = 0; i < tmpVec.size(); ++i) {
+        if (tmpVec[i] != static_cast<int32_t>(i)) {
+            auto *temp = pVector[i];
+            int32_t src = tmpVec[i];
+            int32_t dst = static_cast<int32_t>(i);
+            do {
+                pVector[dst] = pVector[src];
+                tmpVec[dst] = dst;
+                dst = src;
+                src = tmpVec[dst];
+            } while (src != static_cast<int32_t>(i));
+            pVector[dst] = temp;
+            tmpVec[dst] = dst;
+        }
+    }
 }
 
 template<bool isMatched>

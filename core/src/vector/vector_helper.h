@@ -14,6 +14,7 @@
 #include "row_vector.h"
 #include "map_vector.h"
 #include "array_vector.h"
+#include "util/omni_exception.h"
 #include "util/type_util.h"
 
 namespace omniruntime::vec {
@@ -1603,6 +1604,84 @@ public:
             case type::OMNI_CHAR: {
                 return DecodeVarcharDictionaryVector(vector);
             }
+            default: {
+                std::string message("No such data type " + std::to_string(dataTypeId));
+                throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", message);
+            }
+        }
+    }
+
+    template <typename T> static BaseVector *DecodeFlatConstVector(BaseVector *vector)
+    {
+        const int32_t size = vector->GetSize();
+        auto *flatVector = new Vector<T>(size, vector->GetTypeId());
+        auto *constVector = reinterpret_cast<ConstVector<T> *>(vector);
+        if (size <= 0) {
+            return flatVector;
+        }
+        if (constVector->IsNull(0)) {
+            for (int32_t i = 0; i < size; ++i) {
+                flatVector->SetNull(i);
+            }
+            return flatVector;
+        }
+        const T value = constVector->GetConstValue();
+        for (int32_t i = 0; i < size; ++i) {
+            flatVector->SetValue(i, value);
+        }
+        return flatVector;
+    }
+
+    static BaseVector *DecodeVarcharConstVector(BaseVector *vector)
+    {
+        using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
+        const int32_t size = vector->GetSize();
+        auto *flatVector = new VarcharVector(size, INITIAL_STRING_SIZE, vector->GetTypeId());
+        auto *constVector = reinterpret_cast<ConstVector<std::string_view> *>(vector);
+        if (size <= 0) {
+            return flatVector;
+        }
+        if (constVector->IsNull(0)) {
+            for (int32_t i = 0; i < size; ++i) {
+                flatVector->SetNull(i);
+            }
+            return flatVector;
+        }
+        const std::string_view value = constVector->GetConstValue();
+        for (int32_t i = 0; i < size; ++i) {
+            flatVector->SetValue(i, value);
+        }
+        return flatVector;
+    }
+
+    static BaseVector *DecodeConstVector(BaseVector *vector)
+    {
+        const int32_t dataTypeId = vector->GetTypeId();
+        switch (dataTypeId) {
+            case type::OMNI_INT:
+            case type::OMNI_DATE32:
+                return DecodeFlatConstVector<int32_t>(vector);
+            case type::OMNI_SHORT:
+                return DecodeFlatConstVector<int16_t>(vector);
+            case type::OMNI_BYTE:
+                return DecodeFlatConstVector<int8_t>(vector);
+            case type::OMNI_LONG:
+            case type::OMNI_TIMESTAMP:
+            case type::OMNI_DATE64:
+            case type::OMNI_DECIMAL64:
+                return DecodeFlatConstVector<int64_t>(vector);
+            case type::OMNI_DECIMAL128:
+                return DecodeFlatConstVector<type::Decimal128>(vector);
+            case type::OMNI_DOUBLE:
+                return DecodeFlatConstVector<double>(vector);
+            case type::OMNI_FLOAT:
+                return DecodeFlatConstVector<float>(vector);
+            case type::OMNI_BOOLEAN:
+                return DecodeFlatConstVector<bool>(vector);
+            case type::OMNI_VARBINARY:
+            case type::OMNI_VARCHAR:
+            case type::OMNI_CHAR:
+                return DecodeVarcharConstVector(vector);
             default: {
                 std::string message("No such data type " + std::to_string(dataTypeId));
                 throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", message);

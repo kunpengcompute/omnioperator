@@ -185,18 +185,18 @@ public:
 
     bool isSpillCompressEnable() const;
 
+    static uint64_t CollectVecBatchSize(const type::DataTypes &dataTypes, vec::VectorBatch *vectorBatch);
+
 private:
-    uint64_t CollectVecBatchSize(vec::VectorBatch *vectorBatch);
+    template <typename T> static uint64_t CollectVectorSize(vec::BaseVector *vector, int32_t rowCount);
 
-    template <typename T> uint64_t CollectVectorSize(vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectComplexVectorSize(const DataTypePtr &dataType, vec::BaseVector *vector, int32_t rowCount);
 
-    uint64_t CollectComplexVectorSize(const DataTypePtr &dataType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectArrayVectorSize(const DataTypePtr &arrayType, vec::BaseVector *vector, int32_t rowCount);
 
-    uint64_t CollectArrayVectorSize(const DataTypePtr &arrayType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectMapVectorSize(const DataTypePtr &mapType, vec::BaseVector *vector, int32_t rowCount);
 
-    uint64_t CollectMapVectorSize(const DataTypePtr &mapType, vec::BaseVector *vector, int32_t rowCount);
-
-    uint64_t CollectRowVectorSize(const DataTypePtr &rowType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectRowVectorSize(const DataTypePtr &rowType, vec::BaseVector *vector, int32_t rowCount);
 
     DataTypes dataTypes;
     std::vector<int32_t> sortCols;
