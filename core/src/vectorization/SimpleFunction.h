@@ -39,8 +39,8 @@ class SimpleFunction final : public VectorFunction {
             rows->applyToSelected([&](auto row) INLINE_LAMBDA {
                 try {
                     func(row);
-                } catch (const OmniException &e) {
-                    OMNI_THROW("Express Error:", e.what());
+                } catch (const OmniException &) {
+                    throw;
                 } catch (const std::exception &e) {
                     OMNI_THROW("Express Unknown Error:", e.what());
                 }
