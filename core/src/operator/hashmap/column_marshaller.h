@@ -2807,8 +2807,9 @@ public:
           [&](char* data, bool) { });
     }
 
+   /// Returns the number of rows passed to func/nullFunc (at most rowsNum).
    template <class Func, class NullFunc>
-   void Extract(int32_t rowsNum, OutputState &outputState, Func func, NullFunc nullFunc)
+   int32_t Extract(int32_t rowsNum, OutputState &outputState, Func func, NullFunc nullFunc)
     {
         auto tblVisitor = [&] {
             if (outputState.rowBegin) {
@@ -2835,6 +2836,7 @@ public:
             outputState.rowOffset = tagPos;
             outputState.hasBeenOutputNum += rowsNum;
         });
+        return static_cast<int32_t>(idx);
     }
 
     template<bool isDict = false>

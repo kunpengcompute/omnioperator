@@ -71,7 +71,8 @@ public:
     void ParseNullHashMapToVector(const T &key, AggregateState *value, size_t groupIndex)
     {
         auto &kv = kvVec[groupIndex];
-        kvString[groupIndex] = std::to_string(key);
+        // A null group is marked by keyLen == 0; its key bytes are never read.
+        kvString[groupIndex].clear();
         kv.keyAddr = const_cast<char *>(kvString[groupIndex].c_str());
         kv.keyLen = 0;
         kv.value = value;
@@ -81,6 +82,14 @@ public:
     {
         kvVec.clear();
         kvString.clear();
+    }
+
+    /// Return scratch capacity after a spill; clear() alone keeps a table-sized buffer alive.
+    void ReleaseVectors()
+    {
+        std::vector<omniruntime::op::KeyValue>().swap(kvVec);
+        std::vector<std::string>().swap(kvString);
+        std::vector<AggregateState *>().swap(groupStates);
     }
 
     size_t GetRowCount()
