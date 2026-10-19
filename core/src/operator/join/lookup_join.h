@@ -142,6 +142,7 @@ private:
         }
     }
 
+    static constexpr int32_t kInitialProbeBuildIndexRows = 4096;
     int32_t maxRowCount = 0;
     std::vector<int32_t> probeOutputCols;
     const int32_t *probeOutputTypes;

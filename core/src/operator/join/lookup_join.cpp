@@ -2897,7 +2897,9 @@ LookupJoinOutputBuilder::LookupJoinOutputBuilder(std::vector<int32_t> &probeOutp
     // if the probe and build do not have output columns, the row size is setted to DEFAULT_ROW_SIZE
     this->maxRowCount = OperatorUtil::GetMaxRowCount((outputRowSize != 0) ? outputRowSize : DEFAULT_ROW_SIZE);
     if (!probeOutputCols.empty() || !buildOutputCols.empty()) {
-        probeBuildIndex.reserve(maxRowCount);
+        // maxRowCount is a byte-derived cap (131072 rows for an 8-byte row): reserving it up
+        // front costs ~3MB per join operator even when probe batches match a few rows.
+        probeBuildIndex.reserve(std::min<int32_t>(maxRowCount, kInitialProbeBuildIndexRows));
     }
 }
 
@@ -2912,7 +2914,9 @@ LookupJoinOutputBuilder::LookupJoinOutputBuilder(std::vector<int32_t> &probeOutp
     // if the probe and build do not have output columns, the row size is setted to DEFAULT_ROW_SIZE
     this->maxRowCount = OperatorUtil::GetMaxRowCount((outputRowSize != 0) ? outputRowSize : DEFAULT_ROW_SIZE);
     if (!probeOutputCols.empty() || !buildOutputCols.empty()) {
-        probeBuildIndex.reserve(maxRowCount);
+        // maxRowCount is a byte-derived cap (131072 rows for an 8-byte row): reserving it up
+        // front costs ~3MB per join operator even when probe batches match a few rows.
+        probeBuildIndex.reserve(std::min<int32_t>(maxRowCount, kInitialProbeBuildIndexRows));
     }
 }
 
