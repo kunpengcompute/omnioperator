@@ -637,6 +637,9 @@ int32_t HashBuilderOperator::AddInput(omniruntime::vec::VectorBatch *vecBatch)
         VectorHelper::FreeVecBatch(vecBatch);
         vecBatch = cacheOwnedBatch.release();
     }
+    // The build retains its input until the probe ends; do not let a filter or join
+    // dictionary view pin the whole upstream batch behind a few selected rows.
+    VectorHelper::CompactSparseDictionaries(vecBatch, broadcastHashTableId_.empty() ? pool() : cachePool_);
     if (joinSpillEnabled_ && joinSpillState_ != nullptr) {
         // The target's single slot remains resident until pool reclaim or EOB admission.
         if (buildSpillTriggered_) {

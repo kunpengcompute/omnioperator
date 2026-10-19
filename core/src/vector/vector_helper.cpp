@@ -1513,6 +1513,78 @@ BaseVector *VectorHelper::DecodeVarcharDictionaryVector(BaseVector *vector,
     return flatVector;
 }
 
+namespace {
+template <typename T> int32_t DictionarySizeOf(BaseVector *vector)
+{
+    auto container = unsafe::UnsafeDictionaryVector::GetDictionaryOriginal(
+        reinterpret_cast<Vector<DictionaryContainer<T>> *>(vector));
+    return container == nullptr ? 0 : unsafe::UnsafeDictionaryContainer::GetDictSize(container.get());
+}
+} // namespace
+
+bool VectorHelper::IsSparseDictionary(BaseVector *vector)
+{
+    if (vector == nullptr || vector->GetEncoding() != OMNI_DICTIONARY) {
+        return false;
+    }
+    int32_t dictSize = 0;
+    switch (vector->GetTypeId()) {
+        case type::OMNI_INT:
+        case type::OMNI_DATE32:
+            dictSize = DictionarySizeOf<int32_t>(vector);
+            break;
+        case type::OMNI_SHORT:
+            dictSize = DictionarySizeOf<int16_t>(vector);
+            break;
+        case type::OMNI_BYTE:
+            dictSize = DictionarySizeOf<int8_t>(vector);
+            break;
+        case type::OMNI_LONG:
+        case type::OMNI_TIMESTAMP:
+        case type::OMNI_DATE64:
+        case type::OMNI_DECIMAL64:
+            dictSize = DictionarySizeOf<int64_t>(vector);
+            break;
+        case type::OMNI_DECIMAL128:
+            dictSize = DictionarySizeOf<type::Decimal128>(vector);
+            break;
+        case type::OMNI_DOUBLE:
+            dictSize = DictionarySizeOf<double>(vector);
+            break;
+        case type::OMNI_FLOAT:
+            dictSize = DictionarySizeOf<float>(vector);
+            break;
+        case type::OMNI_BOOLEAN:
+            dictSize = DictionarySizeOf<bool>(vector);
+            break;
+        case type::OMNI_VARBINARY:
+        case type::OMNI_VARCHAR:
+        case type::OMNI_CHAR:
+            dictSize = DictionarySizeOf<std::string_view>(vector);
+            break;
+        default:
+            return false;
+    }
+    return static_cast<int64_t>(vector->GetSize()) * 2 < static_cast<int64_t>(dictSize);
+}
+
+void VectorHelper::CompactSparseDictionaries(VectorBatch *batch, omniruntime::mem::OmniTaskMemoryPool *pool)
+{
+    if (batch == nullptr) {
+        return;
+    }
+    const int32_t vectorCount = batch->GetVectorCount();
+    for (int32_t i = 0; i < vectorCount; ++i) {
+        auto *vector = batch->Get(i);
+        if (!IsSparseDictionary(vector)) {
+            continue;
+        }
+        auto *flat = DecodeDictionaryVector(vector, pool != nullptr ? pool : vector->GetPool());
+        batch->SetVector(i, flat);
+        delete vector;
+    }
+}
+
 BaseVector *VectorHelper::DecodeDictionaryVector(BaseVector *vector,
     omniruntime::mem::OmniTaskMemoryPool *pool)
 {

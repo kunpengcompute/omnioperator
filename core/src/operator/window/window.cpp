@@ -437,6 +437,7 @@ int32_t WindowOperator::AddInput(VectorBatch *vecBatch)
     ReserveForInput(vecBatch);
     UpdateAddInputInfo(rowCount);
     totalRowCount += rowCount;
+    VectorHelper::CompactSparseDictionaries(vecBatch, pool());
     pagesIndex->AddVecBatch(vecBatch);
     ResetInputVecBatch();
     return 0;

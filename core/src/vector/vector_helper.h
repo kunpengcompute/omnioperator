@@ -89,6 +89,12 @@ public:
         omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
     static BaseVector *DecodeDictionaryVector(BaseVector *vector,
         omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
+    // A dictionary view keeps its whole dictionary (often an entire upstream batch) alive.
+    // True when the view selects fewer than half of the dictionary's rows.
+    static bool IsSparseDictionary(BaseVector *vector);
+    // Operators that retain input until end of input (hash build, sort) replace sparse
+    // dictionary views with flat copies so they pin only the rows they use.
+    static void CompactSparseDictionaries(VectorBatch *batch, omniruntime::mem::OmniTaskMemoryPool *pool);
     template <typename T> static BaseVector *DecodeFlatConstVector(BaseVector *vector,
         omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
     static BaseVector *DecodeVarcharConstVector(BaseVector *vector,
