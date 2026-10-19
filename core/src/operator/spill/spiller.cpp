@@ -337,6 +337,9 @@ ErrorCode SpillWriter::WriteVecBatch(vec::VectorBatch *vectorBatch, uint64_t vec
     }
 
     if (writeBufferSize != 0) {
+        if (writeBuffer == nullptr) {
+            writeBuffer = new char[writeBufferSize];
+        }
         if (writeBufferOffset + vectorBatchSize > writeBufferSize) {
             if (Write(writeBuffer, writeBufferOffset) != ErrorCode::SUCCESS) {
                 LogError("Write buffer to file %s failed.", filePath.c_str());
@@ -907,6 +910,13 @@ ErrorCode SpillWriter::Close()
         }
         fd = -1;
     }
+    // A closed writer only serves GetSpillFileInfo(); release its I/O buffers.
+    delete[] writeBuffer;
+    writeBuffer = nullptr;
+    std::vector<char>().swap(scratch_buffer);
+    compress_stream.reset();
+    stream_factory.reset();
+    out_stream.reset();
     return result;
 }
 

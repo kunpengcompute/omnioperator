@@ -21,9 +21,8 @@ public:
         : dataTypes(dataTypes), dirPath(dirPath), writeBufferSize(writeBufferSize), writeBufferOffset(0),
           IsSpillCompressEnabled(IsSpillCompressEnabled)
     {
-        if (writeBufferSize != 0) {
-            writeBuffer = new char[writeBufferSize];
-        }
+        // The write buffer is allocated on first write and released by Close(): a Spiller keeps
+        // every closed writer for its file metadata, one per spill run.
     }
 
     ~SpillWriter();
