@@ -57,7 +57,18 @@ ErrorCode SpillReader::ReadVecBatch(std::unique_ptr<vec::VectorBatch> &vectorBat
     auto vectorBatchPtr = vectorBatch.get();
     if (vectorBatchPtr == nullptr || rowCount > maxRowCount) {
         vectorBatch = std::make_unique<VectorBatch>(rowCount);
-        VectorHelper::AppendVectors(vectorBatch.get(), dataTypes, rowCount, pool_);
+        // Top-level string columns start without a content buffer and grow to the exact
+        // length read below. Restored join partitions keep every batch resident, and the
+        // default 32KB start per column dwarfs small spilled sub-partition batches.
+        const auto &types = dataTypes.Get();
+        for (int32_t i = 0; i < dataTypes.GetSize(); i++) {
+            const auto typeId = types[i]->GetId();
+            if (typeId == OMNI_VARCHAR || typeId == OMNI_CHAR || typeId == OMNI_VARBINARY) {
+                vectorBatch->Append(new Vector<LargeStringContainer<std::string_view>>(rowCount, pool_, 1, typeId));
+            } else {
+                vectorBatch->Append(VectorHelper::CreateComplexVector(pool_, types[i].get(), rowCount));
+            }
+        }
         vectorBatchPtr = vectorBatch.get();
         maxRowCount = rowCount;
     } else {
@@ -111,12 +122,7 @@ template <typename T> ErrorCode SpillReader::ReadVector(BaseVector *vector, int3
         auto length = offsets[rowCount] - offsets[0];
         if (length > 0) {
             // read values
-            char *valuesBuffer;
-            if (length <= INITIAL_STRING_SIZE) {
-                valuesBuffer = unsafe::UnsafeStringVector::GetValues(resultVector);
-            } else {
-                valuesBuffer = unsafe::UnsafeStringVector::ExpandStringBuffer(resultVector, length);
-            }
+            char *valuesBuffer = unsafe::UnsafeStringVector::ExpandStringBuffer(resultVector, length);
             if (Read(valuesBuffer, length) != ErrorCode::SUCCESS) {
                 LogError("Read values from %s failed.", filePath.c_str());
                 return ErrorCode::READ_FAILED;

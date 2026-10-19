@@ -281,20 +281,28 @@ static void ALWAYS_INLINE SetVectorForSingleRowVecBatch(omniruntime::vec::Vector
     using Vector = typename NativeAndVectorType<typeId>::vector;
     using DictVector = typename NativeAndVectorType<typeId>::dictVector;
 
-    auto flatVector = VectorHelper::CreateFlatVector<typeId>(vector->GetPool(), 1);
+    // Each retained row is its own batch: size string content to the value instead of the
+    // 32KB default, which otherwise costs 32KB per row per string column.
     if (vector->IsNull(position)) {
+        auto flatVector = VectorHelper::CreateFlatVector<typeId>(vector->GetPool(), 1, 1);
         (static_cast<Vector *>(flatVector))->SetNull(0);
-    } else {
-        Type value;
-        if (vector->GetEncoding() == OMNI_DICTIONARY) {
-            value = (static_cast<DictVector *>(vector))->GetValue(position);
-        } else if (vector->GetEncoding() == OMNI_ENCODING_CONST) {
-            value = (static_cast<ConstVector<Type> *>(vector))->GetConstValue();
-        } else {
-            value = (static_cast<Vector *>(vector))->GetValue(position);
-        }
-        (static_cast<Vector *>(flatVector))->SetValue(0, value);
+        singleRowVecBatch->Append(flatVector);
+        return;
     }
+    Type value;
+    if (vector->GetEncoding() == OMNI_DICTIONARY) {
+        value = (static_cast<DictVector *>(vector))->GetValue(position);
+    } else if (vector->GetEncoding() == OMNI_ENCODING_CONST) {
+        value = (static_cast<ConstVector<Type> *>(vector))->GetConstValue();
+    } else {
+        value = (static_cast<Vector *>(vector))->GetValue(position);
+    }
+    int32_t capacityInBytes = 1;
+    if constexpr (std::is_same_v<Type, std::string_view>) {
+        capacityInBytes = std::max<int32_t>(1, static_cast<int32_t>(value.size()));
+    }
+    auto flatVector = VectorHelper::CreateFlatVector<typeId>(vector->GetPool(), 1, capacityInBytes);
+    (static_cast<Vector *>(flatVector))->SetValue(0, value);
     singleRowVecBatch->Append(flatVector);
 }
 

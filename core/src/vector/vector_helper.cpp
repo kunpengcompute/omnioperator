@@ -2,6 +2,8 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
  */
 #include "vector_helper.h"
+#include <algorithm>
+#include <limits>
 
 namespace omniruntime::vec {
 
@@ -1489,9 +1491,17 @@ BaseVector *VectorHelper::DecodeVarcharDictionaryVector(BaseVector *vector,
 {
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
     int size = vector->GetSize();
-    VarcharVector *flatVector = new VarcharVector(size, pool);
     auto dicVector =
         reinterpret_cast<Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *>(vector);
+    // Size the content buffer exactly; the default 32KB start plus doubling over-allocates.
+    int64_t totalBytes = 0;
+    for (int i = 0; i < size; i++) {
+        if (!dicVector->IsNull(i)) {
+            totalBytes += static_cast<int64_t>(dicVector->GetValue(i).size());
+        }
+    }
+    VarcharVector *flatVector = new VarcharVector(size, pool,
+        static_cast<int>(std::min<int64_t>(std::max<int64_t>(totalBytes, 1), std::numeric_limits<int32_t>::max())));
     for (int i = 0; i < size; i++) {
         if (dicVector->IsNull(i)) {
             flatVector->SetNull(i);

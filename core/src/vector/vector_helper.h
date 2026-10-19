@@ -384,7 +384,7 @@ public:
         omniruntime::mem::OmniTaskMemoryPool *pool = nullptr)
     {
         int size = vector->GetSize();
-        auto *flatVector = new Vector<T>(size, pool);
+        auto *flatVector = new Vector<T>(size, pool, static_cast<DataTypeId>(vector->GetTypeId()));
         auto dicVector = reinterpret_cast<Vector<DictionaryContainer<T>> *>(vector);
         for (int i = 0; i < size; i++) {
             if (dicVector->IsNull(i)) {

@@ -6,7 +6,9 @@
 #define OMNI_RUNTIME_VECTOR_H
 #pragma once
 
+#include <algorithm>
 #include <cstdlib>
+#include <limits>
 #include <functional>
 #include <string>
 #include <type_traits>
@@ -1063,10 +1065,20 @@ public:
             throw OmniException("OPERATOR_RUNTIME_ERROR", message);
         }
 
+        auto startPositions = positions + offset;
+        // Size the content buffer to the copied bytes. The default 32KB start (plus doubling)
+        // dominates small copies such as spill sub-partitions and selective filters.
+        int64_t totalBytes = 0;
+        for (int32_t i = 0; i < length; i++) {
+            if (!this->IsNull(startPositions[i])) {
+                totalBytes += static_cast<int64_t>(GetValue(startPositions[i]).size());
+            }
+        }
+        const int capacityInBytes = static_cast<int>(std::min<int64_t>(std::max<int64_t>(totalBytes, 1),
+            std::numeric_limits<int32_t>::max()));
         // Pool-bound LargeString ctor only path.
         auto vector = new Vector<LargeStringContainer<std::string_view>>(length, this->pool_,
-            INITIAL_STRING_SIZE, this->dataTypeId);
-        auto startPositions = positions + offset;
+            capacityInBytes, this->dataTypeId);
         for (int32_t i = 0; i < length; i++) {
             auto position = startPositions[i];
             if (this->IsNull(position)) {
