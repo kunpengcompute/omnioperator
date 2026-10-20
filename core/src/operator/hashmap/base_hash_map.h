@@ -278,9 +278,15 @@ public:
         CalculateThreshold();
     }
 
+    // A non-zero step overrides the default growth (x4 below 2^23 slots, x2 above).
+    void SetFixedStep(uint8_t step)
+    {
+        fixedStep = step;
+    }
+
     uint64_t GrowSize()
     {
-        degree += (degree >= enlargeThreshold ? expandFactoryOne : expandFactoryTwo);
+        degree += fixedStep != 0 ? fixedStep : (degree >= enlargeThreshold ? expandFactoryOne : expandFactoryTwo);
         CalculateThreshold();
         return 1ULL << degree;
     }
@@ -305,6 +311,7 @@ private:
 
     uint64_t threshold = 0;
     uint8_t degree;
+    uint8_t fixedStep = 0;
 };
 
 struct OutputState {
@@ -631,6 +638,11 @@ public:
     void SetRehashDisabled(bool disabled)
     {
         rehashDisabled_ = disabled;
+    }
+
+    void SetGrowthStep(uint8_t step)
+    {
+        grower.SetFixedStep(step);
     }
 
     void EnableParallelBuildCounter(std::atomic<size_t> *counter)

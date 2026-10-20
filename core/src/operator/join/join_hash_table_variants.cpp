@@ -928,13 +928,15 @@ void JoinHashTableVariants<KeyType, RowRefListType>::AddVecBatchDistinct(int32_t
     if (hashTables[partitionIndex] == nullptr) {
         hashTables[partitionIndex] = std::make_unique<JoinHashTableVariant<KeyType, RowRefListType>>(
             executionContexts[partitionIndex]->GetAllocator(), AdaptiveInitDegree());
+        // Grown from a small seed rather than pre-sized: double instead of the default x4 so the
+        // final table stays within 2x of the distinct keys.
+        hashTables[partitionIndex]->hashmap.SetGrowthStep(1);
         hashTableTypes[partitionIndex] = HashTableImplementationType::NORMAL_HASH_TABLE;
         incrementalTable_[partitionIndex] = 1;
     }
     auto &batches = inputVecBatches[partitionIndex];
     const auto vecBatchIdx = static_cast<int32_t>(batches.size());
     distinctRows_.clear();
-    distinctRefs_.clear();
     collectDistinct_ = true;
     try {
         EmplaceBatch<true>(partitionIndex, owned.get(), vecBatchIdx);
@@ -948,16 +950,13 @@ void JoinHashTableVariants<KeyType, RowRefListType>::AddVecBatchDistinct(int32_t
         return;
     }
     if (kept < rowCount) {
-        // Keep only the rows that introduced a key. Row references are rewritten to the
-        // compacted positions; Emplace* inserts rows in ascending order, so they stay sorted.
+        // Keep only the rows that introduced a key. The probe never reads build rows; the kept
+        // rows remain the source of a later build spill or of a full build after abandonment.
         UniqueVecBatch compact(new omniruntime::vec::VectorBatch(kept));
         const int32_t vectorCount = owned->GetVectorCount();
         compact->ResizeVectorCount(vectorCount);
         for (int32_t col = 0; col < vectorCount; ++col) {
             compact->SetVector(col, VectorHelper::CopyPositionsVector(owned->Get(col), distinctRows_.data(), 0, kept));
-        }
-        for (int32_t i = 0; i < kept; ++i) {
-            distinctRefs_[i]->rowIdx = static_cast<uint32_t>(i);
         }
         // CopyPositions keeps dictionary encoding, which would pin the dropped rows' dictionary.
         VectorHelper::CompactSparseDictionaries(compact.get(), pool_);
@@ -966,7 +965,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::AddVecBatchDistinct(int32_t
     batches.emplace_back(owned.release());
     totalRowCount[partitionIndex] += static_cast<uint32_t>(kept);
     distinctRows_.clear();
-    distinctRefs_.clear();
     distinctInputRows_ += static_cast<uint64_t>(rowCount);
     distinctKeptRows_ += static_cast<uint64_t>(kept);
     // Like Velox's abandonBuildNoDupHash: when nearly every row brings a new key the dedup saves

@@ -524,15 +524,22 @@ private:
     ALWAYS_INLINE void ApplyRowRef(InsertResult<RowRefListType *> &ret, uint32_t rowIdx, uint32_t vecBatchIdx,
         omniruntime::mem::SimpleArenaAllocator &arenaAllocator)
     {
+        if (UNLIKELY(distinctBuild_)) {
+            // Existence-only probes test presence and never read build rows: every key shares one
+            // row reference instead of allocating a RowRefList per key.
+            if (ret.IsInsert()) {
+                ret.SetValue(&existenceRowRef_);
+                if (collectDistinct_) {
+                    distinctRows_.push_back(static_cast<int32_t>(rowIdx));
+                }
+            }
+            return;
+        }
         if (ret.IsInsert()) {
             auto *rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
             *rowRef = RowRefListType(rowIdx, vecBatchIdx);
             ret.SetValue(rowRef);
-            if (UNLIKELY(collectDistinct_)) {
-                distinctRows_.push_back(static_cast<int32_t>(rowIdx));
-                distinctRefs_.push_back(rowRef);
-            }
-        } else if (LIKELY(!distinctBuild_)) {
+        } else {
             ret.GetValue()->Insert({ rowIdx, vecBatchIdx }, arenaAllocator);
         }
     }
@@ -661,7 +668,7 @@ private:
     // True only while AddVecBatchDistinct emplaces one batch.
     bool collectDistinct_ = false;
     std::vector<int32_t> distinctRows_;
-    std::vector<RowRefListType *> distinctRefs_;
+    RowRefListType existenceRowRef_{0, 0};
     // Per-task pool bound at HBO ctor via SetPool;
     // remembered for idempotency check on repeated SetPool calls (future spill
     // multi-op case where N HBOs share one JHTV with the same task pool).
