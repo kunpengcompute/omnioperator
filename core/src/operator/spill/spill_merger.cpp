@@ -18,10 +18,6 @@ SpillReader::~SpillReader()
 {
     // the spill file can be deleted if there is exception
     remove(filePath.c_str());
-    if (prevBuffer_ != nullptr) {
-        delete[] prevBuffer_;
-        prevBuffer_ = nullptr;
-    }
 }
 
 ErrorCode SpillReader::ReadVecBatch(std::unique_ptr<vec::VectorBatch> &vectorBatch, bool &isEnd)
@@ -369,41 +365,32 @@ ErrorCode SpillReader::ReadWithCompress(void *buf, size_t bufSize)
     }
 
     if (remainLength == 0) {
-        if (prevBuffer_ != nullptr) {
-            delete[] prevBuffer_;
-            prevBuffer_ = nullptr;
-        }
-        char* header_data = new char[3];
+        char header_data[3];
         if (fread(header_data, 1, 3, file) != 3) {
-            delete[] header_data;
             return ErrorCode::READ_FAILED;
         }
         std::pair<size_t, bool> header_info = parseCompressionHeader(header_data);
-        delete[] header_data;
         size_t compressed_block_size = header_info.first;
         bool is_original_data = header_info.second;
-        int32_t actual_decompress_len = 0;
-        char* compressed_data = new char[compressed_block_size];
-        if (fread(compressed_data, 1, compressed_block_size, file) != compressed_block_size) {
-            delete[] compressed_data;
+        if (compressedBuffer_.size() < compressed_block_size) {
+            compressedBuffer_.resize(compressed_block_size);
+        }
+        if (fread(compressedBuffer_.data(), 1, compressed_block_size, file) != compressed_block_size) {
             return ErrorCode::READ_FAILED;
         }
         if (is_original_data) {
-            actual_decompress_len = static_cast<int32_t>(compressed_block_size);
-            prevBuffer_ = compressed_data;
-            currentBuffer_ = prevBuffer_;
-            remainLength = actual_decompress_len;
+            currentBuffer_ = compressedBuffer_.data();
+            remainLength = static_cast<int32_t>(compressed_block_size);
         } else {
-            auto [decomp_data, decomp_len] = decompressLZ4(
-                    compressed_data, static_cast<int32_t>(compressed_block_size), 32 * 1024 * 1024
-            );
-            delete[] compressed_data;
-            if (decomp_data == nullptr || decomp_len <= 0) {
+            if (decompressedBuffer_.empty()) {
+                decompressedBuffer_.resize(SPILL_COMPRESS_BLOCK_SIZE);
+            }
+            int decomp_len = LZ4_decompress_safe(compressedBuffer_.data(), decompressedBuffer_.data(),
+                static_cast<int>(compressed_block_size), static_cast<int>(decompressedBuffer_.size()));
+            if (decomp_len <= 0) {
                 return ErrorCode::READ_FAILED;
             }
-
-            prevBuffer_ = decomp_data;
-            currentBuffer_ = prevBuffer_;
+            currentBuffer_ = decompressedBuffer_.data();
             remainLength = decomp_len;
         }
     }

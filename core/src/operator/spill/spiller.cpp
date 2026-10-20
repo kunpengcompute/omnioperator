@@ -922,7 +922,7 @@ ErrorCode SpillWriter::Close()
 
 void SpillWriter::InitCompressStream()
 {
-    const int32_t compress_block_size = 32 * 1024 * 1024;
+    const int32_t compress_block_size = SPILL_COMPRESS_BLOCK_SIZE;
     omniSpark::WriterOptions writer_options;
     writer_options.setCompression(omniSpark::CompressionKind_LZ4);
     writer_options.setCompressionBlockSize(compress_block_size);

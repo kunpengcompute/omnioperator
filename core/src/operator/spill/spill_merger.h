@@ -6,6 +6,7 @@
 #ifndef OMNI_RUNTIME_SPILL_MERGER_H
 #define OMNI_RUNTIME_SPILL_MERGER_H
 
+#include <vector>
 #include "type/data_types.h"
 #include "vector/vector_batch.h"
 #include "loser_tree.h"
@@ -53,6 +54,12 @@ private:
     bool sortAscending = true;
     bool sortNullsFirst = true;
 };
+
+// LZ4 block size for compressed spill files; the reader sizes its decompress buffer to it.
+// Kept below jemalloc's 8 MiB oversize threshold: larger buffers go to a dedicated arena that
+// returns pages to the OS on every free, and spill opens many small files (q11 SF1000 wrote
+// ~9k files of ~1 MB each), so a 32 MiB block paid an madvise + page faults per file and per block.
+constexpr int32_t SPILL_COMPRESS_BLOCK_SIZE = 1 * 1024 * 1024;
 
 struct SpillFileInfo {
     std::string filePath;
@@ -109,8 +116,10 @@ private:
     // deserialized spill VectorBatch — the actual data source for downstream — is pool-accounted.
     omniruntime::mem::OmniTaskMemoryPool *pool_ = nullptr;
 
-    char* currentBuffer_ = nullptr;
-    char* prevBuffer_ = nullptr;
+    // Reused across compressed blocks (grow-only) instead of allocating per block.
+    std::vector<char> compressedBuffer_;
+    std::vector<char> decompressedBuffer_;
+    const char* currentBuffer_ = nullptr;
     int32_t remainLength = 0;
     bool isSpillCompressEnabled = false;
     bool compareWithHashVal = false;
