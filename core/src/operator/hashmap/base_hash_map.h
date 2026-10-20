@@ -110,8 +110,9 @@ static const double MAX_LOAD_FACTOR = 0.9;
  * @tparam KeyType the key type of hashmap
  * @tparam ValueType the value type of hashmap
  */
-template <typename KeyType, typename ValueType> class HashSlot {
+template <typename KeyType, typename ValueType, bool kStoreHash = true> class HashSlot {
 public:
+    static constexpr bool kStoresHash = true;
     HashSlot() = default;
 
     ~HashSlot() = default;
@@ -188,6 +189,74 @@ public:
 private:
     std::pair<KeyType, ValueType> kv;
     size_t hashVal;
+};
+
+/**
+ * Slot without the cached hash. Probing compares keys (IsSameKey ignores the hash), so the
+ * cached value only serves rehash; maps that rarely rehash recompute it there instead of
+ * spending 8 bytes (a third of an int64 slot) per slot.
+ */
+template <typename KeyType, typename ValueType> class HashSlot<KeyType, ValueType, false> {
+public:
+    static constexpr bool kStoresHash = false;
+    HashSlot() = default;
+
+    ~HashSlot() = default;
+
+    explicit HashSlot(const KeyType &keyParam)
+    {
+        kv.first = keyParam;
+    }
+
+    explicit HashSlot(KeyType &&keyParam) : kv(std::move(keyParam), ValueType {}) {}
+
+    HashSlot(HashSlot &&o) noexcept : kv(std::move(o.kv)) {}
+
+    HashSlot(const KeyType &key, const ValueType &value) : kv(key, value) {}
+
+    HashSlot &operator = (HashSlot &&o) noexcept
+    {
+        kv = std::move(o.kv);
+        return *this;
+    }
+
+    HashSlot &operator = (const HashSlot &o)
+    {
+        kv = o.kv;
+        return *this;
+    }
+
+    HashSlot(const HashSlot &o) : kv(o.kv) {}
+
+    bool ALWAYS_INLINE IsSameKey(const size_t &otherHashVal, const KeyType &key1)
+    {
+        return kv.first == key1;
+    }
+
+    void SetValue(const ValueType &value)
+    {
+        kv.second = value;
+    }
+
+    const KeyType &GetKey() const
+    {
+        return kv.first;
+    }
+
+    ValueType &GetValue()
+    {
+        return kv.second;
+    }
+
+    const ValueType &GetValue() const
+    {
+        return kv.second;
+    }
+
+    void SetHashVal(const size_t) {}
+
+private:
+    std::pair<KeyType, ValueType> kv;
 };
 
 /**
@@ -493,10 +562,11 @@ private:
  */
 template <typename KeyType, typename ValueType, typename HashType, typename GrowStrategy, typename Allocator,
     std::enable_if_t<std::is_move_constructible_v<KeyType> && std::is_move_constructible_v<ValueType> &&
-    (std::is_move_assignable_v<ValueType> || std::is_copy_assignable_v<ValueType>)>* = nullptr>
+    (std::is_move_assignable_v<ValueType> || std::is_copy_assignable_v<ValueType>)>* = nullptr,
+    bool kStoreHash = true>
 class BaseHashMap {
 public:
-    using Slot = HashSlot<KeyType, ValueType>;
+    using Slot = HashSlot<KeyType, ValueType, kStoreHash>;
     using HashKey = KeyType;
     using ResultType = InsertResult<ValueType>;
     using Keys = KeyType;
@@ -989,7 +1059,7 @@ public:
 
     class HashmapIteratorOutput {
     public:
-        HashmapIteratorOutput(BaseHashMap<KeyType, ValueType, HashType, GrowStrategy, Allocator> *mapPtr, uint32_t pos,
+        HashmapIteratorOutput(BaseHashMap *mapPtr, uint32_t pos,
             uint32_t hasBeenOutputCount, ctrl_t *identifiers)
             : hashMapPtr(mapPtr)
         {
@@ -1044,7 +1114,7 @@ public:
         }
 
     private:
-        BaseHashMap<KeyType, ValueType, HashType, GrowStrategy, Allocator> *hashMapPtr;
+        BaseHashMap *hashMapPtr;
         ctrl_t *identifiers_ = EmptyGroup();
         uint32_t pos = 0;
         uint32_t remainSlot = 0;
@@ -1075,8 +1145,14 @@ public:
 private:
     void Reinsert(Slot &&cell)
     {
-        auto pos = FindPosition(cell.GetKey(), cell.GetHashVal());
-        identifiers[pos] = (h2_t)H2(cell.GetHashVal());
+        size_t hashVal;
+        if constexpr (Slot::kStoresHash) {
+            hashVal = cell.GetHashVal();
+        } else {
+            hashVal = hasher(cell.GetKey());
+        }
+        auto pos = FindPosition(cell.GetKey(), hashVal);
+        identifiers[pos] = (h2_t)H2(hashVal);
         new (&slots[pos]) Slot(std::move(cell));
     }
 

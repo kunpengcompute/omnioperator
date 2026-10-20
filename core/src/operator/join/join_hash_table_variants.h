@@ -40,8 +40,8 @@ constexpr int32_t NOT_EXPECTED_TYPE = 0;
 // Allocator::GetAllocator() (uncovered). After task-pool SetPool, allocator must be task-pool bound so
 // Build / ReclaimBuildPartition GetAllocatedBytes and pool currentBytes stay aligned.
 template <typename KeyType, typename ValueType>
-using JoinHashMap =
-    BaseHashMap<KeyType, ValueType, omniruntime::simdutil::HashCRC32<KeyType>, Grower, OmniHashmapAllocator>;
+using JoinHashMap = BaseHashMap<KeyType, ValueType, omniruntime::simdutil::HashCRC32<KeyType>, Grower,
+    OmniHashmapAllocator, nullptr, false>;
 
 template <typename KeyType, typename RowRefListType>
 using JoinHashTableVariant = ColumnSerializeHandler<JoinHashMap<KeyType, RowRefListType *>>;

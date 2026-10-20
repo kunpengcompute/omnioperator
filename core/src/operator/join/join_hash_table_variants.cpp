@@ -265,7 +265,7 @@ uint64_t JoinHashTableVariants<KeyType, RowRefListType>::EstimateBuildReservatio
     // B: normal-hash ctrl+slots, sized exactly as BuildHashTable sizes it.
     const uint8_t degree = NormalTableDegree(rows);
     const uint64_t capacity = 1ULL << degree;
-    using SlotT = HashSlot<KeyType, RowRefListType *>;
+    using SlotT = typename JoinHashMap<KeyType, RowRefListType *>::Slot;
     constexpr uint64_t kGroupWidth = 16;
     uint64_t blockB =
         capacity * sizeof(SlotT) + (capacity + kGroupWidth) * sizeof(signed char);
