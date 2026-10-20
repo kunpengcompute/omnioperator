@@ -262,12 +262,8 @@ uint64_t JoinHashTableVariants<KeyType, RowRefListType>::EstimateBuildReservatio
         return static_cast<uint64_t>(columnCount) * (sizeof(BaseVector **) + batchCount * sizeof(BaseVector *));
     }
 
-    // B: conservative normal-hash ctrl+slots upper bound (ArrayMap candidates stay <= this).
-    constexpr double kBuildLoadFactor = 0.75;
-    constexpr uint8_t kMinDegree = 5;
-    const double needed = static_cast<double>(rows) / kBuildLoadFactor;
-    const auto computed = static_cast<uint8_t>(std::ceil(std::log2(std::max(needed, 1.0))));
-    const uint8_t degree = std::max(kMinDegree, computed);
+    // B: normal-hash ctrl+slots, sized exactly as BuildHashTable sizes it.
+    const uint8_t degree = NormalTableDegree(rows);
     const uint64_t capacity = 1ULL << degree;
     using SlotT = HashSlot<KeyType, RowRefListType *>;
     constexpr uint64_t kGroupWidth = 16;
@@ -900,6 +896,20 @@ void JoinHashTableVariants<KeyType, RowRefListType>::BuildNormalHashTableWithVar
 }
 
 template <typename KeyType, typename RowRefListType>
+uint8_t JoinHashTableVariants<KeyType, RowRefListType>::NormalTableDegree(uint32_t rows)
+{
+    // Size for the 0.9 load the growing path already runs at, keeping at least one empty
+    // group. Sizing for 0.75 doubles the table whenever rows fall in (0.75, 0.9] of a power
+    // of two, and rows already over-count the distinct keys the table holds.
+    uint8_t degree = MIN_DEGREE;
+    while ((1ULL << degree) * MAX_LOAD_FACTOR < static_cast<double>(rows) ||
+        (1ULL << degree) - rows < Group::kWidth) {
+        ++degree;
+    }
+    return degree;
+}
+
+template <typename KeyType, typename RowRefListType>
 uint8_t JoinHashTableVariants<KeyType, RowRefListType>::AdaptiveInitDegree()
 {
     uint8_t initDegree = MIN_DEGREE;
@@ -1403,10 +1413,11 @@ void JoinHashTableVariants<KeyType, RowRefListType>::BuildHashTable(int32_t part
     }
 
     if (!shouldBuildArrayTable) {
+        const uint8_t normalDegree = NormalTableDegree(totalRowCount[partitionIndex]);
         if (isFixedKeys) {
-            BuildNormalHashTableWithFixedKey<false>(partitionIndex, initDegree);
+            BuildNormalHashTableWithFixedKey<false>(partitionIndex, normalDegree);
         } else {
-            BuildNormalHashTableWithVariableKey<false>(partitionIndex, initDegree);
+            BuildNormalHashTableWithVariableKey<false>(partitionIndex, normalDegree);
         }
     }
 }

@@ -516,6 +516,8 @@ private:
 
     static uint8_t AdaptiveInitDegree();
 
+    static uint8_t NormalTableDegree(uint32_t rows);
+
     void AbandonIncrementalTables();
 
     /// A table built by AddVecBatchDistinct is complete once input ends; full builds reuse it.
