@@ -84,10 +84,11 @@ char* RowContainer::NewRow()
         if (batchRemaining == 0) {
             batchPtr = reinterpret_cast<char*>(pool.Allocate(kBatchSize * fixedRowSize));
             batchRemaining = kBatchSize;
+            batchStarts.push_back(batchPtr);
         }
         row = batchPtr + (kBatchSize - batchRemaining) * fixedRowSize;
         --batchRemaining;
-        allocations.push_back(row);
+        ++numAllocated;
     }
 
     return InitializeRow(row);
@@ -102,10 +103,11 @@ char* RowContainer::InitializeRow(char* row)
 int32_t RowContainer::ListRows(RowContainerIterator* iter, int32_t maxRows, char** rows)
 {
     int32_t count = 0;
-    int32_t numAllocations = static_cast<int32_t>(allocations.size());
+    int32_t numAllocations = static_cast<int32_t>(numAllocated);
 
     while (count < maxRows && iter->allocationIndex < numAllocations) {
-        rows[count++] = allocations[iter->allocationIndex];
+        const int32_t index = iter->allocationIndex;
+        rows[count++] = batchStarts[index / kBatchSize] + static_cast<int64_t>(index % kBatchSize) * fixedRowSize;
         iter->allocationIndex++;
     }
 

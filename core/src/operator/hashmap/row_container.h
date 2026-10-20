@@ -137,7 +137,8 @@ public:
 
     void Reset()
     {
-        allocations.clear();
+        std::vector<char*>().swap(batchStarts);
+        numAllocated = 0;
         firstFreeRow = nullptr;
         numRows = 0;
         numFreeRows = 0;
@@ -165,7 +166,11 @@ private:
 
     // Row storage
     mem::SimpleArenaAllocator& pool;
-    std::vector<char*> allocations; // all allocated row pointers
+    // Rows are carved from kBatchSize-row blocks in order, so row i lives at
+    // batchStarts[i / kBatchSize] + (i % kBatchSize) * fixedRowSize. Keeping one pointer per
+    // block instead of per row saves 8-16 bytes per group outside the task pool.
+    std::vector<char*> batchStarts;
+    int64_t numAllocated = 0;
     char* firstFreeRow = nullptr;
     int64_t numRows = 0;
     int64_t numFreeRows = 0;
