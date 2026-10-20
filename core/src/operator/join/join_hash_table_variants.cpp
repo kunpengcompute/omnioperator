@@ -3,6 +3,7 @@
  * @Description: join hash table
  */
 #include "join_hash_table_variants.h"
+#include "join_spill_state.h"
 #include "operator/util/operator_util.h"
 #include "type/data_type.h"
 #include "util/debug.h"
@@ -44,6 +45,7 @@ JoinHashTableVariants<KeyType, RowRefListType>::JoinHashTableVariants(uint32_t h
     arrayTables = std::vector<std::unique_ptr<DefaultArrayMap<RowRefListType>>>(hashTableCount);
     hashTableTypes = std::vector<HashTableImplementationType>(hashTableCount);
     maxMins = std::vector<std::pair<int64_t, int64_t>>(hashTableCount);
+    incrementalTable_ = std::vector<uint8_t>(hashTableCount, 0);
     sizeOfRowRefList = sizeof(RowRefListType);
     // POOL-BOUND (C): no-arg ExecutionContext => SimpleArenaAllocator uses Allocator::GetAllocator().
     // Task-pool SetPool must rebuild these with the per-task pool allocator before BuildHashTable.
@@ -202,7 +204,9 @@ void JoinHashTableVariants<KeyType, RowRefListType>::ReclaimBuildPartition(int32
                   << " released=" << (buildStateReleased ? 1 : 0) << "\n";
         std::cerr.flush();
     }
-    const bool hadTable = hashTables[partitionIndex] != nullptr || arrayTables[partitionIndex] != nullptr;
+    const bool hadTable = (hashTables[partitionIndex] != nullptr && !incrementalTable_[partitionIndex]) ||
+        arrayTables[partitionIndex] != nullptr;
+    incrementalTable_[partitionIndex] = 0;
     hashTables[partitionIndex].reset();
     arrayTables[partitionIndex].reset();
     if (hadTable && hashTableSize > 0) {
@@ -250,6 +254,12 @@ uint64_t JoinHashTableVariants<KeyType, RowRefListType>::EstimateBuildReservatio
     const uint32_t rows = totalRowCount[static_cast<size_t>(partitionIndex)];
     if (rows == 0) {
         return 0;
+    }
+    if (incrementalTable_[static_cast<size_t>(partitionIndex)]) {
+        // The distinct build already owns its table and row references; only D remains.
+        const uint32_t columnCount = buildTypes != nullptr ? static_cast<uint32_t>(buildTypes->GetSize()) : 0;
+        const auto batchCount = static_cast<uint64_t>(inputVecBatches[static_cast<size_t>(partitionIndex)].size());
+        return static_cast<uint64_t>(columnCount) * (sizeof(BaseVector **) + batchCount * sizeof(BaseVector *));
     }
 
     // B: conservative normal-hash ctrl+slots upper bound (ArrayMap candidates stay <= this).
@@ -599,7 +609,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceSingleNotNullKeyToNo
     // POOL-BOUND (C): RowRefList nodes and inserts allocate from per-SP ExecutionContext arena.
     // All Emplace* / TryToInsertJoinKeysToHashmap arena paths share this requirement.
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     KeyType key;
 
     for (auto offset = 0; offset < rowCount; offset++) {
@@ -615,14 +624,7 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceSingleNotNullKeyToNo
                 }
             }
             auto ret = EmplaceJoinKey<kGrowing>(hashTable, key);
-            if (ret.IsInsert()) {
-                rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx));
-                ret.SetValue(rowRef);
-            } else {
-                rowRef = ret.GetValue();
-                rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx) }, arenaAllocator);
-            }
+            ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
         }
     }
 }
@@ -634,7 +636,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceSingleKeyToNormalHas
 {
     auto rowCount = vecBatch->GetRowCount();
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     KeyType key;
     for (auto offset = 0; offset < rowCount; offset++) {
         bool unNullKey = (!buildVectors[0]->IsNull(offset));
@@ -649,24 +650,10 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceSingleKeyToNormalHas
         }
         if (LIKELY(unNullKey)) {
             auto ret = EmplaceJoinKey<kGrowing>(hashTable, key);
-            if (ret.IsInsert()) {
-                rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx));
-                ret.SetValue(rowRef);
-            } else {
-                rowRef = ret.GetValue();
-                rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx) }, arenaAllocator);
-            }
+            ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
         } else {
             auto ret = hashTable->InsertNullKeysToHashmap(key);
-            if (ret.IsInsert()) {
-                rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx));
-                ret.SetValue(rowRef);
-            } else {
-                rowRef = ret.GetValue();
-                rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx) }, arenaAllocator);
-            }
+            ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
         }
     }
 }
@@ -692,7 +679,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceMultiNotNullKeyToNor
 {
     auto rowCount = vecBatch->GetRowCount();
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     KeyType key;
 
     for (auto offset = 0; offset < rowCount; offset++) {
@@ -708,14 +694,7 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceMultiNotNullKeyToNor
             }
             ComputeMultiColKey(buildVectors, buildHashCols.size(), offset, key);
             auto ret = EmplaceJoinKey<kGrowing>(hashTable, key);
-            if (ret.IsInsert()) {
-                rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx));
-                ret.SetValue(rowRef);
-            } else {
-                rowRef = ret.GetValue();
-                rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx) }, arenaAllocator);
-            }
+            ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
         }
     }
 }
@@ -727,7 +706,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceMultiKeyToNormalHash
 {
     auto rowCount = vecBatch->GetRowCount();
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     KeyType key{};
 
     for (auto offset = 0; offset < rowCount; offset++) {
@@ -743,24 +721,10 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceMultiKeyToNormalHash
             }
             ComputeMultiColKey(buildVectors, buildHashCols.size(), offset, key);
             auto ret = EmplaceJoinKey<kGrowing>(hashTable, key);
-            if (ret.IsInsert()) {
-                rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx));
-                ret.SetValue(rowRef);
-            } else {
-                rowRef = ret.GetValue();
-                rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx) }, arenaAllocator);
-            }
+            ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
         } else {
             auto ret = hashTable->InsertNullKeysToHashmap(key);
-            if (ret.IsInsert()) {
-                rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx));
-                ret.SetValue(rowRef);
-            } else {
-                rowRef = ret.GetValue();
-                rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx) }, arenaAllocator);
-            }
+            ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
         }
     }
 }
@@ -789,7 +753,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceVariableNotNullKeyTo
 {
     auto rowCount = static_cast<uint32_t>(vecBatch->GetRowCount());
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     for (uint32_t offset = 0; offset < rowCount; offset += BLOCK_SIZE) {
         uint32_t maxStep = std::min(rowCount - offset, BLOCK_SIZE);
         for (uint32_t rowIdx = offset, i = 0; rowIdx < offset + maxStep; rowIdx++, i++) {
@@ -801,16 +764,7 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceVariableNotNullKeyTo
         for (uint32_t rowIdx = 0; rowIdx < maxStep; rowIdx++) {
             if (LIKELY(isNotNullKeys[rowIdx])) {
                 auto ret = EmplaceJoinKey<kGrowing>(hashTable, tryRes[rowIdx], hashes[rowIdx]);
-                if (ret.IsInsert()) {
-                    rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                    *rowRef =
-                        RowRefListType(static_cast<uint32_t>(offset + rowIdx), static_cast<uint32_t>(vecBatchIdx));
-                    ret.SetValue(rowRef);
-                } else {
-                    rowRef = ret.GetValue();
-                    rowRef->Insert({ static_cast<uint32_t>(offset + rowIdx), static_cast<uint32_t>(vecBatchIdx) },
-                        arenaAllocator);
-                }
+                ApplyRowRef(ret, static_cast<uint32_t>(offset + rowIdx), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
             }
         }
     }
@@ -824,7 +778,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceVariableKeyToNormalH
 {
     auto rowCount = static_cast<uint32_t>(vecBatch->GetRowCount());
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     for (uint32_t offset = 0; offset < rowCount; offset += BLOCK_SIZE) {
         uint32_t maxStep = std::min(rowCount - offset, BLOCK_SIZE);
         for (uint32_t rowIdx = offset, i = 0; rowIdx < offset + maxStep; rowIdx++, i++) {
@@ -836,30 +789,86 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceVariableKeyToNormalH
         for (uint32_t rowIdx = 0; rowIdx < maxStep; rowIdx++) {
             if (LIKELY(isNotNullKeys[rowIdx])) {
                 auto ret = EmplaceJoinKey<kGrowing>(hashTable, tryRes[rowIdx], hashes[rowIdx]);
-                if (ret.IsInsert()) {
-                    rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                    *rowRef =
-                        RowRefListType(static_cast<uint32_t>(offset + rowIdx), static_cast<uint32_t>(vecBatchIdx));
-                    ret.SetValue(rowRef);
-                } else {
-                    rowRef = ret.GetValue();
-                    rowRef->Insert({ static_cast<uint32_t>(offset + rowIdx), static_cast<uint32_t>(vecBatchIdx) },
-                        arenaAllocator);
-                }
+                ApplyRowRef(ret, static_cast<uint32_t>(offset + rowIdx), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
             } else {
                 auto ret = hashTable->InsertNullKeysToHashmap(tryRes[rowIdx]);
-                if (ret.IsInsert()) {
-                    rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                    *rowRef =
-                        RowRefListType(static_cast<uint32_t>(offset + rowIdx), static_cast<uint32_t>(vecBatchIdx));
-                    ret.SetValue(rowRef);
-                } else {
-                    rowRef = ret.GetValue();
-                    rowRef->Insert({ static_cast<uint32_t>(offset + rowIdx), static_cast<uint32_t>(vecBatchIdx) },
-                        arenaAllocator);
-                }
+                ApplyRowRef(ret, static_cast<uint32_t>(offset + rowIdx), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
             }
         }
+    }
+}
+
+template <typename KeyType, typename RowRefListType>
+template <bool kGrowing>
+void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceBatch(int32_t partitionIndex, VectorBatch *vecBatch,
+    int32_t vecBatchIdx)
+{
+    auto &hashTable = hashTables[partitionIndex];
+    auto buildColNum = static_cast<int32_t>(this->buildHashCols.size());
+    BaseVector *buildVectors[buildColNum];
+    if constexpr (!std::is_same_v<KeyType, StringRef>) {
+        for (int32_t i = 0; i < buildColNum; ++i) {
+            buildVectors[i] = vecBatch->Get(this->buildHashCols[i]);
+        }
+        if (isMultiCols) {
+            EmplaceMultiKey<std::unique_ptr<JoinHashTableVariant<KeyType, RowRefListType>>, kGrowing>(hashTable,
+                partitionIndex, vecBatch, vecBatchIdx, buildVectors);
+        } else {
+            EmplaceSingleKey<std::unique_ptr<JoinHashTableVariant<KeyType, RowRefListType>>, kGrowing>(hashTable,
+                partitionIndex, vecBatch, vecBatchIdx, buildVectors);
+        }
+    } else if (isFixedKeys) {
+        hashTable->ResetFixedKeysIgnoreNullSerializerSimd();
+        for (int32_t i = 0; i < buildColNum; ++i) {
+            auto curVector = vecBatch->Get(this->buildHashCols[i]);
+            if (curVector->GetEncoding() == Encoding::OMNI_DICTIONARY) {
+                hashTable->PushBackFixedKeysIgnoreNullSerializer(
+                    dicVectorSerializerFixedKeysIgnoreNullCenter[curVector->GetTypeId()]);
+                hashTable->PushBackFixedKeysIgnoreNullSerializerSimd(
+                    dicVectorSerializerFixedKeysIgnoreNullCenterSimd[curVector->GetTypeId()]);
+            } else if (curVector->GetEncoding() == Encoding::OMNI_ENCODING_CONST) {
+                hashTable->PushBackFixedKeysIgnoreNullSerializer(
+                    constVectorSerializerFixedKeysIgnoreNullCenter[curVector->GetTypeId()]);
+                hashTable->PushBackFixedKeysIgnoreNullSerializerSimd(
+                    constVectorSerializerFixedKeysIgnoreNullCenterSimd[curVector->GetTypeId()]);
+            } else {
+                hashTable->PushBackFixedKeysIgnoreNullSerializer(
+                    vectorSerializerFixedKeysIgnoreNullCenter[curVector->GetTypeId()]);
+                hashTable->PushBackFixedKeysIgnoreNullSerializerSimd(
+                    vectorSerializerFixedKeysIgnoreNullCenterSimd[curVector->GetTypeId()]);
+            }
+            buildVectors[i] = curVector;
+        }
+        EmplaceFixedKey<std::unique_ptr<JoinHashTableVariant<KeyType, RowRefListType>>, kGrowing>(hashTable,
+            partitionIndex, vecBatch, vecBatchIdx, buildVectors, buildColNum);
+    } else {
+        hashTable->ResetIgnoreNullSerializer();
+        for (int32_t i = 0; i < buildColNum; ++i) {
+            auto curVector = vecBatch->Get(this->buildHashCols[i]);
+            auto typeId = static_cast<size_t>(curVector->GetTypeId());
+            VectorSerializerIgnoreNull serializer = nullptr;
+            if (curVector->GetEncoding() == Encoding::OMNI_DICTIONARY && typeId < dicVectorSerializerIgnoreNullCenter.size()) {
+                serializer = dicVectorSerializerIgnoreNullCenter[typeId];
+            } else if (curVector->GetEncoding() == Encoding::OMNI_ENCODING_CONST &&
+                typeId < constVectorSerializerIgnoreNullCenter.size()) {
+                serializer = constVectorSerializerIgnoreNullCenter[typeId];
+            }
+
+            // Complex join keys (e.g. struct) may have only flat serializer registered.
+            if (serializer == nullptr && typeId < vectorSerializerIgnoreNullCenter.size()) {
+                serializer = vectorSerializerIgnoreNullCenter[typeId];
+            }
+            if (serializer == nullptr) {
+                throw OmniException("UNSUPPORTED_ERROR", "No build serializer for join key type");
+            }
+            hashTable->PushBackIgnoreNullSerializer(serializer);
+            buildVectors[i] = curVector;
+        }
+        std::vector<int8_t> isNotNullKeys(BLOCK_SIZE);
+        std::vector<size_t> hashes(BLOCK_SIZE);
+        std::vector<StringRef> tryRes(BLOCK_SIZE);
+        EmplaceVariableKey<std::unique_ptr<JoinHashTableVariant<StringRef, RowRefListType>>, kGrowing>(hashTable,
+            partitionIndex, vecBatch, vecBatchIdx, buildVectors, buildColNum, isNotNullKeys, hashes, tryRes);
     }
 }
 
@@ -869,59 +878,13 @@ void JoinHashTableVariants<KeyType, RowRefListType>::BuildNormalHashTableWithFix
     uint8_t initDegree)
 {
     // Pool-bound: route hashmap memory to the task pool.
-    auto hashTable = std::make_unique<JoinHashTableVariant<KeyType, RowRefListType>>(
+    hashTables[partitionIndex] = std::make_unique<JoinHashTableVariant<KeyType, RowRefListType>>(
         executionContexts[partitionIndex]->GetAllocator(), std::max(initDegree, MIN_DEGREE));
-    auto buildColNum = static_cast<int32_t>(this->buildHashCols.size());
     auto &vecBatchesOnePartition = inputVecBatches[partitionIndex];
     auto vecBatchesNum = static_cast<int32_t>(vecBatchesOnePartition.size());
-
-    if constexpr (!std::is_same_v<KeyType, StringRef>) {
-        BaseVector *buildVectors[buildColNum];
-        for (auto j = 0; j < vecBatchesNum; j++) {
-            auto vecBatch = vecBatchesOnePartition[j];
-            for (int32_t i = 0; i < buildColNum; ++i) {
-                buildVectors[i] = vecBatch->Get(this->buildHashCols[i]);
-            }
-            if (isMultiCols) {
-                EmplaceMultiKey<std::unique_ptr<JoinHashTableVariant<KeyType, RowRefListType>>, kGrowing>(hashTable,
-                    partitionIndex, vecBatch, j, buildVectors);
-            } else {
-                EmplaceSingleKey<std::unique_ptr<JoinHashTableVariant<KeyType, RowRefListType>>, kGrowing>(hashTable,
-                    partitionIndex, vecBatch, j, buildVectors);
-            }
-        }
-    } else if constexpr (std::is_same_v<KeyType, StringRef>) {
-        BaseVector *buildVectors[buildColNum];
-        for (auto j = 0; j < vecBatchesNum; j++) {
-            auto vecBatch = vecBatchesOnePartition[j];
-            hashTable->ResetFixedKeysIgnoreNullSerializerSimd();
-            for (int32_t i = 0; i < buildColNum; ++i) {
-                auto curVector = vecBatch->Get(this->buildHashCols[i]);
-                if (curVector->GetEncoding() == Encoding::OMNI_DICTIONARY) {
-                    hashTable->PushBackFixedKeysIgnoreNullSerializer(
-                        dicVectorSerializerFixedKeysIgnoreNullCenter[curVector->GetTypeId()]);
-                    hashTable->PushBackFixedKeysIgnoreNullSerializerSimd(
-                        dicVectorSerializerFixedKeysIgnoreNullCenterSimd[curVector->GetTypeId()]);
-                } else if (curVector->GetEncoding() == Encoding::OMNI_ENCODING_CONST) {
-                    hashTable->PushBackFixedKeysIgnoreNullSerializer(
-                        constVectorSerializerFixedKeysIgnoreNullCenter[curVector->GetTypeId()]);
-                    hashTable->PushBackFixedKeysIgnoreNullSerializerSimd(
-                        constVectorSerializerFixedKeysIgnoreNullCenterSimd[curVector->GetTypeId()]);
-                } else {
-                    hashTable->PushBackFixedKeysIgnoreNullSerializer(
-                        vectorSerializerFixedKeysIgnoreNullCenter[curVector->GetTypeId()]);
-                    hashTable->PushBackFixedKeysIgnoreNullSerializerSimd(
-                        vectorSerializerFixedKeysIgnoreNullCenterSimd[curVector->GetTypeId()]);
-                }
-
-                buildVectors[i] = curVector;
-            }
-            EmplaceFixedKey<std::unique_ptr<JoinHashTableVariant<KeyType, RowRefListType>>, kGrowing>(hashTable,
-                partitionIndex, vecBatch, j, buildVectors, buildColNum);
-        }
+    for (auto j = 0; j < vecBatchesNum; j++) {
+        EmplaceBatch<kGrowing>(partitionIndex, vecBatchesOnePartition[j], j);
     }
-
-    hashTables[partitionIndex] = std::move(hashTable);
     hashTableTypes[partitionIndex] = HashTableImplementationType::NORMAL_HASH_TABLE;
     hashTableSize++;
 }
@@ -932,50 +895,116 @@ void JoinHashTableVariants<KeyType, RowRefListType>::BuildNormalHashTableWithVar
     uint8_t initDegree)
 {
     if constexpr (std::is_same_v<KeyType, StringRef>) {
-        // Pool-bound: route hashmap memory to the task pool.
-        auto hashTable = std::make_unique<JoinHashTableVariant<KeyType, RowRefListType>>(
-            executionContexts[partitionIndex]->GetAllocator(), std::max(initDegree, MIN_DEGREE));
-        auto buildColNum = static_cast<int32_t>(this->buildHashCols.size());
-        auto &vecBatchesOnePartition = inputVecBatches[partitionIndex];
-        auto vecBatchesNum = static_cast<int32_t>(vecBatchesOnePartition.size());
-
-        BaseVector *buildVectors[buildColNum];
-        std::vector<int8_t> isNotNullKeys(BLOCK_SIZE);
-        std::vector<size_t> hashes(BLOCK_SIZE);
-        std::vector<StringRef> tryRes(BLOCK_SIZE);
-        for (auto j = 0; j < vecBatchesNum; j++) {
-            auto vecBatch = vecBatchesOnePartition[j];
-            hashTable->ResetIgnoreNullSerializer();
-            for (int32_t i = 0; i < buildColNum; ++i) {
-                auto curVector = vecBatch->Get(this->buildHashCols[i]);
-                auto typeId = static_cast<size_t>(curVector->GetTypeId());
-                VectorSerializerIgnoreNull serializer = nullptr;
-                if (curVector->GetEncoding() == Encoding::OMNI_DICTIONARY && typeId < dicVectorSerializerIgnoreNullCenter.size()) {
-                    serializer = dicVectorSerializerIgnoreNullCenter[typeId];
-                } else if (curVector->GetEncoding() == Encoding::OMNI_ENCODING_CONST &&
-                    typeId < constVectorSerializerIgnoreNullCenter.size()) {
-                    serializer = constVectorSerializerIgnoreNullCenter[typeId];
-                }
-
-                // Complex join keys (e.g. struct) may have only flat serializer registered.
-                if (serializer == nullptr && typeId < vectorSerializerIgnoreNullCenter.size()) {
-                    serializer = vectorSerializerIgnoreNullCenter[typeId];
-                }
-                if (serializer == nullptr) {
-                    throw OmniException("UNSUPPORTED_ERROR", "No build serializer for join key type");
-                }
-                hashTable->PushBackIgnoreNullSerializer(serializer);
-                buildVectors[i] = curVector;
-            }
-
-            EmplaceVariableKey<std::unique_ptr<JoinHashTableVariant<StringRef, RowRefListType>>, kGrowing>(hashTable,
-                partitionIndex, vecBatch, j, buildVectors, buildColNum, isNotNullKeys, hashes, tryRes);
-        }
-
-        hashTables[partitionIndex] = std::move(hashTable);
-        hashTableTypes[partitionIndex] = HashTableImplementationType::NORMAL_HASH_TABLE;
-        hashTableSize++;
+        BuildNormalHashTableWithFixedKey<kGrowing>(partitionIndex, initDegree);
     }
+}
+
+template <typename KeyType, typename RowRefListType>
+uint8_t JoinHashTableVariants<KeyType, RowRefListType>::AdaptiveInitDegree()
+{
+    uint8_t initDegree = MIN_DEGREE;
+    // Group probe leaves the sentinel tail unwrapped. Keep one entire group empty
+    // at the 0.9 growth threshold so a tiny adaptive seed cannot overwrite a live
+    // slot before NeedRehash. With 16-slot groups this starts at 256 slots.
+    auto spareSlots = [](uint8_t degree) {
+        const uint64_t capacity = 1ULL << degree;
+        return capacity - static_cast<uint64_t>(std::ceil(static_cast<double>(capacity) * MAX_LOAD_FACTOR));
+    };
+    while (initDegree < 63 && spareSlots(initDegree) < Group::kWidth) {
+        ++initDegree;
+    }
+    return initDegree;
+}
+
+template <typename KeyType, typename RowRefListType>
+void JoinHashTableVariants<KeyType, RowRefListType>::AddVecBatchDistinct(int32_t partitionIndex,
+    omniruntime::vec::VectorBatch *vecBatch)
+{
+    UniqueVecBatch owned(vecBatch);
+    const int32_t rowCount = owned->GetRowCount();
+    if (rowCount <= 0) {
+        return;
+    }
+    if (hashTables[partitionIndex] == nullptr) {
+        hashTables[partitionIndex] = std::make_unique<JoinHashTableVariant<KeyType, RowRefListType>>(
+            executionContexts[partitionIndex]->GetAllocator(), AdaptiveInitDegree());
+        hashTableTypes[partitionIndex] = HashTableImplementationType::NORMAL_HASH_TABLE;
+        incrementalTable_[partitionIndex] = 1;
+    }
+    auto &batches = inputVecBatches[partitionIndex];
+    const auto vecBatchIdx = static_cast<int32_t>(batches.size());
+    distinctRows_.clear();
+    distinctRefs_.clear();
+    collectDistinct_ = true;
+    try {
+        EmplaceBatch<true>(partitionIndex, owned.get(), vecBatchIdx);
+    } catch (...) {
+        collectDistinct_ = false;
+        throw;
+    }
+    collectDistinct_ = false;
+    const auto kept = static_cast<int32_t>(distinctRows_.size());
+    if (kept == 0) {
+        return;
+    }
+    if (kept < rowCount) {
+        // Keep only the rows that introduced a key. Row references are rewritten to the
+        // compacted positions; Emplace* inserts rows in ascending order, so they stay sorted.
+        UniqueVecBatch compact(new omniruntime::vec::VectorBatch(kept));
+        const int32_t vectorCount = owned->GetVectorCount();
+        compact->ResizeVectorCount(vectorCount);
+        for (int32_t col = 0; col < vectorCount; ++col) {
+            compact->SetVector(col, VectorHelper::CopyPositionsVector(owned->Get(col), distinctRows_.data(), 0, kept));
+        }
+        for (int32_t i = 0; i < kept; ++i) {
+            distinctRefs_[i]->rowIdx = static_cast<uint32_t>(i);
+        }
+        // CopyPositions keeps dictionary encoding, which would pin the dropped rows' dictionary.
+        VectorHelper::CompactSparseDictionaries(compact.get(), pool_);
+        owned = std::move(compact);
+    }
+    batches.emplace_back(owned.release());
+    totalRowCount[partitionIndex] += static_cast<uint32_t>(kept);
+    distinctRows_.clear();
+    distinctRefs_.clear();
+    distinctInputRows_ += static_cast<uint64_t>(rowCount);
+    distinctKeptRows_ += static_cast<uint64_t>(kept);
+    // Like Velox's abandonBuildNoDupHash: when nearly every row brings a new key the dedup saves
+    // little, while the growing table (rehash keeps old and new tables live) and the forced
+    // normal hash table (no array table) cost more than they save.
+    constexpr uint64_t kAbandonMinRows = 100000;
+    constexpr uint64_t kAbandonMinKeptPct = 50;
+    if (distinctInputRows_ >= kAbandonMinRows && distinctKeptRows_ * 100 >= distinctInputRows_ * kAbandonMinKeptPct) {
+        AbandonIncrementalTables();
+    }
+}
+
+template <typename KeyType, typename RowRefListType>
+void JoinHashTableVariants<KeyType, RowRefListType>::AbandonIncrementalTables()
+{
+    distinctAbandoned_ = true;
+    for (uint32_t partition = 0; partition < hashTableCount; ++partition) {
+        if (!incrementalTable_[partition]) {
+            continue;
+        }
+        // Drop the table before the arena/allocator it was built from; the retained rows stay
+        // and the end-of-input build indexes them like any other build.
+        hashTables[partition].reset();
+        incrementalTable_[partition] = 0;
+        executionContexts[partition] = std::make_unique<ExecutionContext>(4096, pool_);
+    }
+}
+
+template <typename KeyType, typename RowRefListType>
+bool JoinHashTableVariants<KeyType, RowRefListType>::FinishIncrementalTable(int32_t partitionIndex)
+{
+    if (!incrementalTable_[partitionIndex] || hashTables[partitionIndex] == nullptr) {
+        return false;
+    }
+    incrementalTable_[partitionIndex] = 0;
+    hashTableTypes[partitionIndex] = HashTableImplementationType::NORMAL_HASH_TABLE;
+    hashTableSize++;
+    return true;
 }
 
 template <typename KeyType, typename RowRefListType>
@@ -985,7 +1014,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceFixedNotNullKeyToNor
 {
     auto rowCount = static_cast<uint32_t>(vecBatch->GetRowCount());
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     KeyType key;
     bool unNullKey = false;
     char *keysPool = reinterpret_cast<char *>(arenaAllocator.Allocate(fixedKeysSize * rowCount));
@@ -1002,14 +1030,7 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceFixedNotNullKeyToNor
     for (uint32_t offset = 0; offset < rowCount; offset++) {
         if (LIKELY(unNullKeys[offset])) {
             auto ret = EmplaceJoinKey<kGrowing>(hashTable, keys[offset]);
-            if (ret.IsInsert()) {
-                rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx));
-                ret.SetValue(rowRef);
-            } else {
-                rowRef = ret.GetValue();
-                rowRef->Insert({static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx)}, arenaAllocator);
-            }
+            ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
         }
     }
 }
@@ -1020,7 +1041,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceFixedKeyToNormalHash
 {
     auto rowCount = static_cast<uint32_t>(vecBatch->GetRowCount());
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     KeyType key;
     bool unNullKey = false;
     char *keysPool = reinterpret_cast<char *>(arenaAllocator.Allocate(fixedKeysSize * rowCount));
@@ -1040,24 +1060,10 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceFixedKeyToNormalHash
     for (uint32_t offset = 0; offset < rowCount; offset++) {
         if (LIKELY(unNullKeys[offset])) {
             auto ret = EmplaceJoinKey<kGrowing>(hashTable, keys[offset]);
-            if (ret.IsInsert()) {
-                rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx));
-                ret.SetValue(rowRef);
-            } else {
-                rowRef = ret.GetValue();
-                rowRef->Insert({static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx)}, arenaAllocator);
-            }
+            ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
         } else {
             auto ret = hashTable->InsertNullKeysToHashmap(keys[offset]);
-            if (ret.IsInsert()) {
-                rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx));
-                ret.SetValue(rowRef);
-            } else {
-                rowRef = ret.GetValue();
-                rowRef->Insert({static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx)}, arenaAllocator);
-            }
+            ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(vecBatchIdx), arenaAllocator);
         }
     }
 }
@@ -1124,7 +1130,7 @@ bool JoinHashTableVariants<KeyType, RowRefListType>::TryBuildHashTableParallel(i
                   std::is_same_v<KeyType, int128_t>) {
         return false;
     }
-    if (numThreads <= 1 || !isFixedKeys || isMultiCols || hashTableCount != 1) {
+    if (numThreads <= 1 || !isFixedKeys || isMultiCols || hashTableCount != 1 || incrementalTable_[partitionIndex]) {
         return false;
     }
     if (totalRowCount[partitionIndex] < minRowsPerPartition) {
@@ -1345,7 +1351,7 @@ bool JoinHashTableVariants<KeyType, RowRefListType>::IsArrayTableEligible(uint32
 template <typename KeyType, typename RowRefListType>
 void JoinHashTableVariants<KeyType, RowRefListType>::BuildHashTable(int32_t partitionIndex)
 {
-    if (buildStateReleased) {
+    if (buildStateReleased || FinishIncrementalTable(partitionIndex)) {
         return;
     }
     /// if build size partition is an empty partition, we need to provide a empty HashTable for probe size.
@@ -1410,20 +1416,10 @@ void JoinHashTableVariants<KeyType, RowRefListType>::BuildHashTable(int32_t part
 template <typename KeyType, typename RowRefListType>
 void JoinHashTableVariants<KeyType, RowRefListType>::BuildHashTableAdaptive(int32_t partitionIndex)
 {
-    if (buildStateReleased) {
+    if (buildStateReleased || FinishIncrementalTable(partitionIndex)) {
         return;
     }
-    uint8_t initDegree = MIN_DEGREE;
-    // Group probe leaves the sentinel tail unwrapped. Keep one entire group empty
-    // at the 0.9 growth threshold so a tiny adaptive seed cannot overwrite a live
-    // slot before NeedRehash. With 16-slot groups this starts at 256 slots.
-    auto spareSlots = [](uint8_t degree) {
-        const uint64_t capacity = 1ULL << degree;
-        return capacity - static_cast<uint64_t>(std::ceil(static_cast<double>(capacity) * MAX_LOAD_FACTOR));
-    };
-    while (initDegree < 63 && spareSlots(initDegree) < Group::kWidth) {
-        ++initDegree;
-    }
+    const uint8_t initDegree = AdaptiveInitDegree();
     if (isFixedKeys) {
         BuildNormalHashTableWithFixedKey<true>(partitionIndex, initDegree);
     } else {
@@ -1508,7 +1504,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceNotNullKeyToArrayTab
     auto hashTable = std::make_unique<DefaultArrayMap<RowRefListType>>(
         rangeUpperBound, OmniHashmapAllocator(executionContexts[partitionIndex]->GetAllocator()));
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     T key;
 
     auto buildHashCol = buildHashCols[0];
@@ -1522,14 +1517,7 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceNotNullKeyToArrayTab
             for (auto offset = 0; offset < rowCount; offset++) {
                 key = curVector->GetValue(offset);
                 auto ret = hashTable->InsertJoinKeysToHashmap(static_cast<size_t>(key - min));
-                if (ret.IsInsert()) {
-                    rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                    *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(j));
-                    ret.SetValue(rowRef);
-                } else {
-                    rowRef = ret.GetValue();
-                    rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(j) }, arenaAllocator);
-                }
+                ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(j), arenaAllocator);
             }
         } else {
             for (auto offset = 0; offset < rowCount; offset++) {
@@ -1537,14 +1525,7 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceNotNullKeyToArrayTab
                 if (LIKELY(unNullKey)) {
                     key = curVector->GetValue(offset);
                     auto ret = hashTable->InsertJoinKeysToHashmap(static_cast<size_t>(key - min));
-                    if (ret.IsInsert()) {
-                        rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                        *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(j));
-                        ret.SetValue(rowRef);
-                    } else {
-                        rowRef = ret.GetValue();
-                        rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(j) }, arenaAllocator);
-                    }
+                    ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(j), arenaAllocator);
                 }
             }
         }
@@ -1565,7 +1546,6 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceKeyToArrayTable(T &m
     auto hashTable = std::make_unique<DefaultArrayMap<RowRefListType>>(
         rangeUpperBound, OmniHashmapAllocator(executionContexts[partitionIndex]->GetAllocator()));
     auto &arenaAllocator = *(executionContexts[partitionIndex]->GetArena());
-    RowRefListType *rowRef = nullptr;
     T key;
 
     auto buildHashCol = buildHashCols[0];
@@ -1581,26 +1561,12 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceKeyToArrayTable(T &m
                 key = static_cast<ConstVector<T> *>(baseVector)->GetConstValue();
                 for (auto offset = 0; offset < rowCount; offset++) {
                     auto ret = hashTable->InsertJoinKeysToHashmap(static_cast<size_t>(key - min));
-                    if (ret.IsInsert()) {
-                        rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                        *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(j));
-                        ret.SetValue(rowRef);
-                    } else {
-                        rowRef = ret.GetValue();
-                        rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(j) }, arenaAllocator);
-                    }
+                    ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(j), arenaAllocator);
                 }
             } else {
                 for (auto offset = 0; offset < rowCount; offset++) {
                     auto ret = hashTable->InsertNullKeysToHashmap();
-                    if (ret.IsInsert()) {
-                        rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                        *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(j));
-                        ret.SetValue(rowRef);
-                    } else {
-                        rowRef = ret.GetValue();
-                        rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(j) }, arenaAllocator);
-                    }
+                    ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(j), arenaAllocator);
                 }
             }
             continue;
@@ -1611,14 +1577,7 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceKeyToArrayTable(T &m
             for (auto offset = 0; offset < rowCount; offset++) {
                 key = curVector->GetValue(offset);
                 auto ret = hashTable->InsertJoinKeysToHashmap(static_cast<size_t>(key - min));
-                if (ret.IsInsert()) {
-                    rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                    *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(j));
-                    ret.SetValue(rowRef);
-                } else {
-                    rowRef = ret.GetValue();
-                    rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(j) }, arenaAllocator);
-                }
+                ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(j), arenaAllocator);
             }
         } else {
             for (auto offset = 0; offset < rowCount; offset++) {
@@ -1626,24 +1585,10 @@ void JoinHashTableVariants<KeyType, RowRefListType>::EmplaceKeyToArrayTable(T &m
                 if (LIKELY(unNullKey)) {
                     key = curVector->GetValue(offset);
                     auto ret = hashTable->InsertJoinKeysToHashmap(static_cast<size_t>(key - min));
-                    if (ret.IsInsert()) {
-                        rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                        *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(j));
-                        ret.SetValue(rowRef);
-                    } else {
-                        rowRef = ret.GetValue();
-                        rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(j) }, arenaAllocator);
-                    }
+                    ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(j), arenaAllocator);
                 } else {
                     auto ret = hashTable->InsertNullKeysToHashmap();
-                    if (ret.IsInsert()) {
-                        rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
-                        *rowRef = RowRefListType(static_cast<uint32_t>(offset), static_cast<uint32_t>(j));
-                        ret.SetValue(rowRef);
-                    } else {
-                        rowRef = ret.GetValue();
-                        rowRef->Insert({ static_cast<uint32_t>(offset), static_cast<uint32_t>(j) }, arenaAllocator);
-                    }
+                    ApplyRowRef(ret, static_cast<uint32_t>(offset), static_cast<uint32_t>(j), arenaAllocator);
                 }
             }
         }

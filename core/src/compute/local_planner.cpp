@@ -363,6 +363,14 @@ void planDetail(
             queryConfig.spillableReservationGrowthPct());
         res.second->SetJoinSpillState(joinSpillState);
         res.second->SetDynamicFilterPushdownEnabled(ResolveDynamicFilterPushdownEnabled(queryConfig));
+        // Without a join filter, semi/anti/existence probes only test key presence, so
+        // duplicate build rows are never read and need not stay resident.
+        const auto joinType = joinNode->GetJoinType();
+        if ((joinType == OMNI_JOIN_TYPE_LEFT_SEMI || joinType == OMNI_JOIN_TYPE_LEFT_ANTI ||
+                joinType == OMNI_JOIN_TYPE_EXISTENCE) &&
+            joinNode->Filter() == nullptr && !joinNode->IsNullAware() && !joinNode->IsBuildLeft()) {
+            res.second->SetDistinctBuild(true);
+        }
         if (isBHJ && !res.second->IsPrebuilt() && !HasExprBuildKeys(joinNode)) {
             res.second->SetBroadcastParallelBuildPolicy(
                 op::BroadcastParallelBuildPolicy::FromQueryConfig(queryConfig));

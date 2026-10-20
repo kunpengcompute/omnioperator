@@ -89,6 +89,10 @@ public:
 
     void SetDynamicFilterPushdownEnabled(bool enabled);
 
+    /// Keep one build row per join key. Only valid when the probe never needs
+    /// duplicate build rows: semi/anti/existence joins without a join filter.
+    void SetDistinctBuild(bool enabled);
+
     bool IsDynamicFilterPushdownEnabled() const
     {
         return dynamicFilterPushdownEnabled_;
@@ -285,6 +289,7 @@ public:
 private:
     uint32_t ComputeParallelBuildThreads(uint32_t rowCount, uint64_t estimatedBuildBytes) const;
     void AddLatchedInput(omniruntime::vec::VectorBatch *vecBatch);
+    void AddBuildBatch(int32_t slot, omniruntime::vec::VectorBatch *vecBatch);
     void SpillAndClearResidentBuild();
     void TryPublishEmptyTableHandoff();
     int32_t DriveHandoffRestore();

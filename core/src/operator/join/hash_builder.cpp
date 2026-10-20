@@ -257,6 +257,14 @@ void HashBuilderOperatorFactory::PublishCachedVariants()
     slot->lease = std::move(prepared);
 }
 
+void HashBuilderOperatorFactory::SetDistinctBuild(bool enabled)
+{
+    if (prebuilt_ || hashTablesVariants == nullptr) {
+        return;
+    }
+    std::visit([&](auto &&arg) { arg.SetDistinctBuild(enabled); }, *hashTablesVariants);
+}
+
 void HashBuilderOperatorFactory::SetDynamicFilterPushdownEnabled(bool enabled)
 {
     dynamicFilterPushdownEnabled_ = enabled;
@@ -646,11 +654,25 @@ int32_t HashBuilderOperator::AddInput(omniruntime::vec::VectorBatch *vecBatch)
             AddLatchedInput(vecBatch);
             return 0;
         }
-        std::visit([&](auto &&arg) { arg.AddVecBatch(0, vecBatch); }, *hashTablesVariants);
+        AddBuildBatch(0, vecBatch);
         return 0;
     }
-    std::visit([&](auto &&arg) { arg.AddVecBatch(partitionIndex, vecBatch); }, *hashTablesVariants);
+    AddBuildBatch(partitionIndex, vecBatch);
     return 0;
+}
+
+void HashBuilderOperator::AddBuildBatch(int32_t slot, omniruntime::vec::VectorBatch *vecBatch)
+{
+    std::visit([&](auto &&arg) {
+        if (!arg.IsDistinctBuild()) {
+            arg.AddVecBatch(slot, vecBatch);
+            return;
+        }
+        // The distinct build grows the table while it adds input; a reclaim of this
+        // operator in the middle would free the table being inserted into.
+        NonReclaimableSection guard(this);
+        arg.AddVecBatch(slot, vecBatch);
+    }, *hashTablesVariants);
 }
 
 int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVecBatch)

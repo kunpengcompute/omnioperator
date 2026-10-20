@@ -199,8 +199,25 @@ public:
             throw omniruntime::exception::OmniException("OPERATOR_RUNTIME_ERROR",
                 "Cannot add build input after releasing join build state");
         }
+        if (distinctBuild_ && !distinctAbandoned_) {
+            AddVecBatchDistinct(partitionIndex, vecBatch);
+            return;
+        }
         inputVecBatches[partitionIndex].emplace_back(vecBatch);
         totalRowCount[partitionIndex] += vecBatch->GetRowCount();
+    }
+
+    /// Existence-only joins (semi/anti/existence without a join filter) need one build row per key.
+    /// In this mode each added batch is inserted into a growing table immediately and only the rows
+    /// that introduced a new key are retained; duplicate and null-key rows are freed on arrival.
+    void SetDistinctBuild(bool enabled)
+    {
+        distinctBuild_ = enabled;
+    }
+
+    ALWAYS_INLINE bool IsDistinctBuild() const
+    {
+        return distinctBuild_ && !distinctAbandoned_;
     }
 
     ALWAYS_INLINE uint32_t GetTotalRowCount(int32_t partitionIndex) const
@@ -491,6 +508,35 @@ private:
 
     template <typename T> void EmplaceKeyToArrayTable(T &min, T &max, int64_t rangeUpperBound, int32_t partitionIndex);
 
+    void AddVecBatchDistinct(int32_t partitionIndex, omniruntime::vec::VectorBatch *vecBatch);
+
+    /// Emplace one batch into an existing table; shared by full builds and the distinct build.
+    template <bool kGrowing>
+    void EmplaceBatch(int32_t partitionIndex, VectorBatch *vecBatch, int32_t vecBatchIdx);
+
+    static uint8_t AdaptiveInitDegree();
+
+    void AbandonIncrementalTables();
+
+    /// A table built by AddVecBatchDistinct is complete once input ends; full builds reuse it.
+    bool FinishIncrementalTable(int32_t partitionIndex);
+
+    ALWAYS_INLINE void ApplyRowRef(InsertResult<RowRefListType *> &ret, uint32_t rowIdx, uint32_t vecBatchIdx,
+        omniruntime::mem::SimpleArenaAllocator &arenaAllocator)
+    {
+        if (ret.IsInsert()) {
+            auto *rowRef = reinterpret_cast<RowRefListType *>(arenaAllocator.Allocate(sizeOfRowRefList));
+            *rowRef = RowRefListType(rowIdx, vecBatchIdx);
+            ret.SetValue(rowRef);
+            if (UNLIKELY(collectDistinct_)) {
+                distinctRows_.push_back(static_cast<int32_t>(rowIdx));
+                distinctRefs_.push_back(rowRef);
+            }
+        } else if (LIKELY(!distinctBuild_)) {
+            ret.GetValue()->Insert({ rowIdx, vecBatchIdx }, arenaAllocator);
+        }
+    }
+
     template <bool kGrowing>
     void BuildNormalHashTableWithFixedKey(int32_t partitionIndex, uint8_t initDegree);
 
@@ -604,6 +650,18 @@ private:
     bool dynamicFiltersBuilt_ = false;
     bool hasDuplicateKeys_ = false;
     bool buildStateReleased = false;
+    bool distinctBuild_ = false;
+    // Set once the incremental dedup stops paying for itself (see AddVecBatchDistinct). Duplicate
+    // row-reference chains are still skipped afterwards; only the per-batch dedup stops.
+    bool distinctAbandoned_ = false;
+    uint64_t distinctInputRows_ = 0;
+    uint64_t distinctKeptRows_ = 0;
+    // Per partition: 1 while hashTables[p] was grown by AddVecBatchDistinct and is not yet counted.
+    std::vector<uint8_t> incrementalTable_;
+    // True only while AddVecBatchDistinct emplaces one batch.
+    bool collectDistinct_ = false;
+    std::vector<int32_t> distinctRows_;
+    std::vector<RowRefListType *> distinctRefs_;
     // Per-task pool bound at HBO ctor via SetPool;
     // remembered for idempotency check on repeated SetPool calls (future spill
     // multi-op case where N HBOs share one JHTV with the same task pool).
