@@ -254,6 +254,9 @@ TEST(JoinSpillNullReservationTest, AllIgnoredNullKeysNeedNoRowReferenceArena)
 TEST(JoinSpillNullReservationTest, NonNullBuildStillHonorsReservationDenialAndSpill)
 {
     NullReservationFixture f;
+    // 1M distinct int64 keys: the 16MB input fits, the table (2M 16-byte slots, ctrl and
+    // row references, ~58MB more) does not, so the build must be denied and spill.
+    f.listener.limit = 48LL << 20;
     f.AddRows(1 << 20, 1 << 20);
     f.EndBuild();
     EXPECT_GT(f.listener.denied, 0);
