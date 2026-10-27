@@ -803,10 +803,16 @@ int64_t OmniTaskMemoryPool::reclaim(int64_t targetBytes)
         // A successful spill or unused billed headroom permits repayment. Keep only committed bytes plus any not-yet-granted request that
         // surrounds this synchronous callback. The caller will separately
         // commit or roll back that pending delta.
-        if (pendingReservation > INT64_MAX - usedAfter) {
+        // A donor may also allocate while spilling (scratch or reused I/O
+        // buffers). Under the shield that growth was never billed, so it must
+        // consume the pending request's headroom; keeping usedAfter as the
+        // committed marker would bill it locally only and a later release
+        // would return more than the listener ever received.
+        const int64_t committedAfter = std::min(usedAfter, billableBefore);
+        if (pendingReservation > INT64_MAX - committedAfter) {
             throw std::overflow_error("OmniTaskMemoryPool: post-reclaim reservation overflow");
         }
-        billingShieldGuard.Finalize(usedAfter + pendingReservation);
+        billingShieldGuard.Finalize(committedAfter + pendingReservation);
         freed = std::max<int64_t>(0, billableBefore - usedAfter);
     } else {
         // No donor changed the pool, so restore the exact marker observed at

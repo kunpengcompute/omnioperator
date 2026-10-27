@@ -671,6 +671,59 @@ TEST(OmniTaskMemoryPoolReclaim, ShrinkReturnConsumesReservationExactlyOnce)
     pool.SubMemory(40);
 }
 
+TEST(OmniTaskMemoryPoolReclaim, DonorGrowthDuringPendingReserveStaysBilled)
+{
+    // A donor that keeps scratch it allocated while spilling grows the pool
+    // under the reclaim shield. That growth must consume the in-flight
+    // request's headroom instead of becoming locally billed reservation.
+    class GrowingSpillable : public TestSpillable {
+    public:
+        GrowingSpillable(OmniTaskMemoryPool *pool, std::vector<int> *order)
+            : TestSpillable(pool, 1, order, 1), pool_(pool) {}
+        int64_t reclaim(int64_t) override
+        {
+            pool_->AddMemory(kScratch);
+            return 1;
+        }
+        static constexpr int64_t kScratch = 64;
+    private:
+        OmniTaskMemoryPool *pool_;
+    };
+    class ReclaimingListener : public MockListener {
+    public:
+        OmniTaskMemoryPool *pool = nullptr;
+        bool reclaimNext = false;
+        void allocationChanged(int64_t diff) override
+        {
+            MockListener::allocationChanged(diff);
+            if (diff > 0 && reclaimNext) {
+                reclaimNext = false;
+                const auto freed = pool->reclaim(diff);
+                MockListener::allocationChanged(-freed);
+            }
+        }
+    } listener;
+    {
+        OmniTaskMemoryPool pool(&listener);
+        listener.pool = &pool;
+        pool.AddMemory(100);
+        std::vector<int> order;
+        GrowingSpillable donor(&pool, &order);
+        pool.registerSpillable(&donor);
+        listener.reclaimNext = true;
+
+        EXPECT_TRUE(pool.reserve(4096));
+        EXPECT_EQ(pool.currentBytes(), 100 + GrowingSpillable::kScratch);
+        EXPECT_EQ(listener.totalDelta, std::max(pool.currentBytes(), pool.reservedBytes()));
+
+        pool.unregisterSpillable(&donor);
+        pool.SubMemory(pool.currentBytes());
+        pool.releaseAllReservation();
+        EXPECT_EQ(listener.totalDelta, 0);
+    }
+    EXPECT_EQ(listener.totalDelta, 0);
+}
+
 TEST(OmniTaskMemoryPoolReclaim, UnreservedUsageIsCreditedOnlyByExternalRepay)
 {
     MockListener listener;
