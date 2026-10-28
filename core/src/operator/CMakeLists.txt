@@ -26,6 +26,9 @@ install(FILES ${SOURCE_ROOT}/src/operator/config/operator_config.h DESTINATION $
 # be installed too — else gluten compile fails with "memory/global_mem_tracker.h not found".
 install(FILES ${SOURCE_ROOT}/src/memory/global_mem_tracker.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/memory)
 install(FILES ${SOURCE_ROOT}/src/operator/hash_util.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
+# Gluten's memory manager, splitter and JNI wrapper include these from the installed tree.
+install(FILES ${SOURCE_ROOT}/src/operator/reclaim_context.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator)
+install(FILES ${SOURCE_ROOT}/src/operator/join/broadcast_hash_table_cache_control.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator/join)
 install(FILES ${SOURCE_ROOT}/src/operator/aggregation/udaf/udaf_registry.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator/aggregation/udaf)
 install(FILES ${SOURCE_ROOT}/src/operator/util/function_type.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator/util/)
 install(FILES ${SOURCE_ROOT}/src/operator/util/operator_util.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/operator/util/)
