@@ -58,6 +58,21 @@ public:
 private:
     bool TryEvaluateMd5ConcatWsFusion(const expressions::FuncExpr &e);
 
+    /// Lazy evaluation of an AND/OR chain: the same-op chain is flattened,
+    /// operands are ordered by estimated cost (constants first), and each
+    /// operand runs only on the rows no earlier operand has decided. FALSE
+    /// decides an AND row, TRUE decides an OR row, NULLs taint without
+    /// deciding (three-valued logic, identical to AndFunction/OrFunction).
+    void VisitLazyLogical(const expressions::BinaryExpr &e);
+
+    /// True when an AND/OR operand can run through the original eager
+    /// AndFunction/OrFunction merge: a bare column reference whose top-level
+    /// batch column is a flat vector. The eager merge's value reader ignores
+    /// nulls on constants and throws on dictionary encodings, so literals
+    /// (folded by the lazy loop), dictionary/const columns, and lambda
+    /// parameters must take the lazy path instead.
+    bool IsFlatBoolColumnOperand(const expressions::Expr *operand) const;
+
     /// Number of rows of the expression space currently being evaluated. When
     /// activeSel_ is set the evaluator works on a compacted subset of rows;
     /// otherwise it works on the full batch.
