@@ -742,6 +742,24 @@ public:
         container->SetValue(index, value);
     }
 
+    // Batch materialization is only valid for an independently allocated output vector.
+    void SetValues(int32_t index, const std::string_view *values, const uint8_t *nulls, int32_t count)
+    {
+        if (this->IsSliced() || this->offset != 0 || index < 0 || count < 0 ||
+            index > this->size || count > this->size - index) {
+            throw OmniException("OPERATOR_RUNTIME_ERROR", "invalid batch string output vector or range");
+        }
+        container->SetValues(index, values, nulls, count);
+        this->SetNulls(index, false, count);
+        if (nulls != nullptr) {
+            for (int32_t i = 0; i < count; ++i) {
+                if (nulls[i]) {
+                    BaseVector::SetNull(index + i);
+                }
+            }
+        }
+    }
+
     /* *
      * Gets the value of the vector at the indicated index
      * @param index
@@ -757,6 +775,10 @@ public:
     {
         if (container && !this->isSliced) {
             container->ResetForReuse(this->size);
+            // Resize may have reduced the logical size while the shared null buffer
+            // still spans capacity. Clear it all before invalidating the cached flag.
+            this->nullsBuffer->SetNulls(0, false, this->capacity);
+            this->SetNullFlag(false);
         }
     }
 

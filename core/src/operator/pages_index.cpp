@@ -3,6 +3,7 @@
  * @Description: pages index implementations
  */
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include "vector/vector.h"
 #include "vector/array_vector.h"
@@ -2007,6 +2008,7 @@ void PagesIndex::GetOutput(int32_t *outputCols, int32_t outputColsCount, VectorB
     BaseVector ***inputVecBatches = this->columns;
     uint64_t *vaStart = valueAddresses + offset;
 
+
     for (int32_t j = 0; j < outputColsCount; j++) {
         const int32_t outputCol = outputCols[j];
         const int32_t colTypeId = sourceTypes[outputCol];
@@ -2343,6 +2345,9 @@ NO_INLINE void ConstructVectorRadixSort(const uint8_t *vaStart, int32_t length, 
 void PagesIndex::SetSpillVecBatch(vec::VectorBatch *spillVecBatch, std::vector<int32_t> &outputCols, uint64_t rowOffset,
     bool canInplaceSort, bool canRadixSort)
 {
+    // Spill batches are reused and rewritten from row zero. Resize only changes the
+    // logical size, so reset top-level string offsets and null state explicitly.
+    VectorHelper::ResetVarcharVectorsForReuse(spillVecBatch);
     const int32_t outputColsCount = static_cast<int32_t>(outputCols.size());
     const int32_t offset = static_cast<int32_t>(rowOffset);
     const int32_t rowCount = spillVecBatch->GetRowCount();

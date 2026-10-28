@@ -3,6 +3,7 @@
  */
 
 #include "large_string_container.h"
+#include <limits>
 
 namespace omniruntime::vec {
 template<typename RAW_DATA_TYPE>
@@ -41,6 +42,60 @@ void LargeStringContainer<RAW_DATA_TYPE>::SetValue(int index, const std::string_
     }
     offsets[index + 1] = needCapacityInBytes;
     lastOffsetPosition = index;
+}
+
+template<typename RAW_DATA_TYPE>
+void LargeStringContainer<RAW_DATA_TYPE>::SetValues(int32_t index, const std::string_view *values,
+    const uint8_t *nulls, int32_t count)
+{
+    if (index < 0 || count < 0 || index > size || count > size - index || (count > 0 && values == nullptr)) {
+        throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "invalid batch string range");
+    }
+    if (count == 0) {
+        return;
+    }
+
+    // The payload is append-only: changing an already materialized offset would also
+    // require moving every following value. Gaps are supported and FillSlots will
+    // propagate the current end offset over them.
+    const uint32_t nextPosition = lastOffsetPosition + 1;
+    if (static_cast<uint32_t>(index) < nextPosition) {
+        throw omniruntime::exception::OmniException(
+            "STRING_CONTAINER_ERROR", "batch string overwrite is not supported");
+    }
+
+    // Validate the whole payload before changing offsets or reallocating storage
+    // referenced by a source.
+    uint64_t bytes = offsets[nextPosition];
+    const auto bufferAddress = reinterpret_cast<uintptr_t>(bufferSupplier->Data());
+    for (int32_t i = 0; i < count; ++i) {
+        if (nulls != nullptr && nulls[i]) {
+            continue;
+        }
+        const auto &value = values[i];
+        if (value.size() > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) - bytes) {
+            throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "batch string offsets overflow");
+        }
+        if (!value.empty() && reinterpret_cast<uintptr_t>(value.data()) - bufferAddress < bufferSupplier->Capacity()) {
+            throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "batch string source aliases output");
+        }
+        bytes += value.size();
+    }
+
+    char *destination = GetBufferWithSpace(static_cast<uint32_t>(bytes));
+    FillSlots(index);
+    int32_t position = offsets[index];
+    for (int32_t i = 0; i < count; ++i) {
+        if (nulls == nullptr || !nulls[i]) {
+            const auto &value = values[i];
+            if (!value.empty()) {
+                memcpy(destination + position, value.data(), value.size());
+                position += static_cast<int32_t>(value.size());
+            }
+        }
+        offsets[index + i + 1] = position;
+    }
+    lastOffsetPosition = static_cast<uint32_t>(index + count - 1);
 }
 
 /* *

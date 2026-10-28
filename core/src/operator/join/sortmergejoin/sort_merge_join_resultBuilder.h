@@ -158,6 +158,13 @@ private:
 
     void EnsureBuildVectorBatchCapacity(int32_t rowCount);
 
+    void CopyOutputSegment(BaseVector *inputVector, const DataTypePtr &inputType, const int32_t *rows,
+        int32_t rowCount, BaseVector *outputVector, int32_t outputRowId);
+
+    void CopyOutputSelection(const std::vector<int32_t> &batchIds, const std::vector<int32_t> &rowIds,
+        DynamicPagesIndex *pagesIndex, const std::vector<DataTypePtr> &outputTypes, const int32_t *outputCols,
+        int32_t outputColsCount, int32_t columnOffset, int32_t rowBase);
+
     void UpdateLeftAntiJoinHandler(int32_t addressPosition, std::vector<int8_t> &isSameBufferedKeyMatched,
         int32_t inputSize);
 
@@ -224,6 +231,10 @@ private:
     bool *nulls = nullptr;
     int32_t *lengths = nullptr;
     JoinType joinType;
+    // Scratch reused across segments and columns of one builder. Every slot is
+    // rewritten before SetValues reads it, so stale nulls cannot leak between columns.
+    std::vector<std::string_view> batchVarcharValues;
+    std::vector<uint8_t> batchVarcharNulls;
 
     bool isPreRowMatched = false;
     int32_t addressOffset = 0;
@@ -243,7 +254,13 @@ private:
     std::vector<int32_t> rightOutputBatchIds;
     std::vector<int32_t> rightOutputRowIds;
 
-    void SetRightNullRangeForColumn(BaseVector *vector, const DataTypePtr &dataType, int32_t startRow, int32_t endRow);
+    void SetRightNullRangeForColumn(BaseVector *vector, const DataTypePtr &dataType, int32_t startRow,
+        int32_t endRow);
+
+    // Gathers one flat VARCHAR segment into the scratch views and writes it with a
+    // single SetValues. Returns false (output untouched) for non-flat source encodings.
+    bool TryBatchVarcharSegment(BaseVector *inputVector, BaseVector *outputVector, const int32_t *rows,
+        int32_t rowCount, int32_t outputRowId);
 };
 }
 }

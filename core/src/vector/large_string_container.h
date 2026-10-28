@@ -23,6 +23,11 @@ public:
 
     void SetValue(int index, const std::string_view &value);
 
+    // Append and deep-copy a sequential output range after reserving its payload once.
+    // Already materialized rows cannot be overwritten. Source views must not refer to
+    // this container; nulls may be nullptr for an all-non-null range.
+    void SetValues(int32_t index, const std::string_view *values, const uint8_t *nulls, int32_t count);
+
     /* *
      * set the element at the index position to null
      * @param index
