@@ -11,15 +11,18 @@
 
 #include "test/util/test_util.h"
 #include "vectorization/registration/Register.h"
+#include "vectorization/ExprEval.h"
 #include "vectorization/functions/If.h"
 #include "vectorization/registration/SimpleFunctionRegistry.h"
 #include "vectorization/VectorFunction.h"
 #include "codegen/func_signature.h"
+#include "expression/expressions.h"
 #include "vector/vector_helper.h"
 #include "vector/vector.h"
 #include "vector/array_vector.h"
 #include "vector/map_vector.h"
 #include "vector/row_vector.h"
+#include "VectorTestUtil.h"
 
 using namespace omniruntime;
 using namespace omniruntime::vec;
@@ -28,7 +31,9 @@ using namespace omniruntime::mem;
 using namespace omniruntime::op;
 using namespace omniruntime::type;
 using namespace omniruntime::codegen;
+using namespace omniruntime::expressions;
 using namespace omniruntime::TestUtil;
+using namespace omniruntime::VectorTestUtil;
 
 class IfTestEnvironment : public ::testing::Environment {
 public:
@@ -91,108 +96,6 @@ public:
         }
     }
 
-    template<typename T>
-    static BaseVector* CreateNumericVector(const std::vector<T>& values, DataTypeId typeId) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, values.size());
-        auto* typedVec = static_cast<Vector<T>*>(vec);
-        for (size_t i = 0; i < values.size(); ++i) {
-            typedVec->SetValue(i, values[i]);
-        }
-        return vec;
-    }
-
-    static BaseVector* CreateBooleanVector(const std::vector<bool>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, values.size());
-        auto* typedVec = static_cast<Vector<bool>*>(vec);
-        for (size_t i = 0; i < values.size(); ++i) {
-            typedVec->SetValue(i, values[i]);
-        }
-        return vec;
-    }
-
-    static BaseVector* CreateStringVector(const std::vector<std::string>& values, DataTypeId typeId = OMNI_VARCHAR) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, values.size());
-        auto* typedVec = dynamic_cast<Vector<LargeStringContainer<std::string_view>>*>(vec);
-        for (size_t i = 0; i < values.size(); ++i) {
-            std::string_view sv(values[i]);
-            typedVec->SetValue(i, sv);
-        }
-        return vec;
-    }
-
-    static BaseVector* CreateArrayVector(const std::vector<std::vector<int32_t>>& arrays) {
-        int32_t totalElements = 0;
-        for (const auto& arr : arrays) {
-            totalElements += arr.size();
-        }
-        auto elemVec = std::shared_ptr<BaseVector>(
-            VectorHelper::CreateFlatVector(OMNI_INT, totalElements));
-        auto* arrayVec = new ArrayVector(arrays.size(), elemVec);
-
-        for (size_t row = 0; row < arrays.size(); ++row) {
-            const auto& arr = arrays[row];
-            auto* tempElem = VectorHelper::CreateFlatVector(OMNI_INT, arr.size());
-            auto* typedElem = static_cast<Vector<int32_t>*>(tempElem);
-            for (size_t i = 0; i < arr.size(); ++i) {
-                typedElem->SetValue(i, arr[i]);
-            }
-            arrayVec->SetValue(row, tempElem);
-            delete tempElem;
-        }
-        return arrayVec;
-    }
-
-    static BaseVector* CreateMapVector(const std::vector<std::vector<std::pair<std::string, int32_t>>>& maps) {
-        int32_t totalEntries = 0;
-        for (const auto& m : maps) {
-            totalEntries += m.size();
-        }
-
-        auto keyVec = std::shared_ptr<BaseVector>(
-            VectorHelper::CreateFlatVector(OMNI_VARCHAR, totalEntries));
-        auto valVec = std::shared_ptr<BaseVector>(
-            VectorHelper::CreateFlatVector(OMNI_INT, totalEntries));
-        auto* mapVec = new MapVector(maps.size(), keyVec, valVec);
-
-        int32_t offset = 0;
-        for (size_t row = 0; row < maps.size(); ++row) {
-            const auto& m = maps[row];
-            int32_t mapSize = m.size();
-            for (size_t i = 0; i < m.size(); ++i) {
-                auto* typedKeys = static_cast<Vector<LargeStringContainer<std::string_view>>*>(keyVec.get());
-                auto* typedVals = static_cast<Vector<int32_t>*>(valVec.get());
-                typedKeys->Expand(offset + i + 1);
-                typedVals->Expand(offset + i + 1);
-                std::string_view keySv(m[i].first);
-                typedKeys->SetValue(offset + i, keySv);
-                typedVals->SetValue(offset + i, m[i].second);
-            }
-            mapVec->SetSize(row, mapSize);
-            offset += mapSize;
-        }
-        return mapVec;
-    }
-
-    static BaseVector* CreateRowVector(const std::vector<std::pair<std::string, int32_t>>& rows) {
-        int32_t size = rows.size();
-        auto* rowVec = new RowVector(size);
-
-        auto* strChild = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
-        auto* intChild = VectorHelper::CreateFlatVector(OMNI_INT, size);
-        auto* typedStr = static_cast<Vector<LargeStringContainer<std::string_view>>*>(strChild);
-        auto* typedInt = static_cast<Vector<int32_t>*>(intChild);
-
-        for (size_t i = 0; i < rows.size(); ++i) {
-            std::string_view sv(rows[i].first);
-            typedStr->SetValue(i, sv);
-            typedInt->SetValue(i, rows[i].second);
-        }
-
-        rowVec->AddChild(strChild);
-        rowVec->AddChild(intChild);
-        return rowVec;
-    }
-
     static void ExecuteIf(BaseVector* condVec, BaseVector* trueVec, BaseVector* falseVec,
                           DataTypeId outputTypeId, BaseVector*& result) {
         auto signature = std::make_shared<FunctionSignature>("if",
@@ -221,9 +124,9 @@ TEST(IfTest, BooleanIfMixed) {
     std::vector<bool> falseValues = {false, false, true};
     std::vector<bool> expected = {true, false, false};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateBooleanVector(trueValues);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateBooleanVector(falseValues);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateBooleanVector(trueValues);
+    BaseVector* falseVec = CreateBooleanVector(falseValues);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_BOOLEAN, resultVec);
@@ -238,9 +141,9 @@ TEST(IfTest, BooleanIfNullCondition) {
     std::vector<bool> trueValues = {true, true, false};
     std::vector<bool> falseValues = {false, false, true};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateBooleanVector(trueValues);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateBooleanVector(falseValues);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateBooleanVector(trueValues);
+    BaseVector* falseVec = CreateBooleanVector(falseValues);
 
     condVec->SetNull(1);
 
@@ -266,9 +169,9 @@ TEST(IfTest, ByteIfMixed) {
     std::vector<int8_t> falseValues = {40, 50, 60};
     std::vector<int8_t> expected = {10, 50, 30};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_BYTE);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_BYTE);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_BYTE);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_BYTE);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_BYTE, resultVec);
@@ -284,9 +187,9 @@ TEST(IfTest, ShortIfMixed) {
     std::vector<int16_t> falseValues = {4000, 5000, 6000};
     std::vector<int16_t> expected = {1000, 5000, 3000};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_SHORT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_SHORT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_SHORT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_SHORT);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_SHORT, resultVec);
@@ -302,9 +205,9 @@ TEST(IfTest, IntIfTrue) {
     std::vector<int32_t> falseValues = {400, 500, 600};
     std::vector<int32_t> expected = {100, 200, 300};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_INT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_INT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_INT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_INT);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_INT, resultVec);
@@ -320,9 +223,9 @@ TEST(IfTest, IntIfFalse) {
     std::vector<int32_t> falseValues = {400, 500, 600};
     std::vector<int32_t> expected = {400, 500, 600};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_INT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_INT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_INT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_INT);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_INT, resultVec);
@@ -338,9 +241,9 @@ TEST(IfTest, IntIfMixed) {
     std::vector<int32_t> falseValues = {400, 500, 600};
     std::vector<int32_t> expected = {100, 500, 300};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_INT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_INT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_INT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_INT);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_INT, resultVec);
@@ -355,9 +258,9 @@ TEST(IfTest, IntIfNullCondition) {
     std::vector<int32_t> trueValues = {100, 200, 300};
     std::vector<int32_t> falseValues = {400, 500, 600};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_INT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_INT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_INT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_INT);
 
     condVec->SetNull(1);
 
@@ -382,9 +285,9 @@ TEST(IfTest, IntIfNullTrueValue) {
     std::vector<int32_t> trueValues = {100, 200, 300};
     std::vector<int32_t> falseValues = {400, 500, 600};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_INT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_INT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_INT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_INT);
 
     trueVec->SetNull(0);
 
@@ -405,9 +308,9 @@ TEST(IfTest, LongIfMixed) {
     std::vector<int64_t> falseValues = {400LL, 500LL, 600LL};
     std::vector<int64_t> expected = {100LL, 500LL, 300LL};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_LONG);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_LONG);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_LONG);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_LONG);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_LONG, resultVec);
@@ -423,9 +326,9 @@ TEST(IfTest, FloatIfMixed) {
     std::vector<float> falseValues = {400.1f, 500.3f, 600.5f};
     std::vector<float> expected = {100.5f, 500.3f, 300.9f};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_FLOAT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_FLOAT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_FLOAT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_FLOAT);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_FLOAT, resultVec);
@@ -441,9 +344,9 @@ TEST(IfTest, DoubleIfMixed) {
     std::vector<double> falseValues = {400.1, 500.3, 600.5};
     std::vector<double> expected = {100.5, 500.3, 300.9};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_DOUBLE);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_DOUBLE);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_DOUBLE);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_DOUBLE);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_DOUBLE, resultVec);
@@ -459,9 +362,9 @@ TEST(IfTest, StringIfMixed) {
     std::vector<std::string> falseValues = {"foo", "bar", "baz"};
     std::vector<std::string> expected = {"hello", "bar", "test"};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateStringVector(trueValues);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateStringVector(falseValues);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateStringVector(trueValues);
+    BaseVector* falseVec = CreateStringVector(falseValues);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_VARCHAR, resultVec);
@@ -476,9 +379,9 @@ TEST(IfTest, StringIfNullCondition) {
     std::vector<std::string> trueValues = {"hello", "world", "test"};
     std::vector<std::string> falseValues = {"foo", "bar", "baz"};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateStringVector(trueValues);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateStringVector(falseValues);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateStringVector(trueValues);
+    BaseVector* falseVec = CreateStringVector(falseValues);
 
     condVec->SetNull(1);
 
@@ -499,9 +402,9 @@ TEST(IfTest, TimestampIfMixed) {
     std::vector<int64_t> falseValues = {0LL, 86400000000LL, 172800000000LL};
     std::vector<int64_t> expected = {1706522730000000LL, 86400000000LL, 1706695530000000LL};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_TIMESTAMP);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_TIMESTAMP);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_TIMESTAMP);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_TIMESTAMP);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_TIMESTAMP, resultVec);
@@ -516,9 +419,9 @@ TEST(IfTest, TimestampIfNullCondition) {
     std::vector<int64_t> trueValues = {1000000LL, 2000000LL, 3000000LL};
     std::vector<int64_t> falseValues = {4000000LL, 5000000LL, 6000000LL};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_TIMESTAMP);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_TIMESTAMP);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_TIMESTAMP);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_TIMESTAMP);
 
     condVec->SetNull(0);
 
@@ -539,9 +442,9 @@ TEST(IfTest, BinaryIfMixed) {
     std::vector<std::string> falseValues = {"bin_x", "bin_y", "bin_z"};
     std::vector<std::string> expected = {"binary_a", "bin_y", "binary_c"};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateStringVector(trueValues, OMNI_VARBINARY);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateStringVector(falseValues, OMNI_VARBINARY);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateStringVector(trueValues, OMNI_VARBINARY);
+    BaseVector* falseVec = CreateStringVector(falseValues, OMNI_VARBINARY);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_VARBINARY, resultVec);
@@ -556,9 +459,9 @@ TEST(IfTest, BinaryIfNullCondition) {
     std::vector<std::string> trueValues = {"aaa", "bbb", "ccc"};
     std::vector<std::string> falseValues = {"xxx", "yyy", "zzz"};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateStringVector(trueValues, OMNI_VARBINARY);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateStringVector(falseValues, OMNI_VARBINARY);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateStringVector(trueValues, OMNI_VARBINARY);
+    BaseVector* falseVec = CreateStringVector(falseValues, OMNI_VARBINARY);
 
     condVec->SetNull(2);
 
@@ -583,9 +486,9 @@ TEST(IfTest, BinaryIfNullValue) {
     std::vector<std::string> trueValues = {"data1", "data2", "data3"};
     std::vector<std::string> falseValues = {"alt1", "alt2", "alt3"};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateStringVector(trueValues, OMNI_VARBINARY);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateStringVector(falseValues, OMNI_VARBINARY);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateStringVector(trueValues, OMNI_VARBINARY);
+    BaseVector* falseVec = CreateStringVector(falseValues, OMNI_VARBINARY);
 
     trueVec->SetNull(0);
 
@@ -605,9 +508,9 @@ TEST(IfTest, ArrayIfMixed) {
     std::vector<std::vector<int32_t>> trueArrays = {{1, 2, 3}, {4, 5}, {6}};
     std::vector<std::vector<int32_t>> falseArrays = {{10, 20}, {30, 40, 50}, {60, 70}};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateArrayVector(trueArrays);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateArrayVector(falseArrays);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateArrayVector(trueArrays);
+    BaseVector* falseVec = CreateArrayVector(falseArrays);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_ARRAY, resultVec);
@@ -643,9 +546,9 @@ TEST(IfTest, ArrayIfNullCondition) {
     std::vector<std::vector<int32_t>> trueArrays = {{1, 2}, {3, 4}, {5, 6}};
     std::vector<std::vector<int32_t>> falseArrays = {{10, 20}, {30, 40}, {50, 60}};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateArrayVector(trueArrays);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateArrayVector(falseArrays);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateArrayVector(trueArrays);
+    BaseVector* falseVec = CreateArrayVector(falseArrays);
 
     condVec->SetNull(0);
 
@@ -671,9 +574,9 @@ TEST(IfTest, ArrayIfNullValue) {
     std::vector<std::vector<int32_t>> trueArrays = {{1, 2}, {3, 4}};
     std::vector<std::vector<int32_t>> falseArrays = {{10, 20}, {30, 40}};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateArrayVector(trueArrays);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateArrayVector(falseArrays);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateArrayVector(trueArrays);
+    BaseVector* falseVec = CreateArrayVector(falseArrays);
 
     trueVec->SetNull(0);
 
@@ -700,9 +603,9 @@ TEST(IfTest, MapIfMixed) {
         {{"a2", 20}, {"a3", 30}}
     };
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateMapVector(trueMaps);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateMapVector(falseMaps);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateMapVector(trueMaps);
+    BaseVector* falseVec = CreateMapVector(falseMaps);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_MAP, resultVec);
@@ -729,9 +632,9 @@ TEST(IfTest, MapIfNullCondition) {
         {{"a3", 30}}
     };
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateMapVector(trueMaps);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateMapVector(falseMaps);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateMapVector(trueMaps);
+    BaseVector* falseVec = CreateMapVector(falseMaps);
 
     condVec->SetNull(0);
 
@@ -756,9 +659,9 @@ TEST(IfTest, RowIfMixed) {
         {"dave", 40}, {"eve", 45}, {"frank", 50}
     };
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateRowVector(trueRows);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateRowVector(falseRows);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateRowVector(trueRows);
+    BaseVector* falseVec = CreateRowVector(falseRows);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_ROW, resultVec);
@@ -793,9 +696,9 @@ TEST(IfTest, RowIfNullCondition) {
         {"dave", 40}, {"eve", 45}
     };
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateRowVector(trueRows);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateRowVector(falseRows);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateRowVector(trueRows);
+    BaseVector* falseVec = CreateRowVector(falseRows);
 
     condVec->SetNull(0);
 
@@ -822,9 +725,9 @@ TEST(IfTest, RowIfNullValue) {
         {"dave", 40}, {"eve", 45}
     };
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateRowVector(trueRows);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateRowVector(falseRows);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateRowVector(trueRows);
+    BaseVector* falseVec = CreateRowVector(falseRows);
 
     trueVec->SetNull(0);
 
@@ -844,9 +747,9 @@ TEST(IfTest, AllNullConditions) {
     std::vector<int32_t> trueValues = {100, 200, 300};
     std::vector<int32_t> falseValues = {400, 500, 600};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_INT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_INT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_INT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_INT);
 
     condVec->SetNull(0);
     condVec->SetNull(1);
@@ -870,9 +773,9 @@ TEST(IfTest, AllNullValues) {
     std::vector<int32_t> trueValues = {100, 200};
     std::vector<int32_t> falseValues = {300, 400};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_INT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_INT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_INT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_INT);
 
     trueVec->SetNull(0);
     trueVec->SetNull(1);
@@ -895,13 +798,500 @@ TEST(IfTest, SingleRow) {
     std::vector<int32_t> falseValues = {99};
     std::vector<int32_t> expected = {42};
 
-    BaseVector* condVec = IfFunctionTestHelper::CreateBooleanVector(condValues);
-    BaseVector* trueVec = IfFunctionTestHelper::CreateNumericVector(trueValues, OMNI_INT);
-    BaseVector* falseVec = IfFunctionTestHelper::CreateNumericVector(falseValues, OMNI_INT);
+    BaseVector* condVec = CreateBooleanVector(condValues);
+    BaseVector* trueVec = CreateNumericVector(trueValues, OMNI_INT);
+    BaseVector* falseVec = CreateNumericVector(falseValues, OMNI_INT);
 
     BaseVector* resultVec = nullptr;
     IfFunctionTestHelper::ExecuteIf(condVec, trueVec, falseVec, OMNI_INT, resultVec);
     IfFunctionTestHelper::ValidateNumericResult(resultVec, expected, condValues.size());
 
     delete resultVec;
+}
+
+namespace {
+BaseVector* RunIfExpr(IfExpr* ifExpr, VectorBatch* batch, int32_t rowSize)
+{
+    ExecutionContext context;
+    context.SetResultRowSize(rowSize);
+    ExprEval e(batch, &context);
+    e.VisitExpr(*ifExpr);
+    return e.GetResult();
+}
+}
+
+TEST(IfTest, LazyIfExprIntMixed)
+{
+    const int32_t rowSize = 4;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), new FieldExpr(1, intType), new FieldExpr(2, intType));
+    ASSERT_NE(ifExpr->vectorFunction, nullptr);
+
+    std::vector vecOfTypes = {BooleanType(), IntType(), IntType()};
+    DataTypes inputTypes(vecOfTypes);
+    bool cond[rowSize] = {true, false, true, false};
+    int32_t trueVals[rowSize] = {1, 2, 3, 4};
+    int32_t falseVals[rowSize] = {10, 20, 30, 40};
+    VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, cond, trueVals, falseVals);
+
+    auto* result = RunIfExpr(ifExpr, input, rowSize);
+    auto* resVec = dynamic_cast<Vector<int32_t>*>(result);
+    ASSERT_NE(resVec, nullptr);
+    EXPECT_EQ(resVec->GetValue(0), 1);
+    EXPECT_EQ(resVec->GetValue(1), 20);
+    EXPECT_EQ(resVec->GetValue(2), 3);
+    EXPECT_EQ(resVec->GetValue(3), 40);
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprComputedBranches)
+{
+    const int32_t rowSize = 4;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    auto* trueBranch = new BinaryExpr(expressions::Operator::ADD, new FieldExpr(1, intType),
+        new LiteralExpr(static_cast<int32_t>(1), intType), intType);
+    auto* falseBranch = new BinaryExpr(expressions::Operator::SUB, new FieldExpr(2, intType),
+        new LiteralExpr(static_cast<int32_t>(1), intType), intType);
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), trueBranch, falseBranch);
+    ASSERT_NE(ifExpr->vectorFunction, nullptr);
+
+    std::vector vecOfTypes = {BooleanType(), IntType(), IntType()};
+    DataTypes inputTypes(vecOfTypes);
+    bool cond[rowSize] = {true, false, true, false};
+    int32_t a[rowSize] = {1, 2, 3, 4};
+    int32_t b[rowSize] = {10, 20, 30, 40};
+    VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, cond, a, b);
+
+    auto* result = RunIfExpr(ifExpr, input, rowSize);
+    auto* resVec = dynamic_cast<Vector<int32_t>*>(result);
+    ASSERT_NE(resVec, nullptr);
+    EXPECT_EQ(resVec->GetValue(0), 2);    // a[0] + 1
+    EXPECT_EQ(resVec->GetValue(1), 19);   // b[1] - 1
+    EXPECT_EQ(resVec->GetValue(2), 4);    // a[2] + 1
+    EXPECT_EQ(resVec->GetValue(3), 39);   // b[3] - 1
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprNullCondition)
+{
+    const int32_t rowSize = 3;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), new FieldExpr(1, intType), new FieldExpr(2, intType));
+
+    std::vector vecOfTypes = {BooleanType(), IntType(), IntType()};
+    DataTypes inputTypes(vecOfTypes);
+    bool cond[rowSize] = {true, false, true};
+    int32_t trueVals[rowSize] = {1, 2, 3};
+    int32_t falseVals[rowSize] = {10, 20, 30};
+    VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, cond, trueVals, falseVals);
+    input->Get(0)->SetNull(1);
+    input->Get(1)->SetNull(2);   // true branch value is NULL at row 2
+
+    auto* result = RunIfExpr(ifExpr, input, rowSize);
+    auto* resVec = dynamic_cast<Vector<int32_t>*>(result);
+    ASSERT_NE(resVec, nullptr);
+    EXPECT_EQ(resVec->GetValue(0), 1);
+    EXPECT_EQ(resVec->GetValue(1), 20);    // NULL condition takes the false branch
+    EXPECT_TRUE(resVec->IsNull(2));        // NULL true value is preserved
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprStringBranches)
+{
+    const int32_t rowSize = 3;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto strType = std::make_shared<DataType>(OMNI_VARCHAR);
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), new FieldExpr(1, strType), new FieldExpr(2, strType));
+
+    std::vector vecOfTypes = {BooleanType(), VarcharType(), VarcharType()};
+    DataTypes inputTypes(vecOfTypes);
+    bool cond[rowSize] = {true, false, true};
+    std::string trueVals[rowSize] = {"hello", "world", "test"};
+    std::string falseVals[rowSize] = {"foo", "bar", "baz"};
+    VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, cond, trueVals, falseVals);
+
+    auto* result = RunIfExpr(ifExpr, input, rowSize);
+    auto* resVec = dynamic_cast<Vector<LargeStringContainer<std::string_view>>*>(result);
+    ASSERT_NE(resVec, nullptr);
+    EXPECT_EQ(resVec->GetValue(0), "hello");
+    EXPECT_EQ(resVec->GetValue(1), "bar");
+    EXPECT_EQ(resVec->GetValue(2), "test");
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprConstConditionShortCircuitsFalseBranch)
+{
+    const int32_t rowSize = 3;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    // The false branch references a function that is not registered: with lazy
+    // evaluation and a constant true condition it must never be visited.
+    auto* falseBranch = new FuncExpr("not_a_registered_function",
+        std::vector<Expr*>{new FieldExpr(0, intType)}, intType);
+    auto* ifExpr = new IfExpr(new LiteralExpr(true, boolType), new FieldExpr(0, intType), falseBranch);
+    ASSERT_NE(ifExpr->vectorFunction, nullptr);
+
+    std::vector vecOfTypes = {IntType()};
+    DataTypes inputTypes(vecOfTypes);
+    int32_t col[rowSize] = {1, 2, 3};
+    VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, col);
+
+    BaseVector* result = nullptr;
+    ASSERT_NO_THROW(result = RunIfExpr(ifExpr, input, rowSize));
+    auto* resVec = dynamic_cast<Vector<int32_t>*>(result);
+    ASSERT_NE(resVec, nullptr);
+    EXPECT_EQ(resVec->GetValue(0), 1);
+    EXPECT_EQ(resVec->GetValue(1), 2);
+    EXPECT_EQ(resVec->GetValue(2), 3);
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprNested)
+{
+    const int32_t rowSize = 3;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    auto* innerIf = new IfExpr(new FieldExpr(1, boolType), new FieldExpr(2, intType), new FieldExpr(3, intType));
+    auto* outerIf = new IfExpr(new FieldExpr(0, boolType), innerIf, new FieldExpr(4, intType));
+    ASSERT_NE(outerIf->vectorFunction, nullptr);
+
+    std::vector vecOfTypes = {BooleanType(), BooleanType(), IntType(), IntType(), IntType()};
+    DataTypes inputTypes(vecOfTypes);
+    bool cond1[rowSize] = {true, false, true};
+    bool cond2[rowSize] = {true, true, false};
+    int32_t a[rowSize] = {1, 2, 3};
+    int32_t b[rowSize] = {10, 20, 30};
+    int32_t c[rowSize] = {100, 200, 300};
+    VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, cond1, cond2, a, b, c);
+
+    auto* result = RunIfExpr(outerIf, input, rowSize);
+    auto* resVec = dynamic_cast<Vector<int32_t>*>(result);
+    ASSERT_NE(resVec, nullptr);
+    EXPECT_EQ(resVec->GetValue(0), 1);    // cond1 true, cond2 true -> a
+    EXPECT_EQ(resVec->GetValue(1), 200);  // cond1 false -> c
+    EXPECT_EQ(resVec->GetValue(2), 30);   // cond1 true, cond2 false -> b
+
+    delete result;
+    delete input;
+    delete outerIf;
+}
+
+TEST(IfTest, LazyIfExprUnderFilter)
+{
+    const int32_t rowSize = 4;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    auto* trueBranch = new BinaryExpr(expressions::Operator::ADD, new FieldExpr(1, intType),
+        new LiteralExpr(static_cast<int32_t>(1), intType), intType);
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), trueBranch, new FieldExpr(2, intType));
+    ASSERT_NE(ifExpr->vectorFunction, nullptr);
+
+    std::vector vecOfTypes = {BooleanType(), IntType(), IntType()};
+    DataTypes inputTypes(vecOfTypes);
+    bool cond[rowSize] = {true, false, true, false};
+    int32_t a[rowSize] = {1, 2, 3, 4};
+    int32_t b[rowSize] = {10, 20, 30, 40};
+    VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, cond, a, b);
+
+    bool mask[rowSize] = {true, true, false, false};
+    ExecutionContext context;
+    context.SetResultRowSize(rowSize);
+    context.hasFilter = true;
+    context.SetIsSelectRow(mask);
+
+    ExprEval e(input, &context);
+    e.VisitExpr(*ifExpr);
+    auto* result = e.GetResult();
+
+    auto* resVec = dynamic_cast<Vector<int32_t>*>(result);
+    ASSERT_NE(resVec, nullptr);
+    EXPECT_EQ(resVec->GetSize(), 2);
+    EXPECT_EQ(resVec->GetValue(0), 2);    // row 0 selected: cond true -> a[0] + 1
+    EXPECT_EQ(resVec->GetValue(1), 20);   // row 1 selected: cond false -> b[1]
+    EXPECT_TRUE(context.hasFilter);
+    EXPECT_EQ(context.GetIsSelectRow(), static_cast<bool*>(mask));
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprArrayBranches)
+{
+    const int32_t rowSize = 3;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto arrayType = std::make_shared<ArrayType>(std::make_shared<DataType>(OMNI_INT));
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), new FieldExpr(1, arrayType), new FieldExpr(2, arrayType));
+    ASSERT_NE(ifExpr->vectorFunction, nullptr);
+
+    auto* input = new VectorBatch(rowSize);
+    input->Append(CreateBooleanVector({true, false, true}));
+    input->Append(CreateArrayVector({{1, 2}, {3}, {4, 5, 6}}));
+    input->Append(CreateArrayVector({{9}, {8, 7}, {6}}));
+
+    auto* result = RunIfExpr(ifExpr, input, rowSize);
+    auto* resArr = dynamic_cast<ArrayVector*>(result);
+    ASSERT_NE(resArr, nullptr);
+    EXPECT_EQ(resArr->GetSize(static_cast<int64_t>(0)), 2);
+    EXPECT_EQ(resArr->GetSize(static_cast<int64_t>(1)), 2);
+    EXPECT_EQ(resArr->GetSize(static_cast<int64_t>(2)), 3);
+
+    BaseVector* row0 = resArr->GetValue(0);
+    EXPECT_EQ(static_cast<Vector<int32_t>*>(row0)->GetValue(0), 1);
+    EXPECT_EQ(static_cast<Vector<int32_t>*>(row0)->GetValue(1), 2);
+    delete row0;
+
+    BaseVector* row1 = resArr->GetValue(1);
+    EXPECT_EQ(static_cast<Vector<int32_t>*>(row1)->GetValue(0), 8);
+    EXPECT_EQ(static_cast<Vector<int32_t>*>(row1)->GetValue(1), 7);
+    delete row1;
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprMapBranches)
+{
+    const int32_t rowSize = 3;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto mapType = std::make_shared<MapType>(std::make_shared<DataType>(OMNI_VARCHAR),
+        std::make_shared<DataType>(OMNI_INT));
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), new FieldExpr(1, mapType), new FieldExpr(2, mapType));
+    ASSERT_NE(ifExpr->vectorFunction, nullptr);
+
+    auto* input = new VectorBatch(rowSize);
+    input->Append(CreateBooleanVector({true, false, true}));
+    input->Append(CreateMapVector({{{"k1", 1}}, {{"k2", 2}}, {{"k3", 3}}}));
+    input->Append(CreateMapVector({{{"a1", 10}}, {{"a2", 20}, {"a3", 30}}, {{"a4", 40}}}));
+
+    auto* result = RunIfExpr(ifExpr, input, rowSize);
+    auto* resMap = dynamic_cast<MapVector*>(result);
+    ASSERT_NE(resMap, nullptr);
+    EXPECT_EQ(resMap->GetSize(static_cast<int64_t>(0)), 1);  // true branch {"k1": 1}
+    EXPECT_EQ(resMap->GetSize(static_cast<int64_t>(1)), 2);  // false branch {"a2": 20, "a3": 30}
+    EXPECT_EQ(resMap->GetSize(static_cast<int64_t>(2)), 1);  // true branch {"k3": 3}
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprRowBranches)
+{
+    const int32_t rowSize = 3;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    std::vector<std::shared_ptr<DataType>> rowFields = {std::make_shared<DataType>(OMNI_VARCHAR),
+        std::make_shared<DataType>(OMNI_INT)};
+    auto rowType = std::make_shared<RowType>(rowFields);
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), new FieldExpr(1, rowType), new FieldExpr(2, rowType));
+    ASSERT_NE(ifExpr->vectorFunction, nullptr);
+
+    auto* input = new VectorBatch(rowSize);
+    input->Append(CreateBooleanVector({true, false, true}));
+    input->Append(CreateRowVector({{"alice", 25}, {"bob", 30}, {"charlie", 35}}));
+    input->Append(CreateRowVector({{"dave", 40}, {"eve", 45}, {"frank", 50}}));
+
+    auto* result = RunIfExpr(ifExpr, input, rowSize);
+    auto* resRow = dynamic_cast<RowVector*>(result);
+    ASSERT_NE(resRow, nullptr);
+    auto* strChild = dynamic_cast<Vector<LargeStringContainer<std::string_view>>*>(resRow->ChildAt(0).get());
+    auto* intChild = dynamic_cast<Vector<int32_t>*>(resRow->ChildAt(1).get());
+    ASSERT_NE(strChild, nullptr);
+    ASSERT_NE(intChild, nullptr);
+    EXPECT_EQ(strChild->GetValue(0), "alice");
+    EXPECT_EQ(intChild->GetValue(0), 25);
+    EXPECT_EQ(strChild->GetValue(1), "eve");
+    EXPECT_EQ(intChild->GetValue(1), 45);
+    EXPECT_EQ(strChild->GetValue(2), "charlie");
+    EXPECT_EQ(intChild->GetValue(2), 35);
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprInsideLambda)
+{
+    // transform(arr, x -> if(x > 3, x, 0)): exercises lazy IF evaluation over the
+    // lambda input space, where branches are lambda params instead of batch columns.
+    int rowSize = 3;
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto types = DataTypes({intType});
+    std::vector vecOfTypes = {IntType(), IntType()};
+    DataTypes inputTypes(vecOfTypes);
+    int32_t col[] = {1, 2, 3, 4, 5};
+    std::vector<int32_t> offset = {0, 3, 4, 5};
+    auto* input = CreateArrayVectorBatch(types, offset, rowSize, 5, col);
+    std::vector<DataTypePtr> paramTypes;
+    paramTypes.push_back(IntType());
+    ParamRefExpr* param = new ParamRefExpr("x", IntType());
+    BinaryExpr* cond = new BinaryExpr(expressions::Operator::GT, param, new LiteralExpr(3, IntType()), boolType);
+    auto* ifBody = new IfExpr(cond, new ParamRefExpr("x", IntType()), new LiteralExpr(0, IntType()));
+    ASSERT_NE(ifBody->vectorFunction, nullptr);
+    std::unordered_map<std::string, int32_t> paramNameToIdxMap;
+    paramNameToIdxMap.emplace("x", 0);
+    auto* expr = new FuncExpr("transform", {
+            new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY)),
+            new LambdaExpr(ifBody, paramTypes, paramNameToIdxMap, IntType())
+    }, std::make_shared<DataType>(OMNI_ARRAY));
+
+    ExecutionContext context;
+    context.SetResultRowSize(rowSize);
+    ExprEval e(input, &context);
+    e.VisitExpr(*expr);
+    auto* result = e.GetResult();
+
+    auto* arrVec = dynamic_cast<ArrayVector*>(result);
+    ASSERT_NE(arrVec, nullptr);
+    auto* element = dynamic_cast<Vector<int32_t>*>(arrVec->GetElementVector().get());
+    ASSERT_NE(element, nullptr);
+    int32_t expect[] = {0, 0, 0, 4, 5};
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(element->GetValue(i), expect[i]);
+    }
+
+    delete input;
+    delete result;
+    delete expr;
+}
+
+TEST(IfTest, LazyIfExprInsideLambdaUnderFilter)
+{
+    // Filtered batch + IF inside a lambda: the lambda space is the flattened
+    // elements (6 > 3 batch rows), so the batch filter mask must not be applied
+    // to it — it is defined over batch rows only. Regresses the mask over-read
+    // and the out-of-bounds branch selection of the lazy-IF filtered path.
+    const int32_t rowSize = 3;
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto types = DataTypes({intType});
+    int32_t col[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    std::vector<int32_t> offset = {0, 6, 7, 8};
+    auto* input = CreateArrayVectorBatch(types, offset, rowSize, 8, col);
+    std::vector<DataTypePtr> paramTypes;
+    paramTypes.push_back(IntType());
+    ParamRefExpr* param = new ParamRefExpr("x", IntType());
+    BinaryExpr* cond = new BinaryExpr(expressions::Operator::GT, param, new LiteralExpr(3, IntType()), boolType);
+    auto* ifBody = new IfExpr(cond, new ParamRefExpr("x", IntType()), new LiteralExpr(0, IntType()));
+    ASSERT_NE(ifBody->vectorFunction, nullptr);
+    std::unordered_map<std::string, int32_t> paramNameToIdxMap;
+    paramNameToIdxMap.emplace("x", 0);
+    auto* expr = new FuncExpr("transform", {
+            new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY)),
+            new LambdaExpr(ifBody, paramTypes, paramNameToIdxMap, IntType())
+    }, std::make_shared<DataType>(OMNI_ARRAY));
+
+    bool mask[rowSize] = {true, false, false};
+    ExecutionContext context;
+    context.SetResultRowSize(rowSize);
+    context.hasFilter = true;
+    context.SetIsSelectRow(mask);
+
+    ExprEval e(input, &context);
+    e.VisitExpr(*expr);
+    auto* result = e.GetResult();
+
+    auto* arrVec = dynamic_cast<ArrayVector*>(result);
+    ASSERT_NE(arrVec, nullptr);
+    EXPECT_EQ(arrVec->GetSize(), 1);   // only row 0 passes the batch filter
+    auto* element = dynamic_cast<Vector<int32_t>*>(arrVec->GetElementVector().get());
+    ASSERT_NE(element, nullptr);
+    int32_t expect[] = {0, 0, 0, 4, 5, 6};
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(element->GetValue(i), expect[i]);
+    }
+
+    delete input;
+    delete result;
+    delete expr;
+}
+
+TEST(IfTest, LazyIfExprComputedStringBranches)
+{
+    // IF(cond, lower(a), b): expensive string branch merged through the ordered,
+    // type-specialized merge path.
+    const int32_t rowSize = 4;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto strType = std::make_shared<DataType>(OMNI_VARCHAR);
+    auto* trueBranch = new FuncExpr("lower", std::vector<Expr*>{new FieldExpr(1, strType)}, strType);
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), trueBranch, new FieldExpr(2, strType));
+    ASSERT_NE(ifExpr->vectorFunction, nullptr);
+
+    std::vector vecOfTypes = {BooleanType(), VarcharType(), VarcharType()};
+    DataTypes inputTypes(vecOfTypes);
+    bool cond[rowSize] = {true, false, true, false};
+    std::string a[rowSize] = {"HELLO", "WORLD", "TEST", "ABC"};
+    std::string b[rowSize] = {"foo", "bar", "baz", "qux"};
+    VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, cond, a, b);
+
+    auto* result = RunIfExpr(ifExpr, input, rowSize);
+    auto* resVec = dynamic_cast<Vector<LargeStringContainer<std::string_view>>*>(result);
+    ASSERT_NE(resVec, nullptr);
+    EXPECT_EQ(resVec->GetValue(0), "hello");
+    EXPECT_EQ(resVec->GetValue(1), "bar");
+    EXPECT_EQ(resVec->GetValue(2), "test");
+    EXPECT_EQ(resVec->GetValue(3), "qux");
+
+    delete result;
+    delete input;
+    delete ifExpr;
+}
+
+TEST(IfTest, LazyIfExprComputedArrayBranches)
+{
+    // IF(cond, array(a), b): expensive array branch merged through the ordered,
+    // complex merge path.
+    const int32_t rowSize = 3;
+    auto boolType = std::make_shared<DataType>(OMNI_BOOLEAN);
+    auto intType = std::make_shared<DataType>(OMNI_INT);
+    auto arrayType = std::make_shared<ArrayType>(std::make_shared<DataType>(OMNI_INT));
+    auto* trueBranch = new FuncExpr("array", std::vector<Expr*>{new FieldExpr(1, intType)},
+        std::make_shared<DataType>(OMNI_ARRAY));
+    auto* ifExpr = new IfExpr(new FieldExpr(0, boolType), trueBranch, new FieldExpr(2, arrayType));
+    ASSERT_NE(ifExpr->vectorFunction, nullptr);
+
+    auto* input = new VectorBatch(rowSize);
+    input->Append(CreateBooleanVector({true, false, true}));
+    input->Append(CreateNumericVector<int32_t>({1, 2, 3}, OMNI_INT));
+    input->Append(CreateArrayVector({{9}, {8, 7}, {6}}));
+
+    auto* result = RunIfExpr(ifExpr, input, rowSize);
+    auto* resArr = dynamic_cast<ArrayVector*>(result);
+    ASSERT_NE(resArr, nullptr);
+    EXPECT_EQ(resArr->GetSize(static_cast<int64_t>(0)), 1);  // [a[0]]
+    EXPECT_EQ(resArr->GetSize(static_cast<int64_t>(1)), 2);  // false branch {8, 7}
+    EXPECT_EQ(resArr->GetSize(static_cast<int64_t>(2)), 1);  // [a[2]]
+
+    BaseVector* row0 = resArr->GetValue(0);
+    EXPECT_EQ(static_cast<Vector<int32_t>*>(row0)->GetValue(0), 1);
+    delete row0;
+
+    BaseVector* row1 = resArr->GetValue(1);
+    EXPECT_EQ(static_cast<Vector<int32_t>*>(row1)->GetValue(0), 8);
+    EXPECT_EQ(static_cast<Vector<int32_t>*>(row1)->GetValue(1), 7);
+    delete row1;
+
+    delete result;
+    delete input;
+    delete ifExpr;
 }
