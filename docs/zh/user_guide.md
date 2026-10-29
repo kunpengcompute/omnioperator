@@ -21,9 +21,9 @@
 在SparkExtension上使用OmniOperator算子加速特性时，该特性支持的算子、表达式、函数如[**表 2** 支持算子列表](#支持算子列表)、[**表 3** 支持表达式列表](#支持表达式列表)和[**表 4** cast表达式支持列表](#cast表达式支持列表)所示，表格中使用符号表示算子和表达式是否支持，符号的含义请参见[**表 1** 算子和表达式支持表格中符号的含义](#算子和表达式支持表格中符号的含义)。
 
 >![](public_sys-resources/icon-notice.gif) **须知：** 
->-   本节以Spark 3.3.1引擎为例，描述OmniOperator算子加速特性支持的算子和表达式。
->-   本章节[支持算子列表](#section176711256181910)和[支持表达式列表](#section5353103435216)中仅描述了OmniOperator算子加速支持或涉及的数据类型，未展示的数据类型（BYTE/FLOAT/BINARY/ARRAY/MAP/STRUCT/CALENDAR/UDT）是OmniOperator算子加速不支持的。
->-   如果使用OmniOperator算子加速不支持的算子和表达式，会导致执行计划回退为开源版本执行，对性能会有影响。
+>- 本节以Spark 3.3.1引擎为例，描述OmniOperator算子加速特性支持的算子和表达式。
+>- 本章节[支持算子列表](#section176711256181910)和[支持表达式列表](#section5353103435216)中仅描述了OmniOperator算子加速支持或涉及的数据类型，未展示的数据类型（BYTE/FLOAT/BINARY/ARRAY/MAP/STRUCT/CALENDAR/UDT）是OmniOperator算子加速不支持的。
+>- 如果使用OmniOperator算子加速不支持的算子和表达式，会导致执行计划回退为开源版本执行，对性能会有影响。
 
 **表 1** 算子和表达式支持表格中符号的含义<a id="算子和表达式支持表格中符号的含义"></a>
 
@@ -35,7 +35,6 @@
 |NA| 表示不涉及该算子或表达式。开源版本Spark也没有此输入场景。                                  |
 |NA-2| 表示基于开源版本Spark实现的上下文函数，不涉及OmniOperator算子加速。                       |
 |[Blank Cell]| 表示不适用或需要确认。                                                      |
-
 
 **支持算子列表<a name="section176711256181910" id="section176711256181910"></a>**
 
@@ -67,7 +66,6 @@ Spark引擎使用OmniOperator算子加速特性支持的算子情况如[**表 2*
 |SubqueryBroadcastExec|OmniColumnarSubqueryBroadcastExec|S|S|S|S|S|S|S|S|S|S|S|
 |AQEShuffleReadExec|OmniAQEShuffleReadExec|S|S|S|S|S|S|S|S|S|S|S|
 |WindowGroupLimitExec|ColumnarWindowGroupLimitExec|S|S|S|S|S|S|S|S|S|NS|S|
-
 
 **支持表达式列表<a name="section5353103435216" id="section5353103435216"></a>**
 
@@ -186,7 +184,6 @@ Spark引擎使用OmniOperator算子加速特性支持的表达式/函数情况�
 | try_avg                |S|Aggregate Functions| -                                                                                                                    | NA               | S            | S            | S            | S            | S            | S            | NA           | S            | S            | S            | NA            | NA           |
 | try_sum                |S|Aggregate Functions| -                                                                                                                    | NA               | S            | S            | S            | S            | S            | S            | NA           | S            | S            | S            | NA            | NA           |
 
-
 **表 4** cast表达式支持列表<a id="cast表达式支持列表"></a>
 
 |**源类型\目标类型**|**BOOLEAN**|**INT**|**LONG**|**DOUBLE**|**STRING**|**CHAR**|**VARCHAR**|**DATE**|**DECIMAL**|**SHORT**|**TIMESTAMP**| **ARRAY** |
@@ -213,7 +210,7 @@ OmniOperator算子加速特性支持Spark引擎，需在管理节点和所有计
 OmniOperator算子加速安装所需Spark引擎扩展包和OmniOperator算子加速运行时所依赖的库文件详情如《[安装指南](installation_guide.md)》中表3所示。
 
 >![](public_sys-resources/icon-note.gif) **说明：** 
->-   boostkit-omniop-spark-3.1.1-2.0.0-aarch64.zip中包含boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler.zip（NEON实现）和boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler-sve.zip（sve实现）两个包， 依据机型是否支持NEON、SVE指令进行选择。下文以boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler.zip（NEON实现）为例进行说明。如需在支持SVE指令的服务器上安装SVE实现的依赖包，将下文的boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler.zip换成boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler-sve.zip即可。
+>- boostkit-omniop-spark-3.1.1-2.0.0-aarch64.zip中包含boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler.zip（NEON实现）和boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler-sve.zip（sve实现）两个包， 依据机型是否支持NEON、SVE指令进行选择。下文以boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler.zip（NEON实现）为例进行说明。如需在支持SVE指令的服务器上安装SVE实现的依赖包，将下文的boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler.zip换成boostkit-omniop-spark-3.1.1-2.0.0-aarch64-openeuler-sve.zip即可。
 >-   请根据OS类型选择对应的依赖包，以下安装步骤以openEuler 22.03系统为例，对应`Dependency_library_openeuler22.03.zip`。
 
 **安装SparkExtension 3.1.1<a name="section3748143825311"></a>**
@@ -319,7 +316,7 @@ OmniOperator算子加速安装所需Spark引擎扩展包和OmniOperator算子加
 4. 配置SparkExtension。
     1. 在管理节点创建`/opt/omni-operator/`目录作为安装OmniOperator算子加速的根目录，进入该目录。
 
-        ```
+        ```shell
         mkdir /opt/omni-operator
         cd /opt/omni-operator
         ```
@@ -327,8 +324,8 @@ OmniOperator算子加速安装所需Spark引擎扩展包和OmniOperator算子加
     2. 从《[安装指南](installation_guide.md)》的“软件安装包获取”中获取`Dependency_library_openeuler22.03.zip`，并上传到`/opt/omni-operator`目录下，再将适用于对应操作系统的压缩包内容解压并拷贝到`/opt/omni-operator/lib`目录下。
 
         >![](public_sys-resources/icon-note.gif) **说明：** 
-        >-   如果已经安装其他版本的SparkExtension则可跳过该步。查看`$OMNI_HOME`目录下的lib目录，如果已经包含相关so库和JAR包即表明已经安装其他版本的SparkExtension。本文档中`$OMNI_HOME`为`/opt/omni-operator`。
-        >-   如果在《[安装指南](installation_guide.md)》“安装依赖”中已拷贝libLLVM-15.so、libjemalloc.so.2两个so文件到`/opt/omni-operator/lib`目录下，则本步骤无需重复拷贝。
+        >- 如果已经安装其他版本的SparkExtension则可跳过该步。查看`$OMNI_HOME`目录下的lib目录，如果已经包含相关so库和JAR包即表明已经安装其他版本的SparkExtension。本文档中`$OMNI_HOME`为`/opt/omni-operator`。
+        >- 如果在《[安装指南](installation_guide.md)》“安装依赖”中已拷贝libLLVM-15.so、libjemalloc.so.2两个so文件到`/opt/omni-operator/lib`目录下，则本步骤无需重复拷贝。
 
         ```
         unzip Dependency_library_openeuler22.03.zip
@@ -343,7 +340,7 @@ OmniOperator算子加速安装所需Spark引擎扩展包和OmniOperator算子加
 
         将dependencies.tar.gz解压到`/opt/omni-operator/lib`目录下。
 
-        ```
+        ```shell
         cd /opt/omni-operator
         rm -rf dependencies.tar.gz
         unzip boostkit-omniop-spark-3.3.1-2.0.0-aarch64.zip
@@ -458,20 +455,20 @@ OmniOperator算子加速安装所需Spark引擎扩展包和OmniOperator算子加
 
     1. **可选:**配置Yum源。以openEuler 22.03 LTS SP1为例：
 
-        ```
+        ```shell
         dnf config-manager --add-repo https://repo.oepkgs.net/openeuler/rpm/openEuler-22.03-LTS-SP1/extras/aarch64/
         ```
 
     2. 安装依赖。
 
-        ```
+        ```shell
         yum install lz4-devel zstd-devel snappy-devel protobuf-c-devel protobuf-lite-devel boost-devel cyrus-sasl-devel jsoncpp-devel openssl-devel libatomic -y
         ```
 
 4. 配置SparkExtension。
     1. 在管理节点创建`/opt/omni-operator/`目录作为安装OmniOperator算子加速的根目录，进入该目录。
 
-        ```
+        ```shell
         mkdir /opt/omni-operator
         cd /opt/omni-operator
         ```
@@ -479,10 +476,10 @@ OmniOperator算子加速安装所需Spark引擎扩展包和OmniOperator算子加
     2. 从《[安装指南](installation_guide.md)》中的“软件安装包获取”中获取`Dependency_library_openeuler22.03.zip`，并上传到`/opt/omni-operator`目录下，再将适用于对应操作系统的压缩包内容解压并拷贝到`/opt/omni-operator/lib`目录下。
 
         >![](public_sys-resources/icon-note.gif) **说明：** 
-        >-   如果已经安装其他版本的SparkExtension则可跳过该步。查看`$OMNI_HOME`目录下的lib目录，如果已经包含相关so库和JAR包即表明已经安装其他版本的SparkExtension。本文档中`$OMNI_HOME`为`/opt/omni-operator`。
-        >-   如果在安装指南的《安装依赖》中已拷贝libLLVM-15.so、libjemalloc.so.2两个so文件到`/opt/omni-operator/lib`目录下，则本步骤无需重复拷贝。
+        >- 如果已经安装其他版本的SparkExtension则可跳过该步。查看`$OMNI_HOME`目录下的lib目录，如果已经包含相关so库和JAR包即表明已经安装其他版本的SparkExtension。本文档中`$OMNI_HOME`为`/opt/omni-operator`。
+        >- 如果在安装指南的《安装依赖》中已拷贝libLLVM-15.so、libjemalloc.so.2两个so文件到`/opt/omni-operator/lib`目录下，则本步骤无需重复拷贝。
 
-        ```
+        ```shell
         unzip Dependency_library_openeuler22.03.zip
         \cp -f /opt/omni-operator/Dependency_library_openeuler22.03/* /opt/omni-operator/lib
         ```
@@ -938,11 +935,11 @@ Spark使用交互式页面命令行来执行SQL任务。如果需要确认SparkE
 
     SparkExtension输出执行计划如下图，如果算子以**Omni**开头则证明SparkExtension生效。
 
-    ![](figures/zh-cn_image_0000002515902982.png)
+    ![验证SparkExtension是否生效的执行回显](figures/zh-cn_image_0000002515902982.png)
 
     Spark-SQL开源版本输出执行计划如下图。
 
-    ![](figures/zh-cn_image_0000002515743078.png)
+    ![验证SparkExtension是否生效的执行回显](figures/zh-cn_image_0000002515743078.png)
 
 3. 运行SQL语句。
 
@@ -970,19 +967,19 @@ Spark使用交互式页面命令行来执行SQL任务。如果需要确认SparkE
 
     - 开源版本Spark-SQL执行结果。
 
-        ![](figures/zh-cn_image_0000002547382895.png)
+        ![运行SQL语句的执行回显](figures/zh-cn_image_0000002547382895.png)
 
         执行计划如下。
 
-        ![](figures/zh-cn_image_0000002547382893.png)
+        ![运行SQL语句的执行回显](figures/zh-cn_image_0000002547382893.png)
 
     - 使能SparkExtension后的执行结果。
 
-        ![](figures/zh-cn_image_0000002547462889.png)
+        ![运行SQL语句的执行回显](figures/zh-cn_image_0000002547462889.png)
 
         执行计划如下。
 
-        ![](figures/zh-cn_image_0000002547462887.png)
+        ![运行SQL语句的执行回显](figures/zh-cn_image_0000002547462887.png)
 
     执行结果对比：两项测试在查询结果上完全一致，使能SparkExtension后，执行SQL的耗时减少。SparkExtension在不影响查询结果的前提下，有效提升了Q82查询的执行效率。
 
@@ -1395,11 +1392,11 @@ Spark使用交互式页面命令行来执行SQL任务。如果需要确认Gluten
 
     Gluten输出执行计划如下图。如果算子以**Omni**开头或者**Transformer**结尾，证明Gluten生效。
 
-    ![](figures/zh-cn_image_0000002515902986.png)
+    ![查看Gluten是否生效的执行回显](figures/zh-cn_image_0000002515902986.png)
 
     开源版本Spark-SQL输出执行计划如下图。
 
-    ![](figures/zh-cn_image_0000002515743080.png)
+    ![查看Gluten是否生效的执行回显](figures/zh-cn_image_0000002515743080.png)
 
 3. 运行SQL语句。
 
@@ -1427,11 +1424,11 @@ Spark使用交互式页面命令行来执行SQL任务。如果需要确认Gluten
 
     - 开源版本Spark-SQL执行结果。
 
-        ![](figures/zh-cn_image_0000002547382899.png)
+        ![对比开源版本Spark-SQL和Gluten执行TPC-的执行回显](figures/zh-cn_image_0000002547382899.png)
 
     - 使能Gluten后的执行结果。
 
-        ![](figures/zh-cn_image_0000002547462895.png)
+        ![对比开源版本Spark-SQL和Gluten执行TPC-的执行回显](figures/zh-cn_image_0000002547462895.png)
 
     执行结果对比：两项测试在查询结果上完全一致，使能Gluten后，执行SQL的耗时减少。Gluten在不影响查询结果的前提下，有效提升了Q82查询的执行效率。
 
@@ -1779,11 +1776,11 @@ Hive使用交互式页面命令行来执行SQL任务。在Hive侧查看HiveExten
 
     HiveExtension输出执行计划如下图，算子以Omni开头则说明HiveExtension生效。
 
-    ![](figures/hive-plan-1.png)
+    ![查看HiveExtension是否生效的执行回显](figures/hive-plan-1.png)
 
     Hive-SQL开源版本输出执行计划如下图。
 
-    ![](figures/hive-plan.png)
+    ![查看HiveExtension是否生效的执行回显](figures/hive-plan.png)
 
 3. 运行SQL语句。
 

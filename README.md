@@ -1,5 +1,7 @@
 # OmniOperator介绍<a name="ZH-CN_TOPIC_0000002515818290"></a>
 
+本文档介绍OmniOperator算子加速特性，涵盖架构、应用场景与约束限制；该特性以Native Code实现大数据SQL算子，通过列式存储和向量化执行提升Spark、Hive等引擎的查询性能，适用于需要提升大数据分析性能的开发与运维人员。
+
 ## 最新消息<a name="ZH-CN_TOPIC_0000002547298195"></a>
 
 - \[2026.06.30\]：发布OmniOperator
@@ -19,7 +21,7 @@
 
 大数据OmniRuntime是鲲鹏BoostKit大数据面向应用加速推出的一系列特性，通过插件化的形式，端到端提升数据加载、数据计算和数据交换的性能，从而提升大数据分析的性能。
 
-OmniOperator算子加速为OmniRuntime的特性之一。OmniOperator算子加速采用Native Code（C/C++）实现大数据SQL算子来提高查询性能的特性，通过列式存储和向量化执行技术，同时利用鲲鹏向量化指令，用高性能Native算子替换开源版本Java算子，提升算子的执行效率，从而提升查询引擎的查询性能。
+OmniOperator算子加速特性为OmniRuntime的特性之一。OmniOperator算子加速采用Native Code（C/C++）实现大数据SQL算子来提高查询性能的特性，通过列式存储和向量化执行技术，同时利用鲲鹏向量化指令，用高性能Native算子替换开源版本Java算子，提升算子的执行效率，从而提升查询引擎的查询性能。
 
 已适配的开源组件及版本有：
 
@@ -46,13 +48,13 @@ OmniOperator算子加速特性仅在单个任务中被用户代码调用，不�
 
 **图 1** OmniOperator算子加速特性软件架构<a name="zh-cn_topic_0000002515301928_fig11886120161918"></a><a id="OmniOperator算子加速特性软件架构"></a>
 
-![](docs/zh/figures/OmniOperator算子加速特性软件架构.png "OmniOperator算子加速特性软件架构")
+![OmniOperator算子加速软件架构图，SQL任务提交至Spark集群，由集群管理节点调度分发到各计算节点，算子以Native Code执行](docs/zh/figures/OmniOperator算子加速特性软件架构.png "OmniOperator算子加速特性软件架构")
 
 OmniOperator算子加速特性提供统一接口，供用户在分布式任务中调用。用户可将SQL任务提交至Spark集群，由集群管理节点进行任务调度，将多个子任务分发到对应的计算节点执行。
 
 ### 应用场景<a name="ZH-CN_TOPIC_0000002515818282"></a>
 
-OmniOperator算子加速特性主要应用于数据分析引擎场景，通过优化执行流程，提升数据分析性能。
+OmniOperator算子加速特性主要应用于数据分析引擎场景，通过优化执行流程，提升数据分析性能，上述引擎均通过替换开源算子获得性能提升。
 
 OmniOperator算子加速特性提供Native算子，可替代分析引擎中原有的开源算子，从而加速SQL查询的执行，提升数据分析性能。用户提交SQL后，引擎会将其转换为一系列算子，OmniOperator通过使用性能更优的Native算子替换部分开源算子，实现执行效率的提升。
 
@@ -111,13 +113,18 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 
 > - Gluten仅支持Spark 3.3.1、Spark 3.4.3和Spark 3.5.2
 >- 操作系统差异：
+<<<<<<< HEAD
 >
 
 - SparkExtension支持Centos 7.9、openEuler 20.03和openEuler 22.03
 
 > - Gluten支持openEuler 22.03和openEuler 24.03
+=======
+>    - CentOS 7.9：SparkExtension支持CentOS 7.9、openEuler 20.03和openEuler 22.03
+>    - Gluten支持openEuler 22.03和openEuler 24.03
+>>>>>>> f0b0ee51... AI亲和修改
 
-- 不同的负载所需内存配置不一样，例如TPC-DS 3TB数据集，SparkExtension推荐配置下，堆外内存配置不低于20GB，99条所有SQL可成功运行，运行过程中日志可能出现`MEM_CAP_EXCEEDED`但不影响最终功能，建议适当增大堆外内存配置。如果堆外内存配置过低，SQL执行结果可能不正确。
+- 不同的负载所需内存配置不一样，例如TPC-DS 3TB数据集，SparkExtension推荐配置下，堆外内堆外内存通过spark.memory.offHeap.size配置（单位：字节，需同时开启spark.memory.offHeap.enabled=true），SparkExtension推荐配置下取值不低于20GB，99条所有SQL可成功运行，运行过程中日志可能出现`MEM_CAP_EXCEEDED`但不影响最终功能，建议适当增大堆外内存配置。如果堆外内存配置过低，SQL执行结果可能不正确。
 - Spark OmniOperator算子加速支持`from_unixtime`和`unix_timestamp`表达式：
     1. 仅支持时间解析策略spark.sql.legacy.timeParserPolicy为EXCEPTION、CORRECTED的情况，不支持LEGACY。
     2. <a name="li23961023256"></a>对于一些不合理的参数（如不存在的日期，无效的超大时间戳值等），Omni实现与Spark开源版本实现的处理结果存在不一致。
@@ -329,3 +336,9 @@ OmniOperator docs目录下的文档适用CC-BY 4.0许可证，具体请参见[LI
 ## 致谢<a name="ZH-CN_TOPIC_0000002515658382"></a>
 
 感谢来自社区的每一个PR，欢迎贡献OmniOperator！
+
+## 修订记录
+
+| 文档版本 | 发布日期 | 修改说明 |
+| --- | --- | --- |
+| 01 | 2026-06-30 | 第一次正式发布。 |

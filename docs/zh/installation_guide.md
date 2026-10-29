@@ -26,14 +26,14 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 
 **表 1** 硬件要求<a id="hardware_requirements"></a>
 
-| 硬件环境    | 管理/计算/存储节点                                                                                                            |
-|---------|-----------------------------------------------------------------------------------------------------------------------|
-| 处理器     | 鲲鹏920系列处理器鲲鹏950处理器只有支持SVE（Scalable Vector Extension，可扩展向量指令集）指令集的服务器支持在Gluten上使能OmniOperator。您可以通过**cat /proc/cpuinfo | grep sve | head -n 1**查询是否支持SVE指令集，如果有输出则表示支持。|
-| 内存大小    | 384GB（12 * 32GB）                                                                                                      |
-| 内存频率    | 2666MHz                                                                                                               |
-| 网络      | 业务网络10GE管理网络1GE                                                                                                       |
-| 硬盘      | 系统盘：1 *RAID 0（1* 1.2TB SAS HDD）数据盘：12 *RAID 0（12* 8TB SATA HDD）                                                       |
-| RAID控制卡 | LSI SAS3508                                                                                                           |
+|硬件环境|管理/计算/存储节点|
+|--|--|
+|处理器|鲲鹏920系列处理器<br>鲲鹏950处理器<br>只有支持SVE（Scalable Vector Extension，可扩展向量指令集）指令集的服务器支持在Gluten上使能OmniOperator。您可以通过**cat /proc/cpuinfo \| grep sve \| head -n 1**查询是否支持SVE指令集，如果有输出则表示支持。|
+|内存大小|384GB（12 * 32GB）|
+|内存频率|2666MHz|
+|网络|业务网络10GE<br>管理网络1GE|
+|硬盘|系统盘：1 \* RAID 0（1 \* 1.2TB SAS HDD）<br> 数据盘：12 \* RAID 0（12 \* 8TB SATA HDD）|
+|RAID控制卡|LSI SAS3508|
 
 **操作系统和软件要求<a name="section112321019581"></a>**
 
@@ -133,14 +133,20 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
       <td rowspan="2">Gluten</td>
       <td>Boostkit-omniruntime-gluten-2.0.0.zip</td>
       <td>开源</td>
-      <td>OmniOperator算子加速软件安装包（适配Gluten）。</td>
-      <td><a href="https://gitcode.com/openeuler/OmniOperator/releases/download/26.1.0-OmniOperator-2.2.0-release/BoostKit-omniruntime-gluten-2.2.0.zip">获取链接</a></td>
+      <td>OmniOperator算子加速软件安装包（适配Gluten、Spark 3.4.3）。</td>
+      <td><a href="https://atomgit.com/openeuler/OmniOperator/releases/download/26.0.0-OmniOperator-2.1.0-release/BoostKit-omniruntime-gluten-2.0.0.zip">获取链接</a></td>
+    </tr>
+    <tr>      
+      <td>Boostkit-omniruntime-gluten-1.0.0.zip</td>
+      <td>开源</td>
+      <td>OmniOperator算子加速软件安装包（适配Gluten、Spark 3.3.1）。</td>
+      <td><a href="https://gitcode.com/openeuler/OmniOperator/releases/download/25.3.0-OmniOperator-1.0.0-release/BoostKit-omniruntime-gluten-1.0.0.zip">Dependency_library_Gluten.zip下载</a></td>
     </tr>
     <tr>      
       <td>Dependency_library_Gluten.zip</td>
       <td>开源</td>
       <td>Gluten运行时所依赖的库文件。</td>
-      <td><a href="https://gitcode.com/openeuler/OmniOperator/releases/download/26.1.0-OmniOperator-2.2.0-release/Dependency_library_Gluten.zip">获取链接</a></td>
+      <td><a href="https://gitcode.com/openeuler/OmniOperator/releases/download/26.1.0-OmniOperator-2.2.0-release/Dependency_library_Gluten.zip">BoostKit-omniruntime-gluten-2.2.0.zip下载</a></td>
     </tr>
     <tr>
       <td rowspan="1">5</td>
@@ -205,36 +211,40 @@ OmniOperator算子加速组网规划的环境由4台服务器组成，使用存�
 
     **表 1** 源码编译前需要配置的软件<a id="源码编译前需要配置的软件"></a>
 
-<table border="1" cellpadding="6" cellspacing="0">
-  <thead>
-    <tr>
-      <th>名称</th>
-      <th>版本要求</th>
-      <th>获取链接</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td rowspan="2">GCC/G++</td>
-      <td>openEuler 20.03：7.3.0</td>
-      <td><a href="https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-7.3.0/gcc-7.3.0.tar.gz" target="_blank">获取链接</a></td>
-    </tr>
-    <tr>
-      <td>openEuler 22.03：10.3.0</td>
-      <td><a href="https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-10.3.0/gcc-10.3.0.tar.gz" target="_blank">获取链接</a></td>
-    </tr>
-    <tr>
-      <td>Autoconf</td>
-      <td>2.69</td>
-      <td><a href="https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz" target="_blank">获取链接</a></td>
-    </tr>
-    <tr>
-      <td>CMake</td>
-      <td>3.20.5</td>
-      <td><a href="https://github.com/Kitware/CMake/releases/download/v3.20.5/cmake-3.20.5-linux-aarch64.tar.gz" target="_blank">获取链接</a></td>
-    </tr>
-  </tbody>
-</table>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <thead>
+      <tr>
+        <th>名称</th>
+        <th>版本要求</th>
+        <th>获取链接</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td rowspan="3">GCC/G++</td>
+        <td>openEuler 20.03：7.3.0</td>
+        <td><a href="https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-7.3.0/gcc-7.3.0.tar.gz" target="_blank">gcc-7.3.0.tar.gz下载</a></td>
+      </tr>
+      <tr>
+        <td>openEuler 22.03：10.3.0</td>
+        <td><a href="https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-10.3.0/gcc-10.3.0.tar.gz" target="_blank">gcc-10.3.0.tar.gz下载</a></td>
+      </tr>
+      <tr>
+        <td>openEuler 24.03：12.3.0</td>
+        <td><a href="https://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-12.3.0/gcc-12.3.0.tar.gz" target="_blank">gcc-12.3.0.tar.gz下载</a></td>
+      </tr>
+      <tr>
+        <td>Autoconf</td>
+        <td>2.69</td>
+        <td><a href="https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz" target="_blank">autoconf-2.69.tar.gz下载</a></td>
+      </tr>
+      <tr>
+        <td>CMake</td>
+        <td>3.20.5</td>
+        <td><a href="https://github.com/Kitware/CMake/releases/download/v3.20.5/cmake-3.20.5-linux-aarch64.tar.gz" target="_blank">cmake-3.20.5-linux-aarch64.tar.gz下载</a></td>
+      </tr>
+    </tbody>
+  </table>
 
 1. 编译安装GCC/G++。以7.3.0版本为例：
    1. 查看GCC/G++版本，确认是否为目标版本。
