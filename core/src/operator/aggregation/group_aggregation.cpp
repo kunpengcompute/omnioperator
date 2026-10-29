@@ -25,6 +25,8 @@ namespace op {
 using namespace omniruntime::type;
 
 static constexpr int32_t UNSPILL_ROW_COUNT_ONE_BATCH = 128;
+// Rows per sorted run when spilling fixed-key groups (hash map or array table).
+static constexpr int32_t kMaxFixedRowsPerSpillRun = 1024 * 1024;
 
 static ALWAYS_INLINE uint8_t PackedBitWidthForType(int32_t typeId)
 {
@@ -1562,7 +1564,7 @@ ErrorCode HashAggregationOperator::SpillToDisk()
     // Fixed keys are materialized into kv entries plus a std::string per group. Spilling the
     // whole table in one run doubles its footprint exactly when the pool is short of memory,
     // so write bounded sorted runs; the unspill merge already handles several runs.
-    constexpr int32_t kMaxFixedRowsPerRun = 1024 * 1024;
+    constexpr int32_t kMaxFixedRowsPerRun = kMaxFixedRowsPerSpillRun;
     auto extractRun = [&](int32_t runRows) -> int32_t {
         auto parse = [&](const auto &key, uint8_t *value, int32_t idx) mutable {
             aggregationSortPtr->ParseHashMapToVector(key, value, idx);
@@ -1611,13 +1613,63 @@ ErrorCode HashAggregationOperator::SpillToDisk()
     return result;
 }
 
+// Spill the array table straight into sorted runs, in slot order, with the same key encoding
+// the fixed-key handlers produce. Moving the entries into a hash map first would allocate a
+// table sized by the group count from the task pool while the array table is still alive,
+// which is exactly when reclaim has no headroom for it.
+ErrorCode HashAggregationOperator::SpillArrayTable()
+{
+    const int64_t minValue = vectorAnalyzer->MinValue();
+    const auto totalRows = static_cast<int32_t>(arrayTable->GetElementsSize());
+    auto aggregationSortPtr = aggregationSort.get();
+    uint32_t slotCursor = 0;
+    auto extractRun = [&](auto typedKey, int32_t runRows) {
+        using KeyType = decltype(typedKey);
+        int32_t row = 0;
+        arrayTable->OutputEachValue([&](const auto &value, const auto &index) {
+            auto *state = reinterpret_cast<AggregateState *>(value);
+            if (index != 0) {
+                aggregationSortPtr->ParseHashMapToVector(static_cast<KeyType>(index + minValue - 1), state, row);
+            } else {
+                aggregationSortPtr->ParseNullHashMapToVector(KeyType{}, state, row);
+            }
+            ++row;
+        }, slotCursor, runRows);
+    };
+    ErrorCode result = ErrorCode::SUCCESS;
+    int32_t spilledRows = 0;
+    while (spilledRows < totalRows) {
+        const int32_t runRows = std::min(kMaxFixedRowsPerSpillRun, totalRows - spilledRows);
+        aggregationSort->ResizeKvVector(runRows);
+        if (groupByColumnsHandleType == HandleType::fixedInt32) {
+            extractRun(int32_t{}, runRows);
+        } else if (groupByColumnsHandleType == HandleType::fixedInt64) {
+            extractRun(int64_t{}, runRows);
+        } else {
+            extractRun(int16_t{}, runRows);
+        }
+        aggregationSort->SortKvVector(false);
+        LogDebug("Spill array table to disk in hash aggregation operator, rowCount=%d\n", runRows);
+        result = spiller->Spill(aggregationSort.get(), this, false);
+        aggregationSort->ClearVector();
+        if (result != ErrorCode::SUCCESS) {
+            break;
+        }
+        spilledRows += runRows;
+    }
+    aggregationSort->ReleaseVectors();
+    return result;
+}
+
 ErrorCode HashAggregationOperator::SpillHashMap()
 {
-    // SpillToDisk consumes the normal hashmap handlers. Preserve array-map
-    // states by moving them into the already-initialized fixed-key handler
-    // before materialization; the arena-owned aggregate states remain valid
-    // until the spill has completed.
-    if (vectorAnalyzer != nullptr && vectorAnalyzer->IsArrayHashTableType() && arrayTable != nullptr) {
+    // Array-map groups are spilled directly from the array table (SpillArrayTable); afterwards
+    // the operator continues on the normal hash table. Handler types the array path does not
+    // cover keep the old route through the already-initialized fixed-key handler.
+    const bool spillArray = vectorAnalyzer != nullptr && vectorAnalyzer->IsArrayHashTableType() &&
+        arrayTable != nullptr && (groupByColumnsHandleType == HandleType::fixedInt32 ||
+        groupByColumnsHandleType == HandleType::fixedInt64 || groupByColumnsHandleType == HandleType::fixedInt16);
+    if (!spillArray && vectorAnalyzer != nullptr && vectorAnalyzer->IsArrayHashTableType() && arrayTable != nullptr) {
         if (UNLIKELY(hashmapCapacityReleased_)) {
             ReinitializeHashmapAfterRelease();
         }
@@ -1625,7 +1677,13 @@ ErrorCode HashAggregationOperator::SpillHashMap()
         vectorAnalyzer->SetNormalHashTable();
     }
     auto rowCount = 0;
-    if (serialize != nullptr) {
+    if (spillArray) {
+        rowCount = static_cast<int32_t>(arrayTable->GetElementsSize());
+        if (rowCount == 0) {
+            arrayTable.reset();
+            vectorAnalyzer->SetNormalHashTable();
+        }
+    } else if (serialize != nullptr) {
         rowCount = serialize->GetElementsSize();
     } else if (fixedInt32 != nullptr) {
         rowCount = fixedInt32->GetElementsSize();
@@ -1654,7 +1712,16 @@ ErrorCode HashAggregationOperator::SpillHashMap()
         hasSpill = true;
     }
     UpdateSpillTimesInfo();
-    auto result = SpillToDisk();
+    ErrorCode result;
+    if (spillArray) {
+        result = SpillArrayTable();
+        if (result == ErrorCode::SUCCESS) {
+            arrayTable.reset();
+            vectorAnalyzer->SetNormalHashTable();
+        }
+    } else {
+        result = SpillToDisk();
+    }
     spillOutputState.hasBeenOutputNum = 0;
     spillOutputState.outputHashmapPos = 0;
     spillOutputState.rowBegin = nullptr;

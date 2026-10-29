@@ -22,6 +22,7 @@
 #include "memory/omni_task_memory_pool.h"
 #include "memory/pool_listener.h"
 #include "operator/reclaim_context.h"
+#include "util/config_util.h"
 
 namespace omniruntime {
 using namespace omniruntime::vec;
@@ -241,6 +242,134 @@ TEST(HashAggregationNullGroupReclaimTest, OutputReservationCanReclaimUnderDriver
     EXPECT_EQ(r.nullGroups, 1);
     EXPECT_EQ(r.nullGroupSum, 7);
     EXPECT_EQ(r.rows, (2048 - 7) + 1);
+}
+
+namespace {
+struct AggHashTableRuleGuard {
+    AggHashTableRule saved = ConfigUtil::GetAggHashTableRule();
+    explicit AggHashTableRuleGuard(AggHashTableRule rule) { ConfigUtil::SetAggHashTableRule(rule); }
+    ~AggHashTableRuleGuard() { ConfigUtil::SetAggHashTableRule(saved); }
+};
+
+// Dense INT keys 0..kGroups-1 grouped with SUM(value). Every batch is strided across the whole key
+// range so the first batch fixes min/max and the operator stays on the array table.
+struct ArraySpillResult {
+    int64_t reclaimGrowth = 0;
+    int64_t reclaimed = 0;
+    int64_t rows = 0;
+    int64_t nullGroups = 0;
+    int64_t nullGroupSum = 0;
+    int64_t wrongSums = 0;
+    uint64_t spilledBytes = 0;
+};
+
+ArraySpillResult RunArrayTableSpill(int reclaimsAfterSpill)
+{
+    constexpr int32_t kGroups = 400000;
+    constexpr int32_t kStride = 8;
+    constexpr int32_t kNullRows = 5;
+    AggHashTableRuleGuard arrayRule(AggHashTableRule::ARRAY);
+    mem::OmniTaskMemoryPool pool(nullptr);
+
+    std::vector<uint32_t> groupByCols({0});
+    DataTypes groupInputTypes(std::vector<DataTypePtr>({IntType()}));
+    auto aggInputCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t>({1}));
+    auto aggInputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    auto aggOutputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    std::vector<uint32_t> aggFuncTypes({OMNI_AGGREGATION_TYPE_SUM});
+    std::vector<uint32_t> maskCols({static_cast<uint32_t>(-1)});
+    std::vector<bool> inputRaws({true});
+    std::vector<bool> outputPartials({false});
+    std::vector<int8_t> hasAggFilters({static_cast<int8_t>(-1)});
+    SparkSpillConfig spillConfig(TestUtil::GenerateSpillPath(), INT32_MAX, 0);
+    OperatorConfig operatorConfig(spillConfig);
+    auto factory = std::make_unique<HashAggregationOperatorFactory>(groupByCols, groupInputTypes,
+        aggInputCols, aggInputTypes, aggOutputTypes, aggFuncTypes, maskCols, inputRaws,
+        outputPartials, hasAggFilters, operatorConfig, AggregationNode::Step::K_SINGLE);
+    factory->Init();
+    auto *aggregation = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+    aggregation->setNoMoreInput(false);
+
+    // One pass adds `value` to every key once, plus kNullRows NULL-key rows.
+    const auto addPass = [&](int64_t value) {
+        for (int32_t stripe = 0; stripe < kStride; ++stripe) {
+            const int32_t keyRows = (kGroups - stripe + kStride - 1) / kStride;
+            const int32_t rows = keyRows + (stripe == 0 ? kNullRows : 0);
+            auto *input = new VectorBatch(rows);
+            auto *keys = new Vector<int32_t>(rows, &pool);
+            auto *values = new Vector<int64_t>(rows, &pool);
+            for (int32_t row = 0; row < keyRows; ++row) {
+                keys->SetValue(row, stripe + row * kStride);
+                values->SetValue(row, value);
+            }
+            for (int32_t row = keyRows; row < rows; ++row) {
+                keys->SetNull(row);
+                values->SetValue(row, value);
+            }
+            input->Append(keys);
+            input->Append(values);
+            aggregation->AddInput(input);
+        }
+    };
+
+    ArraySpillResult result;
+    addPass(1);
+    const int64_t usedBefore = pool.currentBytes();
+    const int64_t peakBefore = pool.peakBytes();
+    result.reclaimed = aggregation->reclaim(1);
+    result.reclaimGrowth = pool.peakBytes() - std::max(usedBefore, peakBefore);
+    // Later input lands in the normal hash table and is merged with the spilled array run.
+    addPass(2);
+    for (int i = 0; i < reclaimsAfterSpill; ++i) {
+        aggregation->reclaim(1);
+        addPass(0);
+    }
+    aggregation->setNoMoreInput(true);
+
+    while (!aggregation->isFinished()) {
+        VectorBatch *output = nullptr;
+        {
+            op::Operator::NonReclaimableSection driverGuard(aggregation);
+            aggregation->GetOutput(&output);
+        }
+        if (output == nullptr) continue;
+        auto *keys = output->Get(0);
+        auto *sums = static_cast<Vector<int64_t> *>(output->Get(1));
+        for (int32_t row = 0; row < output->GetRowCount(); ++row) {
+            if (keys->IsNull(row)) {
+                ++result.nullGroups;
+                result.nullGroupSum += sums->GetValue(row);
+            } else if (sums->GetValue(row) != 3) {
+                ++result.wrongSums;
+            }
+        }
+        result.rows += output->GetRowCount();
+        VectorHelper::FreeVecBatch(output);
+    }
+    result.spilledBytes = aggregation->GetSpilledBytes();
+    op::Operator::DeleteOperator(aggregation);
+    return result;
+}
+} // namespace
+
+// Reclaiming an array-table aggregation must not allocate a hash map sized by its group count
+// from the task pool: reclaim runs when the task has no headroom left, so that allocation is
+// denied and the spill fails (mt_case q3 at 1-4 GB offheap).
+TEST(HashAggregationNullGroupReclaimTest, ArrayTableSpillGrowthIsIndependentOfGroupCount)
+{
+    auto r = RunArrayTableSpill(0);
+    EXPECT_GT(r.reclaimed, 0);
+    EXPECT_LT(r.reclaimGrowth, 2 * 1024 * 1024) << "reclaim grew the pool by " << r.reclaimGrowth << " bytes";
+}
+
+TEST(HashAggregationNullGroupReclaimTest, ArrayTableSpillPreservesGroupsAndNullGroup)
+{
+    auto r = RunArrayTableSpill(1);
+    EXPECT_GT(r.spilledBytes, 0);
+    EXPECT_EQ(r.rows, 400000 + 1);
+    EXPECT_EQ(r.wrongSums, 0);
+    EXPECT_EQ(r.nullGroups, 1);
+    EXPECT_EQ(r.nullGroupSum, 5 * 3);
 }
 
 } // namespace omniruntime

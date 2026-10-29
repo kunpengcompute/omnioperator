@@ -140,6 +140,8 @@ private:
 
     ErrorCode SpillToDisk();
 
+    ErrorCode SpillArrayTable();
+
     void SetVectors(VectorBatch *output, const std::vector<DataTypePtr> &types, int32_t rowCount);
 
     template<typename Deserialize>
