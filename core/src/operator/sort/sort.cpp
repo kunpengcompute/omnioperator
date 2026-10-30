@@ -408,6 +408,7 @@ ErrorCode SortOperator::SpillToDisk()
             static_cast<long>(pool_ == nullptr ? 0 : pool_->reservedBytes()));
     }
     auto result = spiller->Spill(pagesIndex.get(), canInplaceSort, canRadixSort, this);
+    stats_.spillScratchPeakBytes = std::max(stats_.spillScratchPeakBytes, spiller->ScratchPeakBytes());
     if (omniruntime::telemetry::IsReclaimVerboseEnabled()) {
         std::fprintf(stderr,
             "[OMNI-SORT] event=spill_phase phase=write_end pool=%p rows=%ld used=%ld reserved=%ld result=%d\n",

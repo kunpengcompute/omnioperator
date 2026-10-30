@@ -116,6 +116,8 @@ struct PlanNodeStats {
     uint64_t spilledRows{0};
     uint32_t spilledPartitions{0};
     uint32_t spilledFiles{0};
+    /// Largest spill working memory held outside the task pool, across operators.
+    uint64_t spillScratchPeakBytes{0};
 
     // For BHJ/SHJ
     uint64_t buildInputRows{0};

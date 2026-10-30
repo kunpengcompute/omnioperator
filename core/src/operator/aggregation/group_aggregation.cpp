@@ -1530,7 +1530,11 @@ ErrorCode HashAggregationOperator::SpillToDisk()
         // time; retaining all reconstructed keys can exhaust the task pool.
         constexpr int32_t kMaxRowsPerRun = 64 * 1024;
         constexpr size_t kMaxScratchBytesPerRun = 8 * 1024 * 1024;
-        mem::SimpleArenaAllocator scratch(64 * 1024, executionContext->GetAllocator());
+        // The scratch is spill working memory, not operator state: it is taken outside the task
+        // pool because the spill usually runs inside Spark-driven reclaim with no headroom left,
+        // and it is released before the spill returns. Its peak is reported in the operator stats.
+        mem::Allocator unpooledScratchAllocator(nullptr);
+        mem::SimpleArenaAllocator scratch(64 * 1024, &unpooledScratchAllocator);
         int32_t spilledRows = 0;
         while (spilledRows < totalSpillCount) {
             const int32_t runRows = std::min(kMaxRowsPerRun, totalSpillCount - spilledRows);
@@ -1550,6 +1554,8 @@ ErrorCode HashAggregationOperator::SpillToDisk()
             aggregationSort->ResizeKvVector(extractedRows);
             aggregationSort->SortKvVector(true);
             auto result = spiller->Spill(aggregationSort.get(), this, true);
+            stats_.spillScratchPeakBytes = std::max<uint64_t>(stats_.spillScratchPeakBytes,
+                scratch.TotalBytes() + spiller->ScratchPeakBytes());
             aggregationSort->ClearVector();
             if (result != ErrorCode::SUCCESS) {
                 return result;
@@ -1722,6 +1728,7 @@ ErrorCode HashAggregationOperator::SpillHashMap()
     } else {
         result = SpillToDisk();
     }
+    stats_.spillScratchPeakBytes = std::max(stats_.spillScratchPeakBytes, spiller->ScratchPeakBytes());
     spillOutputState.hasBeenOutputNum = 0;
     spillOutputState.outputHashmapPos = 0;
     spillOutputState.rowBegin = nullptr;

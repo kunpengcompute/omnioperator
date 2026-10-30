@@ -3,6 +3,7 @@
  * Description: spiller implementation
  */
 
+#include <algorithm>
 #include <cstdlib>
 #include <unistd.h>
 #include <cstring>
@@ -34,6 +35,11 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
     auto writer = new SpillWriter(dataTypes, dirPaths[0], writeBufferSize, isSpillCompressEnabled);
     writers.emplace_back(writer);
 
+    // The write batch lives outside the task pool; never keep it past this call.
+    struct ReleaseWriteBatch {
+        std::unique_ptr<VectorBatch> &batch;
+        ~ReleaseWriteBatch() { batch.reset(); }
+    } releaseWriteBatch{spillVecBatch};
     int64_t totalRowOffset = 0;
     int32_t vecBatchCount = OperatorUtil::GetVecBatchCount(totalRowCount, maxRowCountPerBatch);
     int32_t maxRowCount = 0; // for reuse vector batch memory
@@ -41,8 +47,7 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
         auto rowCount = std::min(maxRowCountPerBatch, static_cast<int32_t>(totalRowCount - totalRowOffset));
         if (spillVecBatch == nullptr || rowCount > maxRowCount) {
             spillVecBatch = std::make_unique<VectorBatch>(rowCount);
-            VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount,
-                op != nullptr ? op->pool() : nullptr);
+            VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount, nullptr);
             maxRowCount = rowCount;
         } else {
             spillVecBatch->Resize(rowCount);
@@ -50,6 +55,7 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
         auto spillVecBatchPtr = spillVecBatch.get();
         aggregationSort->SetSpillVectorBatch(spillVecBatchPtr, totalRowOffset, comapreWithHashVal);
         auto vecBatchSize = CollectVecBatchSize(dataTypes, spillVecBatchPtr);
+        scratchPeakBytes_ = std::max(scratchPeakBytes_, vecBatchSize);
         if (isSpillCompressEnabled) {
             if (writer->getTotalCompressBytes() + vecBatchSize> UINT64_MAX) {
                 return ErrorCode::EXCEED_SPILL_THRESHOLD;
@@ -87,6 +93,11 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
     auto writer = new SpillWriter(dataTypes, dirPaths[0], writeBufferSize, isSpillCompressEnabled);
     writers.emplace_back(writer);
 
+    // The write batch lives outside the task pool; never keep it past this call.
+    struct ReleaseWriteBatch {
+        std::unique_ptr<VectorBatch> &batch;
+        ~ReleaseWriteBatch() { batch.reset(); }
+    } releaseWriteBatch{spillVecBatch};
     int64_t totalRowOffset = 0;
     int32_t vecBatchCount = OperatorUtil::GetVecBatchCount(totalRowCount, maxRowCountPerBatch);
     int32_t maxRowCount = 0; // for reuse vector batch memory
@@ -94,8 +105,7 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
         auto rowCount = std::min(maxRowCountPerBatch, static_cast<int32_t>(totalRowCount - totalRowOffset));
         if (spillVecBatch == nullptr || rowCount > maxRowCount) {
             spillVecBatch = std::make_unique<VectorBatch>(rowCount);
-            VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount,
-                op != nullptr ? op->pool() : nullptr);
+            VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount, nullptr);
             maxRowCount = rowCount;
         } else {
             spillVecBatch->Resize(rowCount);
@@ -104,6 +114,7 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
         auto spillVecBatchPtr = spillVecBatch.get();
         pagesIndex->SetSpillVecBatch(spillVecBatchPtr, outputCols, totalRowOffset, canInplaceSort, canRadixSort);
         auto vecBatchSize = CollectVecBatchSize(dataTypes, spillVecBatchPtr);
+        scratchPeakBytes_ = std::max(scratchPeakBytes_, vecBatchSize);
         if (isSpillCompressEnabled) {
             if (writer->getTotalCompressBytes() + vecBatchSize> UINT64_MAX) {
                 return ErrorCode::EXCEED_SPILL_THRESHOLD;

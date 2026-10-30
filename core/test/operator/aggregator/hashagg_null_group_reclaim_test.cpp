@@ -362,6 +362,79 @@ TEST(HashAggregationNullGroupReclaimTest, ArrayTableSpillGrowthIsIndependentOfGr
     EXPECT_LT(r.reclaimGrowth, 2 * 1024 * 1024) << "reclaim grew the pool by " << r.reclaimGrowth << " bytes";
 }
 
+// Multi-column keys with a varchar use the serialize handler, whose spill rebuilds keys into a
+// scratch arena of up to 8 MB per run and writes them through the spiller's batch. Both are spill
+// working memory: reclaim must not take them from the task pool (mt_case q3 at 1-4 GB offheap),
+// and their peak must still be visible in the operator stats.
+TEST(HashAggregationNullGroupReclaimTest, SerializedKeySpillWorkingMemoryStaysOutOfTaskPool)
+{
+    constexpr int32_t kGroups = 200000;
+    constexpr int32_t kRowsPerBatch = 12500;
+    mem::OmniTaskMemoryPool pool(nullptr);
+    std::vector<uint32_t> groupByCols({0, 1});
+    DataTypes groupInputTypes(std::vector<DataTypePtr>({VarcharType(120), LongType()}));
+    auto aggInputCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t>({2}));
+    auto aggInputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({IntType()})));
+    auto aggOutputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    std::vector<uint32_t> aggFuncTypes({OMNI_AGGREGATION_TYPE_COUNT_COLUMN});
+    std::vector<uint32_t> maskCols({static_cast<uint32_t>(-1)});
+    std::vector<bool> inputRaws({true});
+    std::vector<bool> outputPartials({false});
+    std::vector<int8_t> hasAggFilters({static_cast<int8_t>(-1)});
+    SparkSpillConfig spillConfig(TestUtil::GenerateSpillPath(), INT32_MAX, 0);
+    OperatorConfig operatorConfig(spillConfig);
+    auto factory = std::make_unique<HashAggregationOperatorFactory>(groupByCols, groupInputTypes,
+        aggInputCols, aggInputTypes, aggOutputTypes, aggFuncTypes, maskCols, inputRaws,
+        outputPartials, hasAggFilters, operatorConfig, AggregationNode::Step::K_SINGLE);
+    factory->Init();
+    auto *aggregation = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+    aggregation->setNoMoreInput(false);
+
+    const auto addPass = [&]() {
+        for (int32_t first = 0; first < kGroups; first += kRowsPerBatch) {
+            std::vector<std::string> names(kRowsPerBatch);
+            std::vector<int64_t> ids(kRowsPerBatch);
+            std::vector<int32_t> ones(kRowsPerBatch, 1);
+            for (int32_t row = 0; row < kRowsPerBatch; ++row) {
+                names[row] = std::string(100, 'k') + std::to_string(first + row);
+                ids[row] = first + row;
+            }
+            DataTypes types(std::vector<DataTypePtr>({VarcharType(120), LongType(), IntType()}));
+            aggregation->AddInput(TestUtil::CreateVectorBatch(types, kRowsPerBatch, names.data(), ids.data(), ones.data()));
+        }
+    };
+
+    addPass();
+    const int64_t usedBefore = pool.currentBytes();
+    const int64_t peakBefore = pool.peakBytes();
+    EXPECT_GT(aggregation->reclaim(1), 0);
+    const int64_t reclaimGrowth = pool.peakBytes() - std::max(usedBefore, peakBefore);
+    EXPECT_LT(reclaimGrowth, 2 * 1024 * 1024) << "reclaim grew the pool by " << reclaimGrowth << " bytes";
+    EXPECT_GT(aggregation->stats().spillScratchPeakBytes, 1024 * 1024u);
+
+    addPass();
+    aggregation->setNoMoreInput(true);
+    int64_t rows = 0;
+    int64_t wrongCounts = 0;
+    while (!aggregation->isFinished()) {
+        VectorBatch *output = nullptr;
+        {
+            op::Operator::NonReclaimableSection driverGuard(aggregation);
+            aggregation->GetOutput(&output);
+        }
+        if (output == nullptr) continue;
+        auto *counts = static_cast<Vector<int64_t> *>(output->Get(2));
+        for (int32_t row = 0; row < output->GetRowCount(); ++row) {
+            wrongCounts += counts->GetValue(row) != 2;
+        }
+        rows += output->GetRowCount();
+        VectorHelper::FreeVecBatch(output);
+    }
+    EXPECT_EQ(rows, kGroups);
+    EXPECT_EQ(wrongCounts, 0);
+    op::Operator::DeleteOperator(aggregation);
+}
+
 TEST(HashAggregationNullGroupReclaimTest, ArrayTableSpillPreservesGroupsAndNullGroup)
 {
     auto r = RunArrayTableSpill(1);

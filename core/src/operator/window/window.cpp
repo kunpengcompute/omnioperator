@@ -747,6 +747,7 @@ ErrorCode WindowOperator::SpillToDisk()
 
     LogDebug("Spill data to disk starting in window operator, rowCount=%lld\n", rowCount);
     auto result = spiller->Spill(pagesIndex.get(), canInplaceSort, false, this);
+    stats_.spillScratchPeakBytes = std::max(stats_.spillScratchPeakBytes, spiller->ScratchPeakBytes());
     UpdateSpillTimesInfo();
     LogDebug("Spill data to disk finished in window operator, rowCount=%lld\n", rowCount);
     return result;

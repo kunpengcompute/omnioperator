@@ -19,6 +19,7 @@
 #include "plannode/planNode.h"
 #include "util/format.h"
 #include "metrics/metrics_config.h"
+#include <algorithm>
 #include <unordered_map>
 
 namespace omniruntime::compute {
@@ -66,6 +67,7 @@ PlanNodeStats& PlanNodeStats::operator+=(const PlanNodeStats& another)
     spilledRows += another.spilledRows;
     spilledPartitions += another.spilledPartitions;
     spilledFiles += another.spilledFiles;
+    spillScratchPeakBytes = std::max(spillScratchPeakBytes, another.spillScratchPeakBytes);
 
     return *this;
 }
@@ -144,6 +146,7 @@ void PlanNodeStats::AddTotals(const OperatorStats& stats)
     spilledRows += stats.spilledRows;
     spilledPartitions += stats.spilledPartitions;
     spilledFiles += stats.spilledFiles;
+    spillScratchPeakBytes = std::max(spillScratchPeakBytes, stats.spillScratchPeakBytes);
 
     HashJoinOperator(stats);
 }
@@ -208,7 +211,7 @@ std::string PlanNodeStats::ToString(
         << ", Threads: " << numDrivers
         << ", Splits: " << numSplits
         <<", Spilled: " << spilledRows << " rows ("
-            << spilledBytes << ", " << spilledFiles << " files)";
+            << spilledBytes << ", " << spilledFiles << " files, scratch peak " << spillScratchPeakBytes << ")";
     out << ", CPU breakdown: B/I/O/F "
         << Format(
             "({}/{}/{}/{})", isBlockedTiming.cpuNanos, addInputTime.cpuNanos,

@@ -149,6 +149,12 @@ public:
         return spillTracker->GetSpilledBytes();
     }
 
+    // Largest write batch built by Spill(); reported in operator stats only.
+    uint64_t ScratchPeakBytes() const
+    {
+        return scratchPeakBytes_;
+    }
+
     SpillTracker *GetSpillTracker() const
     {
         return spillTracker;
@@ -191,7 +197,11 @@ private:
     std::vector<std::string> dirPaths;
     std::vector<int32_t> outputCols;
     int32_t maxRowCountPerBatch;
+    // Write batch for one Spill() call. It is built without a task pool: spills usually run inside
+    // Spark-driven reclaim when the task has no headroom, and this batch is released before
+    // Spill() returns, long before the spilled state frees far more.
     std::unique_ptr<vec::VectorBatch> spillVecBatch = nullptr;
+    uint64_t scratchPeakBytes_ = 0;
     std::vector<SpillWriter *> writers;
     SpillTracker *spillTracker = nullptr;
     uint64_t writeBufferSize = 0;
