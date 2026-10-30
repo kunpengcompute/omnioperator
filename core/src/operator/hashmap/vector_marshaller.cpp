@@ -200,6 +200,28 @@ ALWAYS_INLINE VectorSerializer SelectSerializerByEncodingAndType(BaseVector *vec
     return serializer;
 }
 
+// Join key compare must use the same encoding dispatch as SelectSerializerByEncodingAndType.
+// A dictionary or const struct field compared as a flat vector reads the wrong bytes.
+ALWAYS_INLINE VectorComparator SelectComparatorByEncodingAndType(BaseVector *vec, type::DataTypeId typeId)
+{
+    const size_t idx = static_cast<size_t>(typeId);
+    VectorComparator comparator = nullptr;
+    if (vec->GetEncoding() == Encoding::OMNI_DICTIONARY && idx < dicVectorComparatorCenter.size() &&
+        dicVectorComparatorCenter[idx] != nullptr) {
+        comparator = dicVectorComparatorCenter[idx];
+    } else if (vec->GetEncoding() == Encoding::OMNI_ENCODING_CONST && idx < constVectorComparatorCenter.size() &&
+        constVectorComparatorCenter[idx] != nullptr) {
+        comparator = constVectorComparatorCenter[idx];
+    }
+    if (comparator != nullptr) {
+        return comparator;
+    }
+    if (idx < vectorComparatorCenter.size()) {
+        return vectorComparatorCenter[idx];
+    }
+    return nullptr;
+}
+
 void ALWAYS_INLINE ArrayVectorSerializer(ArrayVector &arrayVector, int32_t rowIdx, mem::SimpleArenaAllocator
     &arenaAllocator, StringRef &result) {
     int64_t offset = arrayVector.GetOffset(rowIdx);
@@ -556,7 +578,8 @@ bool RowVectorComparator(BaseVector &baseVector, int32_t rowIdx, uint8_t *&begin
             throw OmniException("RowVector's field Comparator failed : Invalid childTypeId", std::to_string(childTypeId));
         }
 
-        auto comparator = vectorComparatorCenter[childTypeId];
+        auto comparator = SelectComparatorByEncodingAndType(childVec.get(),
+            static_cast<type::DataTypeId>(childTypeId));
         if (comparator == nullptr) {
             throw OmniException("RowVector's field Comparator failed : Unsupport childTypeId", std::to_string(childTypeId));
         }
