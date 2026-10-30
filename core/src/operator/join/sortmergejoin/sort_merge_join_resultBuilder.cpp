@@ -827,8 +827,6 @@ int32_t JoinResultBuilder::AddJoinValueAddresses()
 void JoinResultBuilder::FreeVectorBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId)
 {
     if (!isPreMatched && leftBatchId > lastUnMatchedStreamedBatchId) {
-        LogWarn("SMJ_LEFT_JOIN_FREE builder=%p left_batch=%d right_batch=%d previous_left_freed=%d",
-            static_cast<const void *>(this), leftBatchId, rightBatchId, lastUnMatchedStreamedBatchId);
         leftTablePagesIndex->FreeBeforeVecBatch(leftBatchId);
         rightTablePagesIndex->FreeBeforeVecBatch(rightBatchId);
         lastUnMatchedStreamedBatchId = leftBatchId;
