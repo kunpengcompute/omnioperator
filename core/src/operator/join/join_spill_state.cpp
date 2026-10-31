@@ -5,13 +5,16 @@
 #include "join_spill_state.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <iostream>
 #include <sys/stat.h>
+#include <system_error>
+#include <unistd.h>
 #include <vector>
 
 #include "join_sub_partitioner.h"
@@ -30,8 +33,6 @@
 
 namespace omniruntime::op {
 namespace {
-
-std::atomic<uint64_t> gJoinSpillSessionId{0};
 
 std::string NormalizeLocalSpillDir(const std::string &path)
 {
@@ -158,6 +159,18 @@ JoinSpillState::~JoinSpillState()
         RemoveBuildSpillFilesLocked();
     } catch (...) {
     }
+    // Also remove untracked files left behind by failed spill operations.
+    try {
+        if (!sessionDir_.empty()) {
+            std::error_code error;
+            std::filesystem::remove_all(sessionDir_, error);
+            if (error) {
+                LogWarn("Failed to remove join spill session directory %s: %s.", sessionDir_.c_str(),
+                    error.message().c_str());
+            }
+        }
+    } catch (...) {
+    }
     for (uint32_t sp = 0; sp < pendingVisitedFlags_.size(); ++sp) {
         ClearPendingVisitedFlagsLocked(sp);
     }
@@ -169,9 +182,14 @@ void JoinSpillState::EnsureSessionDirLocked()
         return;
     }
     MkdirIfNeeded(spillDir_);
-    const auto sessionId = gJoinSpillSessionId.fetch_add(1, std::memory_order_relaxed);
-    sessionDir_ = spillDir_ + "/join-spill-" + std::to_string(sessionId);
-    MkdirIfNeeded(sessionDir_);
+    // Each process must own a unique directory before the destructor can remove it.
+    std::string pattern = spillDir_ + "/join-spill-" + std::to_string(static_cast<int>(getpid())) + "-XXXXXX";
+    if (mkdtemp(pattern.data()) == nullptr) {
+        const int err = errno;
+        throw omniruntime::exception::OmniException("JOIN_SPILL_WRITE_FAILED",
+            "Failed to create join spill session directory '" + pattern + "': " + std::strerror(err));
+    }
+    sessionDir_ = std::move(pattern);
 }
 
 uint64_t JoinSpillState::NextRunId()

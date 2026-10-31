@@ -2,6 +2,8 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
  * Description: Compact JoinSpillState coverage for the upstream branch.
  */
+#include <cstdio>
+#include <filesystem>
 #include <memory>
 #include "gtest/gtest.h"
 #include "join_spill_dual_run_test_util.h"
@@ -215,4 +217,27 @@ TEST(JoinSpillStateHandoffTest, BuildSpillSchemaAndRoundTrip)
     shared->RestoreBuildSubPartition(variants, 1);
     EXPECT_FALSE(shared->HasPendingBuildSpill(1));
     delete factory;
+}
+
+TEST(JoinSpillStateHandoffTest, DestructorRemovesSessionDir)
+{
+    join_spill_dual_run::ScopedTempDirectory root("session-cleanup");
+    auto state = std::make_unique<JoinSpillState>(root.path().string(), LongTypes(), LongTypes(), 4);
+    auto *batch = join_spill_dual_run::MakeLongKeyValueBatch({100, 101}, {1000, 1001});
+    state->SpillBuildSubPartition(0, 0, batch);
+    VectorHelper::FreeVecBatch(batch);
+
+    // Simulate a probe file left behind by a failed writer close.
+    const std::string probeDir = state->ProbeSubPartitionDir(0, 1);
+    std::FILE *orphan = std::fopen((probeDir + "/orphan").c_str(), "w");
+    ASSERT_NE(orphan, nullptr);
+    std::fclose(orphan);
+
+    auto other = std::make_unique<JoinSpillState>(root.path().string(), LongTypes(), LongTypes(), 4);
+    const std::string otherDir = other->ProbeSubPartitionDir(0, 0);
+    state.reset();
+    EXPECT_FALSE(std::filesystem::exists(probeDir));
+    EXPECT_TRUE(std::filesystem::exists(otherDir));
+    other.reset();
+    EXPECT_TRUE(std::filesystem::is_empty(root.path()));
 }

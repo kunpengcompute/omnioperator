@@ -114,7 +114,8 @@ Harness MakeHarness(const std::string &dir, const DataTypes &types, int32_t hash
         harness.hashFactory->SetJoinSpillPolicy(true, JoinSpillTestSubPartitionConfig());
         harness.hashFactory->SetJoinSpillState(harness.state);
         harness.hashFactory->SetSpillConfig(MakeJoinSpillTestSparkConfig(dir));
-        harness.hashFactory->SetJoinSpillMemThresholdForTest(force ? 0 : LLONG_MAX);
+        // Force spill even if process-wide accounted memory is negative after earlier tests.
+        harness.hashFactory->SetJoinSpillMemThresholdForTest(force ? LLONG_MIN : LLONG_MAX);
     }
     std::vector<int32_t> outputs(static_cast<size_t>(types.GetSize()));
     for (int32_t i = 0; i < types.GetSize(); ++i) {
@@ -188,7 +189,7 @@ join_spill_dual_run::TupleMultiset RunExpr(const std::string &dir, bool force)
     hashFactory->SetJoinSpillPolicy(true, JoinSpillTestSubPartitionConfig());
     hashFactory->SetJoinSpillState(state);
     hashFactory->SetSpillConfig(MakeJoinSpillTestSparkConfig(dir));
-    hashFactory->SetJoinSpillMemThresholdForTest(force ? 0 : LLONG_MAX);
+    hashFactory->SetJoinSpillMemThresholdForTest(force ? LLONG_MIN : LLONG_MAX);
     std::vector<expr::Expr *> probeKeys{new expr::BinaryExpr(expr::Operator::ADD, new expr::FieldExpr(0, LongType()),
         new expr::LiteralExpr(0L, LongType()), LongType())};
     int32_t outputs[] = {0, 1};

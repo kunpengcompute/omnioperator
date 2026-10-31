@@ -160,7 +160,7 @@ ErrorCode Spiller::MergeRecentFiles(size_t startIdx, bool compareWithHashVal)
             if (result != ErrorCode::SUCCESS) {
                 break;
             }
-            auto vecBatchSize = CollectVecBatchSize(mergedVecBatchPtr);
+            auto vecBatchSize = CollectVecBatchSize(dataTypes, mergedVecBatchPtr);
             result = writer->WriteVecBatch(mergedVecBatchPtr, vecBatchSize);
             if (result != ErrorCode::SUCCESS) {
                 break;

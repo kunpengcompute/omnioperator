@@ -228,7 +228,8 @@ TEST(SpillTest, TestWriteReadLongNestedJoinSpillDir)
     mkdir(path.c_str(), 0750);
 
     SpillWriter writer(sourceTypes, path);
-    ASSERT_EQ(writer.WriteVecBatch(vecBatch, 100), ErrorCode::SUCCESS);
+    auto vecBatchSize = Spiller::CollectVecBatchSize(sourceTypes, vecBatch);
+    ASSERT_EQ(writer.WriteVecBatch(vecBatch, vecBatchSize), ErrorCode::SUCCESS);
     ASSERT_EQ(writer.Close(), ErrorCode::SUCCESS);
     VectorHelper::FreeVecBatch(vecBatch);
 

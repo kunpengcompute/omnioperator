@@ -859,14 +859,20 @@ void JoinHashTableVariants<KeyType, RowRefListType>::BuildHashTableAdaptive(int3
     // Group probe leaves the sentinel tail unwrapped. Keep one entire group empty
     // at the 0.9 growth threshold so a tiny adaptive seed cannot overwrite a live
     // slot before NeedRehash. With 16-slot groups this starts at 256 slots.
+    constexpr uint8_t MAX_DEGREE = 63;
     uint8_t initDegree = MIN_DEGREE;
-    while (true) {
+    while (initDegree <= MAX_DEGREE) {
         const uint64_t capacity = 1ULL << initDegree;
         const auto threshold = static_cast<uint64_t>(std::ceil(static_cast<double>(capacity) * MAX_LOAD_FACTOR));
         if (capacity - threshold >= Group::kWidth) {
             break;
         }
         ++initDegree;
+    }
+    // Keep the shift below defined even if the load-factor/group constants change
+    // so that no degree satisfies the condition above.
+    if (initDegree > MAX_DEGREE) {
+        initDegree = MAX_DEGREE;
     }
     if (isFixedKeys) {
         BuildNormalHashTableWithFixedKey(partitionIndex, initDegree);

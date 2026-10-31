@@ -125,8 +125,10 @@ void PumpLimitDrivers(JoinType joinType, int32_t *outputRows, bool *finished)
         return std::make_shared<const ValueStreamNode>(id, typePtr,
             std::make_shared<ResultIterator>(std::make_unique<It>(std::move(batches))));
     };
-    std::vector<ExprPtr> leftKeys{new FieldExpr(0, LongType())};
-    std::vector<ExprPtr> rightKeys{new FieldExpr(0, LongType())};
+    auto leftKey = std::make_unique<FieldExpr>(0, LongType());
+    auto rightKey = std::make_unique<FieldExpr>(0, LongType());
+    std::vector<ExprPtr> leftKeys{leftKey.get()};
+    std::vector<ExprPtr> rightKeys{rightKey.get()};
     std::vector<Expr *> partitionKeys;
     for (int32_t col = 0; col < types.GetSize() * 2; ++col) {
         partitionKeys.push_back(new FieldExpr(col, LongType()));
@@ -282,6 +284,7 @@ TEST(JoinSpillDriverTest, RePumpDrivesAscendingRestoreToCompletion)
     EXPECT_EQ(3, rows);
     omniruntime::op::Operator::DeleteOperator(probe);
     omniruntime::op::Operator::DeleteOperator(build);
+    delete lookupFactory;
     delete hashFactory;
 }
 TEST(JoinSpillDriverTest, RuntimeLayoutChangesAfterForcedSpill)
@@ -320,22 +323,26 @@ TEST(JoinSpillDriverTest, NoSessionBuildStateRelease)
         build->AddInput(MakeLongKeyValueBatch({1, 2}, {10, 19}));
         build->noMoreInput();
         GetOutput(build);
-        auto *probe = dynamic_cast<LookupJoinOperator *>(LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        auto *lookupFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
             types, outputs, 2, hashCols, 1, outputs, 2, types, reinterpret_cast<int64_t>(hashFactory), nullptr, false,
-            nullptr)->CreateOperator());
+            nullptr);
+        auto *probe = dynamic_cast<LookupJoinOperator *>(lookupFactory->CreateOperator());
         probe->AddInput(MakeLongKeyValueBatch({1}, {201}));
         probe->noMoreInput();
         for (int32_t i = 0; i < 100000 && !probe->isFinished(); ++i) GetOutput(probe);
         if (joinType == OMNI_JOIN_TYPE_FULL) {
-            auto *outer = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(types, outputs, 2,
-                outputs, types, reinterpret_cast<int64_t>(hashFactory), OMNI_BUILD_RIGHT)->CreateOperator();
+            auto *outerFactory = LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(types, outputs, 2,
+                outputs, types, reinterpret_cast<int64_t>(hashFactory), OMNI_BUILD_RIGHT);
+            auto *outer = outerFactory->CreateOperator();
             for (int32_t i = 0; i < 100000 && !outer->isFinished(); ++i) GetOutput(outer);
             probe->FinishFullTableProbeAfterOuter();
             omniruntime::op::Operator::DeleteOperator(outer);
+            delete outerFactory;
         }
         EXPECT_EQ(0u, HashTableSize(hashFactory));
         omniruntime::op::Operator::DeleteOperator(probe);
         omniruntime::op::Operator::DeleteOperator(build);
+        delete lookupFactory;
         delete hashFactory;
     }
 }
@@ -347,7 +354,8 @@ TEST(JoinSpillDriverTest, BuildPreservingOuterDefersCompletion)
     build->AddInput(MakeLongKeyValueBatch({1, 2}, {10, 19}));
     build->noMoreInput();
     GetOutput(build);
-    auto *probe = dynamic_cast<LookupJoinOperator *>(MakeLookupFactory(hashFactory, state)->CreateOperator());
+    auto *lookupFactory = MakeLookupFactory(hashFactory, state);
+    auto *probe = dynamic_cast<LookupJoinOperator *>(lookupFactory->CreateOperator());
     probe->AddInput(MakeLongKeyValueBatch({1}, {201}));
     probe->noMoreInput();
     for (int32_t i = 0; i < 1000 && !probe->isFinished(); ++i) GetOutput(probe);
@@ -355,6 +363,7 @@ TEST(JoinSpillDriverTest, BuildPreservingOuterDefersCompletion)
     EXPECT_GT(HashTableSize(hashFactory), 0u);
     omniruntime::op::Operator::DeleteOperator(probe);
     omniruntime::op::Operator::DeleteOperator(build);
+    delete lookupFactory;
     delete hashFactory;
 }
 TEST(JoinSpillDriverTest, MultiSpChunkPreservesColumnPermutation)
