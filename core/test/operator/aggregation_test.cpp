@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <mutex>
 #include <cstdarg>
+#include <string_view>
 #include <gtest/gtest.h>
 #include "operator/aggregation/aggregator/all_aggregators.h"
 #include "operator/aggregation/aggregator/aggregator_util.h"
@@ -23,6 +24,8 @@
 #include "operator/aggregation/aggregator/aggregator_factory.h"
 #include "operator/aggregation/aggregator/corr_aggregator.h"
 #include "memory/omni_task_memory_pool.h"
+#include "memory/pool_listener.h"
+#include "operator/reclaim_context.h"
 #include "type/decimal128.h"
 #include "util/type_util.h"
 
@@ -3248,6 +3251,116 @@ TEST(HashAggregationOperatorTest, ReclaimsSerializedKeysAcrossInputBatches)
     }
     EXPECT_EQ(outputRows, kRowsPerBatch * 3);
     EXPECT_TRUE(std::all_of(seen.begin(), seen.end(), [](bool value) { return value; }));
+    op::Operator::DeleteOperator(aggregation);
+    EXPECT_EQ(pool.currentBytes(), 0);
+}
+
+namespace {
+// Plays Spark: when the partial aggregation pre-reserves before growing, spill
+// the task first and then grant the reservation.
+class SpillOnEnsureInputFitsListener : public omniruntime::mem::PoolListener {
+public:
+    void allocationChanged(int64_t diff) override
+    {
+        if (diff <= 0 || pool == nullptr || reclaiming) {
+            return;
+        }
+        const auto request = CurrentReservationRequest();
+        if (request.site == nullptr ||
+            std::string_view(request.site) != "HashAggregationOperator::EnsureInputFits") {
+            return;
+        }
+        ++requests;
+        requestorReclaimable = request.requestor != nullptr && !request.requestor->isInNonReclaimableSection();
+        reclaiming = true;
+        freed += pool->reclaim(diff);
+        reclaiming = false;
+    }
+    omniruntime::mem::OmniTaskMemoryPool *pool = nullptr;
+    bool reclaiming = false;
+    bool requestorReclaimable = false;
+    int requests = 0;
+    int64_t freed = 0;
+};
+} // namespace
+
+TEST(HashAggregationOperatorTest, PartialAggregationSpillsDuringInputReservation)
+{
+    // Growth inside AddInput is not reclaimable, so partial aggregation must
+    // reserve before each batch and spill itself there under pressure.
+    constexpr int32_t kRowsPerBatch = 200000;
+    constexpr int32_t kKeyRanges = 3;
+    constexpr int32_t kBatches = 6;
+    SpillOnEnsureInputFitsListener listener;
+    omniruntime::mem::OmniTaskMemoryPool pool(&listener);
+    listener.pool = &pool;
+    const auto makeInput = [&](int32_t firstKey) {
+        auto *input = new VectorBatch(kRowsPerBatch);
+        auto *keys = new Vector<int64_t>(kRowsPerBatch, &pool);
+        auto *values = new Vector<int64_t>(kRowsPerBatch, &pool);
+        for (int32_t row = 0; row < kRowsPerBatch; ++row) {
+            // Sparse keys force the normal hashmap and stay inside the legacy
+            // std::stoi unspill range.
+            keys->SetValue(row, static_cast<int64_t>(firstKey + row) * 3001);
+            values->SetValue(row, 1);
+        }
+        input->Append(keys);
+        input->Append(values);
+        return input;
+    };
+
+    std::vector<uint32_t> groupByCols({0});
+    DataTypes groupInputTypes(std::vector<DataTypePtr>({LongType()}));
+    auto aggInputCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t>({1}));
+    auto aggInputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    auto aggOutputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    std::vector<uint32_t> aggFuncTypes({OMNI_AGGREGATION_TYPE_SUM});
+    std::vector<uint32_t> maskCols({static_cast<uint32_t>(-1)});
+    std::vector<bool> inputRaws({true});
+    std::vector<bool> outputPartials({true});
+    std::vector<int8_t> hasAggFilters({static_cast<int8_t>(-1)});
+    SparkSpillConfig spillConfig(GenerateSpillPath(), INT32_MAX, 0);
+    OperatorConfig operatorConfig(spillConfig);
+    auto factory = std::make_unique<HashAggregationOperatorFactory>(groupByCols, groupInputTypes,
+        aggInputCols, aggInputTypes, aggOutputTypes, aggFuncTypes, maskCols, inputRaws,
+        outputPartials, hasAggFilters, operatorConfig, AggregationNode::Step::K_PARTIAL);
+    factory->Init();
+    auto *aggregation = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+    ASSERT_NE(aggregation, nullptr);
+    ASSERT_TRUE(aggregation->IsStepPartials());
+    aggregation->SetRowCountPerBatch(kRowsPerBatch);
+    aggregation->setNoMoreInput(false);
+
+    for (int32_t batch = 0; batch < kBatches; ++batch) {
+        // Every key range arrives twice, so spilled runs must merge.
+        auto *input = makeInput((batch % kKeyRanges) * kRowsPerBatch);
+        op::Operator::NonReclaimableSection section(aggregation);
+        aggregation->AddInput(input);
+    }
+    EXPECT_GT(listener.requests, 0);
+    EXPECT_TRUE(listener.requestorReclaimable);
+    EXPECT_GT(listener.freed, 0);
+
+    aggregation->setNoMoreInput(true);
+    std::vector<int64_t> sums(kRowsPerBatch * kKeyRanges, 0);
+    while (!aggregation->isFinished()) {
+        VectorBatch *output = nullptr;
+        aggregation->GetOutput(&output);
+        if (output != nullptr) {
+            auto *keys = static_cast<Vector<int64_t> *>(output->Get(0));
+            auto *values = static_cast<Vector<int64_t> *>(output->Get(1));
+            for (int32_t row = 0; row < output->GetRowCount(); ++row) {
+                const int64_t key = keys->GetValue(row);
+                ASSERT_EQ(key % 3001, 0);
+                ASSERT_GE(key / 3001, 0);
+                ASSERT_LT(key / 3001, static_cast<int64_t>(sums.size()));
+                sums[key / 3001] += values->GetValue(row);
+            }
+            VectorHelper::FreeVecBatch(output);
+        }
+    }
+    EXPECT_TRUE(std::all_of(sums.begin(), sums.end(), [](int64_t sum) { return sum == kBatches / kKeyRanges; }));
+    EXPECT_GT(aggregation->GetSpilledBytes(), 0);
     op::Operator::DeleteOperator(aggregation);
     EXPECT_EQ(pool.currentBytes(), 0);
 }

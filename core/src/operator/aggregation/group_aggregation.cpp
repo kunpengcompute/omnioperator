@@ -286,10 +286,12 @@ void HashAggregationOperator::EnsureReservationPctsCached()
 
 void HashAggregationOperator::EnsureInputFits(const VectorBatch *vecBatch)
 {
-    // Match Velox GroupingSet::ensureInputFits: partial aggregation and an
-    // empty table rely on normal allocation/arbitration instead of reserving.
-    if (pool_ == nullptr || isStepPartials ||
-        !operatorConfig.GetSpillConfig()->IsSpillEnabled() || GetElementsSize() == 0) {
+    // Match Velox GroupingSet::ensureInputFits: an empty table relies on normal
+    // allocation/arbitration instead of reserving. Unlike Velox, partial
+    // aggregation reserves too: Omni has no memory-driven partial flush, so a
+    // partial table otherwise grows only inside AddInput, where arbitration
+    // cannot spill it, and the task fails once its memory share is used up.
+    if (pool_ == nullptr || !operatorConfig.GetSpillConfig()->IsSpillEnabled() || GetElementsSize() == 0) {
         return;
     }
     constexpr uint64_t kMax = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
