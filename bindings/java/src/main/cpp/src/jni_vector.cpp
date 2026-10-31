@@ -333,10 +333,14 @@ JNIEXPORT jint JNICALL Java_nova_hetu_omniruntime_vector_Vec_getVecEncodingNativ
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_VarcharVec_expandDataCapacity(JNIEnv *env, jclass jcls,
     jlong jNativeVector, jint jToCapacityInBytes)
 {
+    // The buffer growth reserves task-pool memory, and a denied reservation
+    // must reach Java as an exception instead of terminating the executor.
+    JNI_METHOD_START
     auto nativeVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(jNativeVector);
     char *newBuffAddress =
         omniruntime::vec::unsafe::UnsafeStringVector::ExpandStringBuffer(nativeVector, jToCapacityInBytes);
     return reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(newBuffAddress));
+    JNI_METHOD_END(0)
 }
 
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_Vec_setNullFlagNative(JNIEnv *env, jclass jcls,
