@@ -22,6 +22,102 @@ class IfFunction : public VectorFunction {
 public:
     explicit IfFunction() {}
 
+    /// Creates the result vector for an if expression, mirroring the structure of
+    /// sourceVec (used for complex types whose children must be allocated upfront).
+    static void CreateResultVector(DataTypeId typeId, int32_t size, BaseVector *sourceVec,
+        BaseVector *&result)
+    {
+        switch (typeId) {
+            case OMNI_ARRAY :
+            {
+                auto *srcArray = static_cast<ArrayVector *>(sourceVec);
+                auto elemVec = std::shared_ptr<BaseVector>(
+                    VectorHelper::CreateFlatVector(srcArray->GetElementVector()->GetTypeId(), 0));
+                result = new ArrayVector(size, elemVec);
+                break;
+            }
+            case OMNI_MAP :
+            {
+                auto *srcMap = static_cast<MapVector *>(sourceVec);
+                auto keyVec = std::shared_ptr<BaseVector>(
+                    VectorHelper::CreateFlatVector(srcMap->GetKeyVector()->GetTypeId(), 0));
+                auto valVec = std::shared_ptr<BaseVector>(
+                    VectorHelper::CreateFlatVector(srcMap->GetValueVector()->GetTypeId(), 0));
+                result = new MapVector(size, keyVec, valVec);
+                break;
+            }
+            case OMNI_ROW :
+            {
+                auto *srcRow = static_cast<RowVector *>(sourceVec);
+                auto *resRow = new RowVector(size);
+                for (int32_t c = 0; c < srcRow->ChildSize(); ++c) {
+                    auto childTypeId = srcRow->ChildAt(c)->GetTypeId();
+                    resRow->AddChild(VectorHelper::CreateFlatVector(childTypeId, size));
+                }
+                result = resRow;
+                break;
+            }
+            default :
+                result = VectorHelper::CreateFlatVector(typeId, size);
+                break;
+        }
+    }
+
+    static void CopyArrayValue(BaseVector *source, BaseVector *result, int32_t srcRow, int32_t dstRow)
+    {
+        auto *srcArray = static_cast<ArrayVector *>(source);
+        auto *resArray = static_cast<ArrayVector *>(result);
+        BaseVector *elemSlice = srcArray->GetValue(srcRow);
+        resArray->SetValue(dstRow, elemSlice);
+        delete elemSlice;
+    }
+
+    static void CopyMapValue(BaseVector *source, BaseVector *result, int32_t srcRow, int32_t dstRow)
+    {
+        auto *srcMap = static_cast<MapVector *>(source);
+        auto *resMap = static_cast<MapVector *>(result);
+        int64_t mapEntryCount = srcMap->GetSize(srcRow);
+        int64_t srcStartOffset = srcMap->GetOffset(srcRow);
+        int64_t resStartOffset = resMap->GetOffset(dstRow);
+
+        if (mapEntryCount > 0) {
+            BaseVector *resKeys = const_cast<BaseVector *>(resMap->GetKeyVector().get());
+            VectorHelper::ExpandElementVector(resKeys, resKeys->GetTypeId(),
+                static_cast<int32_t>(resStartOffset + mapEntryCount));
+            BaseVector *srcKeySlice = srcMap->GetKeyVector()->Slice(
+                static_cast<int>(srcStartOffset), static_cast<int>(mapEntryCount));
+            VectorHelper::AppendVector(resKeys, static_cast<int32_t>(resStartOffset),
+                srcKeySlice, static_cast<int32_t>(mapEntryCount));
+            delete srcKeySlice;
+
+            BaseVector *resValues = const_cast<BaseVector *>(resMap->GetValueVector().get());
+            VectorHelper::ExpandElementVector(resValues, resValues->GetTypeId(),
+                static_cast<int32_t>(resStartOffset + mapEntryCount));
+            BaseVector *srcValSlice = srcMap->GetValueVector()->Slice(
+                static_cast<int>(srcStartOffset), static_cast<int>(mapEntryCount));
+            VectorHelper::AppendVector(resValues, static_cast<int32_t>(resStartOffset),
+                srcValSlice, static_cast<int32_t>(mapEntryCount));
+            delete srcValSlice;
+        }
+        resMap->SetSize(dstRow, static_cast<int32_t>(mapEntryCount));
+    }
+
+    static void CopyRowValue(BaseVector *source, BaseVector *result, int32_t srcRow, int32_t dstRow)
+    {
+        auto *srcRowVec = static_cast<RowVector *>(source);
+        auto *resRow = static_cast<RowVector *>(result);
+
+        for (int32_t c = 0; c < srcRowVec->ChildSize(); ++c) {
+            BaseVector *srcChild = srcRowVec->ChildAt(c).get();
+            BaseVector *resChild = resRow->ChildAt(c).get();
+            if (srcChild->IsNull(srcRow)) {
+                resChild->SetNull(dstRow);
+            } else {
+                VectorHelper::CopyValue(srcChild, srcRow, resChild, dstRow);
+            }
+        }
+    }
+
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
         ExecutionContext *context) const override
     {
@@ -203,110 +299,16 @@ private:
 
             switch (typeId) {
                 case OMNI_ARRAY:
-                    CopyArrayValue(temp, result, row);
+                    CopyArrayValue(temp, result, row, row);
                     break;
                 case OMNI_MAP:
-                    CopyMapValue(temp, result, row);
+                    CopyMapValue(temp, result, row, row);
                     break;
                 case OMNI_ROW:
-                    CopyRowValue(temp, result, row);
+                    CopyRowValue(temp, result, row, row);
                     break;
                 default:
                     break;
-            }
-        }
-    }
-
-    void CreateResultVector(DataTypeId typeId, int32_t size, BaseVector *sourceVec,
-        BaseVector *&result) const
-    {
-        switch (typeId) {
-            case OMNI_ARRAY :
-            {
-                auto *srcArray = static_cast<ArrayVector *>(sourceVec);
-                auto elemVec = std::shared_ptr<BaseVector>(
-                    VectorHelper::CreateFlatVector(srcArray->GetElementVector()->GetTypeId(), 0));
-                result = new ArrayVector(size, elemVec);
-                break;
-            }
-            case OMNI_MAP :
-            {
-                auto *srcMap = static_cast<MapVector *>(sourceVec);
-                auto keyVec = std::shared_ptr<BaseVector>(
-                    VectorHelper::CreateFlatVector(srcMap->GetKeyVector()->GetTypeId(), 0));
-                auto valVec = std::shared_ptr<BaseVector>(
-                    VectorHelper::CreateFlatVector(srcMap->GetValueVector()->GetTypeId(), 0));
-                result = new MapVector(size, keyVec, valVec);
-                break;
-            }
-            case OMNI_ROW :
-            {
-                auto *srcRow = static_cast<RowVector *>(sourceVec);
-                auto *resRow = new RowVector(size);
-                for (int32_t c = 0; c < srcRow->ChildSize(); ++c) {
-                    auto childTypeId = srcRow->ChildAt(c)->GetTypeId();
-                    resRow->AddChild(VectorHelper::CreateFlatVector(childTypeId, size));
-                }
-                result = resRow;
-                break;
-            }
-            default :
-                result = VectorHelper::CreateFlatVector(typeId, size);
-                break;
-        }
-    }
-
-    void CopyArrayValue(BaseVector *source, BaseVector *result, int32_t row) const
-    {
-        auto *srcArray = static_cast<ArrayVector *>(source);
-        auto *resArray = static_cast<ArrayVector *>(result);
-        BaseVector *elemSlice = srcArray->GetValue(row);
-        resArray->SetValue(row, elemSlice);
-        delete elemSlice;
-    }
-
-    void CopyMapValue(BaseVector *source, BaseVector *result, int32_t row) const
-    {
-        auto *srcMap = static_cast<MapVector *>(source);
-        auto *resMap = static_cast<MapVector *>(result);
-        int64_t mapEntryCount = srcMap->GetSize(row);
-        int64_t srcStartOffset = srcMap->GetOffset(row);
-        int64_t resStartOffset = resMap->GetOffset(row);
-
-        if (mapEntryCount > 0) {
-            BaseVector *resKeys = const_cast<BaseVector *>(resMap->GetKeyVector().get());
-            VectorHelper::ExpandElementVector(resKeys, resKeys->GetTypeId(),
-                static_cast<int32_t>(resStartOffset + mapEntryCount));
-            BaseVector *srcKeySlice = srcMap->GetKeyVector()->Slice(
-                static_cast<int>(srcStartOffset), static_cast<int>(mapEntryCount));
-            VectorHelper::AppendVector(resKeys, static_cast<int32_t>(resStartOffset),
-                srcKeySlice, static_cast<int32_t>(mapEntryCount));
-            delete srcKeySlice;
-
-            BaseVector *resValues = const_cast<BaseVector *>(resMap->GetValueVector().get());
-            VectorHelper::ExpandElementVector(resValues, resValues->GetTypeId(),
-                static_cast<int32_t>(resStartOffset + mapEntryCount));
-            BaseVector *srcValSlice = srcMap->GetValueVector()->Slice(
-                static_cast<int>(srcStartOffset), static_cast<int>(mapEntryCount));
-            VectorHelper::AppendVector(resValues, static_cast<int32_t>(resStartOffset),
-                srcValSlice, static_cast<int32_t>(mapEntryCount));
-            delete srcValSlice;
-        }
-        resMap->SetSize(row, static_cast<int32_t>(mapEntryCount));
-    }
-
-    void CopyRowValue(BaseVector *source, BaseVector *result, int32_t row) const
-    {
-        auto *srcRow = static_cast<RowVector *>(source);
-        auto *resRow = static_cast<RowVector *>(result);
-
-        for (int32_t c = 0; c < srcRow->ChildSize(); ++c) {
-            BaseVector *srcChild = srcRow->ChildAt(c).get();
-            BaseVector *resChild = resRow->ChildAt(c).get();
-            if (srcChild->IsNull(row)) {
-                resChild->SetNull(row);
-            } else {
-                VectorHelper::CopyValue(srcChild, row, resChild, row);
             }
         }
     }

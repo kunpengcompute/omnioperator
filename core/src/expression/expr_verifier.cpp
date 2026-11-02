@@ -368,9 +368,10 @@ void ExprVerifier::Visit(const FuncExpr &funcExpr)
 
 void ExprVerifier::Visit(const SwitchExpr &switchExpr)
 {
-    if (switchExpr.vectorFunction == nullptr) {
-        this->isSupportVectorization_ = false;
-    }
+    // SwitchExpr is evaluated directly by ExprEval::Visit(SwitchExpr) and
+    // ExpressionCodeGen::Visit(SwitchExpr); unlike IfExpr it has no
+    // vectorFunction registry entry, so the support flags come entirely from
+    // its children.
     std::vector<std::pair<Expr *, Expr *>> whenClause = switchExpr.whenClause;
     auto size = whenClause.size();
 

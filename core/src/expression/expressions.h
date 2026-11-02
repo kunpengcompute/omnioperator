@@ -361,12 +361,40 @@ class SwitchExpr : public Expr {
 public:
     std::vector<std::pair<Expr *, Expr *>> whenClause;
     Expr *falseExpr = nullptr;
+
+    // Null-propagation analysis, computed lazily by ExprEval::Visit(SwitchExpr) and
+    // reused across batches (same idiom as FuncExpr::vectorFunction). When
+    // propagatesNulls_ is true, every whenClause result and falseExpr are pure field
+    // references over the same field access path (nullFieldCol_ is its top-level
+    // column), and every condition references only that column. The evaluator then
+    // pre-fills the result nulls and skips conditions and results on rows where the
+    // field is null. When eqFieldConst_ is true, every condition is
+    // `field = <literal>` over the same field, so conditions run as allocation-free
+    // scalar passes over the remaining rows instead of compacted vector evaluations.
+    mutable bool switchAnalysisDone_ = false;
+    mutable bool propagatesNulls_ = false;
+    mutable int32_t nullFieldCol_ = -1;
+    mutable bool eqFieldConst_ = false;
+
     SwitchExpr();
     ~SwitchExpr() override;
     SwitchExpr(const std::vector<std::pair<Expr *, Expr *>> &whens, Expr *fexp);
 
     void Accept(ExprVisitor &visitor) const override;
     ExprType GetType() const override;
+
+    // The vectorized evaluator (ExprEval::Visit(SwitchExpr)) handles the lazy
+    // CASE cascade; declare support so operators route switch expressions to
+    // it instead of the codegen evaluator when vectorization is preferred.
+    bool supportVectorized() const override
+    {
+        for (const auto &when : whenClause) {
+            if (!when.first->supportVectorized() || !when.second->supportVectorized()) {
+                return false;
+            }
+        }
+        return falseExpr != nullptr && falseExpr->supportVectorized();
+    }
 
     std::string toString() const override
     {

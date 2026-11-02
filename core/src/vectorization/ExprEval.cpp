@@ -8,6 +8,9 @@
 #include <string>
 #include "codegen/expr_evaluator.h"
 #include "type/data_type.h"
+#include "util/bit_util.h"
+#include "vector/unsafe_vector.h"
+#include "vectorization/functions/If.h"
 #include "vectorization/functions/Md5ConcatWsFusion.h"
 
 namespace omniruntime::vectorization {
@@ -35,7 +38,7 @@ BaseVector *ColumnProjectionHelper(BaseVector *colVec, int32_t numSelectedRows)
 }
 
 template <typename T>
-BaseVector *ColumnProjectionCopyPositionsHelper(BaseVector *colVec, int32_t *selectedRows, int32_t numSelectedRows)
+BaseVector *ColumnProjectionCopyPositionsHelper(BaseVector *colVec, const int32_t *selectedRows, int32_t numSelectedRows)
 {
     if (colVec->GetEncoding() == OMNI_ENCODING_CONST) {
         auto *constVec = reinterpret_cast<ConstVector<T> *>(colVec);
@@ -182,7 +185,7 @@ ExprEval::ExprEval(VectorBatch *vectorBatch, ExecutionContext *context): context
     rowSize = vectorBatch->GetRowCount();
 }
 
-ExprEval::ExprEval(ExecutionContext *context): context(context)
+ExprEval::ExprEval(ExecutionContext *context): context(context), rowSize(0)
 {}
 
 void ExprEval::Reset(VectorBatch *vectorBatch, ExecutionContext *ctx)
@@ -200,48 +203,51 @@ void ExprEval::Reset(VectorBatch *vectorBatch, ExecutionContext *ctx)
         typeIds.push_back(vectorBatch->Get(i)->GetTypeId());
     }
     std::stack<vec::BaseVector *>().swap(inputValues_);
+    activeSel_ = nullptr;
+    activePos_.clear();
     rowSize = vectorBatch->GetRowCount();
 }
 
 void ExprEval::Visit(const LiteralExpr &e)
 {
+    int32_t rowCount = CurrentRowCount();
     if (!e.isRoot) {
         auto typeId = e.dataType->GetId();
         BaseVector *constVec = nullptr;
         switch (e.dataType->GetId()) {
             case OMNI_INT:
             case OMNI_DATE32:
-                constVec = new ConstVector(e.intVal, typeId, rowSize);
+                constVec = new ConstVector(e.intVal, typeId, rowCount);
                 break;
             case OMNI_SHORT:
-                constVec = new ConstVector(e.shortVal, typeId, rowSize);
+                constVec = new ConstVector(e.shortVal, typeId, rowCount);
                 break;
             case OMNI_BYTE:
-                constVec = new ConstVector(e.byteVal, typeId, rowSize);
+                constVec = new ConstVector(e.byteVal, typeId, rowCount);
                 break;
             case OMNI_LONG:
             case OMNI_TIMESTAMP:
             case OMNI_DECIMAL64:
-                constVec = new ConstVector(e.longVal, typeId, rowSize);
+                constVec = new ConstVector(e.longVal, typeId, rowCount);
                 break;
             case OMNI_DOUBLE:
-                constVec = new ConstVector(e.doubleVal, typeId, rowSize);
+                constVec = new ConstVector(e.doubleVal, typeId, rowCount);
                 break;
             case OMNI_FLOAT:
-                constVec = new ConstVector(e.floatVal, typeId, rowSize);
+                constVec = new ConstVector(e.floatVal, typeId, rowCount);
                 break;
             case OMNI_BOOLEAN:
-                constVec = new ConstVector(e.boolVal, typeId, rowSize);
+                constVec = new ConstVector(e.boolVal, typeId, rowCount);
                 break;
             case OMNI_DECIMAL128: {
                 Decimal128 decimal128(*e.stringVal);
-                constVec = new ConstVector<Decimal128>(decimal128, typeId, rowSize);
+                constVec = new ConstVector<Decimal128>(decimal128, typeId, rowCount);
                 break;
             }
             case OMNI_VARCHAR:
             case OMNI_CHAR:
             case OMNI_VARBINARY:
-                constVec = new ConstVector(std::string_view(*e.stringVal), typeId, rowSize);
+                constVec = new ConstVector(std::string_view(*e.stringVal), typeId, rowCount);
                 break;
             case OMNI_STRING_VIEW:
 #ifdef STRINGVIEW_ENABLE
@@ -250,7 +256,7 @@ void ExprEval::Visit(const LiteralExpr &e)
                 // Construct it from (const char*, len) to avoid the deleted std::string_view rvalue
                 // overload and its resulting ambiguity.
                 constVec = new ConstVector<StringView>(
-                    StringView(e.stringVal->data(), static_cast<int32_t>(e.stringVal->size())), typeId, rowSize);
+                    StringView(e.stringVal->data(), static_cast<int32_t>(e.stringVal->size())), typeId, rowCount);
                 break;
 #else
                 OMNI_THROW("STRING_VIEW_DISABLED", "StringView expression was requested but this native build was configured with STRINGVIEW_ENABLE=OFF");
@@ -259,34 +265,34 @@ void ExprEval::Visit(const LiteralExpr &e)
                 // Non-root null map literals (e.g. stack padding: array(col, null)) must match
                 // batch row count; size 1 would overrun in variadic functions like array()/named_struct().
                 if (e.isNull) {
-                    VectorHelper::CreateNullMapVector(rowSize, e.dataType, constVec);
+                    VectorHelper::CreateNullMapVector(rowCount, e.dataType, constVec);
                 } else {
-                    constVec = VectorHelper::CreateComplexVector(e.dataType.get(), rowSize);
+                    constVec = VectorHelper::CreateComplexVector(e.dataType.get(), rowCount);
                 }
                 break;
             }
             case OMNI_ARRAY: {
                 if (e.isNull) {
-                    VectorHelper::CreateNullArrayVector(rowSize, e.dataType, constVec);
+                    VectorHelper::CreateNullArrayVector(rowCount, e.dataType, constVec);
                 } else {
-                    constVec = VectorHelper::CreateComplexVector(e.dataType.get(), rowSize);
+                    constVec = VectorHelper::CreateComplexVector(e.dataType.get(), rowCount);
                 }
                 break;
             }
             case OMNI_ROW: {
                 if (e.isNull) {
-                    VectorHelper::CreateNullRowVector(rowSize, e.dataType, constVec);
+                    VectorHelper::CreateNullRowVector(rowCount, e.dataType, constVec);
                 } else {
-                    constVec = VectorHelper::CreateComplexVector(e.dataType.get(), rowSize);
+                    constVec = VectorHelper::CreateComplexVector(e.dataType.get(), rowCount);
                 }
                 break;
             }
             case OMNI_NONE: {
-                auto *nullArrayVec = new ArrayVector(rowSize);
+                auto *nullArrayVec = new ArrayVector(rowCount);
                 auto emptyElements = std::shared_ptr<BaseVector>(
                     VectorHelper::CreateFlatVector(static_cast<int32_t>(OMNI_INT), 0));
                 nullArrayVec->SetElementVector(emptyElements);
-                for (int32_t i = 0; i < rowSize; ++i) {
+                for (int32_t i = 0; i < rowCount; ++i) {
                     nullArrayVec->SetNull(i);
                 }
                 constVec = nullArrayVec;
@@ -302,11 +308,11 @@ void ExprEval::Visit(const LiteralExpr &e)
     }
     auto typeId = e.dataType->GetId();
     if (typeId == OMNI_NONE) {
-        auto *arrayVec = new ArrayVector(rowSize);
+        auto *arrayVec = new ArrayVector(rowCount);
         auto emptyElements = std::shared_ptr<BaseVector>(
             VectorHelper::CreateFlatVector(static_cast<int32_t>(OMNI_INT), 0));
         arrayVec->SetElementVector(emptyElements);
-        for (int32_t i = 0; i < rowSize; ++i) {
+        for (int32_t i = 0; i < rowCount; ++i) {
             arrayVec->SetNull(i);
         }
         inputValues_.push(arrayVec);
@@ -314,23 +320,23 @@ void ExprEval::Visit(const LiteralExpr &e)
     }
     if (typeId == OMNI_ARRAY) {
         BaseVector *arrayVec = nullptr;
-        VectorHelper::CreateNullArrayVector(rowSize, e.dataType, arrayVec);
+        VectorHelper::CreateNullArrayVector(rowCount, e.dataType, arrayVec);
         inputValues_.push(arrayVec);
         return;
     }
     if (typeId == OMNI_MAP) {
         BaseVector *mapVec = nullptr;
-        VectorHelper::CreateNullMapVector(rowSize, e.dataType, mapVec);
+        VectorHelper::CreateNullMapVector(rowCount, e.dataType, mapVec);
         inputValues_.push(mapVec);
         return;
     }
     if (typeId == OMNI_ROW) {
         BaseVector *rowVector = nullptr;
-        VectorHelper::CreateNullRowVector(rowSize, e.dataType, rowVector);
+        VectorHelper::CreateNullRowVector(rowCount, e.dataType, rowVector);
         inputValues_.push(rowVector);
         return;
     }
-    BaseVector *outVec = VectorHelper::CreateFlatVector(typeId, rowSize);
+    BaseVector *outVec = VectorHelper::CreateFlatVector(typeId, rowCount);
     ConstantColumnProjection(context, outVec, e);
     inputValues_.push(outVec);
 }
@@ -349,6 +355,58 @@ BaseVector *GetStructField(const Expr *e, const std::vector<BaseVector *> &input
         OMNI_THROW("Express Error:", "GetStructField error!!");
     }
     OMNI_THROW("Express Error:", "GetStructField error!");
+}
+
+void ExprEval::PushProjectedColumn(BaseVector *colVec, DataTypeId typeId, const int32_t *selectRow, int32_t selectSize)
+{
+    switch (typeId) {
+        case OMNI_INT:
+        case OMNI_DATE32:
+            inputValues_.push(ColumnProjectionCopyPositionsHelper<int32_t>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_SHORT:
+            inputValues_.push(ColumnProjectionCopyPositionsHelper<int16_t>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_BYTE:
+            inputValues_.push(ColumnProjectionCopyPositionsHelper<int8_t>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_LONG:
+        case OMNI_TIMESTAMP:
+        case OMNI_DECIMAL64:
+            inputValues_.push(ColumnProjectionCopyPositionsHelper<int64_t>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_DOUBLE:
+            inputValues_.push(ColumnProjectionCopyPositionsHelper<double>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_FLOAT:
+            inputValues_.push(ColumnProjectionCopyPositionsHelper<float>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_BOOLEAN:
+            inputValues_.push(ColumnProjectionCopyPositionsHelper<bool>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_DECIMAL128:
+            inputValues_.push(ColumnProjectionCopyPositionsHelper<Decimal128>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_VARCHAR:
+        case OMNI_CHAR:
+        case OMNI_VARBINARY:
+            inputValues_.push(
+                ColumnProjectionVarCharCopyPositionsHelper<std::string_view>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_STRING_VIEW:
+            inputValues_.push(ColumnProjectionCopyPositionsHelper<StringView>(colVec, selectRow, selectSize));
+            break;
+        case OMNI_ARRAY:
+            inputValues_.push(reinterpret_cast<ArrayVector *>(colVec)->CopyPositions(selectRow, 0, selectSize));
+            break;
+        case OMNI_MAP:
+            inputValues_.push(reinterpret_cast<MapVector *>(colVec)->CopyPositions(selectRow, 0, selectSize));
+            break;
+        case OMNI_ROW:
+            inputValues_.push(reinterpret_cast<RowVector *>(colVec)->CopyPositions(selectRow, 0, selectSize));
+            break;
+        default: LogError("Do not support such vector type %d", typeId);
+    }
 }
 
 void ExprEval::Visit(const FieldExpr &e)
@@ -370,6 +428,11 @@ void ExprEval::Visit(const FieldExpr &e)
     if (topLevelColVal >= 0 && topLevelColVal < static_cast<int32_t>(vecBatch_.size()) && vecBatch_[topLevelColVal] != nullptr) {
         vecBatch_[topLevelColVal]->SetIsField(true);
     }
+    if (activeSel_ != nullptr) {
+        // Compacted evaluation mode: project only the active rows, in full-batch order.
+        PushProjectedColumn(colVec, typeId, activePos_.data(), static_cast<int32_t>(activePos_.size()));
+        return;
+    }
     if (context->hasFilter) {
         auto isSelect = context->GetIsSelectRow();
         int selectRow[context->GetResultRowSize()] = {-1};
@@ -380,54 +443,7 @@ void ExprEval::Visit(const FieldExpr &e)
                 ++selectSize;
             }
         }
-        switch (typeId) {
-            case OMNI_INT:
-            case OMNI_DATE32:
-                inputValues_.push(ColumnProjectionCopyPositionsHelper<int32_t>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_SHORT:
-                inputValues_.push(ColumnProjectionCopyPositionsHelper<int16_t>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_BYTE:
-                inputValues_.push(ColumnProjectionCopyPositionsHelper<int8_t>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_LONG:
-            case OMNI_TIMESTAMP:
-            case OMNI_DECIMAL64:
-                inputValues_.push(ColumnProjectionCopyPositionsHelper<int64_t>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_DOUBLE:
-                inputValues_.push(ColumnProjectionCopyPositionsHelper<double>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_FLOAT:
-                inputValues_.push(ColumnProjectionCopyPositionsHelper<float>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_BOOLEAN:
-                inputValues_.push(ColumnProjectionCopyPositionsHelper<bool>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_DECIMAL128:
-                inputValues_.push(ColumnProjectionCopyPositionsHelper<Decimal128>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_VARCHAR:
-            case OMNI_CHAR:
-            case OMNI_VARBINARY:
-                inputValues_.push(
-                    ColumnProjectionVarCharCopyPositionsHelper<std::string_view>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_STRING_VIEW:
-                inputValues_.push(ColumnProjectionCopyPositionsHelper<StringView>(colVec, selectRow, selectSize));
-                break;
-            case OMNI_ARRAY:
-                inputValues_.push(reinterpret_cast<ArrayVector *>(colVec)->CopyPositions(selectRow, 0, selectSize));
-                break;
-            case OMNI_MAP:
-                inputValues_.push(reinterpret_cast<MapVector *>(colVec)->CopyPositions(selectRow, 0, selectSize));
-                break;
-            case OMNI_ROW:
-                inputValues_.push(reinterpret_cast<RowVector *>(colVec)->CopyPositions(selectRow, 0, selectSize));
-                break;
-            default: LogError("Do not support such vector type %d", typeIds[e.colVal]);
-        }
+        PushProjectedColumn(colVec, typeId, selectRow, selectSize);
         return;
     }
     switch (typeId) {
@@ -485,7 +501,7 @@ void ExprEval::Visit(const UnaryExpr &e)
     if (e.vectorFunction == nullptr) {
         OMNI_THROW("Vectorization Error:", "Vector function not found for unary expression");
     }
-    auto result = VectorHelper::CreateFlatVector(e.dataType->GetId(), rowSize);
+    auto result = VectorHelper::CreateFlatVector(e.dataType->GetId(), CurrentRowCount());
     e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
 }
@@ -523,17 +539,828 @@ void ExprEval::Visit(const InExpr &e)
 
 void ExprEval::Visit(const BetweenExpr &e) {}
 
+int32_t ExprEval::CurrentRowCount() const
+{
+    // In compacted mode the space size is the number of active rows; otherwise it is
+    // the context row count, which callers keep in sync with the space being
+    // evaluated (batch row count for regular evaluation, element count for lambda
+    // evaluation).
+    return activeSel_ != nullptr ? static_cast<int32_t>(activePos_.size()) : context->GetResultRowSize();
+}
+
+BaseVector *ExprEval::EvaluateBranch(const Expr *branch, const SelectivityVector &innerSel, bool inPlace)
+{
+    int32_t n = CurrentRowCount();
+    int32_t selCount = innerSel.countSelected();
+    if (selCount == 0 && n > 0) {
+        OMNI_THROW("If expr Error", "Internal error: empty branch selection");
+    }
+    if (inPlace || selCount == n) {
+        // The branch covers the whole (possibly empty) current space; evaluate it in
+        // place.
+        branch->Accept(*this);
+    } else {
+        // Evaluate only the selected rows: map the selection into full-batch
+        // coordinates so column projections gather the right rows, and evaluate in
+        // compacted mode. The compacted space's own size is the bound of those
+        // coordinates (activePos_ positions live in the space the guard covers),
+        // not the batch row count, which can differ under lambda evaluation. When
+        // no compacted space is active the mapping is the identity and the current
+        // space size bounds all positions (e.g. lambda evaluation has no batch
+        // columns).
+        int32_t fullSpace = activeSel_ != nullptr ? activeSel_->size() : n;
+        SelectivityVector branchSel(fullSpace, false);
+        std::vector<int32_t> branchPos;
+        branchPos.reserve(selCount);
+        innerSel.applyToSelected([&](vector_size_t i) {
+            int32_t fullPos = activeSel_ != nullptr ? activePos_[i] : i;
+            if (fullPos >= fullSpace) {
+                OMNI_THROW("Vectorization Error:", "Internal error: branch position exceeds full-space bounds");
+            }
+            branchSel.setValid(fullPos, true);
+            branchPos.push_back(fullPos);
+        });
+        branchSel.updateBounds();
+        ScopedCompactEval guard(*this, branchSel, branchPos);
+        branch->Accept(*this);
+    }
+    BaseVector *result = inputValues_.top();
+    inputValues_.pop();
+    return result;
+}
+
+namespace {
+/// A branch whose leaves cannot throw and whose per-row evaluation is cheaper than
+/// gathering + scattering its inputs: evaluating it over the whole current space and
+/// merging afterwards beats the compacted path.
+bool IsCheapIfBranch(const Expr *e)
+{
+    switch (e->GetType()) {
+        case ExprType::FIELD_E:
+        case ExprType::LITERAL_E:
+        case ExprType::PARAM_REF_E:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/// Merges the two (in-place or compacted) branch vectors into result in ascending
+/// row order. String and array containers append values per row and rely on fill
+/// order, so the merge must visit result rows strictly in order.
+template <typename T>
+void MergeIfTyped(BaseVector *trueVec, BaseVector *falseVec, const std::vector<int32_t> &truePos,
+    const std::vector<int32_t> &falsePos, bool trueCheap, bool falseCheap, BaseVector *result, int32_t n)
+{
+    auto *resVec = static_cast<Vector<T> *>(result);
+    bool trueConst = trueVec->GetEncoding() == OMNI_ENCODING_CONST;
+    bool falseConst = falseVec->GetEncoding() == OMNI_ENCODING_CONST;
+    bool trueHasNull = trueVec->HasNull();
+    bool falseHasNull = falseVec->HasNull();
+    size_t trueIdx = 0;
+    size_t falseIdx = 0;
+    for (int32_t dst = 0; dst < n; ++dst) {
+        if (trueIdx < truePos.size() && truePos[trueIdx] == dst) {
+            int32_t srcRow = trueConst ? 0 : (trueCheap ? dst : static_cast<int32_t>(trueIdx));
+            if (trueHasNull && trueVec->IsNull(srcRow)) {
+                resVec->SetNull(dst);
+            } else {
+                resVec->SetValue(dst, VectorHelper::GetValueFromVector<T>(trueVec, srcRow));
+            }
+            ++trueIdx;
+        } else {
+            int32_t srcRow = falseConst ? 0 : (falseCheap ? dst : static_cast<int32_t>(falseIdx));
+            if (falseHasNull && falseVec->IsNull(srcRow)) {
+                resVec->SetNull(dst);
+            } else {
+                resVec->SetValue(dst, VectorHelper::GetValueFromVector<T>(falseVec, srcRow));
+            }
+            ++falseIdx;
+        }
+    }
+}
+
+void MergeIfString(BaseVector *trueVec, BaseVector *falseVec, const std::vector<int32_t> &truePos,
+    const std::vector<int32_t> &falsePos, bool trueCheap, bool falseCheap, BaseVector *result, int32_t n)
+{
+    auto *resVec = static_cast<Vector<LargeStringContainer<std::string_view>> *>(result);
+    bool trueConst = trueVec->GetEncoding() == OMNI_ENCODING_CONST;
+    bool falseConst = falseVec->GetEncoding() == OMNI_ENCODING_CONST;
+    bool trueHasNull = trueVec->HasNull();
+    bool falseHasNull = falseVec->HasNull();
+    size_t trueIdx = 0;
+    size_t falseIdx = 0;
+    for (int32_t dst = 0; dst < n; ++dst) {
+        if (trueIdx < truePos.size() && truePos[trueIdx] == dst) {
+            int32_t srcRow = trueConst ? 0 : (trueCheap ? dst : static_cast<int32_t>(trueIdx));
+            if (trueHasNull && trueVec->IsNull(srcRow)) {
+                resVec->SetNull(dst);
+            } else {
+                resVec->SetValue(dst, VectorHelper::GetStringValueFromVector(trueVec, srcRow));
+            }
+            ++trueIdx;
+        } else {
+            int32_t srcRow = falseConst ? 0 : (falseCheap ? dst : static_cast<int32_t>(falseIdx));
+            if (falseHasNull && falseVec->IsNull(srcRow)) {
+                resVec->SetNull(dst);
+            } else {
+                resVec->SetValue(dst, VectorHelper::GetStringValueFromVector(falseVec, srcRow));
+            }
+            ++falseIdx;
+        }
+    }
+}
+
+void MergeIfComplex(BaseVector *trueVec, BaseVector *falseVec, const std::vector<int32_t> &truePos,
+    const std::vector<int32_t> &falsePos, bool trueCheap, bool falseCheap, BaseVector *result, int32_t n,
+    DataTypeId typeId)
+{
+    size_t trueIdx = 0;
+    size_t falseIdx = 0;
+    for (int32_t dst = 0; dst < n; ++dst) {
+        BaseVector *src = nullptr;
+        int32_t srcRow = 0;
+        if (trueIdx < truePos.size() && truePos[trueIdx] == dst) {
+            src = trueVec;
+            srcRow = trueCheap ? dst : static_cast<int32_t>(trueIdx);
+            ++trueIdx;
+        } else {
+            src = falseVec;
+            srcRow = falseCheap ? dst : static_cast<int32_t>(falseIdx);
+            ++falseIdx;
+        }
+        if (src->IsNull(srcRow)) {
+            if (typeId == OMNI_ARRAY) {
+                static_cast<ArrayVector *>(result)->SetNull(dst);
+            } else if (typeId == OMNI_MAP) {
+                static_cast<MapVector *>(result)->SetNull(dst);
+            } else {
+                result->SetNull(dst);
+            }
+            continue;
+        }
+        if (typeId == OMNI_ARRAY) {
+            IfFunction::CopyArrayValue(src, result, srcRow, dst);
+        } else if (typeId == OMNI_MAP) {
+            IfFunction::CopyMapValue(src, result, srcRow, dst);
+        } else {
+            IfFunction::CopyRowValue(src, result, srcRow, dst);
+        }
+    }
+}
+
+/// Scatters the branch values into result at the selected positions, visiting result
+/// rows in ascending order. trueCheap/falseCheap tell whether the corresponding
+/// branch vector covers the whole space (src row == dst row) or is compacted (src row
+/// == compacted index).
+void MergeIfBranches(BaseVector *trueVec, BaseVector *falseVec, const std::vector<int32_t> &truePos,
+    const std::vector<int32_t> &falsePos, bool trueCheap, bool falseCheap, BaseVector *result, int32_t n,
+    DataTypeId typeId)
+{
+    switch (typeId) {
+        case OMNI_BOOLEAN:
+            MergeIfTyped<bool>(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n);
+            break;
+        case OMNI_BYTE:
+            MergeIfTyped<int8_t>(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n);
+            break;
+        case OMNI_SHORT:
+            MergeIfTyped<int16_t>(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n);
+            break;
+        case OMNI_INT:
+        case OMNI_DATE32:
+            MergeIfTyped<int32_t>(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n);
+            break;
+        case OMNI_LONG:
+        case OMNI_DATE64:
+        case OMNI_TIMESTAMP:
+        case OMNI_DECIMAL64:
+            MergeIfTyped<int64_t>(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n);
+            break;
+        case OMNI_FLOAT:
+            MergeIfTyped<float>(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n);
+            break;
+        case OMNI_DOUBLE:
+            MergeIfTyped<double>(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n);
+            break;
+        case OMNI_DECIMAL128:
+            MergeIfTyped<Decimal128>(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n);
+            break;
+        case OMNI_VARCHAR:
+        case OMNI_CHAR:
+        case OMNI_VARBINARY:
+            MergeIfString(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n);
+            break;
+        case OMNI_ARRAY:
+        case OMNI_MAP:
+        case OMNI_ROW:
+            MergeIfComplex(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n, typeId);
+            break;
+        default:
+            OMNI_THROW("If expr Error", "Unsupported output type Id:" + std::to_string(typeId));
+    }
+}
+
+// ---- Switch (CASE) expression helpers -------------------------------------
+//
+// Port of Velox's lazy SwitchExpr evaluation (velox/expression/SwitchExpr.cpp)
+// onto the compactor-based evaluator: conditions run only on rows no earlier
+// case has matched, results only on the rows their condition selected, and a
+// null-propagation fast path skips both on rows where the shared result column
+// is null.
+
+/// Follows the FieldExpr input chain to the top-level column index.
+int32_t RootFieldCol(const FieldExpr *field)
+{
+    int32_t rootCol = field->colVal;
+    for (const FieldExpr *cur = field; cur->input != nullptr;) {
+        cur = dynamic_cast<const FieldExpr *>(cur->input);
+        if (cur == nullptr) {
+            break;
+        }
+        rootCol = cur->colVal;
+    }
+    return rootCol;
+}
+
+/// Collects the top-level column indices referenced anywhere in the expression tree.
+void CollectFieldCols(const Expr *expr, std::vector<int32_t> &cols)
+{
+    if (expr == nullptr) {
+        return;
+    }
+    switch (expr->GetType()) {
+        case ExprType::FIELD_E:
+            cols.push_back(RootFieldCol(static_cast<const FieldExpr *>(expr)));
+            return;
+        case ExprType::LITERAL_E:
+        case ExprType::PARAM_REF_E:
+            return;
+        case ExprType::UNARY_E:
+            CollectFieldCols(static_cast<const UnaryExpr *>(expr)->exp, cols);
+            return;
+        case ExprType::BINARY_E: {
+            const auto *binary = static_cast<const BinaryExpr *>(expr);
+            CollectFieldCols(binary->left, cols);
+            CollectFieldCols(binary->right, cols);
+            return;
+        }
+        case ExprType::IN_E:
+            for (const Expr *arg : static_cast<const InExpr *>(expr)->arguments) {
+                CollectFieldCols(arg, cols);
+            }
+            return;
+        case ExprType::BETWEEN_E: {
+            const auto *between = static_cast<const BetweenExpr *>(expr);
+            CollectFieldCols(between->value, cols);
+            CollectFieldCols(between->lowerBound, cols);
+            CollectFieldCols(between->upperBound, cols);
+            return;
+        }
+        case ExprType::IF_E: {
+            const auto *ifExpr = static_cast<const IfExpr *>(expr);
+            CollectFieldCols(ifExpr->condition, cols);
+            CollectFieldCols(ifExpr->trueExpr, cols);
+            CollectFieldCols(ifExpr->falseExpr, cols);
+            return;
+        }
+        case ExprType::SWITCH_E: {
+            const auto *switchExpr = static_cast<const SwitchExpr *>(expr);
+            for (const auto &when : switchExpr->whenClause) {
+                CollectFieldCols(when.first, cols);
+                CollectFieldCols(when.second, cols);
+            }
+            CollectFieldCols(switchExpr->falseExpr, cols);
+            return;
+        }
+        case ExprType::COALESCE_E:
+            for (const Expr *arg : static_cast<const CoalesceExpr *>(expr)->arguments) {
+                CollectFieldCols(arg, cols);
+            }
+            return;
+        case ExprType::IS_NULL_E:
+            CollectFieldCols(static_cast<const IsNullExpr *>(expr)->value, cols);
+            return;
+        case ExprType::FUNC_E:
+            for (const Expr *arg : static_cast<const FuncExpr *>(expr)->arguments) {
+                CollectFieldCols(arg, cols);
+            }
+            return;
+        case ExprType::LAMBDA_E:
+            CollectFieldCols(static_cast<const LambdaExpr *>(expr)->body_, cols);
+            return;
+        default:
+            return;
+    }
+}
+
+/// Collects the field access path from leaf to root (top-level column index
+/// last). Null propagation requires all results to be the SAME field path, not
+/// just the same root column: two fields of one struct (s.a and s.b) share a
+/// root but have independent nulls per row, so sealing rows where s.a is null
+/// would be wrong when another branch reads s.b.
+void FieldAccessPath(const Expr *expr, std::vector<int32_t> &path)
+{
+    for (const FieldExpr *cur = static_cast<const FieldExpr *>(expr); cur != nullptr;
+         cur = dynamic_cast<const FieldExpr *>(cur->input)) {
+        path.push_back(cur->colVal);
+    }
+}
+
+/// Returns true if expr is a pure field reference (possibly nested) over the
+/// shared field; on the first call path is set to the referenced access path.
+bool IsSingleFieldExpr(const Expr *expr, std::vector<int32_t> &path)
+{
+    if (expr == nullptr || expr->GetType() != ExprType::FIELD_E) {
+        return false;
+    }
+    std::vector<int32_t> candidate;
+    FieldAccessPath(expr, candidate);
+    if (path.empty()) {
+        path = candidate;
+    }
+    return path == candidate;
+}
+
+/// Types the EQ(field, literal) fast path can compare with a plain scalar
+/// equality (see RunEqFieldConstCase). Complex types and decimal128 keep the
+/// general vectorized path.
+bool IsSupportedEqFieldConstType(DataTypeId typeId)
+{
+    switch (typeId) {
+        case OMNI_BOOLEAN:
+        case OMNI_BYTE:
+        case OMNI_SHORT:
+        case OMNI_INT:
+        case OMNI_DATE32:
+        case OMNI_LONG:
+        case OMNI_DATE64:
+        case OMNI_TIMESTAMP:
+        case OMNI_DECIMAL64:
+        case OMNI_FLOAT:
+        case OMNI_DOUBLE:
+        case OMNI_VARCHAR:
+        case OMNI_CHAR:
+        case OMNI_VARBINARY:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/// Cached-on-the-AST analyses for switch evaluation (computed once per
+/// expression, not once per batch):
+///  - null propagation (Velox's SwitchExpr::computePropagatesNulls): every
+///    result and the else clause must be the same single field (identical
+///    access path) and every condition must reference only that field's
+///    top-level column;
+///  - EQ(field, literal) fast path: every condition must compare the same
+///    single field to a literal of matching type, so the conditions can run
+///    as allocation-free scalar passes over the remaining rows instead of
+///    compacted vector evaluations.
+void AnalyzeSwitchPatterns(const SwitchExpr &e)
+{
+    if (e.switchAnalysisDone_) {
+        return;
+    }
+    e.switchAnalysisDone_ = true;
+    if (e.whenClause.empty()) {
+        return;
+    }
+
+    // Null-propagation analysis.
+    std::vector<int32_t> path;
+    bool nullProp = true;
+    for (const auto &when : e.whenClause) {
+        if (!IsSingleFieldExpr(when.second, path)) {
+            nullProp = false;
+            break;
+        }
+    }
+    if (nullProp && !IsSingleFieldExpr(e.falseExpr, path)) {
+        nullProp = false;
+    }
+    if (nullProp) {
+        // Conditions may touch any part of the shared field's top-level column:
+        // all results are the identical path, so the outcome of a sealed row is
+        // fixed regardless of what the conditions say.
+        int32_t col = path.back();
+        for (const auto &when : e.whenClause) {
+            std::vector<int32_t> cols;
+            CollectFieldCols(when.first, cols);
+            for (int32_t c : cols) {
+                if (c != col) {
+                    nullProp = false;
+                    break;
+                }
+            }
+            if (!nullProp) {
+                break;
+            }
+        }
+    }
+    if (nullProp) {
+        e.propagatesNulls_ = true;
+        e.nullFieldCol_ = path.back();
+    }
+
+    // EQ(field, literal) fast-path analysis.
+    std::vector<int32_t> eqPath;
+    bool eqFieldConst = true;
+    for (const auto &when : e.whenClause) {
+        if (when.first->GetType() != ExprType::BINARY_E) {
+            eqFieldConst = false;
+            break;
+        }
+        const auto *binary = static_cast<const BinaryExpr *>(when.first);
+        if (binary->op != expressions::Operator::EQ || binary->right == nullptr ||
+            binary->right->GetType() != ExprType::LITERAL_E ||
+            !IsSingleFieldExpr(binary->left, eqPath) ||
+            binary->right->GetReturnTypeId() != binary->left->GetReturnTypeId() ||
+            !IsSupportedEqFieldConstType(binary->left->GetReturnTypeId())) {
+            eqFieldConst = false;
+            break;
+        }
+    }
+    if (eqFieldConst) {
+        e.eqFieldConst_ = true;
+    }
+}
+
+enum class CondMix { kAllTrue, kAllFalse, kMix };
+
+/// Classifies the boolean values of condVec over [0, size). The vector covers
+/// exactly the rows the current case condition was evaluated on, in ascending
+/// order. For kMix fills trueBits (bit set = condition true, nulls behave as
+/// false).
+CondMix ClassifyBoolCond(BaseVector *condVec, int32_t size, std::vector<uint64_t> &trueBits)
+{
+    if (condVec->GetEncoding() == OMNI_ENCODING_CONST) {
+        bool isNull = condVec->HasNull() && condVec->IsNull(0);
+        if (isNull || !static_cast<ConstVector<bool> *>(condVec)->GetConstValue()) {
+            return CondMix::kAllFalse;
+        }
+        return CondMix::kAllTrue;
+    }
+    if (condVec->GetEncoding() == OMNI_FLAT && !condVec->HasNull()) {
+        bool *values = static_cast<Vector<bool> *>(condVec)->GetValuesBuffer();
+        bool allTrue = true;
+        bool anyTrue = false;
+        for (int32_t i = 0; i < size; ++i) {
+            if (values[i]) {
+                anyTrue = true;
+            } else {
+                allTrue = false;
+            }
+        }
+        if (allTrue) {
+            return CondMix::kAllTrue;
+        }
+        if (!anyTrue) {
+            return CondMix::kAllFalse;
+        }
+        trueBits.assign(BitUtil::Nwords(size), 0);
+        for (int32_t i = 0; i < size; ++i) {
+            if (values[i]) {
+                BitUtil::SetBit(trueBits.data(), i);
+            }
+        }
+        return CondMix::kMix;
+    }
+    // Other encodings or nulls: per-row scan.
+    trueBits.assign(BitUtil::Nwords(size), 0);
+    bool anyTrue = false;
+    for (int32_t i = 0; i < size; ++i) {
+        if (!condVec->IsNull(i) && VectorHelper::GetValueFromVector<bool>(condVec, i)) {
+            BitUtil::SetBit(trueBits.data(), i);
+            anyTrue = true;
+        }
+    }
+    return anyTrue ? CondMix::kMix : CondMix::kAllFalse;
+}
+
+/// One EQ(field, literal) fast-path condition: marks the rows of remaining
+/// whose field value equals the constant. No vector evaluation, no
+/// compaction, no data movement - the field vector is the zero-copy slice
+/// evaluated once before the case loop. Nulls never match (SQL semantics).
+template <typename T>
+void EqFieldConstCase(BaseVector *fieldVec, T constVal, const SelectivityVector &remaining,
+    SelectivityVector &thenSel, std::vector<int32_t> &thenPos)
+{
+    remaining.applyToSelected([&](vector_size_t row) {
+        if (fieldVec->IsNull(row)) {
+            return;
+        }
+        T value;
+        if constexpr (std::is_same_v<T, std::string_view>) {
+            value = VectorHelper::GetStringValueFromVector(fieldVec, row);
+        } else {
+            value = VectorHelper::GetValueFromVector<T>(fieldVec, row);
+        }
+        if (value == constVal) {
+            thenSel.setValid(row, true);
+            thenPos.push_back(row);
+        }
+    });
+    thenSel.updateBounds();
+}
+
+/// Dispatches the EQ(field, literal) scalar pass for the field type, reading
+/// the constant from the literal expression.
+void RunEqFieldConstCase(BaseVector *fieldVec, const LiteralExpr &lit, DataTypeId typeId,
+    const SelectivityVector &remaining, SelectivityVector &thenSel, std::vector<int32_t> &thenPos)
+{
+    switch (typeId) {
+        case OMNI_BOOLEAN:
+            EqFieldConstCase<bool>(fieldVec, lit.boolVal, remaining, thenSel, thenPos);
+            break;
+        case OMNI_BYTE:
+            EqFieldConstCase<int8_t>(fieldVec, lit.byteVal, remaining, thenSel, thenPos);
+            break;
+        case OMNI_SHORT:
+            EqFieldConstCase<int16_t>(fieldVec, lit.shortVal, remaining, thenSel, thenPos);
+            break;
+        case OMNI_INT:
+        case OMNI_DATE32:
+            EqFieldConstCase<int32_t>(fieldVec, lit.intVal, remaining, thenSel, thenPos);
+            break;
+        case OMNI_LONG:
+        case OMNI_DATE64:
+        case OMNI_TIMESTAMP:
+        case OMNI_DECIMAL64:
+            EqFieldConstCase<int64_t>(fieldVec, lit.longVal, remaining, thenSel, thenPos);
+            break;
+        case OMNI_FLOAT:
+            EqFieldConstCase<float>(fieldVec, lit.floatVal, remaining, thenSel, thenPos);
+            break;
+        case OMNI_DOUBLE:
+            EqFieldConstCase<double>(fieldVec, lit.doubleVal, remaining, thenSel, thenPos);
+            break;
+        case OMNI_VARCHAR:
+        case OMNI_CHAR:
+        case OMNI_VARBINARY:
+            EqFieldConstCase<std::string_view>(fieldVec, std::string_view(*lit.stringVal), remaining,
+                thenSel, thenPos);
+            break;
+        default:
+            OMNI_THROW("Switch expr Error",
+                "Unsupported EQ(field, literal) type " + std::to_string(typeId));
+    }
+}
+
+/// One evaluated result branch of a switch: its vector, the rows it covers in
+/// the result space (ascending), and whether the vector covers the whole result
+/// space (src row == dst row; the in-place and const evaluation modes).
+struct SwitchBranch {
+    BaseVector *vec = nullptr;
+    std::vector<int32_t> pos;
+    bool coversAll = false;
+};
+
+/// K-way ordered merge of the case branches into result. The branches partition
+/// the result rows (rows outside all branches keep their pre-filled nulls) and
+/// every position list is ascending, so a single left-to-right pass with
+/// per-branch cursors preserves the ascending fill order that string and array
+/// containers rely on.
+template <typename T>
+void MergeSwitchTyped(const std::vector<SwitchBranch> &branches, BaseVector *result, int32_t n)
+{
+    auto *resVec = static_cast<Vector<T> *>(result);
+    std::vector<int32_t> cursor(branches.size(), 0);
+    for (int32_t dst = 0; dst < n; ++dst) {
+        int32_t branchIdx = -1;
+        for (size_t b = 0; b < branches.size(); ++b) {
+            if (cursor[b] < static_cast<int32_t>(branches[b].pos.size()) && branches[b].pos[cursor[b]] == dst) {
+                branchIdx = static_cast<int32_t>(b);
+                break;
+            }
+        }
+        if (branchIdx < 0) {
+            continue;
+        }
+        const SwitchBranch &branch = branches[branchIdx];
+        bool isConst = branch.vec->GetEncoding() == OMNI_ENCODING_CONST;
+        int32_t srcRow = isConst ? 0 : (branch.coversAll ? dst : cursor[branchIdx]);
+        if (branch.vec->IsNull(srcRow)) {
+            resVec->SetNull(dst);
+        } else {
+            resVec->SetValue(dst, VectorHelper::GetValueFromVector<T>(branch.vec, srcRow));
+        }
+        ++cursor[branchIdx];
+    }
+}
+
+void MergeSwitchString(const std::vector<SwitchBranch> &branches, BaseVector *result, int32_t n)
+{
+    auto *resVec = static_cast<Vector<LargeStringContainer<std::string_view>> *>(result);
+    std::vector<int32_t> cursor(branches.size(), 0);
+    for (int32_t dst = 0; dst < n; ++dst) {
+        int32_t branchIdx = -1;
+        for (size_t b = 0; b < branches.size(); ++b) {
+            if (cursor[b] < static_cast<int32_t>(branches[b].pos.size()) && branches[b].pos[cursor[b]] == dst) {
+                branchIdx = static_cast<int32_t>(b);
+                break;
+            }
+        }
+        if (branchIdx < 0) {
+            continue;
+        }
+        const SwitchBranch &branch = branches[branchIdx];
+        bool isConst = branch.vec->GetEncoding() == OMNI_ENCODING_CONST;
+        int32_t srcRow = isConst ? 0 : (branch.coversAll ? dst : cursor[branchIdx]);
+        if (branch.vec->IsNull(srcRow)) {
+            resVec->SetNull(dst);
+        } else {
+            resVec->SetValue(dst, VectorHelper::GetStringValueFromVector(branch.vec, srcRow));
+        }
+        ++cursor[branchIdx];
+    }
+}
+
+void MergeSwitchComplex(const std::vector<SwitchBranch> &branches, BaseVector *result, int32_t n, DataTypeId typeId)
+{
+    std::vector<int32_t> cursor(branches.size(), 0);
+    for (int32_t dst = 0; dst < n; ++dst) {
+        int32_t branchIdx = -1;
+        for (size_t b = 0; b < branches.size(); ++b) {
+            if (cursor[b] < static_cast<int32_t>(branches[b].pos.size()) && branches[b].pos[cursor[b]] == dst) {
+                branchIdx = static_cast<int32_t>(b);
+                break;
+            }
+        }
+        if (branchIdx < 0) {
+            continue;
+        }
+        const SwitchBranch &branch = branches[branchIdx];
+        bool isConst = branch.vec->GetEncoding() == OMNI_ENCODING_CONST;
+        int32_t srcRow = isConst ? 0 : (branch.coversAll ? dst : cursor[branchIdx]);
+        if (branch.vec->IsNull(srcRow)) {
+            if (typeId == OMNI_ARRAY) {
+                static_cast<ArrayVector *>(result)->SetNull(dst);
+            } else if (typeId == OMNI_MAP) {
+                static_cast<MapVector *>(result)->SetNull(dst);
+            } else {
+                result->SetNull(dst);
+            }
+            ++cursor[branchIdx];
+            continue;
+        }
+        if (typeId == OMNI_ARRAY) {
+            IfFunction::CopyArrayValue(branch.vec, result, srcRow, dst);
+        } else if (typeId == OMNI_MAP) {
+            IfFunction::CopyMapValue(branch.vec, result, srcRow, dst);
+        } else {
+            IfFunction::CopyRowValue(branch.vec, result, srcRow, dst);
+        }
+        ++cursor[branchIdx];
+    }
+}
+
+void MergeSwitchBranches(const std::vector<SwitchBranch> &branches, BaseVector *result, int32_t n, DataTypeId typeId)
+{
+    switch (typeId) {
+        case OMNI_BOOLEAN:
+            MergeSwitchTyped<bool>(branches, result, n);
+            break;
+        case OMNI_BYTE:
+            MergeSwitchTyped<int8_t>(branches, result, n);
+            break;
+        case OMNI_SHORT:
+            MergeSwitchTyped<int16_t>(branches, result, n);
+            break;
+        case OMNI_INT:
+        case OMNI_DATE32:
+            MergeSwitchTyped<int32_t>(branches, result, n);
+            break;
+        case OMNI_LONG:
+        case OMNI_DATE64:
+        case OMNI_TIMESTAMP:
+        case OMNI_DECIMAL64:
+            MergeSwitchTyped<int64_t>(branches, result, n);
+            break;
+        case OMNI_FLOAT:
+            MergeSwitchTyped<float>(branches, result, n);
+            break;
+        case OMNI_DOUBLE:
+            MergeSwitchTyped<double>(branches, result, n);
+            break;
+        case OMNI_DECIMAL128:
+            MergeSwitchTyped<Decimal128>(branches, result, n);
+            break;
+        case OMNI_VARCHAR:
+        case OMNI_CHAR:
+        case OMNI_VARBINARY:
+            MergeSwitchString(branches, result, n);
+            break;
+        case OMNI_ARRAY:
+        case OMNI_MAP:
+        case OMNI_ROW:
+            MergeSwitchComplex(branches, result, n, typeId);
+            break;
+        default:
+            OMNI_THROW("Switch expr Error", "Unsupported output type Id:" + std::to_string(typeId));
+    }
+}
+} // namespace
+
 void ExprEval::Visit(const IfExpr &e)
 {
-    for (auto arg : e.arguments) {
-        arg->Accept(*this);
-    }
     if (e.vectorFunction == nullptr) {
         OMNI_THROW("Vectorization Error:", "Vector function not found for if expression");
     }
 
+    // Lazy evaluation: the condition is evaluated for every row, then each branch is
+    // evaluated only for the rows that select it. Rows with a NULL condition take the
+    // false branch (same semantics as IfFunction::Apply).
+    //
+    // Under an outer filter the current rows are the filter-selected rows scattered
+    // over the full batch; convert them into an explicit compacted space first so the
+    // condition and both branches agree on sizes and positions. The filter mask is
+    // defined over the batch row space only: when the current space differs (lambda
+    // evaluation keeps an inherited hasFilter but sizes the space by element count),
+    // it must not be applied.
+    SelectivityVector outerSel;
+    std::vector<int32_t> outerPos;
+    std::unique_ptr<ScopedCompactEval> outerGuard;
+    if (activeSel_ == nullptr && context->hasFilter && context->GetResultRowSize() == rowSize) {
+        auto *mask = context->GetIsSelectRow();
+        int32_t fullSize = context->GetResultRowSize();
+        outerSel = SelectivityVector(fullSize, false);
+        outerPos.reserve(fullSize);
+        for (int32_t i = 0; i < fullSize; ++i) {
+            if (mask[i]) {
+                outerSel.setValid(i, true);
+                outerPos.push_back(i);
+            }
+        }
+        outerSel.updateBounds();
+        outerGuard = std::make_unique<ScopedCompactEval>(*this, outerSel, outerPos);
+    }
+
+    int32_t n = CurrentRowCount();
+
+    // 1. Evaluate only the condition.
+    e.condition->Accept(*this);
+    BaseVector *condVec = inputValues_.top();
+    inputValues_.pop();
+
+    // 2. Build the selectivity vectors of the true and false branches.
+    SelectivityVector trueSel(n, false);
+    SelectivityVector falseSel(n, false);
+    if (condVec->GetEncoding() == OMNI_ENCODING_CONST) {
+        bool condIsNull = condVec->HasNull() && condVec->IsNull(0);
+        bool condValue = !condIsNull && static_cast<ConstVector<bool> *>(condVec)->GetConstValue();
+        (condValue ? trueSel : falseSel).setAll();
+    } else {
+        for (int32_t i = 0; i < n; ++i) {
+            if (condVec->IsNull(i) || !VectorHelper::GetValueFromVector<bool>(condVec, i)) {
+                falseSel.setValid(i, true);
+            } else {
+                trueSel.setValid(i, true);
+            }
+        }
+        trueSel.updateBounds();
+        falseSel.updateBounds();
+    }
+
+    // 3. Evaluate each branch only for the rows that select it and merge the results.
     BaseVector *result = nullptr;
-    e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
+    if (!trueSel.hasSelections()) {
+        result = EvaluateBranch(e.falseExpr, falseSel, false);
+    } else if (!falseSel.hasSelections()) {
+        result = EvaluateBranch(e.trueExpr, trueSel, false);
+    } else {
+        // Cheap (leaf-only) branches are evaluated over the whole current space:
+        // their evaluation is zero-copy (Slice) and beats gathering the selected
+        // rows. Expensive branches are compacted so they run only on selected rows.
+        bool trueCheap = IsCheapIfBranch(e.trueExpr);
+        bool falseCheap = IsCheapIfBranch(e.falseExpr);
+        BaseVector *trueVec = EvaluateBranch(e.trueExpr, trueSel, trueCheap);
+        BaseVector *falseVec = EvaluateBranch(e.falseExpr, falseSel, falseCheap);
+
+        if (trueCheap && falseCheap && condVec->GetEncoding() == OMNI_FLAT) {
+            // Leaf-only branches: merge through IfFunction, which avoids the
+            // position materialization and has a tight loop for flat null-free
+            // inputs. It consumes and frees its three arguments.
+            inputValues_.push(condVec);
+            inputValues_.push(trueVec);
+            inputValues_.push(falseVec);
+            e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
+            inputValues_.push(result);
+            return;
+        }
+
+        IfFunction::CreateResultVector(e.dataType->GetId(), n, trueVec, result);
+        std::vector<int32_t> truePos;
+        std::vector<int32_t> falsePos;
+        trueSel.applyToSelected([&](vector_size_t i) { truePos.push_back(i); });
+        falseSel.applyToSelected([&](vector_size_t i) { falsePos.push_back(i); });
+        MergeIfBranches(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n,
+            e.dataType->GetId());
+        delete trueVec;
+        delete falseVec;
+    }
+    delete condVec;
     inputValues_.push(result);
 }
 
@@ -557,7 +1384,7 @@ void ExprEval::Visit(const IsNullExpr &e)
     if (e.vectorFunction == nullptr) {
         OMNI_THROW("Vectorization Error:", "Vector function not found for isnull expression");
     }
-    auto result = VectorHelper::CreateFlatVector(e.dataType->GetId(), rowSize);
+    auto result = VectorHelper::CreateFlatVector(e.dataType->GetId(), CurrentRowCount());
     e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
 }
@@ -617,11 +1444,272 @@ void ExprEval::Visit(const FuncExpr &e)
     inputValues_.push(result);
 }
 
-void ExprEval::Visit(const SwitchExpr &e) {}
+void ExprEval::Visit(const SwitchExpr &e)
+{
+    // Lazy evaluation of CASE (Velox-style SwitchExpr::evalSpecialForm): each
+    // condition runs only on the rows no earlier case has matched, and each
+    // result only on the rows its condition selected. Rows with a NULL
+    // condition do not match, so they keep falling through to later cases and
+    // finally the else clause.
+
+    // Under an outer filter the current rows are the filter-selected rows
+    // scattered over the full batch; convert them into an explicit compacted
+    // space first (same as Visit(IfExpr)). The mask is defined over the batch
+    // row space only; see Visit(IfExpr) for why it is skipped otherwise.
+    SelectivityVector outerSel;
+    std::vector<int32_t> outerPos;
+    std::unique_ptr<ScopedCompactEval> outerGuard;
+    if (activeSel_ == nullptr && context->hasFilter && context->GetResultRowSize() == rowSize) {
+        auto *mask = context->GetIsSelectRow();
+        int32_t fullSize = context->GetResultRowSize();
+        outerSel = SelectivityVector(fullSize, false);
+        outerPos.reserve(fullSize);
+        for (int32_t i = 0; i < fullSize; ++i) {
+            if (mask[i]) {
+                outerSel.setValid(i, true);
+                outerPos.push_back(i);
+            }
+        }
+        outerSel.updateBounds();
+        outerGuard = std::make_unique<ScopedCompactEval>(*this, outerSel, outerPos);
+    }
+
+    int32_t n = CurrentRowCount();
+
+    // Rows not matched by any case yet, in current-space coordinates.
+    SelectivityVector remaining(n, n > 0);
+
+    AnalyzeSwitchPatterns(e);
+
+    BaseVector *result = nullptr;
+    if (e.propagatesNulls_ && n > 0) {
+        // Null-propagation fast path: every result and the else clause are the
+        // shared column, so rows where it is null are null in the result and no
+        // condition or result ever needs to run on them.
+        SelectivityVector allSel(n, true);
+        BaseVector *fieldVec = EvaluateBranch(e.whenClause[0].second, allSel, true);
+        IfFunction::CreateResultVector(e.dataType->GetId(), n, fieldVec, result);
+        if (fieldVec->HasNull()) {
+            auto *nulls = reinterpret_cast<const uint64_t *>(unsafe::UnsafeBaseVector::GetNulls(fieldVec));
+            remaining.deselectNonNulls(nulls, 0, n);
+            for (int32_t i = 0; i < n; ++i) {
+                if (fieldVec->IsNull(i)) {
+                    result->SetNull(i);
+                }
+            }
+        }
+        delete fieldVec;
+    }
+
+    std::vector<SwitchBranch> branches;
+    branches.reserve(e.whenClause.size() + 1);
+    std::vector<uint64_t> trueBits;
+
+    // Single-case fast path: a 1-branch CASE is exactly one IF, so route it
+    // through the two-way merge machinery (same shape as Visit(IfExpr))
+    // instead of the K-way structures, which are pure overhead for one case.
+    // Skipped when the null-propagation pre-pass ran, because its sealed rows
+    // are handled by the general path's merge bookkeeping.
+    if (e.whenClause.size() == 1 && !e.propagatesNulls_ && e.falseExpr != nullptr) {
+        const Expr *cond = e.whenClause[0].first;
+        const Expr *thenExpr = e.whenClause[0].second;
+        const Expr *elseExpr = e.falseExpr;
+
+        SelectivityVector trueSel(n, false);
+        SelectivityVector falseSel(n, false);
+        if (e.eqFieldConst_ && n > 0) {
+            const auto *binary = static_cast<const BinaryExpr *>(cond);
+            const auto *lit = static_cast<const LiteralExpr *>(binary->right);
+            SelectivityVector allSel(n, true);
+            BaseVector *fieldVec = EvaluateBranch(binary->left, allSel, true);
+            if (lit->isNull) {
+                falseSel = remaining;   // `field = NULL` never matches
+            } else {
+                std::vector<int32_t> truePos;
+                RunEqFieldConstCase(fieldVec, *lit, fieldVec->GetTypeId(), remaining, trueSel, truePos);
+                falseSel = remaining;
+                falseSel.deselect(trueSel);
+            }
+            delete fieldVec;
+        } else {
+            BaseVector *condVec = EvaluateBranch(cond, remaining, false);
+            int32_t condSize = static_cast<int32_t>(remaining.countSelected());
+            CondMix mix = ClassifyBoolCond(condVec, condSize, trueBits);
+            delete condVec;
+            if (mix == CondMix::kAllTrue) {
+                trueSel = remaining;
+            } else if (mix == CondMix::kMix) {
+                int32_t j = 0;
+                remaining.applyToSelected([&](vector_size_t row) {
+                    if (BitUtil::IsBitSet(trueBits.data(), j)) {
+                        trueSel.setValid(row, true);
+                    }
+                    ++j;
+                });
+                trueSel.updateBounds();
+                falseSel = remaining;
+                falseSel.deselect(trueSel);
+            } else {
+                falseSel = remaining;
+            }
+        }
+
+        if (!trueSel.hasSelections()) {
+            result = EvaluateBranch(elseExpr, falseSel, false);
+        } else if (!falseSel.hasSelections()) {
+            result = EvaluateBranch(thenExpr, trueSel, false);
+        } else {
+            bool trueCheap = IsCheapIfBranch(thenExpr);
+            bool falseCheap = IsCheapIfBranch(elseExpr);
+            BaseVector *trueVec = EvaluateBranch(thenExpr, trueSel, trueCheap);
+            BaseVector *falseVec = EvaluateBranch(elseExpr, falseSel, falseCheap);
+            IfFunction::CreateResultVector(e.dataType->GetId(), n, trueVec, result);
+            std::vector<int32_t> truePos;
+            std::vector<int32_t> falsePos;
+            trueSel.applyToSelected([&](vector_size_t row) { truePos.push_back(row); });
+            falseSel.applyToSelected([&](vector_size_t row) { falsePos.push_back(row); });
+            MergeIfBranches(trueVec, falseVec, truePos, falsePos, trueCheap, falseCheap, result, n,
+                e.dataType->GetId());
+            delete trueVec;
+            delete falseVec;
+        }
+        inputValues_.push(result);
+        return;
+    }
+
+    // EQ(field, literal) fast path: the shared field is evaluated once (a
+    // zero-copy slice); each condition then runs as a scalar pass over the
+    // remaining rows, skipping the compacted-evaluation machinery entirely.
+    BaseVector *eqFieldVec = nullptr;
+    if (e.eqFieldConst_ && n > 0) {
+        SelectivityVector allSel(n, true);
+        eqFieldVec = EvaluateBranch(static_cast<const BinaryExpr *>(e.whenClause[0].first)->left, allSel, true);
+    }
+
+    for (const auto &when : e.whenClause) {
+        if (!remaining.hasSelections()) {
+            break;
+        }
+
+        SelectivityVector thenSel(n, false);
+        std::vector<int32_t> thenPos;
+        if (e.eqFieldConst_) {
+            const auto *binary = static_cast<const BinaryExpr *>(when.first);
+            const auto *lit = static_cast<const LiteralExpr *>(binary->right);
+            if (lit->isNull) {
+                continue;   // `field = NULL` never matches
+            }
+            thenPos.reserve(remaining.countSelected());
+            RunEqFieldConstCase(eqFieldVec, *lit, eqFieldVec->GetTypeId(), remaining, thenSel, thenPos);
+            remaining.deselect(thenSel);
+            if (!thenSel.hasSelections()) {
+                continue;
+            }
+        } else {
+            // 1. Evaluate the condition on the remaining rows only.
+            BaseVector *condVec = EvaluateBranch(when.first, remaining, false);
+            int32_t condSize = static_cast<int32_t>(remaining.countSelected());
+
+            // 2. Classify the condition and build the selection of the rows the
+            //    result runs on.
+            CondMix mix = ClassifyBoolCond(condVec, condSize, trueBits);
+            delete condVec;
+            if (mix == CondMix::kAllFalse) {
+                continue;
+            }
+            if (mix == CondMix::kAllTrue) {
+                thenSel = remaining;
+                thenPos.reserve(remaining.countSelected());
+                remaining.applyToSelected([&](vector_size_t row) { thenPos.push_back(row); });
+            } else {
+                thenPos.reserve(remaining.countSelected());
+                int32_t j = 0;
+                remaining.applyToSelected([&](vector_size_t row) {
+                    if (BitUtil::IsBitSet(trueBits.data(), j)) {
+                        thenSel.setValid(row, true);
+                        thenPos.push_back(row);
+                    }
+                    ++j;
+                });
+                thenSel.updateBounds();
+            }
+            remaining.deselect(thenSel);
+            if (!thenSel.hasSelections()) {
+                continue;
+            }
+        }
+
+        // 3. Evaluate the result on its rows. Cheap (leaf-only) results run in
+        //    place over the whole space; expensive ones are compacted.
+        bool cheap = IsCheapIfBranch(when.second);
+        int32_t selCount = thenSel.countSelected();
+        BaseVector *thenVec = EvaluateBranch(when.second, thenSel, cheap);
+        if (result == nullptr) {
+            IfFunction::CreateResultVector(e.dataType->GetId(), n, thenVec, result);
+        }
+        branches.push_back({thenVec, std::move(thenPos), cheap || selCount == n});
+    }
+    delete eqFieldVec;
+
+    // The else clause covers the rows no case matched.
+    if (remaining.hasSelections()) {
+        if (e.falseExpr != nullptr) {
+            bool cheap = IsCheapIfBranch(e.falseExpr);
+            int32_t selCount = remaining.countSelected();
+            BaseVector *elseVec = EvaluateBranch(e.falseExpr, remaining, cheap);
+            if (result == nullptr) {
+                IfFunction::CreateResultVector(e.dataType->GetId(), n, elseVec, result);
+            }
+            SwitchBranch elseBranch;
+            elseBranch.vec = elseVec;
+            elseBranch.coversAll = cheap || selCount == n;
+            elseBranch.pos.reserve(selCount);
+            remaining.applyToSelected([&](vector_size_t row) { elseBranch.pos.push_back(row); });
+            branches.push_back(std::move(elseBranch));
+        } else {
+            // No ELSE clause: unmatched rows are NULL. Defensive; the parser
+            // always materializes an else clause.
+            if (result == nullptr) {
+                if (e.whenClause.empty()) {
+                    OMNI_THROW("Switch expr Error", "Switch expression without cases and else clause");
+                }
+                SelectivityVector allSel(n, true);
+                BaseVector *srcVec = EvaluateBranch(e.whenClause[0].second, allSel, true);
+                IfFunction::CreateResultVector(e.dataType->GetId(), n, srcVec, result);
+                delete srcVec;
+            }
+            remaining.applyToSelected([&](vector_size_t row) { result->SetNull(row); });
+        }
+    }
+
+    if (result == nullptr) {
+        // No branch produced a result (empty input): evaluate a fallback
+        // branch in place to produce the correctly-typed empty vector.
+        const Expr *fallback =
+            e.falseExpr != nullptr ? e.falseExpr : (e.whenClause.empty() ? nullptr : e.whenClause[0].second);
+        if (fallback == nullptr) {
+            OMNI_THROW("Switch expr Error", "Switch expression without cases and else clause");
+        }
+        result = EvaluateBranch(fallback, remaining, false);
+    }
+
+    MergeSwitchBranches(branches, result, n, e.dataType->GetId());
+    for (const SwitchBranch &branch : branches) {
+        delete branch.vec;
+    }
+    inputValues_.push(result);
+}
 
 void ExprEval::Visit(const ParamRefExpr &e) {
     int32_t paramIdx = paramNameToIdxMap[e.paramName_];
     vec::BaseVector *paramVec = lambdaParams_.at(paramIdx);
+    if (activeSel_ != nullptr) {
+        // Compacted evaluation mode: project only the active rows so the result
+        // stays aligned with the compacted space.
+        PushProjectedColumn(paramVec, paramVec->GetTypeId(), activePos_.data(),
+            static_cast<int32_t>(activePos_.size()));
+        return;
+    }
     vec::BaseVector *toPush = paramVec->Slice(0, paramVec->GetSize());
     inputValues_.push(toPush != nullptr ? toPush : paramVec);
 }
