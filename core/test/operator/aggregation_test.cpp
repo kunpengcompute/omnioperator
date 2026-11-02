@@ -3365,6 +3365,118 @@ TEST(HashAggregationOperatorTest, PartialAggregationSpillsDuringInputReservation
     EXPECT_EQ(pool.currentBytes(), 0);
 }
 
+namespace {
+// Plays Spark for one task with a fixed execution share: grants until the
+// share is used, then spills the task once for a pre-reservation and denies
+// what still does not fit. The caller repays what the spill freed.
+class TaskShareListener : public omniruntime::mem::PoolListener {
+public:
+    explicit TaskShareListener(int64_t share) : share(share) {}
+    void allocationChanged(int64_t diff) override
+    {
+        if (diff > 0 && granted + diff > share && pool != nullptr && !reclaiming &&
+            CurrentReservationRequest().site != nullptr) {
+            reclaiming = true;
+            const int64_t freed = pool->reclaim(diff);
+            reclaiming = false;
+            granted -= freed;
+            spills += freed > 0 ? 1 : 0;
+            if (granted + diff > share) {
+                throw omniruntime::mem::ReservationDenied("task share used");
+            }
+        }
+        granted += diff;
+    }
+    omniruntime::mem::OmniTaskMemoryPool *pool = nullptr;
+    const int64_t share;
+    int64_t granted = 0;
+    bool reclaiming = false;
+    int spills = 0;
+};
+} // namespace
+
+TEST(HashAggregationOperatorTest, SpillRunsUseTheRoomOtherOperatorsLeave)
+{
+    // Another operator of the task holds 90% of the Spark share. The
+    // aggregation must still fill the remaining 64 MB before it spills, not
+    // spill every batch because the task as a whole is large.
+    constexpr int64_t kShare = int64_t{640} << 20;
+    constexpr int64_t kOther = kShare / 10 * 9;
+    constexpr int32_t kRowsPerBatch = 65536;
+    constexpr int32_t kKeyRanges = 32;
+    constexpr int32_t kBatches = kKeyRanges * 2;
+    TaskShareListener listener(kShare);
+    omniruntime::mem::OmniTaskMemoryPool pool(&listener);
+    listener.pool = &pool;
+    auto *other = new Vector<int64_t>(kOther / sizeof(int64_t), &pool);
+    const auto makeInput = [&](int32_t firstKey) {
+        auto *input = new VectorBatch(kRowsPerBatch);
+        auto *keys = new Vector<int64_t>(kRowsPerBatch, &pool);
+        auto *values = new Vector<int64_t>(kRowsPerBatch, &pool);
+        for (int32_t row = 0; row < kRowsPerBatch; ++row) {
+            keys->SetValue(row, static_cast<int64_t>(firstKey + row) * 3001);
+            values->SetValue(row, 1);
+        }
+        input->Append(keys);
+        input->Append(values);
+        return input;
+    };
+
+    std::vector<uint32_t> groupByCols({0});
+    DataTypes groupInputTypes(std::vector<DataTypePtr>({LongType()}));
+    auto aggInputCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t>({1}));
+    auto aggInputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    auto aggOutputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    std::vector<uint32_t> aggFuncTypes({OMNI_AGGREGATION_TYPE_SUM});
+    std::vector<uint32_t> maskCols({static_cast<uint32_t>(-1)});
+    std::vector<bool> inputRaws({true});
+    std::vector<bool> outputPartials({false});
+    std::vector<int8_t> hasAggFilters({static_cast<int8_t>(-1)});
+    SparkSpillConfig spillConfig(GenerateSpillPath(), INT32_MAX, 0);
+    OperatorConfig operatorConfig(spillConfig);
+    auto factory = std::make_unique<HashAggregationOperatorFactory>(groupByCols, groupInputTypes,
+        aggInputCols, aggInputTypes, aggOutputTypes, aggFuncTypes, maskCols, inputRaws,
+        outputPartials, hasAggFilters, operatorConfig, AggregationNode::Step::K_SINGLE);
+    factory->Init();
+    auto *aggregation = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+    ASSERT_NE(aggregation, nullptr);
+    aggregation->SetRowCountPerBatch(kRowsPerBatch);
+    aggregation->setNoMoreInput(false);
+
+    for (int32_t batch = 0; batch < kBatches; ++batch) {
+        // Every key range arrives twice, so spilled runs must merge.
+        auto *input = makeInput((batch % kKeyRanges) * kRowsPerBatch);
+        op::Operator::NonReclaimableSection section(aggregation);
+        aggregation->AddInput(input);
+    }
+    // A batch takes about 8 MB of table here, so a run fills the room in about
+    // seven batches; spilling at every batch would be 63 runs.
+    EXPECT_GT(listener.spills, 0);
+    EXPECT_LE(listener.spills, kBatches / 4) << "spilled " << aggregation->GetSpilledBytes() << " bytes";
+
+    aggregation->setNoMoreInput(true);
+    std::vector<int64_t> sums(kRowsPerBatch * kKeyRanges, 0);
+    while (!aggregation->isFinished()) {
+        VectorBatch *output = nullptr;
+        aggregation->GetOutput(&output);
+        if (output != nullptr) {
+            auto *keys = static_cast<Vector<int64_t> *>(output->Get(0));
+            auto *values = static_cast<Vector<int64_t> *>(output->Get(1));
+            for (int32_t row = 0; row < output->GetRowCount(); ++row) {
+                const int64_t key = keys->GetValue(row);
+                ASSERT_EQ(key % 3001, 0);
+                ASSERT_LT(key / 3001, static_cast<int64_t>(sums.size()));
+                sums[key / 3001] += values->GetValue(row);
+            }
+            VectorHelper::FreeVecBatch(output);
+        }
+    }
+    EXPECT_TRUE(std::all_of(sums.begin(), sums.end(), [](int64_t sum) { return sum == kBatches / kKeyRanges; }));
+    op::Operator::DeleteOperator(aggregation);
+    delete other;
+    EXPECT_EQ(pool.currentBytes(), 0);
+}
+
 TEST(HashAggregationOperatorTest, test_hashagg_same_key_cross_spill_file)
 {
     std::string data00[] = {"Asleep, high machines shall no", "Asleep, indian sciences may in",

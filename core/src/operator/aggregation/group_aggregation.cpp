@@ -322,7 +322,13 @@ void HashAggregationOperator::EnsureInputFits(const VectorBatch *vecBatch)
     // peak, and the request that did not fit spilled a table that would have.
     // Only the arena estimate keeps Velox's factor of two.
     const uint64_t headroom = add(multiply(arenaGrowth, 2), tableIncrement);
-    const uint64_t currentUsage = static_cast<uint64_t>(std::max<int64_t>(pool_->currentBytes(), 0));
+    // Velox scales both percentages by the operator's own pool. pool_ is the
+    // task pool here, shared with the shuffle writer, readers and every other
+    // operator, so scaling by it asks for a tenth of the whole task: when other
+    // operators hold most of the task's Spark share, each request is denied
+    // and the table is spilled while still small. Scale by what this
+    // aggregation could spill.
+    const uint64_t currentUsage = reclaimableBytes();
     EnsureReservationPctsCached();
     const uint64_t minimumReservation =
         multiply(currentUsage, static_cast<uint64_t>(minSpillableReservationPct_)) / 100;
