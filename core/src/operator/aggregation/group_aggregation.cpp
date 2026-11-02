@@ -316,7 +316,12 @@ void HashAggregationOperator::EnsureInputFits(const VectorBatch *vecBatch)
         : executionContext->GetArena()->AvailBytes();
     const uint64_t arenaGrowth = arenaDemand > arenaFree ? arenaDemand - arenaFree : 0;
     const uint64_t tableIncrement = EstimateRehashReservation(incomingRows);
-    const uint64_t increment = add(arenaGrowth, tableIncrement);
+    // tableIncrement is the whole new ctrl/slot array of a rehash. The rehash
+    // fills it while the old array is still live and frees the old one after,
+    // so the new array is needed once. Doubling it asked for twice the real
+    // peak, and the request that did not fit spilled a table that would have.
+    // Only the arena estimate keeps Velox's factor of two.
+    const uint64_t headroom = add(multiply(arenaGrowth, 2), tableIncrement);
     const uint64_t currentUsage = static_cast<uint64_t>(std::max<int64_t>(pool_->currentBytes(), 0));
     EnsureReservationPctsCached();
     const uint64_t minimumReservation =
@@ -330,14 +335,14 @@ void HashAggregationOperator::EnsureInputFits(const VectorBatch *vecBatch)
         if (tableIncrement == 0 && arenaFree >= arenaDemand) {
             return;
         }
-        if (availableReservation > multiply(increment, 2)) {
+        if (availableReservation > headroom) {
             return;
         }
     }
 
     const uint64_t growthReservation =
         multiply(currentUsage, static_cast<uint64_t>(spillableReservationGrowthPct_)) / 100;
-    const int64_t target = static_cast<int64_t>(std::max(multiply(increment, 2), growthReservation));
+    const int64_t target = static_cast<int64_t>(std::max(headroom, growthReservation));
     ReservationRequestSection request(
         this, reclaimableName(), "HashAggregationOperator::EnsureInputFits", target);
     ReclaimableReservationSection safeReservation(this);
