@@ -82,6 +82,12 @@ public:
     static std::unique_ptr<VectorBatch> CopyVectorBatchToPool(
         VectorBatch *src, omniruntime::mem::OmniTaskMemoryPool *pool);
     static BaseVector *CopyPositionsVector(BaseVector *vector, int *positions, int offset, int length);
+    // Copy the rows at `positions` into a new flat vector whose buffers belong to `pool`. A null
+    // pool builds the copy outside any task pool: spill working memory that is written to disk and
+    // released before the spill returns must not grow the pool it is reclaiming. Encoded sources
+    // (dictionary, constant) are flattened by the copy. A position of -1 copies a null.
+    static BaseVector *CopyPositionsVectorToPool(BaseVector *vector, const int *positions, int offset,
+        int length, omniruntime::mem::OmniTaskMemoryPool *pool);
     static void *UnsafeGetDictionary(BaseVector *vector);
     static void AppendVector(BaseVector *destVector, int32_t offset, BaseVector *srcVector, int32_t length);
     static void ExpandElementVector(BaseVector *elementVec, type::DataTypeId typeId, int32_t newSize);

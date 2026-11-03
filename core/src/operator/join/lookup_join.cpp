@@ -39,9 +39,11 @@ VectorBatch *CopyRowsForJoinSpill(VectorBatch *source, const std::vector<int32_t
     UniqueVecBatch subBatch(new VectorBatch(static_cast<int32_t>(positions.size())));
     const int32_t vectorCount = source->GetVectorCount();
     subBatch->ResizeVectorCount(vectorCount);
+    // Spill working memory: written to disk and freed before the spill returns, so it is built
+    // outside the task pool. The copy flattens dictionary and constant columns as well.
     for (int32_t col = 0; col < vectorCount; ++col) {
-        subBatch->SetVector(col, VectorHelper::CopyPositionsVector(
-            source->Get(col), positions.data(), 0, static_cast<int32_t>(positions.size())));
+        subBatch->SetVector(col, VectorHelper::CopyPositionsVectorToPool(
+            source->Get(col), positions.data(), 0, static_cast<int32_t>(positions.size()), nullptr));
     }
     return subBatch.release();
 }
@@ -758,9 +760,10 @@ bool LookupJoinOperator::TrySpillPathAProbeInput(omniruntime::vec::VectorBatch *
             const std::string path = joinSpillState_->ProbeSubPartitionDir(*pathARunId_, subPartition);
             pathAWriters_[subPartition] = std::make_unique<SpillWriter>(probeTypes, path);
         }
-        FlattenBatchForJoinSpill(subBatch.get(), pool());
+        FlattenBatchForJoinSpill(subBatch.get(), nullptr);
         const uint64_t vecBatchSize = Spiller::CollectVecBatchSize(probeTypes, subBatch.get());
         joinSpillState_->AccountSpilledBytes(vecBatchSize);
+        stats_.spillScratchPeakBytes = std::max(stats_.spillScratchPeakBytes, vecBatchSize);
         auto status = pathAWriters_[subPartition]->WriteVecBatch(subBatch.get(), vecBatchSize);
         if (status != ErrorCode::SUCCESS) {
             throw OmniException("JOIN_SPILL_WRITE_FAILED", "Failed to spill probe side input.");

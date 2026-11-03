@@ -103,6 +103,13 @@ public:
         return buildSpilledFiles_;
     }
 
+    // Largest build-spill batch built outside the task pool (reported only, see
+    // OperatorStats::spillScratchPeakBytes).
+    uint64_t SpillScratchPeakBytes() const
+    {
+        return spillScratchPeakBytes_;
+    }
+
     uint32_t NumSubPartitions() const
     {
         return numSubPartitions_;
@@ -205,6 +212,7 @@ private:
     uint64_t buildSpilledBytes_ = 0;
     uint64_t cappedSpillBytes_ = 0;
     uint32_t buildSpilledFiles_ = 0;
+    uint64_t spillScratchPeakBytes_ = 0;
 
     mutable std::mutex handoffMutex_;
     std::condition_variable handoffCv_;

@@ -1234,6 +1234,54 @@ std::unique_ptr<VectorBatch> VectorHelper::CopyVectorBatchToPool(
     return copy;
 }
 
+BaseVector *VectorHelper::CopyPositionsVectorToPool(BaseVector *vector, const int *positions, int offset,
+    int length, omniruntime::mem::OmniTaskMemoryPool *pool)
+{
+    if (UNLIKELY(vector == nullptr || positions == nullptr || length < 0)) {
+        throw OmniException("OPERATOR_RUNTIME_ERROR",
+            "CopyPositionsVectorToPool: null vector or positions, or a negative length.");
+    }
+    const DataTypeId typeId = vector->GetTypeId();
+    if (typeId == type::OMNI_CONTAINER) {
+        // Container vectors keep their field vectors' pools; the positional copy has no pool-less
+        // path for them. They do not reach the spill copies which use this helper.
+        return CopyPositionsVector(vector, const_cast<int *>(positions), offset, length);
+    }
+    std::unique_ptr<BaseVector> copy;
+    if (typeId == type::OMNI_ARRAY || typeId == type::OMNI_MAP || typeId == type::OMNI_ROW) {
+        auto dataType = DataTypeForPoolCopy(vector);
+        copy.reset(VectorHelper::CreateComplexVector(pool, dataType.get(), length));
+    } else {
+        int32_t capacityInBytes = INITIAL_STRING_SIZE;
+        if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR || typeId == type::OMNI_VARBINARY) {
+            // Size the string body to the copied bytes, as Vector::CopyPositions does.
+            int64_t totalBytes = 0;
+            for (int32_t i = 0; i < length; i++) {
+                const int position = positions[offset + i];
+                if (position != -1 && !vector->IsNull(position)) {
+                    totalBytes += static_cast<int64_t>(
+                        VectorHelper::GetFlatValue<type::OMNI_VARCHAR>(vector, position).size());
+                }
+            }
+            capacityInBytes = static_cast<int32_t>(std::min<int64_t>(std::max<int64_t>(totalBytes, 1),
+                std::numeric_limits<int32_t>::max()));
+        }
+        copy.reset(VectorHelper::CreateFlatVector(pool, typeId, length, capacityInBytes));
+        if (vector->GetDataType() != nullptr) {
+            VectorHelper::SetVectorDataType(copy.get(), vector->GetDataType().get());
+        }
+    }
+    for (int32_t i = 0; i < length; ++i) {
+        const int position = positions[offset + i];
+        if (position == -1 || vector->IsNull(position)) {
+            VectorHelper::SetNull(copy.get(), i);
+        } else {
+            VectorHelper::CopyValue(vector, position, copy.get(), i);
+        }
+    }
+    return copy.release();
+}
+
 BaseVector *VectorHelper::CopyPositionsVector(BaseVector *vector, int *positions, int offset, int length)
 {
     if (vector->GetEncoding() == OMNI_ENCODING_CONST) {

@@ -387,11 +387,13 @@ void HashBuilderOperator::AddLatchedInput(omniruntime::vec::VectorBatch *vecBatc
         }
         UniqueVecBatch subBatch(new omniruntime::vec::VectorBatch(static_cast<int32_t>(bucketPositions.size())));
         subBatch->ResizeVectorCount(vectorCount);
+        // Spill working memory, built outside the task pool (see SpillAndClearResidentBuild).
         for (int32_t col = 0; col < vectorCount; ++col) {
-            subBatch->SetVector(col, omniruntime::vec::VectorHelper::CopyPositionsVector(
-                owned->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size())));
+            subBatch->SetVector(col, omniruntime::vec::VectorHelper::CopyPositionsVectorToPool(
+                owned->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size()),
+                nullptr));
         }
-        joinSpillState_->SpillBuildSubPartition(runId, subPartition, subBatch.get(), pool());
+        joinSpillState_->SpillBuildSubPartition(runId, subPartition, subBatch.get(), nullptr);
     }
     ResetInputVecBatch();
 }
@@ -447,11 +449,15 @@ void HashBuilderOperator::SpillAndClearResidentBuild()
             }
             UniqueVecBatch subBatch(new omniruntime::vec::VectorBatch(static_cast<int32_t>(bucketPositions.size())));
             subBatch->ResizeVectorCount(vectorCount);
+            // Spill working memory: the sub-batch is written to disk and freed before this spill
+            // returns, so it is built outside the task pool. Inside Spark-driven reclaim the pool has
+            // no headroom left and a pool-bound copy would be denied the memory it is freeing.
             for (int32_t col = 0; col < vectorCount; ++col) {
-                subBatch->SetVector(col, omniruntime::vec::VectorHelper::CopyPositionsVector(
-                    source->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size())));
+                subBatch->SetVector(col, omniruntime::vec::VectorHelper::CopyPositionsVectorToPool(
+                    source->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size()),
+                    nullptr));
             }
-            joinSpillState_->SpillBuildSubPartition(runId, subPartition, subBatch.get(), pool());
+            joinSpillState_->SpillBuildSubPartition(runId, subPartition, subBatch.get(), nullptr);
         }
         resident.Free(source);
     }
@@ -688,6 +694,8 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
         stats_.spilledBytes = joinSpillState_->BuildSpilledBytes();
         stats_.spilledRows = joinSpillState_->BuildSpilledRows();
         stats_.spilledFiles = joinSpillState_->BuildSpilledFiles();
+        stats_.spillScratchPeakBytes = std::max(stats_.spillScratchPeakBytes,
+            joinSpillState_->SpillScratchPeakBytes());
     };
     refreshSpillStats();
     if (!noMoreInput_) {

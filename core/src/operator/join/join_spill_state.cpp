@@ -246,6 +246,9 @@ void JoinSpillState::SpillBuildSubPartition(uint64_t runId, uint32_t subPartitio
     SpillWriter *writer = buildWriters_[subPartition].get();
     const uint64_t vecBatchSize = Spiller::CollectVecBatchSize(BuildSpillTypes(), batch);
     AccountSpilledBytesLocked(vecBatchSize);
+    if (pool == nullptr) {
+        spillScratchPeakBytes_ = std::max(spillScratchPeakBytes_, vecBatchSize);
+    }
     auto status = writer->WriteVecBatch(batch, vecBatchSize);
     if (status != ErrorCode::SUCCESS) {
         throw omniruntime::exception::OmniException(
@@ -949,11 +952,13 @@ void JoinSpillState::FlushHeldBuildTable(HashTableVariants *hashTables, const Jo
                 }
                 UniqueVecBatch subBatch(new vec::VectorBatch(static_cast<int32_t>(bucketPositions.size())));
                 subBatch->ResizeVectorCount(vectorCount);
+                // Spill working memory, built outside the task pool: this runs inside reclaim.
                 for (int32_t col = 0; col < vectorCount; ++col) {
-                    subBatch->SetVector(col, vec::VectorHelper::CopyPositionsVector(
-                        source->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size())));
+                    subBatch->SetVector(col, vec::VectorHelper::CopyPositionsVectorToPool(
+                        source->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size()),
+                        nullptr));
                 }
-                SpillBuildSubPartition(runId, subPartition, subBatch.get(), pool);
+                SpillBuildSubPartition(runId, subPartition, subBatch.get(), nullptr);
             }
             resident.Free(source);
         }
@@ -964,7 +969,9 @@ void JoinSpillState::FlushHeldBuildTable(HashTableVariants *hashTables, const Jo
         const uint32_t dest = *hand.restorePartitionId;
         for (auto *source : resident.batches) {
             if (source != nullptr) {
-                SpillBuildSubPartition(runId, dest, source, pool);
+                // The flattened columns and the visited-flag column are spill working memory:
+                // build them outside the task pool, this runs inside reclaim.
+                SpillBuildSubPartition(runId, dest, source, nullptr);
             }
             resident.Free(source);
         }
