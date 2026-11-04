@@ -190,6 +190,13 @@ public:
     static constexpr const char *KEnableAdaptivePartialAggregation = "enable_adaptive_partial_aggregation";
     static constexpr const char *KAdaptivePartialAggregationMinRows = "adaptive_partial_aggregation_min_rows";
     static constexpr const char *KAdaptivePartialAggregationRatio = "adaptive_partial_aggregation_ratio";
+    /// Memory-driven partial aggregation flush (Velox kMaxPartialAggregationMemory /
+    /// kMaxExtendedPartialAggregationMemory): when an adaptive (K_PARTIAL) hash
+    /// aggregation's table exceeds this many bytes it emits the table downstream and
+    /// resets, instead of growing until the task share is exhausted and spilling the
+    /// whole table. 0 disables the flush.
+    static constexpr const char *KMaxPartialAggregationMemory = "max_partial_aggregation_memory";
+    static constexpr const char *KMaxExtendedPartialAggregationMemory = "max_extended_partial_aggregation_memory";
     static constexpr const char *KPreferVectorizationExpression = "prefer_vectorization_expression";
     static constexpr const char *KStringViewRuntimeValidationEnabled =
         "string_view_runtime_validation_enabled";
@@ -491,6 +498,16 @@ public:
     {
         constexpr double kDefaultValue = 0.8;
         return get<double>(KAdaptivePartialAggregationRatio, kDefaultValue);
+    }
+
+    uint64_t MaxPartialAggregationMemory() const
+    {
+        return static_cast<uint64_t>(std::max<int64_t>(get<int64_t>(KMaxPartialAggregationMemory, 0), 0));
+    }
+
+    uint64_t MaxExtendedPartialAggregationMemory() const
+    {
+        return static_cast<uint64_t>(std::max<int64_t>(get<int64_t>(KMaxExtendedPartialAggregationMemory, 0), 0));
     }
 
     std::string SessionTimezone() const

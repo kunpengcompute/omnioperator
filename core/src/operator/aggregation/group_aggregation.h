@@ -121,6 +121,44 @@ public:
         return isStepPartials;
     }
 
+    /// Memory-driven partial flush, Velox HashAggregation semantics: once the
+    /// partial table holds more than maxBytes the operator stops taking input
+    /// (needsInput() == false), emits the table through GetOutput, resets it and
+    /// continues. maxExtendedBytes is the one-time larger cap granted after a
+    /// flush whose reduction was worth keeping. 0 disables the flush.
+    void SetPartialFlushMemory(uint64_t maxBytes, uint64_t maxExtendedBytes);
+
+    bool IsPartialFlushing() const
+    {
+        return partialFull_;
+    }
+
+    /// True once a flush found the partial aggregation not worth continuing
+    /// (reduction below kPartialMinFinalPct at the extended cap). The wrapper
+    /// turns this into pass-through the same way as its row-ratio rule.
+    bool PartialAggregationAbandonRequested() const
+    {
+        return abandonPartialRequested_;
+    }
+
+    /// Called by the wrapper when it abandons partial aggregation: the pending
+    /// flush is dropped so the remaining table drains through the normal
+    /// finished-output path. Never called while a flush is being emitted.
+    void CancelPartialFlush()
+    {
+        partialFull_ = false;
+    }
+
+    uint64_t PartialFlushTimes() const
+    {
+        return flushTimes_;
+    }
+
+    /// Distinct groups seen so far: in the table + flushed + spilled.
+    uint64_t CumulativeDistinctKeys();
+
+    bool needsInput() override;
+
 private:
     int32_t InitMaxRowCountAndOutputTypes();
 
@@ -197,6 +235,14 @@ private:
 
     void ReleaseFinishedOutputState();
 
+    uint64_t PartialTableBytes();
+
+    void MaybeMarkPartialFull();
+
+    void FinishOutput(int32_t outputRows);
+
+    void CompletePartialFlush(int32_t outputRows);
+
     std::vector<ColumnIndex> groupByCols;
     std::vector<std::vector<int32_t>> aggInputCols;
     uint32_t aggInputColsSize;
@@ -253,6 +299,20 @@ private:
     std::atomic<bool> reclaimInProgress_{false};
     bool hashmapCapacityReleased_ = false;
     bool outputStarted_ = false;
+
+    // Memory-driven partial flush state (see SetPartialFlushMemory). flushedRows_
+    // and spilledRows_ keep GetHashMapUniqueKeys() cumulative: the wrapper's
+    // abandon rule compares distinct keys against cumulative input rows, and a
+    // reclaim empties the in-memory table without resetting that input count.
+    uint64_t maxPartialAggregationMemory_ = 0;
+    uint64_t maxExtendedPartialAggregationMemory_ = 0;
+    bool partialFull_ = false;
+    bool partialFlushing_ = false;
+    bool abandonPartialRequested_ = false;
+    uint64_t partialInputRowsSinceFlush_ = 0;
+    uint64_t flushedRows_ = 0;
+    uint64_t spilledRows_ = 0;
+    uint64_t flushTimes_ = 0;
 
     // QueryConfig is immutable for a query's lifetime (QueryConfig.h). Cache the
     // clamped reservation percentages once instead of copying QueryConfig and

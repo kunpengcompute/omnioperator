@@ -702,6 +702,7 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
     // aggregate state, or ownership mutation has happened for this batch yet.
     EnsureInputFits(vecBatch);
     setInputedData(true);
+    partialInputRowsSinceFlush_ += static_cast<uint64_t>(rowCount);
 
     UpdateAddInputInfo(rowCount);
     // do decide hash table mode
@@ -725,6 +726,7 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
             EmplaceToArrayMap(vecBatch, groupVector);
             VectorHelper::FreeVecBatch(vecBatch);
             ResetInputVecBatch();
+            MaybeMarkPartialFull();
             return 0;
         }
     }
@@ -802,7 +804,110 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
     }
     VectorHelper::FreeVecBatch(vecBatch);
     ResetInputVecBatch();
+    MaybeMarkPartialFull();
     return 0;
+}
+
+bool HashAggregationOperator::needsInput()
+{
+    return Operator::needsInput() && !partialFull_;
+}
+
+void HashAggregationOperator::SetPartialFlushMemory(uint64_t maxBytes, uint64_t maxExtendedBytes)
+{
+    maxPartialAggregationMemory_ = maxBytes;
+    maxExtendedPartialAggregationMemory_ = std::max(maxBytes, maxExtendedBytes);
+}
+
+uint64_t HashAggregationOperator::PartialTableBytes()
+{
+    // Arena (aggregate states, serialized keys, row container) plus the hash or
+    // array table's own storage: the same bytes a reclaim would return.
+    uint64_t bytes = executionContext->GetArena()->TotalBytes();
+    if (arrayTable != nullptr) {
+        bytes += arrayTable->AllocatedBytes();
+    } else if (serialize != nullptr) {
+        bytes += serialize->table->ReclaimableBytesOnRelease();
+    } else if (fixedInt32 != nullptr) {
+        bytes += fixedInt32->table->ReclaimableBytesOnRelease();
+    } else if (fixedInt64 != nullptr) {
+        bytes += fixedInt64->table->ReclaimableBytesOnRelease();
+    } else if (fixedInt16 != nullptr) {
+        bytes += fixedInt16->table->ReclaimableBytesOnRelease();
+    } else if (packedInt32 != nullptr) {
+        bytes += packedInt32->table->ReclaimableBytesOnRelease();
+    } else if (packedInt64 != nullptr) {
+        bytes += packedInt64->table->ReclaimableBytesOnRelease();
+    } else if (packedInt128 != nullptr) {
+        bytes += packedInt128->table->ReclaimableBytesOnRelease();
+    }
+    return bytes;
+}
+
+void HashAggregationOperator::MaybeMarkPartialFull()
+{
+    // Velox HashAggregation::addInput: a partial (non-global) aggregation whose
+    // table passed the cap stops taking input and flushes. Once the table has
+    // spilled the disk path owns the rest of the operator's life, so no flush.
+    if (!isStepPartials || maxPartialAggregationMemory_ == 0 || partialFull_ || hasSpill ||
+        abandonPartialRequested_ || GetElementsSize() == 0) {
+        return;
+    }
+    if (PartialTableBytes() > maxPartialAggregationMemory_) {
+        partialFull_ = true;
+    }
+}
+
+void HashAggregationOperator::FinishOutput(int32_t outputRows)
+{
+    if (partialFlushing_) {
+        CompletePartialFlush(outputRows);
+        return;
+    }
+    SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+    ReleaseFinishedOutputState();
+}
+
+void HashAggregationOperator::CompletePartialFlush(int32_t outputRows)
+{
+    // Velox HashAggregation::resetPartialOutputIfNeed +
+    // maybeIncreasePartialAggregationMemoryUsage. The reset is the sequence a
+    // reclaim already uses (arena reset + table release), minus the disk write;
+    // the next AddInput reinitializes the table.
+    const uint64_t inputRows = partialInputRowsSinceFlush_;
+    const double aggregationPct = inputRows == 0 ? 0.0 : 100.0 * static_cast<double>(outputRows) / static_cast<double>(inputRows);
+    const int64_t usedBefore = pool_ == nullptr ? 0 : pool_->currentBytes();
+
+    flushedRows_ += static_cast<uint64_t>(outputRows);
+    flushTimes_++;
+    executionContext->GetArena()->Reset();
+    ReleaseHashmapCapacity();
+    outputState = OutputState();
+    outputStarted_ = false;
+    partialFull_ = false;
+    partialFlushing_ = false;
+    partialInputRowsSinceFlush_ = 0;
+
+    // If more than this many are unique at full memory, give up on partial agg.
+    constexpr double kPartialMinFinalPct = 40.0;
+    if (aggregationPct > kPartialMinFinalPct &&
+        maxPartialAggregationMemory_ >= maxExtendedPartialAggregationMemory_) {
+        abandonPartialRequested_ = true;
+    } else {
+        maxPartialAggregationMemory_ =
+            std::min(maxPartialAggregationMemory_ * 2, maxExtendedPartialAggregationMemory_);
+    }
+
+    if (pool_ != nullptr && omniruntime::telemetry::IsReclaimSuccessTelemetryEnabled()) {
+        const int64_t usedAfter = pool_->currentBytes();
+        std::fprintf(stderr,
+            "[OMNI-HASHAGG] event=partial_flush operator=%p flush_times=%lu output_rows=%d input_rows=%lu "
+            "aggregation_pct=%.1f next_cap=%lu abandon=%d used_before=%ld used_after=%ld reserved=%ld\n",
+            static_cast<void *>(this), static_cast<unsigned long>(flushTimes_), outputRows,
+            static_cast<unsigned long>(inputRows), aggregationPct,
+            static_cast<unsigned long>(maxPartialAggregationMemory_), static_cast<int>(abandonPartialRequested_),
+            static_cast<long>(usedBefore), static_cast<long>(usedAfter), static_cast<long>(pool_->reservedBytes()));
+    }
 }
 
 /**
@@ -962,6 +1067,15 @@ int32_t HashAggregationOperator::GetOutput(VectorBatch **outputVecBatch)
 {
     if (!hasInputedData()) {
         return 0;
+    }
+    if (partialFull_) {
+        if (hasSpill) {
+            // A reclaim spilled the table between AddInput and this call; the
+            // disk path drains it at the end of input, nothing is left to flush.
+            partialFull_ = false;
+        } else {
+            partialFlushing_ = true;
+        }
     }
     EnsureOutputFits();
     outputStarted_ = true;
@@ -1742,6 +1856,9 @@ ErrorCode HashAggregationOperator::SpillHashMap()
         result = SpillToDisk();
     }
     stats_.spillScratchPeakBytes = std::max(stats_.spillScratchPeakBytes, spiller->ScratchPeakBytes());
+    if (result == ErrorCode::SUCCESS) {
+        spilledRows_ += static_cast<uint64_t>(rowCount);
+    }
     spillOutputState.hasBeenOutputNum = 0;
     spillOutputState.outputHashmapPos = 0;
     spillOutputState.rowBegin = nullptr;
@@ -1776,22 +1893,19 @@ std::vector<uint64_t> HashAggregationOperator::GetSpecialMetricsInfo()
 
 uint64_t HashAggregationOperator::GetHashMapUniqueKeys()
 {
-    if (serialize != nullptr) {
-        return serialize->GetElementsSize();
-    } else if (fixedInt32 != nullptr) {
-        return fixedInt32->GetElementsSize();
-    } else if (fixedInt64 != nullptr) {
-        return fixedInt64->GetElementsSize();
-    } else if (fixedInt16 != nullptr) {
-        return fixedInt16->GetElementsSize();
-    } else if (packedInt32 != nullptr) {
-        return packedInt32->GetElementsSize();
-    } else if (packedInt64 != nullptr) {
-        return packedInt64->GetElementsSize();
-    } else if (packedInt128 != nullptr) {
-        return packedInt128->GetElementsSize();
-    }
-    return 0;
+    // Groups currently in the table, hash or array mode (the array table used
+    // to report 0 here, which hid array-keyed partial aggregations from the
+    // wrapper's abandon rule).
+    return static_cast<uint64_t>(GetElementsSize());
+}
+
+uint64_t HashAggregationOperator::CumulativeDistinctKeys()
+{
+    // Cumulative over the operator's life: groups in the table plus the groups
+    // already emitted by a partial flush or written by a spill. The wrapper's
+    // abandon rule divides this by cumulative input rows; the in-memory count
+    // alone can never reach the ratio again once a reclaim emptied the table.
+    return static_cast<uint64_t>(GetElementsSize()) + flushedRows_ + spilledRows_;
 }
 
 VectorBatch *HashAggregationOperator::AlignSchema(VectorBatch *inputVecBatch)
@@ -2190,8 +2304,7 @@ int32_t HashAggregationOperator::Output(Deserialize &deserializeHashmap, VectorB
     }
 
     if (totalRowCount == 0) {
-        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
-        ReleaseFinishedOutputState();
+        FinishOutput(0);
         return 0;
     }
 
@@ -2211,8 +2324,7 @@ int32_t HashAggregationOperator::Output(Deserialize &deserializeHashmap, VectorB
     *outputVecBatch = output.release();
     UpdateGetOutputInfo((*outputVecBatch)->GetRowCount());
     if (static_cast<int32_t>(outputState.hasBeenOutputNum) == totalRowCount) {
-        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
-        ReleaseFinishedOutputState();
+        FinishOutput(totalRowCount);
     }
     return 1;
 }

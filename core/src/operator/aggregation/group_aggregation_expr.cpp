@@ -7,6 +7,8 @@
 #include "agg_util.h"
 #include "operator/util/operator_util.h"
 #include "vector/vector_helper.h"
+#include "util/telemetry.h"
+#include <cstdio>
 
 using namespace std;
 namespace omniruntime {
@@ -172,6 +174,15 @@ HashAggregationWithExprOperator::HashAggregationWithExprOperator(omniruntime::me
     adaptivePartialAgg = queryConfig.EnableAdaptivePartialAggregation();
     adaptivePartialAggMinRows = queryConfig.AdaptivePartialAggregationMinRows();
     adaptivePartialAggRatio = queryConfig.AdaptivePartialAggregationRatio();
+    hashAggOperator->SetPartialFlushMemory(queryConfig.MaxPartialAggregationMemory(),
+        queryConfig.MaxExtendedPartialAggregationMemory());
+    if (omniruntime::telemetry::IsReclaimVerboseEnabled()) {
+        std::fprintf(stderr,
+            "[OMNI-HASHAGG] event=partial_flush_operator operator=%p step_partials=%d adaptive=%d cap=%lu extended_cap=%lu\n",
+            static_cast<void *>(hashAggOperator), static_cast<int>(hashAggOperator->IsStepPartials()),
+            static_cast<int>(adaptivePartialAgg), static_cast<unsigned long>(queryConfig.MaxPartialAggregationMemory()),
+            static_cast<unsigned long>(queryConfig.MaxExtendedPartialAggregationMemory()));
+    }
     auto aggFilterNum = aggSimpleFilters.size();
     this->aggSimpleFilters.resize(aggFilterNum, nullptr);
     for (size_t i = 0; i < aggFilterNum; ++i) {
@@ -231,13 +242,28 @@ int32_t HashAggregationWithExprOperator::AddInput(VectorBatch *inputVecBatch)
     Operator::NonReclaimableSection innerSection(hashAggOperator);
     hashAggOperator->AddInput(newInputVecBatch);
 
-    if (adaptivePartialAgg && IsStepPartials() && numInputRows > adaptivePartialAggMinRows) {
-        long keyNums = GetHashMapUniqueKeys();
-        if (keyNums > adaptivePartialAggRatio * numInputRows) {
+    if (adaptivePartialAgg && IsStepPartials()) {
+        if (hashAggOperator->PartialAggregationAbandonRequested()) {
+            // A memory-driven flush found the reduction not worth the table.
             abandonedPartialAggregation = true;
+        } else if (numInputRows > adaptivePartialAggMinRows) {
+            // Cumulative distinct groups (in memory + flushed + spilled) against
+            // cumulative input rows.
+            long keyNums = static_cast<long>(hashAggOperator->CumulativeDistinctKeys());
+            if (keyNums > adaptivePartialAggRatio * numInputRows) {
+                abandonedPartialAggregation = true;
+            }
+        }
+        if (abandonedPartialAggregation) {
+            hashAggOperator->CancelPartialFlush();
         }
     }
     return 0;
+}
+
+bool HashAggregationWithExprOperator::needsInput()
+{
+    return Operator::needsInput() && !hashAggOperator->IsPartialFlushing();
 }
 
 void HashAggregationWithExprOperator::ProcessRow(uintptr_t rowValues[], int32_t lens[])
@@ -279,6 +305,13 @@ int32_t HashAggregationWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
         }
         int32_t status = hashAggOperator->GetOutput(outputVecBatch);
         return status;
+    }
+    if (hashAggOperator->IsPartialFlushing()) {
+        // Memory-driven partial flush: emit the table mid-input; the operator
+        // resets itself after the last batch and input resumes.
+        int32_t status = hashAggOperator->GetOutput(outputVecBatch);
+        SetStatus(OMNI_STATUS_NORMAL);
+        return *outputVecBatch == nullptr ? 0 : status;
     }
     if (!noMoreInput_) {
         SetStatus(OMNI_STATUS_NORMAL);

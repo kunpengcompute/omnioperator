@@ -63,6 +63,8 @@ public:
 
     OmniStatus Close() override;
 
+    bool needsInput() override;
+
     void noMoreInput() override
     {
         Operator::NonReclaimableSection innerSection(hashAggOperator);
