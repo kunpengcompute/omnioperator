@@ -352,14 +352,27 @@ void HashAggregationOperator::EnsureInputFits(const VectorBatch *vecBatch)
     ReservationRequestSection request(
         this, reclaimableName(), "HashAggregationOperator::EnsureInputFits", target);
     ReclaimableReservationSection safeReservation(this);
-    if (!pool_->maybeReserve(target) && omniruntime::telemetry::IsReclaimVerboseEnabled()) {
-        // Velox treats a failed speculative reservation as non-fatal. Normal
-        // allocation remains authoritative and can still trigger arbitration.
+    if (pool_->maybeReserve(target)) {
+        return;
+    }
+    // Velox treats a failed speculative reservation as non-fatal. Normal
+    // allocation remains authoritative and can still trigger arbitration.
+    if (omniruntime::telemetry::IsReclaimVerboseEnabled()) {
         std::fprintf(stderr,
             "[OMNI-HASHAGG] event=ensure_input_fits outcome=reservation_denied pool=%p incoming_rows=%ld target=%ld used=%ld reserved=%ld\n",
             static_cast<void *>(pool_), static_cast<long>(vecBatch->GetRowCount()),
             static_cast<long>(target), static_cast<long>(pool_->currentBytes()),
             static_cast<long>(pool_->reservedBytes()));
+    }
+    // A flushable partial aggregation whose share is already taken by its
+    // siblings (a final aggregation in its output phase, the shuffle writer)
+    // would otherwise grow by denied requests until reclaim spills the small
+    // table whole, again and again (q3 SF1000 st16: 50 spills of 3 MB per
+    // task). Velox never spills a partial aggregation; treat the denial as
+    // "table full": this batch still goes in, then the table is flushed
+    // downstream and the memory returns.
+    if (partialFlushEligible_ && maxPartialAggregationMemory_ != 0 && !hasSpill && !abandonPartialRequested_) {
+        partialFull_ = true;
     }
 }
 
