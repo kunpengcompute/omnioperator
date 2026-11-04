@@ -52,6 +52,12 @@ public:
           operatorConfig(operatorConfig)
     {
         isStepPartials = isPartialOutput(step) && !groupByCols.empty();
+        // The memory-driven flush is eligible for every grouped partial step,
+        // including the first/last aggregations excluded from isStepPartials
+        // below: a flush emits partial states in input order, so the final
+        // first/last sees them in the same order as the unflushed table's
+        // single state (and across tasks the order was never defined).
+        partialFlushEligible_ = isStepPartials;
         for (auto i : aggFuncTypesVector) {
             if (i == OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL || i == OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL
                 || i == OMNI_AGGREGATION_TYPE_LAST_IGNORENULL || i == OMNI_AGGREGATION_TYPE_LAST_INCLUDENULL) {
@@ -306,6 +312,7 @@ private:
     // reclaim empties the in-memory table without resetting that input count.
     uint64_t maxPartialAggregationMemory_ = 0;
     uint64_t maxExtendedPartialAggregationMemory_ = 0;
+    bool partialFlushEligible_ = false;
     bool partialFull_ = false;
     bool partialFlushing_ = false;
     bool abandonPartialRequested_ = false;

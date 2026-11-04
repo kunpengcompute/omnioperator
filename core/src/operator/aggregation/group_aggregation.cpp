@@ -849,7 +849,7 @@ void HashAggregationOperator::MaybeMarkPartialFull()
     // Velox HashAggregation::addInput: a partial (non-global) aggregation whose
     // table passed the cap stops taking input and flushes. Once the table has
     // spilled the disk path owns the rest of the operator's life, so no flush.
-    if (!isStepPartials || maxPartialAggregationMemory_ == 0 || partialFull_ || hasSpill ||
+    if (!partialFlushEligible_ || maxPartialAggregationMemory_ == 0 || partialFull_ || hasSpill ||
         abandonPartialRequested_ || GetElementsSize() == 0) {
         return;
     }
