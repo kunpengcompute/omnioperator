@@ -26,7 +26,8 @@ using namespace omniruntime::op;
 /// - indexStartsAtOne: whether indices start at zero or one.
 class SubscriptImpl : public VectorFunction {
 public:
-    explicit SubscriptImpl() {}
+    // indexStartsAtOne: Spark element_at / try_element_at. Otherwise 0-based get_array_item.
+    explicit SubscriptImpl(bool indexStartsAtOne = false) : indexStartsAtOne_(indexStartsAtOne) {}
 
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
         ExecutionContext *context) const override
@@ -83,25 +84,52 @@ public:
         int32_t dicIndex[rowSize];
         memset(dicIndex, -1, sizeof(dicIndex));
         auto arrayVector = dynamic_cast<ArrayVector *>(arrayArg);
-
-        I index = 0;
-        if (auto indexVector = dynamic_cast<ConstVector<I> *>(indexArg)) {
-            index = indexVector->GetConstValue();
-        } else {
-            OMNI_THROW("Runtime Error:", "Index only supported const type!");
-        }
         auto offset = arrayVector->GetOffsets();
-        rows.applyToSelected([&](auto row) {
-            if (index < 0) {
-                dicIndex[row] = -1;
-                return;
-            }
-            if (offset[row] + index < offset[row + 1]) {
-                dicIndex[row] = offset[row] + index;
+
+        if (!indexStartsAtOne_) {
+            I index = 0;
+            if (auto indexVector = dynamic_cast<ConstVector<I> *>(indexArg)) {
+                index = indexVector->GetConstValue();
             } else {
-                dicIndex[row] = -1;
+                OMNI_THROW("Runtime Error:", "Index only supported const type!");
             }
-        });
+            rows.applyToSelected([&](auto row) {
+                if (index < 0) {
+                    dicIndex[row] = -1;
+                    return;
+                }
+                if (offset[row] + index < offset[row + 1]) {
+                    dicIndex[row] = offset[row] + index;
+                } else {
+                    dicIndex[row] = -1;
+                }
+            });
+        } else {
+            // Spark element_at is 1-based. Negative indexes count from the end.
+            // 0 and out-of-range return null, matching try_element_at.
+            rows.applyToSelected([&](auto row) {
+                I index = 0;
+                if (!VectorHelper::GetValueFromVector<I>(indexArg, row, index)) {
+                    dicIndex[row] = -1;
+                    return;
+                }
+                auto rowArraySize = offset[row + 1] - offset[row];
+                int64_t realIndex;
+                if (index > 0) {
+                    realIndex = static_cast<int64_t>(index) - 1;
+                } else if (index < 0) {
+                    realIndex = static_cast<int64_t>(rowArraySize) + static_cast<int64_t>(index);
+                } else {
+                    dicIndex[row] = -1;
+                    return;
+                }
+                if (realIndex < 0 || realIndex >= rowArraySize) {
+                    dicIndex[row] = -1;
+                } else {
+                    dicIndex[row] = offset[row] + static_cast<int32_t>(realIndex);
+                }
+            });
+        }
 
         auto elementVector = arrayVector->GetElementVector();
         auto result = VectorHelper::CreateDictionaryVector(dicIndex, rowSize, elementVector.get(),
@@ -113,5 +141,8 @@ public:
         }
         return result;
     }
+
+private:
+    bool indexStartsAtOne_;
 };
 }

@@ -16,6 +16,7 @@ void RegisterCompareFunctions(const std::string &prefix)
     VectorFunction::RegisterVectorFunctionFactory(ComparisonSignatures("greaterThanEqual"), makeGreaterThanOrEqual);
     VectorFunction::RegisterVectorFunctionFactory(ComparisonSignatures("lessThan"), makeLessThan);
     VectorFunction::RegisterVectorFunctionFactory(ComparisonSignatures("lessThanEqual"), makeLessThanOrEqual);
+    RegisterComplexEquality();
     registerEqualNullSafeFunction(prefix);
     // Register Greatest and Least functions for all supported types
     VectorFunction::RegisterVectorFunctionFactory(GreatestSignatures(), makeGreatest);

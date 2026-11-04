@@ -36,6 +36,13 @@ void RegisterArrayFunctions(const std::string &prefix)
         std::make_shared<SubscriptImpl>());
     VectorFunction::RegisterVectorFunction("get_array_item", {OMNI_ARRAY, OMNI_INT}, OMNI_VARCHAR,
         std::make_shared<SubscriptImpl>());
+
+    std::vector<DataTypeId> elementAtTypes = {OMNI_BOOLEAN, OMNI_BYTE, OMNI_SHORT, OMNI_INT, OMNI_LONG,
+        OMNI_FLOAT, OMNI_DOUBLE, OMNI_VARCHAR, OMNI_DATE32, OMNI_TIMESTAMP, OMNI_DECIMAL64, OMNI_DECIMAL128};
+    for (auto &valueType : elementAtTypes) {
+        VectorFunction::RegisterVectorFunction("element_at", {OMNI_ARRAY, OMNI_INT}, valueType,
+            std::make_shared<SubscriptImpl>(true));
+    }
     VectorFunction::RegisterVectorFunction("slice", {OMNI_ARRAY, OMNI_INT, OMNI_INT}, OMNI_ARRAY,
         std::make_shared<SliceImpl>());
     VectorFunction::RegisterVectorFunction("slice", {OMNI_ARRAY, OMNI_LONG, OMNI_LONG}, OMNI_ARRAY,

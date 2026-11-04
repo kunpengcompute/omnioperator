@@ -6,6 +6,7 @@
 #include <string>
 
 #include "../functions/Cast.h"
+#include "../functions/ArrayCastFunction.h"
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
@@ -13,7 +14,9 @@ void RegisterConversionFunctions(const std::string &prefix)
 {
     // Register comprehensive cast function for all supported type combinations
     auto castFunction = std::make_shared<CastFunction>();
-    
+    auto arrayCastFunction = std::make_shared<ArrayCastFunction>();
+    VectorFunction::RegisterVectorFunction("CAST", {OMNI_ARRAY}, OMNI_ARRAY, arrayCastFunction);
+
     // String to numeric types
     VectorFunction::RegisterVectorFunction("CAST", {OMNI_VARCHAR}, OMNI_BYTE, castFunction);
     VectorFunction::RegisterVectorFunction("CAST", {OMNI_VARCHAR}, OMNI_SHORT, castFunction);

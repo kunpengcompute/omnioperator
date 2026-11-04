@@ -9,4 +9,5 @@
 
 namespace omniruntime::vectorization {
 void RegisterTruncFunction(const std::string &name);
+void RegisterDateTruncFunction(const std::string &name);
 }

@@ -1421,8 +1421,10 @@ void ExprEval::Visit(const FuncExpr &e)
     for (auto arg : e.arguments) {
         arg->Accept(*this);
     }
-    if (e.funcName == "array") {
-        context->setInputParamsNUms(e.arguments.size());
+    if (e.funcName == "array" || e.funcName == "name_struct") {
+        // name_struct must consume only this call's arguments. Parent comparisons
+        // leave the other operand on the same stack.
+        context->setInputParamsNUms(static_cast<int32_t>(e.arguments.size()));
     }
     BaseVector *result = nullptr;
     if (e.vectorFunction == nullptr) {

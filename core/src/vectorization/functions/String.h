@@ -894,6 +894,32 @@ struct InStrFunction {
     }
 };
 
+/// replace(src, search, replacement) -> varchar. Empty search leaves src unchanged.
+template <typename T>
+struct ReplaceFunction {
+    ALWAYS_INLINE bool call(std::string &result, const std::string_view &src, const std::string_view &search,
+        const std::string_view &replacement)
+    {
+        if (search.empty()) {
+            result.assign(src.data(), src.size());
+            return true;
+        }
+        result.clear();
+        size_t pos = 0;
+        while (pos <= src.size()) {
+            const size_t found = src.find(search, pos);
+            if (found == std::string_view::npos) {
+                result.append(src.data() + pos, src.size() - pos);
+                break;
+            }
+            result.append(src.data() + pos, found - pos);
+            result.append(replacement.data(), replacement.size());
+            pos = found + search.size();
+        }
+        return true;
+    }
+};
+
 /// substr(string, start) -> varchar
 /// substr(string, start, length) -> varchar
 /// Spark semantics (velox/functions/sparksql/String.h). Spark + Gluten: int32_t only.

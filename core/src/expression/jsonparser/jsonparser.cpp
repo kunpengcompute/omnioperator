@@ -465,6 +465,22 @@ Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
         } else {
             retType = std::make_shared<Decimal128DataType>(precision, scale);
         }
+    } else if (retTypeId == OMNI_ARRAY && jsonExpr.contains("elementType")) {
+        auto elemId = static_cast<DataTypeId>(jsonExpr["elementType"].get<int32_t>());
+        DataTypePtr elemType;
+        if (TypeUtil::IsStringType(elemId)) {
+            int32_t elemWidth = jsonExpr.contains("width") ? jsonExpr["width"].get<int32_t>() : width;
+            if (elemId == OMNI_CHAR) {
+                elemType = std::make_shared<CharDataType>(elemWidth);
+            } else {
+                elemType = std::make_shared<VarcharDataType>(elemWidth);
+            }
+        } else {
+            elemType = std::make_shared<DataType>(elemId);
+        }
+        // Qualify the type. This .cpp is included by codegen tests, where
+        // llvm::ArrayType is also visible and GCC 10 rejects make_shared<ArrayType>.
+        retType = std::make_shared<omniruntime::type::ArrayType>(elemType);
     } else {
         retType = std::make_shared<DataType>(retTypeId);
     }
@@ -487,6 +503,9 @@ Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
                 if (argScale == retScale && argPrecision <= retPrecision) {
                     return args[0];
                 }
+            } else if (retTypeId == OMNI_ARRAY && jsonExpr.contains("elementType")) {
+                // array<int> and array<string> share OMNI_ARRAY. Keep the CAST so element
+                // types are converted instead of returning the input vector unchanged.
             } else {
                 return args[0];
             }

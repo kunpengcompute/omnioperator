@@ -226,6 +226,18 @@ void RegisterStringFunctions(const std::string &prefix)
     RegisterFunction<InStrFunction, int32_t, omniruntime::vec::StringView, std::string_view>(
         prefix + "instr", {OMNI_STRING_VIEW, OMNI_VARCHAR}, OMNI_INT);
 #endif
+    RegisterFunction<InStrFunction, int32_t, std::string_view, std::string_view>(
+        prefix + "instr", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT);
+    RegisterFunction<InStrFunction, int32_t, std::string_view, std::string_view>(
+        prefix + "instr", {OMNI_CHAR, OMNI_VARCHAR}, OMNI_INT);
+    RegisterFunction<InStrFunction, int32_t, std::string_view, std::string_view>(
+        prefix + "instr", {OMNI_VARCHAR, OMNI_CHAR}, OMNI_INT);
+    RegisterFunction<ReplaceFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "replace", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR);
+    RegisterFunction<ReplaceFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "replace", {OMNI_CHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR);
+    RegisterFunction<ReplaceFunction, std::string, std::string_view, std::string_view, std::string_view>(
+        prefix + "replace", {OMNI_VARCHAR, OMNI_CHAR, OMNI_CHAR}, OMNI_VARCHAR);
 
     // position(substring, string) -> integer, equivalent to locate(substring, string, 1)
     RegisterFunction<PositionFunction, int32_t, std::string_view, std::string_view>(

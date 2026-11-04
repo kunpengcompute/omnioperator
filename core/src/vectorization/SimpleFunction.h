@@ -216,6 +216,7 @@ private:
 
                     if (!notNull) {
                         tempResult->SetNull(row);
+                        return;
                     }
                     std::string_view tmp(out);
                     tempResult->SetValue(row, tmp);
@@ -232,6 +233,7 @@ private:
                     }
                     if (!notNull) {
                         tempResult->SetNull(row);
+                        return;
                     }
                     std::string_view tmp(out);
                     tempResult->SetValue(row, tmp);

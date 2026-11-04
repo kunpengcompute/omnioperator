@@ -111,6 +111,9 @@ public:
         if constexpr (std::is_same_v<decltype(instance_.call(out, args...)), Status>) {
             notNull = true;
             return instance_.call(out, args...);
+        } else if constexpr (std::is_same_v<decltype(instance_.call(out, args...)), bool>) {
+            notNull = instance_.call(out, args...);
+            return Status::OK();
         } else {
             notNull = true;
             instance_.call(out, args...);

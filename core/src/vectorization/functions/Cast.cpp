@@ -1160,12 +1160,19 @@ void CastFunction::CastNumericToString(BaseVector* input, BaseVector*& result, E
     auto* resultVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         auto *constVec = static_cast<ConstVector<T> *>(input);
-        const auto castResult = type::util::Converter<OMNI_VARCHAR>::tryCast(constVec->GetConstValue());
-        if (castResult.hasError()) {
-            result->SetNulls(0, true, size);
-            return;
+        std::string strValue;
+        if constexpr (std::is_same_v<T, float>) {
+            strValue = codegen::function::DoubleToString::FloatToStringConverter(constVec->GetConstValue());
+        } else if constexpr (std::is_same_v<T, double>) {
+            strValue = codegen::function::DoubleToString::DoubleToStringConverter(constVec->GetConstValue());
+        } else {
+            const auto castResult = type::util::Converter<OMNI_VARCHAR>::tryCast(constVec->GetConstValue());
+            if (castResult.hasError()) {
+                result->SetNulls(0, true, size);
+                return;
+            }
+            strValue = castResult.value();
         }
-        std::string strValue = castResult.value();
         std::string_view strView(strValue);
         for (int32_t row = 0; row < size; ++row) {
             resultVec->SetValue(row, strView);
@@ -1173,17 +1180,21 @@ void CastFunction::CastNumericToString(BaseVector* input, BaseVector*& result, E
     } else {
         for (int32_t row = 0; row < size; ++row) {
             if (input->IsNull(row)) {
-                result->SetNull(row);
+                resultVec->SetNull(row);
                 continue;
             }
             T value = VectorHelper::GetValueFromVector<T>(input, row);
             std::string strValue;
-            if constexpr (std::is_same_v<T, double>) {
+            if constexpr (std::is_same_v<T, float>) {
+                // {:.7E} keeps only 8 significant digits. Spark Float.toString needs the
+                // same round-trip digits as the codegen FloatToStringConverter.
+                strValue = codegen::function::DoubleToString::FloatToStringConverter(value);
+            } else if constexpr (std::is_same_v<T, double>) {
                 strValue = codegen::function::DoubleToString::DoubleToStringConverter(value);
             } else {
                 const auto castResult = type::util::Converter<OMNI_VARCHAR>::tryCast(value);
                 if (castResult.hasError()) {
-                    result->SetNull(row);
+                    resultVec->SetNull(row);
                     continue;
                 }
                 strValue = castResult.value();
@@ -1236,15 +1247,18 @@ void CastFunction::CastTimestampToString(BaseVector* input, BaseVector*& result,
         if (options.timeZone) {
             inputValue.toTimezone(*(options.timeZone));
         }
-        auto strView = Timestamp::tsToStringView(inputValue, options, 0);
+        char buf[64];
+        auto strView = Timestamp::tsToStringView(inputValue, options, buf);
         for (int32_t row = 0; row < size; ++row) {
             resultVec->SetValue(row, strView);
         }
     } else {
-        char *rawBuffer = static_cast<char *>(VectorHelper::UnsafeGetValues(result));
+        // Do not format into the varchar vector's own buffer. That buffer is only the
+        // initial allocation; walking it by string length overwrites the heap once the
+        // batch is larger than a few rows. SetValue copies the bytes and grows the buffer.
         for (int32_t row = 0; row < size; ++row) {
             if (input->IsNull(row)) {
-                result->SetNull(row);
+                resultVec->SetNull(row);
                 continue;
             }
             int64_t value = VectorHelper::GetValueFromVector<int64_t>(input, row);
@@ -1252,9 +1266,9 @@ void CastFunction::CastTimestampToString(BaseVector* input, BaseVector*& result,
             if (options.timeZone) {
                 inputValue.toTimezone(*(options.timeZone));
             }
-            auto strView = Timestamp::tsToStringView(inputValue, options, rawBuffer);
+            char buf[64];
+            auto strView = Timestamp::tsToStringView(inputValue, options, buf);
             resultVec->SetValue(row, strView);
-            rawBuffer += strView.size();
         }
     }
 }
