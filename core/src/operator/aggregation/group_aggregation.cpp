@@ -1069,9 +1069,10 @@ int32_t HashAggregationOperator::GetOutput(VectorBatch **outputVecBatch)
         return 0;
     }
     if (partialFull_) {
-        if (hasSpill) {
-            // A reclaim spilled the table between AddInput and this call; the
-            // disk path drains it at the end of input, nothing is left to flush.
+        if (hasSpill || noMoreInput_) {
+            // A reclaim spilled the table between AddInput and this call (the
+            // disk path drains it at the end of input), or the input ended
+            // before the flush started: the normal final output is the flush.
             partialFull_ = false;
         } else {
             partialFlushing_ = true;

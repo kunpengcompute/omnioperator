@@ -161,10 +161,55 @@ void GroupingOperator::noMoreInput()
     }
 }
 
+bool GroupingOperator::needsInput()
+{
+    if (!Operator::needsInput()) {
+        return false;
+    }
+    for (auto &aggOperator : aggOperators_) {
+        if (!aggOperator->needsInput()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Mid-input: a chained partial aggregation whose table passed its memory cap
+// stopped taking input and emits its table (HashAggregationOperator partial
+// flush). Move one flushed batch down the chain per call, exactly as the
+// end-of-input drain does; a flush of the last stage is this operator's own
+// output. Returns 1 with a batch, 0 without (the flush is complete or still
+// propagating).
+int32_t GroupingOperator::PumpPartialFlush(VectorBatch **outputVecBatch)
+{
+    const auto size = aggOperators_.size();
+    for (size_t i = 0; i + 1 < size; ++i) {
+        if (aggOperators_[i]->needsInput()) {
+            continue;
+        }
+        VectorBatch *flushed = nullptr;
+        aggOperators_[i]->GetOutput(&flushed);
+        if (flushed == nullptr) {
+            continue;
+        }
+        auto projectedVecBatch = this->expressionEvaluators_[i + 1]->Evaluate(flushed, executionContext.get());
+        aggOperators_[i + 1]->AddInput(projectedVecBatch);
+        return 0;
+    }
+    if (!aggOperators_[size - 1]->needsInput()) {
+        aggOperators_[size - 1]->GetOutput(outputVecBatch);
+        return *outputVecBatch == nullptr ? 0 : 1;
+    }
+    return 0;
+}
+
 int32_t GroupingOperator::GetOutput(VectorBatch **outputVecBatch)
 {
     if (!noMoreInput_) {
         SetStatus(OMNI_STATUS_NORMAL);
+        if (hasInput && !aggOperators_.empty()) {
+            return PumpPartialFlush(outputVecBatch);
+        }
         return 0;
     }
 
