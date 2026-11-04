@@ -522,17 +522,17 @@ template <int32_t sortAscending> static int8_t ALWAYS_INLINE Decimal128Compare(D
 }
 
 
+// Exact comparison only: Spark and Velox order doubles by exact value.
+// The previous epsilon comparison (both absolute diff < DBL_EPSILON and
+// relative diff < max*DBL_EPSILON) treated near-equal doubles (1 ULP apart)
+// as "equal", causing arbitrary ordering in single-key sorts and incorrect
+// tie-breaking in multi-key sorts. For example 3.0 and 3.0000000000000004
+// (1 ULP apart) were considered "equal" by the relative epsilon because
+// 4.44e-16 < 3.0 * 2.22e-16 = 6.66e-16, so the quicksort did not swap them
+// and the output order depended on the input order rather than the values.
 static bool ALWAYS_INLINE DoubleEqual(double left, double right)
 {
-
-    if (left == right) return true;
-
-    double diff = std::fabs(left - right);
-
-    if (diff < __DBL_EPSILON__) return true;
-
-    double max_val = std::max(std::fabs(left), std::fabs(right));
-    return diff < max_val * __DBL_EPSILON__;
+    return left == right;
 }
 
 template <int32_t sortAscending> static int8_t ALWAYS_INLINE DoubleCompare(double left, double right)
@@ -551,16 +551,10 @@ template <int32_t sortAscending> static int8_t ALWAYS_INLINE DoubleCompare(doubl
     }
 }
 
+// Exact comparison only: same rationale as DoubleEqual above.
 static bool ALWAYS_INLINE FloatEqual(float left, float right)
 {
-    if (left == right) return true;
-
-    float diff = std::fabs(left - right);
-
-    if (diff < __FLT_EPSILON__) return true;
-
-    float max_val = std::max(std::fabs(left), std::fabs(right));
-    return diff < max_val * __FLT_EPSILON__;
+    return left == right;
 }
 
 template <int32_t sortAscending> static int8_t ALWAYS_INLINE FloatCompare(float left, float right)
