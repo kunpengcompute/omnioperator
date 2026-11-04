@@ -537,6 +537,22 @@ static bool ALWAYS_INLINE DoubleEqual(double left, double right)
 
 template <int32_t sortAscending> static int8_t ALWAYS_INLINE DoubleCompare(double left, double right)
 {
+    // NaN is the maximum value (Spark/Velox semantics):
+    // ASC: NaN sorts after everything; DESC: NaN sorts before everything.
+    const bool leftNan = std::isnan(left);
+    const bool rightNan = std::isnan(right);
+    if (leftNan || rightNan) {
+        if (leftNan && rightNan) {
+            return omniruntime::op::OperatorUtil::COMPARE_STATUS_EQUAL;
+        }
+        if constexpr (sortAscending == 1) {
+            return leftNan ? OperatorUtil::COMPARE_STATUS_GREATER_THAN
+                           : OperatorUtil::COMPARE_STATUS_LESS_THAN;
+        } else {
+            return leftNan ? OperatorUtil::COMPARE_STATUS_LESS_THAN
+                           : OperatorUtil::COMPARE_STATUS_GREATER_THAN;
+        }
+    }
 
     if (DoubleEqual(left, right)) {
         return omniruntime::op::OperatorUtil::COMPARE_STATUS_EQUAL;
@@ -559,6 +575,22 @@ static bool ALWAYS_INLINE FloatEqual(float left, float right)
 
 template <int32_t sortAscending> static int8_t ALWAYS_INLINE FloatCompare(float left, float right)
 {
+    // NaN is the maximum value (Spark/Velox semantics).
+    const bool leftNan = std::isnan(left);
+    const bool rightNan = std::isnan(right);
+    if (leftNan || rightNan) {
+        if (leftNan && rightNan) {
+            return omniruntime::op::OperatorUtil::COMPARE_STATUS_EQUAL;
+        }
+        if constexpr (sortAscending == 1) {
+            return leftNan ? OperatorUtil::COMPARE_STATUS_GREATER_THAN
+                           : OperatorUtil::COMPARE_STATUS_LESS_THAN;
+        } else {
+            return leftNan ? OperatorUtil::COMPARE_STATUS_LESS_THAN
+                           : OperatorUtil::COMPARE_STATUS_GREATER_THAN;
+        }
+    }
+
     if (FloatEqual(left, right)) {
         return omniruntime::op::OperatorUtil::COMPARE_STATUS_EQUAL;
     }
@@ -583,14 +615,8 @@ static void ALWAYS_INLINE QuickSortFloatSmall(int64_t *values, uint64_t *address
         while (j >= from) {
             auto jValuePtr = values[j];
             auto jValue = *(reinterpret_cast<float *>(&jValuePtr));
-            if constexpr (sortAscending == 0) {
-                if (FloatEqual(jValue, iValue) || jValue > iValue) {
-                    break;
-                }
-            } else {
-                if (FloatEqual(jValue, iValue) || jValue < iValue) {
-                    break;
-                }
+            if (FloatCompare<sortAscending>(jValue, iValue) <= 0) {
+                break;
             }
             values[j + 1] = values[j];
             addresses[j + 1] = addresses[j];
@@ -839,16 +865,8 @@ static void ALWAYS_INLINE QuickSortDoubleSmall(int64_t *values, uint64_t *addres
         while (j >= from) {
             auto jValuePtr = values[j];
             auto jValue = *(reinterpret_cast<double *>(&jValuePtr));
-			if constexpr (sortAscending == 0) {
-                // condition is jValue >= iValue
-                if (DoubleEqual(jValue, iValue) || jValue > iValue) {
-                    break;
-                }
-            } else {
-                // condition is jValue <= iValue
-                if (DoubleEqual(jValue, iValue) || jValue < iValue) {
-                    break;
-                }
+            if (DoubleCompare<sortAscending>(jValue, iValue) <= 0) {
+                break;
             }
             values[j + 1] = values[j];
             addresses[j + 1] = addresses[j];
