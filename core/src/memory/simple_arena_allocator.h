@@ -11,6 +11,17 @@
 namespace omniruntime {
 namespace mem {
 
+// Snapshot of the arena allocation watermark, used to roll back allocations
+// performed after the snapshot was taken. Callers must ensure the memory
+// allocated after the snapshot is no longer referenced before rolling back.
+struct ArenaState {
+    size_t chunkCount;
+    uint8_t *availBuf;
+    uint64_t availBytes;
+    uint64_t usedBytes;
+    uint64_t totalBytes;
+};
+
 // this allocator is not thread-safe, and mainly applies for temporary memory usage for operators,
 // such as when dealing with types such as varchar/decimal and so on.
 class SimpleArenaAllocator {
@@ -140,6 +151,32 @@ public:
             availBytes += continuousUsedMemoryBytes;
             usedBytes -= continuousUsedMemoryBytes;
         }
+    }
+
+    /// Save the current allocation watermark. A later RollBackToState() releases
+    /// every chunk allocated after this point and restores the counters.
+    ArenaState SaveState() const
+    {
+        return ArenaState{chunks.size(), availBuf, availBytes, usedBytes, totalBytes};
+    }
+
+    /// Roll back to a previously saved watermark. Chunks allocated after the
+    /// snapshot are released; bytes carved from the last pre-existing chunk are
+    /// simply returned to the avail region. The caller must guarantee that no
+    /// memory allocated after the snapshot is still referenced.
+    void RollBackToState(const ArenaState &state)
+    {
+        for (size_t i = state.chunkCount; i < chunks.size(); ++i) {
+            delete chunks[i];
+        }
+        chunks.resize(state.chunkCount);
+        availBuf = state.availBuf;
+        availBytes = state.availBytes;
+        usedBytes = state.usedBytes;
+        totalBytes = state.totalBytes;
+        // The continue-allocation chain no longer holds after rollback.
+        continuousUsedMemoryBytes = 0;
+        continuousUsed = false;
     }
 
     ALWAYS_INLINE uint64_t TotalBytes()

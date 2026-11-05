@@ -139,7 +139,8 @@ HashAggregationWithExprOperatorFactory *HashAggregationWithExprOperatorFactory::
                               : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
     auto spillConfig = new SparkSpillConfig(queryConfig.aggregationSpillEnabled(), queryConfig.SpillDir(),
         queryConfig.SpillDirDiskReserveSize(), queryConfig.SpillHashAggRowThreshold(),
-        queryConfig.memFractionPct(), queryConfig.SpillWriteBufferSize(), queryConfig.SpillEnableCompress());
+        queryConfig.memFractionPct(), queryConfig.SpillWriteBufferSize(), queryConfig.SpillEnableCompress(),
+        queryConfig.hashAggSpillRunFraction(), queryConfig.hashAggSpillMaxRunRows());
     auto operatorConfig = std::make_shared<OperatorConfig>(spillConfig, overflowConfig);
 
     return new HashAggregationWithExprOperatorFactory(groupByKeys, groupByNum, aggsKeys, aggFilters, *sourceDataTypes,

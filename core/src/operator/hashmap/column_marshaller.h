@@ -343,6 +343,23 @@ public:
         return aggRows ? aggRows->AggStateOffset() : totalAggValueSize;
     }
 
+    /// Save the watermark of the hash table's arena pool. Used by run-based spill:
+    /// keys re-serialized into the pool during one run are rolled back once that
+    /// run has been written to disk, so pool memory stays O(runRows) instead of
+    /// O(totalSpillCount).
+    mem::ArenaState SavePoolState()
+    {
+        return table->Pool().SaveState();
+    }
+
+    /// Roll the hash table's arena pool back to a previously saved watermark.
+    /// Must only be called after the memory allocated after the snapshot has
+    /// been persisted (spilled) and is no longer referenced.
+    void RollBackPoolState(const mem::ArenaState &state)
+    {
+        table->Pool().RollBackToState(state);
+    }
+
     void EmplaceTable(BaseVector **groupVectors, int32_t groupColNum, int32_t rowsNum,
         std::vector<uint8_t*>& groups, std::vector<uint8_t*>& newGroups, Encoding encoding)
     {

@@ -118,6 +118,12 @@ private:
 
     ErrorCode SpillToDisk();
 
+    /// Rows materialized per spill run. runFraction < 1.0 splits the table into
+    /// multiple runs so that spill-time auxiliary memory (kvVec + key
+    /// re-serialization buffer) stays O(runRows) instead of O(tableRows).
+    /// Returns totalSpillCount when run-based spill is disabled.
+    int64_t CalcSpillRunRows(int64_t totalSpillCount) const;
+
     void SetVectors(VectorBatch *output, const std::vector<DataTypePtr> &types, int32_t rowCount);
 
     template<typename Deserialize>

@@ -83,6 +83,19 @@ public:
     /// which uses ~128MB memory when to fill a spill run.
     static constexpr const char *kMaxSpillRunRows = "max_spill_run_rows";
 
+    /// The fraction of the hash aggregation table materialized per spill run.
+    /// Values < 1.0 enable run-based (streaming) spill for hash aggregation:
+    /// each run extracts/sorts/writes at most this fraction of the table, then
+    /// rolls back its auxiliary memory before the next run starts. This caps
+    /// spill-time auxiliary memory at fraction x table size instead of the full
+    /// table. Default 1.0 keeps the legacy single-run behavior.
+    static constexpr const char *kHashAggSpillRunFraction = "hash_agg_spill_run_fraction";
+
+    /// The max rows materialized per spill run for hash aggregation. Caps the
+    /// run size even when hash_agg_spill_run_fraction would allow bigger runs,
+    /// bounding both the auxiliary memory and the number of spill files.
+    static constexpr const char *kHashAggSpillMaxRunRows = "hash_agg_spill_max_run_rows";
+
     /// The max spill bytes limit set for each query. This is used to cap the
     /// storage used for spilling. If it is zero, then there is no limit and
     /// spilling might exhaust the storage or takes too long to run. The default
@@ -234,6 +247,27 @@ public:
     {
         static constexpr uint64_t kDefault = 12UL << 20;
         return get<uint64_t>(kMaxSpillRunRows, kDefault);
+    }
+
+    /// Run fraction for hash aggregation run-based spill. 1.0 (default) disables
+    /// run-based spill; values in (0, 1) cap each run at fraction x table rows.
+    double hashAggSpillRunFraction() const
+    {
+        static constexpr double kDefault = 1.0;
+        auto fraction = get<double>(kHashAggSpillRunFraction, kDefault);
+        if (fraction <= 0.0 || fraction > 1.0) {
+            return kDefault;
+        }
+        return fraction;
+    }
+
+    /// Max rows per spill run for hash aggregation. Default 4M rows caps a
+    /// single run's kvVec + key re-serialization at roughly 400MB (32B + ~69B
+    /// per row) even when the run fraction would allow more.
+    uint64_t hashAggSpillMaxRunRows() const
+    {
+        static constexpr uint64_t kDefault = 4UL << 20;
+        return get<uint64_t>(kHashAggSpillMaxRunRows, kDefault);
     }
 
     uint64_t maxSpillBytes() const
