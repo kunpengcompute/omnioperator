@@ -542,15 +542,26 @@ void SpillMerger::SetCompareFunctions(const type::DataTypes &dataTypes, const st
     }
 }
 
+// The CompareNull<IsAscending, IsNullsFirst> template folded in operator_util.h
+// treats IsNullsFirst as "null is smaller than any value" (it negates the null
+// result when IsAscending is false), while the plan flag 'isNullsFirst' is
+// absolute: the position of NULLs in the final order. Convert the flag for the
+// descending case, otherwise the spill merger places NULLs at the opposite end.
+static inline bool NullsCompareLessThanValues(bool isAscending, bool isNullsFirst)
+{
+    return isAscending ? isNullsFirst : !isNullsFirst;
+}
+
 template <typename T>
 void SpillMerger::SetCompareFunctionWithHashVal(bool isAscending, bool isNullsFirst,
     std::vector<OperatorUtil::CompareFuncWithHashVal> &sortCompareFuncs)
 {
-    if (isAscending && isNullsFirst) {
+    const bool nullsLess = NullsCompareLessThanValues(isAscending, isNullsFirst);
+    if (isAscending && nullsLess) {
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplateWithHashVal<T, true, true, true>);
-    } else if (isAscending && !isNullsFirst) {
+    } else if (isAscending && !nullsLess) {
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplateWithHashVal<T, true, true, false>);
-    } else if (!isAscending && isNullsFirst) {
+    } else if (!isAscending && nullsLess) {
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplateWithHashVal<T, false, true, true>);
     } else {
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplateWithHashVal<T, false, true, false>);
@@ -561,11 +572,12 @@ template <typename T>
 void SpillMerger::SetCompareFunction(bool isAscending, bool isNullsFirst,
     std::vector<OperatorUtil::CompareFunc> &sortCompareFuncs)
 {
-    if (isAscending && isNullsFirst) {
+    const bool nullsLess = NullsCompareLessThanValues(isAscending, isNullsFirst);
+    if (isAscending && nullsLess) {
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplate<T, true, true, true>);
-    } else if (isAscending && !isNullsFirst) {
+    } else if (isAscending && !nullsLess) {
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplate<T, true, true, false>);
-    } else if (!isAscending && isNullsFirst) {
+    } else if (!isAscending && nullsLess) {
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplate<T, false, true, true>);
     } else {
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplate<T, false, true, false>);
