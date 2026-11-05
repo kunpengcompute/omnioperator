@@ -392,6 +392,25 @@ public:
         }
     }
 
+    // NaN-aware numeric comparison: NaN is the maximum value (Spark semantics).
+    // For non-floating-point types this is identical to the plain comparison.
+    template <typename T>
+    static ALWAYS_INLINE int32_t CompareNumericWithNaN(T left, T right)
+    {
+        if constexpr (std::is_floating_point_v<T>) {
+            const bool leftNan = std::isnan(left);
+            const bool rightNan = std::isnan(right);
+            if (leftNan || rightNan) {
+                if (leftNan && rightNan) {
+                    return COMPARE_STATUS_EQUAL;
+                }
+                return leftNan ? COMPARE_STATUS_GREATER_THAN : COMPARE_STATUS_LESS_THAN;
+            }
+        }
+        return left > right ? COMPARE_STATUS_GREATER_THAN :
+            (left < right ? COMPARE_STATUS_LESS_THAN : COMPARE_STATUS_EQUAL);
+    }
+
     template <typename T, bool IsAscending, bool NeedCompareNull, bool IsNullsFirst>
     static ALWAYS_INLINE int32_t CompareValue(vec::BaseVector *leftVector, int32_t leftPosition,
             vec::BaseVector *rightVector, int32_t rightPosition)
@@ -446,8 +465,7 @@ public:
             } else {
                 right = static_cast<omniruntime::vec::Vector<T> *>(rightVector)->GetValue(rightPosition);
             }
-            result = left > right ? COMPARE_STATUS_GREATER_THAN :
-                     (left < right ? COMPARE_STATUS_LESS_THAN : COMPARE_STATUS_EQUAL);
+            result = CompareNumericWithNaN<T>(left, right);
         }
         if constexpr (IsAscending) {
             return result;
@@ -487,8 +505,7 @@ public:
         } else {
             T left = static_cast<omniruntime::vec::Vector<T> *>(leftVector)->GetValue(leftPosition);
             T right = static_cast<omniruntime::vec::Vector<T> *>(rightVector)->GetValue(rightPosition);
-            result = left > right ? COMPARE_STATUS_GREATER_THAN :
-                (left < right ? COMPARE_STATUS_LESS_THAN : COMPARE_STATUS_EQUAL);
+            result = CompareNumericWithNaN<T>(left, right);
         }
         if constexpr (IsAscending) {
             return result;
@@ -523,8 +540,7 @@ public:
         } else {
             T left = static_cast<omniruntime::vec::Vector<T> *>(leftVector)->GetValue(leftPosition);
             T right = static_cast<omniruntime::vec::Vector<T> *>(rightVector)->GetValue(rightPosition);
-            result = left > right ? COMPARE_STATUS_GREATER_THAN :
-                (left < right ? COMPARE_STATUS_LESS_THAN : COMPARE_STATUS_EQUAL);
+            result = CompareNumericWithNaN<T>(left, right);
         }
         if constexpr (IsAscending) {
             return result;
@@ -563,8 +579,7 @@ public:
         } else {
             T left = static_cast<omniruntime::vec::Vector<T> *>(leftVector)->GetValue(leftPosition);
             T right = static_cast<omniruntime::vec::Vector<T> *>(rightVector)->GetValue(rightPosition);
-            result = left > right ? COMPARE_STATUS_GREATER_THAN :
-                (left < right ? COMPARE_STATUS_LESS_THAN : COMPARE_STATUS_EQUAL);
+            result = CompareNumericWithNaN<T>(left, right);
         }
         if constexpr (IsAscending) {
             return result;

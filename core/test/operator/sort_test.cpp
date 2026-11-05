@@ -4208,4 +4208,358 @@ TEST(NativeOmniSortTest, TestSortDoubleNearEqualWithSpill)
     DeleteSortOperatorFactory(operatorFactory);
 }
 
+// ============================================================
+// NaN sorting regression tests
+// NaN = maximum value: ASC → end, DESC → beginning (Spark semantics)
+// Fixes: DoubleCompare/FloatCompare NaN branch (pages_index.cpp) +
+//        CompareNumericWithNaN in CompareFlatTemplate (operator_util.h)
+// ============================================================
+
+static void VerifyDoubleColumnWithNaN(BaseVector *column, const double *expected, int32_t size)
+{
+    auto *vec = static_cast<Vector<double> *>(column);
+    for (int32_t i = 0; i < size; ++i) {
+        if (std::isnan(expected[i])) {
+            EXPECT_TRUE(std::isnan(vec->GetValue(i)))
+                << "Row " << i << ": expected NaN, got " << vec->GetValue(i);
+        } else {
+            EXPECT_EQ(expected[i], vec->GetValue(i))
+                << "Row " << i << ": expected " << expected[i] << ", got " << vec->GetValue(i);
+        }
+    }
+}
+
+static void VerifyFloatColumnWithNaN(BaseVector *column, const float *expected, int32_t size)
+{
+    auto *vec = static_cast<Vector<float> *>(column);
+    for (int32_t i = 0; i < size; ++i) {
+        if (std::isnan(expected[i])) {
+            EXPECT_TRUE(std::isnan(vec->GetValue(i)))
+                << "Row " << i << ": expected NaN, got " << vec->GetValue(i);
+        } else {
+            EXPECT_EQ(expected[i], vec->GetValue(i))
+                << "Row " << i << ": expected " << expected[i] << ", got " << vec->GetValue(i);
+        }
+    }
+}
+
+TEST(NativeOmniSortTest, TestSortDoubleNaNAsc)
+{
+    const int32_t dataSize = 8;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+    double inputData[dataSize] = {
+        1.0, std::numeric_limits<double>::quiet_NaN(), -1.0, 3.0,
+        -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(),
+        0.0, 2.0
+    };
+    int32_t inputId[dataSize] = {1, 2, 3, 4, 5, 6, 7, 8};
+    auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, inputData, inputId);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    sortOperator->AddInput(vecBatch);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC: -Inf < -1.0 < 0.0 < 1.0 < 2.0 < 3.0 < +Inf < NaN
+    double expected[dataSize] = {
+        -std::numeric_limits<double>::infinity(), -1.0, 0.0, 1.0,
+        2.0, 3.0, std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::quiet_NaN()
+    };
+    ASSERT_NE(outputVecBatch, nullptr);
+    VerifyDoubleColumnWithNaN(outputVecBatch->Get(0), expected, dataSize);
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortDoubleNANDesc)
+{
+    const int32_t dataSize = 8;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+    double inputData[dataSize] = {
+        1.0, std::numeric_limits<double>::quiet_NaN(), -1.0, 3.0,
+        -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(),
+        0.0, 2.0
+    };
+    int32_t inputId[dataSize] = {1, 2, 3, 4, 5, 6, 7, 8};
+    auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, inputData, inputId);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {0}; // DESC
+    int nullFirsts[] = {0};
+
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    sortOperator->AddInput(vecBatch);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // DESC: NaN > +Inf > 3.0 > 2.0 > 1.0 > 0.0 > -1.0 > -Inf
+    double expected[dataSize] = {
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::infinity(), 3.0, 2.0,
+        1.0, 0.0, -1.0, -std::numeric_limits<double>::infinity()
+    };
+    ASSERT_NE(outputVecBatch, nullptr);
+    VerifyDoubleColumnWithNaN(outputVecBatch->Get(0), expected, dataSize);
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortDoubleMultipleNaN)
+{
+    const int32_t dataSize = 8;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+    double inputData[dataSize] = {
+        3.0, std::numeric_limits<double>::quiet_NaN(), 1.0,
+        std::numeric_limits<double>::quiet_NaN(), 2.0,
+        std::numeric_limits<double>::quiet_NaN(), 0.5,
+        std::numeric_limits<double>::quiet_NaN()
+    };
+    int32_t inputId[dataSize] = {1, 2, 3, 4, 5, 6, 7, 8};
+    auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, inputData, inputId);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    sortOperator->AddInput(vecBatch);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC: 0.5 < 1.0 < 2.0 < 3.0 < NaN < NaN < NaN < NaN
+    double expected[dataSize] = {
+        0.5, 1.0, 2.0, 3.0,
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN()
+    };
+    ASSERT_NE(outputVecBatch, nullptr);
+    VerifyDoubleColumnWithNaN(outputVecBatch->Get(0), expected, dataSize);
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortFloatNaNAsc)
+{
+    const int32_t dataSize = 6;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ FloatType(), IntType() }));
+    float inputData[dataSize] = {
+        1.0f, std::numeric_limits<float>::quiet_NaN(), -1.0f, 3.0f, 0.0f, 2.0f
+    };
+    int32_t inputId[dataSize] = {1, 2, 3, 4, 5, 6};
+    auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, inputData, inputId);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    sortOperator->AddInput(vecBatch);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC: -1.0 < 0.0 < 1.0 < 2.0 < 3.0 < NaN
+    float expected[dataSize] = {
+        -1.0f, 0.0f, 1.0f, 2.0f, 3.0f,
+        std::numeric_limits<float>::quiet_NaN()
+    };
+    ASSERT_NE(outputVecBatch, nullptr);
+    VerifyFloatColumnWithNaN(outputVecBatch->Get(0), expected, dataSize);
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortDoubleNaNWithSpillAsc)
+{
+    // Multiple input batches to force multiple spill runs (rowThreshold=1)
+    const int32_t batchSize = 2;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+
+    double data1[batchSize] = {1.0, std::numeric_limits<double>::quiet_NaN()};
+    int32_t id1[batchSize] = {1, 2};
+    auto batch1 = CreateVectorBatch(sourceTypes, batchSize, data1, id1);
+
+    double data2[batchSize] = {3.0, std::numeric_limits<double>::quiet_NaN()};
+    int32_t id2[batchSize] = {3, 4};
+    auto batch2 = CreateVectorBatch(sourceTypes, batchSize, data2, id2);
+
+    double data3[batchSize] = {2.0, std::numeric_limits<double>::quiet_NaN()};
+    int32_t id3[batchSize] = {5, 6};
+    auto batch3 = CreateVectorBatch(sourceTypes, batchSize, data3, id3);
+
+    double data4[batchSize] = {0.5, std::numeric_limits<double>::infinity()};
+    int32_t id4[batchSize] = {7, 8};
+    auto batch4 = CreateVectorBatch(sourceTypes, batchSize, data4, id4);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    SparkSpillConfig spillConfig(GenerateSpillPath(), MAX_SPILL_BYTES, 1);
+    OperatorConfig operatorConfig(spillConfig);
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1, operatorConfig);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+
+    sortOperator->AddInput(batch1);
+    sortOperator->AddInput(batch2);
+    sortOperator->AddInput(batch3);
+    sortOperator->AddInput(batch4);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC with spill merge: 0.5 < 1.0 < 2.0 < 3.0 < +Inf < NaN < NaN < NaN
+    const int32_t totalSize = 8;
+    double expected[totalSize] = {
+        0.5, 1.0, 2.0, 3.0, std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN()
+    };
+    ASSERT_NE(outputVecBatch, nullptr);
+    VerifyDoubleColumnWithNaN(outputVecBatch->Get(0), expected, totalSize);
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortDoubleNaNWithSpillDesc)
+{
+    const int32_t batchSize = 2;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+
+    double data1[batchSize] = {1.0, std::numeric_limits<double>::quiet_NaN()};
+    int32_t id1[batchSize] = {1, 2};
+    auto batch1 = CreateVectorBatch(sourceTypes, batchSize, data1, id1);
+
+    double data2[batchSize] = {3.0, std::numeric_limits<double>::quiet_NaN()};
+    int32_t id2[batchSize] = {3, 4};
+    auto batch2 = CreateVectorBatch(sourceTypes, batchSize, data2, id2);
+
+    double data3[batchSize] = {2.0, std::numeric_limits<double>::quiet_NaN()};
+    int32_t id3[batchSize] = {5, 6};
+    auto batch3 = CreateVectorBatch(sourceTypes, batchSize, data3, id3);
+
+    double data4[batchSize] = {0.5, std::numeric_limits<double>::infinity()};
+    int32_t id4[batchSize] = {7, 8};
+    auto batch4 = CreateVectorBatch(sourceTypes, batchSize, data4, id4);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {0}; // DESC
+    int nullFirsts[] = {0};
+
+    SparkSpillConfig spillConfig(GenerateSpillPath(), MAX_SPILL_BYTES, 1);
+    OperatorConfig operatorConfig(spillConfig);
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1, operatorConfig);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+
+    sortOperator->AddInput(batch1);
+    sortOperator->AddInput(batch2);
+    sortOperator->AddInput(batch3);
+    sortOperator->AddInput(batch4);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // DESC with spill merge: NaN > NaN > NaN > +Inf > 3.0 > 2.0 > 1.0 > 0.5
+    const int32_t totalSize = 8;
+    double expected[totalSize] = {
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::infinity(), 3.0, 2.0, 1.0, 0.5
+    };
+    ASSERT_NE(outputVecBatch, nullptr);
+    VerifyDoubleColumnWithNaN(outputVecBatch->Get(0), expected, totalSize);
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortFloatNaNWithSpillAsc)
+{
+    const int32_t batchSize = 2;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ FloatType(), IntType() }));
+
+    float data1[batchSize] = {1.0f, std::numeric_limits<float>::quiet_NaN()};
+    int32_t id1[batchSize] = {1, 2};
+    auto batch1 = CreateVectorBatch(sourceTypes, batchSize, data1, id1);
+
+    float data2[batchSize] = {3.0f, std::numeric_limits<float>::quiet_NaN()};
+    int32_t id2[batchSize] = {3, 4};
+    auto batch2 = CreateVectorBatch(sourceTypes, batchSize, data2, id2);
+
+    float data3[batchSize] = {0.5f, 2.0f};
+    int32_t id3[batchSize] = {5, 6};
+    auto batch3 = CreateVectorBatch(sourceTypes, batchSize, data3, id3);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    SparkSpillConfig spillConfig(GenerateSpillPath(), MAX_SPILL_BYTES, 1);
+    OperatorConfig operatorConfig(spillConfig);
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1, operatorConfig);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+
+    sortOperator->AddInput(batch1);
+    sortOperator->AddInput(batch2);
+    sortOperator->AddInput(batch3);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC with spill: 0.5 < 1.0 < 2.0 < 3.0 < NaN < NaN
+    const int32_t totalSize = 6;
+    float expected[totalSize] = {
+        0.5f, 1.0f, 2.0f, 3.0f,
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::quiet_NaN()
+    };
+    ASSERT_NE(outputVecBatch, nullptr);
+    VerifyFloatColumnWithNaN(outputVecBatch->Get(0), expected, totalSize);
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
 } // namespace SortTest
