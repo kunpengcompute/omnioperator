@@ -6,7 +6,10 @@
 #include "collect_set_aggregator.h"
 #include "vector/vector_helper.h"
 #include "vector/nulls_buffer.h"
+#include "util/debug.h"
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 
 namespace omniruntime::op {
 
@@ -23,6 +26,34 @@ static std::shared_ptr<NullsHelper> SliceNullMapForSingleRow(const std::shared_p
     }
     return rowNullMap;
 }
+
+/* Crash-hunt diagnostics (stderr traces + per-row three-state guard) are gated
+ * behind OMNI_HDIAG=1: they only run when explicitly re-enabled for a crash
+ * investigation. The per-row address-book lookup in ProcessGroupInternal costs
+ * one unordered_set::find per row per aggregator, which dominated runtime in
+ * production measurements and skewed countDistinctWithoutExpand benchmarks. */
+static inline bool CsDiagEnabled()
+{
+    static const bool enabled = [] {
+        const char *env = std::getenv("OMNI_HDIAG");
+        return env != nullptr && env[0] != '\0' && env[0] != '0';
+    }();
+    return enabled;
+}
+
+#define CS_DIAG(fmt, ...)                                                                  \
+    do {                                                                                   \
+        if (CsDiagEnabled()) {                                                             \
+            fprintf(stderr, "[HDIAG][CollectSet][%s] " fmt "\n", __func__, ##__VA_ARGS__);\
+            fflush(stderr);                                                                \
+        }                                                                                  \
+    } while (0)
+
+/** Initial capacity (2^4 = 16 slots) of the per-group distinct set hash map.
+ * Kept small on purpose: with tens of millions of groups the default initial
+ * degree (15 -> 32768 slots, ~288KB per group) exhausts memory before spill
+ * thresholds can trigger. Sets grow via Rehash on demand. */
+static constexpr uint8_t AGG_SET_INIT_DEGREE = 4;
 
 /**
  * we have a Set in state (keySet of the DefaultHashMap)
@@ -134,10 +165,30 @@ template<DataTypeId IN_ID, DataTypeId OUT_ID>
 void CollectSetAggregator<IN_ID, OUT_ID>::InitState(AggregateState *state) {
     SetState<InType> *setState = SetState<InType>::CastState(state + aggStateOffset);
     using stateType = typename AggNativeAndVectorType<IN_ID>::type;
-    DefaultHashMap<stateType, int8_t>* uniqueValues = new DefaultHashMap<stateType, int8_t>();
+    // Initial degree 4 (16 slots, a few hundred bytes) instead of the default 15
+    // (32768 slots, ~288KB): per-group distinct sets usually hold few values, and
+    // with tens of millions of groups the default footprint alone exhausts memory
+    // long before spill thresholds are reached. The map still grows on demand via
+    // Rehash (degree += 2 per growth), so large sets are unaffected.
+    DefaultHashMap<stateType, int8_t>* uniqueValues = new DefaultHashMap<stateType, int8_t>(AGG_SET_INIT_DEGREE);
     uniqueValues->Reset();
     setState->uniqueValuesAddr = reinterpret_cast<int64_t>(uniqueValues);
-    allocatedUniqueValuesAddrs_.push_back(setState->uniqueValuesAddr);
+    // The map's slot/control arrays go through OmniHashmapAllocator and are already
+    // accounted; only the heap object header itself is invisible to the memory
+    // manager, so report it here (and reclaim it in DestroyState) to keep global
+    // accounting honest for spill decisions with tens of millions of groups.
+    mem::ThreadMemoryManager::ReportMemory(sizeof(DefaultHashMap<stateType, int8_t>));
+    allocatedUniqueValuesAddrs_.insert(setState->uniqueValuesAddr);
+    // Throttled trace: confirms every live state got a map address that is
+    // registered in the address book. Cross-check against PGI/DESTROY lines.
+    static thread_local int64_t diagInitCnt = 0;
+    if (diagInitCnt < 2 || (diagInitCnt % 16384) == 0) {
+        CS_DIAG("cnt=%lld state=%p aggOff=%d mapAddr=%p bookSize=%zu",
+                static_cast<long long>(diagInitCnt), reinterpret_cast<void *>(state),
+                aggStateOffset, reinterpret_cast<void *>(uniqueValues),
+                allocatedUniqueValuesAddrs_.size());
+    }
+    diagInitCnt++;
 }
 
 /**
@@ -165,11 +216,28 @@ void CollectSetAggregator<IN_ID, OUT_ID>::DestroyState(AggregateState *state) {
     }
     DefaultHashMap<stateType, int8_t> *uniqueValues = reinterpret_cast<DefaultHashMap<stateType, int8_t> *>(addr);
     delete uniqueValues;
+    mem::ThreadMemoryManager::ReclaimMemory(sizeof(DefaultHashMap<stateType, int8_t>));
     setState->uniqueValuesAddr = 0;
-    auto it = std::find(allocatedUniqueValuesAddrs_.begin(), allocatedUniqueValuesAddrs_.end(), addr);
-    if (it != allocatedUniqueValuesAddrs_.end()) {
-        allocatedUniqueValuesAddrs_.erase(it);
+    allocatedUniqueValuesAddrs_.erase(addr);
+}
+
+/**
+ * Frees every DefaultHashMap tracked by this aggregator and clears the address book.
+ * Called by the aggregation operator after a successful spill, before the arena and
+ * hash tables are reset; also safe to call when the book is already empty.
+ */
+template<DataTypeId IN_ID, DataTypeId OUT_ID>
+void CollectSetAggregator<IN_ID, OUT_ID>::DestroyAllStates() {
+    using stateType = typename AggNativeAndVectorType<IN_ID>::type;
+    // Unconditional: this runs once per spill, so volume is tiny. If the next
+    // PGI FATAL line reports a dangling addr that once appeared in an INIT line,
+    // the free happened here while arena/rows survived -> lifecycle bug.
+    CS_DIAG("destroying %zu maps (aggOff=%d)", allocatedUniqueValuesAddrs_.size(), aggStateOffset);
+    for (int64_t addr : allocatedUniqueValuesAddrs_) {
+        delete reinterpret_cast<DefaultHashMap<stateType, int8_t> *>(addr);
+        mem::ThreadMemoryManager::ReclaimMemory(sizeof(DefaultHashMap<stateType, int8_t>));
     }
+    allocatedUniqueValuesAddrs_.clear();
 }
 
 /**
@@ -232,6 +300,57 @@ void CollectSetAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<Aggre
         return;
     }
 
+    // Throttled entry trace: captures the exact state pointers of the batch
+    // being processed. If the crash happens while dereferencing a state, the
+    // last ENTRY line before the crash identifies the poisoned pointer.
+    static thread_local int64_t diagPgiCnt = 0;
+    if (diagPgiCnt < 4 || (diagPgiCnt % 2048) == 0) {
+        using stateType = typename AggNativeAndVectorType<IN_ID>::type;
+        SetState<stateType> *setState0 = SetState<stateType>::CastState(rowStates[0] + aggStateOffset);
+        CS_DIAG("cnt=%lld rows=%zu vec=%p enc=%d rowOff=%d state0=%p addr0=%p bookSize=%zu",
+                static_cast<long long>(diagPgiCnt), rowCount, reinterpret_cast<void *>(vector),
+                static_cast<int>(vector->GetEncoding()), rowOffset,
+                reinterpret_cast<void *>(rowStates[0]),
+                reinterpret_cast<void *>(setState0->uniqueValuesAddr),
+                allocatedUniqueValuesAddrs_.size());
+    }
+    diagPgiCnt++;
+
+    // Three-state guard on every row state (diagnostics only, OMNI_HDIAG=1):
+    //   addr == 0                  -> never initialized (arena zero-fill residue)
+    //   addr != 0, not in book     -> dangling (freed by DestroyAllStates) or
+    //                                 overwritten by a foreign writer.
+    //   addr in book               -> healthy.
+    // Guarded: the unordered_set::find per row per aggregator dominated runtime
+    // in production measurements; in default mode only the cheap addr == 0
+    // null check below (per Emplace target) remains in the hot loop.
+    if (UNLIKELY(CsDiagEnabled())) {
+        using stateType = typename AggNativeAndVectorType<IN_ID>::type;
+        for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+            SetState<stateType> *setState = SetState<stateType>::CastState(rowStates[rowIndex] + aggStateOffset);
+            if (UNLIKELY(setState->uniqueValuesAddr == 0)) {
+                CS_DIAG("FATAL uninitialized state: rowIndex=%zu rowCount=%zu state=%p rowOffset=%d "
+                        "encoding=%d isRaw=%d bookSize=%zu",
+                        rowIndex, rowCount, reinterpret_cast<void *>(rowStates[rowIndex]),
+                        rowOffset, static_cast<int>(vector->GetEncoding()),
+                        IsInputRaw() ? 1 : 0, allocatedUniqueValuesAddrs_.size());
+                throw omniruntime::exception::OmniException("SPILL_FAILED",
+                    "CollectSet state uniqueValuesAddr is null (state never initialized)");
+            }
+            if (UNLIKELY(allocatedUniqueValuesAddrs_.find(setState->uniqueValuesAddr) ==
+                         allocatedUniqueValuesAddrs_.end())) {
+                CS_DIAG("FATAL dangling/foreign state: rowIndex=%zu rowCount=%zu state=%p addr=%p "
+                        "aggOff=%d bookSize=%zu (addr allocated by InitState but not tracked -> "
+                        "freed by DestroyAllStates or overwritten)",
+                        rowIndex, rowCount, reinterpret_cast<void *>(rowStates[rowIndex]),
+                        reinterpret_cast<void *>(setState->uniqueValuesAddr),
+                        aggStateOffset, allocatedUniqueValuesAddrs_.size());
+                throw omniruntime::exception::OmniException("SPILL_FAILED",
+                    "CollectSet state uniqueValuesAddr is dangling/untracked");
+            }
+        }
+    }
+
     bool isDictionary = vector->GetEncoding() == vec::OMNI_DICTIONARY;
     bool isConst = vector->GetEncoding() == vec::OMNI_ENCODING_CONST;
 
@@ -285,6 +404,13 @@ template<DataTypeId IN_ID, DataTypeId OUT_ID>
 void CollectSetAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRowInfo> &unspillRows, int32_t rowCount, int32_t &vectorIndex) {
     int32_t arrayVecIdx = vectorIndex++;
     using stateType = typename AggNativeAndVectorType<IN_ID>::type;
+    // Throttled trace of the unspill merge path.
+    static thread_local int64_t diagUnspillCnt = 0;
+    if (diagUnspillCnt < 2 || (diagUnspillCnt % 1024) == 0) {
+        CS_DIAG("cnt=%lld rows=%d vecIdx=%d", static_cast<long long>(diagUnspillCnt),
+                rowCount, arrayVecIdx);
+    }
+    diagUnspillCnt++;
     for (int32_t rowIdx = 0; rowIdx < rowCount; rowIdx++) {
         UnspillRowInfo &row = unspillRows[rowIdx];
         if (row.batch == nullptr || arrayVecIdx >= row.batch->GetVectorCount()) {
@@ -303,6 +429,12 @@ void CollectSetAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<Unspil
         SetState<stateType> *setState = SetState<stateType>::CastState(row.state + aggStateOffset);
         DefaultHashMap<stateType, int8_t> *uniqueValues =
             reinterpret_cast<DefaultHashMap<stateType, int8_t> *>(setState->uniqueValuesAddr);
+        if (UNLIKELY(uniqueValues == nullptr)) {
+            LogError("CollectSet unspill uninitialized state: rowIdx=%d, stateAddr=%p, aggOffset=%d",
+                     rowIdx, reinterpret_cast<void *>(row.state), aggStateOffset);
+            throw omniruntime::exception::OmniException("SPILL_FAILED",
+                "CollectSet unspill state uniqueValuesAddr is null");
+        }
         auto *flatElementVec = static_cast<Vector<stateType> *>(elementVec);
         stateType *ptr = reinterpret_cast<stateType *>(unsafe::UnsafeVector::GetRawValues<stateType>(flatElementVec));
         for (int32_t j = 0, n = elementVec->GetSize(); j < n; j++) {
@@ -389,6 +521,7 @@ CollectSetAggregator<IN_ID, OUT_ID>::~CollectSetAggregator() {
     using stateType = typename AggNativeAndVectorType<IN_ID>::type;
     for (int64_t addr : allocatedUniqueValuesAddrs_) {
         delete reinterpret_cast<DefaultHashMap<stateType, int8_t> *>(addr);
+        mem::ThreadMemoryManager::ReclaimMemory(sizeof(DefaultHashMap<stateType, int8_t>));
     }
     allocatedUniqueValuesAddrs_.clear();
 }
@@ -402,6 +535,19 @@ CollectSetAggregator<IN_ID, OUT_ID>::CollectSetAggregator(
     const bool outputPartial,
     const bool isOverflowAsNull
     ) : TypedAggregator(OMNI_AGGREGATION_TYPE_COLLECT_SET, inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull) {
+
+}
+
+template<DataTypeId IN_ID, DataTypeId OUT_ID>
+CollectSetAggregator<IN_ID, OUT_ID>::CollectSetAggregator(
+    const FunctionType aggregateType,
+    const DataTypes &inputTypes,
+    const DataTypes &outputTypes,
+    const std::vector<int32_t> &channels,
+    const bool inputRaw,
+    const bool outputPartial,
+    const bool isOverflowAsNull
+    ) : TypedAggregator(aggregateType, inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull) {
 
 }
 

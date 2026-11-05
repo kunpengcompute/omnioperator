@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 #include "vector/vector_helper.h"
 #include "operator/status.h"
 #include "operator/util/operator_util.h"
@@ -13,6 +14,25 @@
 #include "util/debug.h"
 #include "operator/aggregation/aggregator/aggregator_factory.h"
 #include "type/data_type.h"
+
+/* Crash-hunt diagnostics (see collect_set_aggregator.cpp) gated behind
+ * OMNI_HDIAG=1: zero cost unless explicitly re-enabled for an investigation. */
+static inline bool HdDiagEnabled()
+{
+    static const bool enabled = [] {
+        const char *env = std::getenv("OMNI_HDIAG");
+        return env != nullptr && env[0] != '\0' && env[0] != '0';
+    }();
+    return enabled;
+}
+
+#define HDIAG(fmt, ...)                                                               \
+    do {                                                                              \
+        if (HdDiagEnabled()) {                                                        \
+            fprintf(stderr, "[HDIAG][HashAgg][%s] " fmt "\n", __func__, ##__VA_ARGS__); \
+            fflush(stderr);                                                            \
+        }                                                                             \
+    } while (0)
 
 #if defined(DEBUG_OPERATOR) && defined(TRACE)
 #include <sstream>
@@ -371,6 +391,16 @@ void HashAggregationOperator::ResizeArrayMap(int64_t oldMin)
     newAssigned[0] = oldAssigned[0];
     bool hasAgg = aggregators.size() > 0;
     errno_t res1 = EOK;
+    // Bounds check BEFORE the copies: a bad offSet must abort before it can
+    // corrupt the new table (or write past it).
+    if (UNLIKELY(offSet < 0 || 1 + offSet + oldTableSize > newTableSize)) {
+        HDIAG("FATAL ResizeArrayMap copy would overflow new table: offSet=%lld, oldTableSize=%lld, "
+              "newTableSize=%lld, oldMin=%lld, newMin=%lld",
+              offSet, static_cast<int64_t>(oldTableSize), static_cast<int64_t>(newTableSize),
+              oldMin, vectorAnalyzer->MinValue());
+        throw omniruntime::exception::OmniException("SPILL_FAILED",
+            "array hash table resize overflow");
+    }
     if (hasAgg) {
         memcpy(newSlots + 1 + offSet, oldSlots + 1, (oldTableSize - 1) * sizeof(void *));
     }
@@ -378,11 +408,19 @@ void HashAggregationOperator::ResizeArrayMap(int64_t oldMin)
     newArrayTable->AddElementsSize(arrayTable->GetElementsSize());
     arrayTable.reset(newArrayTable.release());
     resizeArrayMapCnt++;
+    HDIAG("ResizeArrayMap: offSet=%lld, oldTableSize=%lld, newTableSize=%lld, oldMin=%lld, newMin=%lld, "
+          "elementsSize=%lld, resizeCnt=%d",
+          offSet, static_cast<int64_t>(oldTableSize), static_cast<int64_t>(newTableSize),
+          oldMin, vectorAnalyzer->MinValue(),
+          static_cast<int64_t>(arrayTable->GetElementsSize()),
+          static_cast<int32_t>(resizeArrayMapCnt));
 }
 
 void HashAggregationOperator::MoveEntryArrayTableToHashMap(int64_t minValue)
 {
     bool hasAgg = aggregators.size() > 0;
+    int64_t migratedCnt = 0;
+    bool hasNullEntry = false;
     arrayTable->ForEachValue([&](const auto &value, const auto &index) {
         if (index != 0) {
             if (groupByColumnsHandleType == HandleType::fixedInt32) {
@@ -395,6 +433,7 @@ void HashAggregationOperator::MoveEntryArrayTableToHashMap(int64_t minValue)
                 fixedInt16->InsertOneValueToHashmap<false>(static_cast<int16_t>(index + minValue - 1),
                             reinterpret_cast<AggregateState *>(value));
             }
+            migratedCnt++;
             return;
         }
         if (groupByColumnsHandleType == HandleType::fixedInt32) {
@@ -404,7 +443,18 @@ void HashAggregationOperator::MoveEntryArrayTableToHashMap(int64_t minValue)
         } else if (groupByColumnsHandleType == HandleType::fixedInt16) {
             fixedInt16->InsertOneValueToHashmap<true>(0, reinterpret_cast<AggregateState *>(value));
         }
+        hasNullEntry = true;
     });
+    LogWarn("MoveEntryArrayTableToHashMap: migrated=%lld entries (nullEntry=%d), minValue=%lld, "
+            "elementsSize=%lld, handleType=%d",
+            migratedCnt, hasNullEntry ? 1 : 0, minValue,
+            static_cast<int64_t>(arrayTable->GetElementsSize()),
+            static_cast<int32_t>(groupByColumnsHandleType));
+    HDIAG("MoveEntryArrayTableToHashMap: migrated=%lld entries (nullEntry=%d), minValue=%lld, "
+          "elementsSize=%lld, handleType=%d",
+          migratedCnt, hasNullEntry ? 1 : 0, minValue,
+          static_cast<int64_t>(arrayTable->GetElementsSize()),
+          static_cast<int32_t>(groupByColumnsHandleType));
     arrayTable.reset();
 }
 
@@ -419,6 +469,17 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
     }
 
     UpdateAddInputInfo(rowCount);
+    // Throttled watch of the spill-decision input: if NO spill ever fires before
+    // the crash, these lines show whether elementsSize/memory accounting grows
+    // as expected or the NeedSpill threshold is simply never reached.
+    static thread_local int64_t diagAddInputCnt = 0;
+    if ((diagAddInputCnt % 4096) == 0) {
+        HDIAG("AddInput cnt=%lld rows=%d elementsSize=%lld isArrayMode=%d",
+              static_cast<long long>(diagAddInputCnt), rowCount,
+              static_cast<int64_t>(GetElementsSize()),
+              vectorAnalyzer->IsArrayHashTableType() ? 1 : 0);
+    }
+    diagAddInputCnt++;
     // do decide hash table mode
     auto oldMin = vectorAnalyzer->MinValue();
     auto preIsArrayMap = vectorAnalyzer->IsArrayHashTableType();
@@ -426,6 +487,13 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
     if (vectorAnalyzer->IsArrayHashTableType()) {
         if (arrayTable == nullptr) {
             arrayTable = std::make_unique<DefaultArrayMap<AggregateState>>(vectorAnalyzer->GetRange());
+            // Rebuild marker: arrayTable is only null here after a spill (ResetHashmap)
+            // or before the very first batch. rangeAnalyzer is NOT reset on spill,
+            // so the rebuilt table keeps the accumulated min/max.
+            HDIAG("arrayTable (re)built: range=%lld, min=%lld, max=%lld, resizeCnt=%d",
+                  static_cast<int64_t>(vectorAnalyzer->GetRange()), vectorAnalyzer->MinValue(),
+                  vectorAnalyzer->MinValue() + static_cast<int64_t>(vectorAnalyzer->GetRange()) - 2,
+                  static_cast<int32_t>(resizeArrayMapCnt));
         } else if (vectorAnalyzer->MinMaxChanged() && resizeArrayMapCnt == 0) {
             ResizeArrayMap(oldMin);
         } else if (vectorAnalyzer->MinMaxChanged() && resizeArrayMapCnt >= 1) {
@@ -439,6 +507,20 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
             EmplaceToArrayMap(vecBatch, groupVector);
             VectorHelper::FreeVecBatch(vecBatch);
             ResetInputVecBatch();
+            if (operatorConfig.GetSpillConfig()->NeedSpill(GetElementsSize())) {
+                HDIAG("start spill (array hash path): elementsSize=%lld, range=%lld, min=%lld, "
+                      "resizeCnt=%d, rowCount=%d",
+                      static_cast<int64_t>(GetElementsSize()),
+                      static_cast<int64_t>(vectorAnalyzer->GetRange()),
+                      vectorAnalyzer->MinValue(), resizeArrayMapCnt, rowCount);
+                auto result = SpillHashMap();
+                if (UNLIKELY(result != ErrorCode::SUCCESS)) {
+                    throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
+                }
+                DestroyActiveAggStates();
+                executionContext->GetArena()->Reset();
+                ResetHashmap();
+            }
             return 0;
         }
     }
@@ -514,12 +596,15 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
     VectorHelper::FreeVecBatch(vecBatch);
     ResetInputVecBatch();
     if (operatorConfig.GetSpillConfig()->NeedSpill(GetElementsSize())) {
+        HDIAG("start spill (normal hash path): elementsSize=%lld",
+              static_cast<int64_t>(GetElementsSize()));
         auto result = SpillHashMap();
-        executionContext->GetArena()->Reset();
-        ResetHashmap();
         if (UNLIKELY(result != ErrorCode::SUCCESS)) {
             throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
         }
+        DestroyActiveAggStates();
+        executionContext->GetArena()->Reset();
+        ResetHashmap();
     }
     return 0;
 }
@@ -743,6 +828,18 @@ void HashAggregationOperator::InitState(int64_t aggStateAddress)
 void HashAggregationOperator::ProcessStates(VectorBatch *vecBatch)
 {
     size_t aggNum = aggregators.size();
+    // Throttled trace of the exact per-row state pointers about to be consumed
+    // by the aggregators. If the crash happens inside a CollectSet update, the
+    // last STATES line shows which pointer the poisoned batch carried.
+    static thread_local int64_t diagStatesCnt = 0;
+    if (diagStatesCnt < 2 || (diagStatesCnt % 8192) == 0) {
+        auto &rs = rowsAggStates;
+        HDIAG("ProcessStates cnt=%lld rows=%zu state0=%p stateLast=%p",
+              static_cast<long long>(diagStatesCnt), rs.size(),
+              rs.empty() ? nullptr : reinterpret_cast<void *>(rs.front()),
+              rs.empty() ? nullptr : reinterpret_cast<void *>(rs.back()));
+    }
+    diagStatesCnt++;
     if (aggFiltersCount > 0) {
         int32_t filterOffset = vecBatch->GetVectorCount() - aggFiltersCount;
         for (size_t aggIdx = 0; aggIdx < aggNum; ++aggIdx) {
@@ -844,15 +941,37 @@ void HashAggregationOperator::InsertAggStatesToArrayMap(T *hashes, int32_t vecLa
 {
     int64_t *matchSlotsData = reinterpret_cast<int64_t*>(rowsAggStates.data());
     auto arrayTablePtr = arrayTable.get();
+    const auto tableSize = static_cast<int64_t>(arrayTablePtr->Size());
     int32_t missCnt = 0;
     for (auto miss = 0; miss < vecLanes; ++miss) {
         auto hash = hashes[miss];
+        // Diagnostic guard: a hash outside [0, tableSize) indexes foreign memory and
+        // eventually produces garbage/0 state pointers that SIGSEGV downstream.
+        if (UNLIKELY(static_cast<int64_t>(hash) >= tableSize)) {
+            LogError("arraymap SIMD lane out-of-range hash=%lld, tableSize=%lld, probePos=%d, "
+                     "min=%lld, range=%lld, resizeCnt=%d",
+                     static_cast<int64_t>(hash), tableSize, probePosition,
+                     vectorAnalyzer->MinValue(),
+                     static_cast<int64_t>(vectorAnalyzer->GetRange()),
+                     static_cast<int32_t>(resizeArrayMapCnt));
+            throw omniruntime::exception::OmniException("SPILL_FAILED",
+                "array hash table lane hash out of range");
+        }
         if (!isAssigned[hash]) {
             missCnt++;
             auto aggSateAddress = reinterpret_cast<int64_t>(arenaAllocator.Allocate(totalAggStatesSize));
             InitState(aggSateAddress);
             slots[hash] = aggSateAddress;
             isAssigned[hash] = true;
+        } else if (UNLIKELY(slots[hash] == 0)) {
+            // isAssigned=true but slot never got a state: this is exactly the
+            // uniqueValuesAddr==0 crash signature (si_addr 0x60/0x78/0x108).
+            LogError("arraymap SIMD inconsistent slot: hash=%lld assigned but slots[hash]=0, "
+                     "tableSize=%lld, probePos=%d, elementsSize=%lld",
+                     static_cast<int64_t>(hash), tableSize, probePosition,
+                     static_cast<int64_t>(arrayTablePtr->GetElementsSize()));
+            throw omniruntime::exception::OmniException("SPILL_FAILED",
+                "array hash table slot state missing");
         }
     }
     arrayTablePtr->AddElementsSize(missCnt);
@@ -942,12 +1061,28 @@ void HashAggregationOperator::ArrayGroupProbeSIMD(BaseVector *groupVector, Vecto
         } else {
             hashValue = *groupValueBase - min + 1;
         }
+        if (UNLIKELY(hashValue < 0 || hashValue >= static_cast<int64_t>(arrayTablePtr->Size()))) {
+            LogError("arraymap tail out-of-range hash=%lld, tableSize=%lld, key=%lld, min=%lld, "
+                     "resizeCnt=%d, elementsSize=%lld",
+                     hashValue, static_cast<int64_t>(arrayTablePtr->Size()),
+                     static_cast<int64_t>(*groupValueBase), static_cast<int64_t>(min),
+                     resizeArrayMapCnt, static_cast<int64_t>(arrayTablePtr->GetElementsSize()));
+            throw omniruntime::exception::OmniException("SPILL_FAILED",
+                "array hash table tail hash out of range");
+        }
         if (!isAssigned[hashValue]) {
             arrayTablePtr->AddElementsSize(1);
             auto aggSateAddress = reinterpret_cast<int64_t>(arenaAllocator.Allocate(totalAggStatesSize));
             InitState(aggSateAddress);
             slots[hashValue] = aggSateAddress;
             isAssigned[hashValue] = true;
+        } else if (UNLIKELY(slots[hashValue] == 0)) {
+            LogError("arraymap tail inconsistent slot: hash=%lld assigned but slots[hash]=0, "
+                     "tableSize=%lld, elementsSize=%lld",
+                     hashValue, static_cast<int64_t>(arrayTablePtr->Size()),
+                     arrayTablePtr->GetElementsSize());
+            throw omniruntime::exception::OmniException("SPILL_FAILED",
+                "array hash table tail slot state missing");
         }
         matchSlotsData[probePosition] = slots[hashValue];
     }
@@ -959,6 +1094,19 @@ void HashAggregationOperator::EmplaceToArrayMap(VectorBatch *vecBatch, BaseVecto
     int32_t rowCount = vecBatch->GetRowCount();
     size_t aggNum = aggregators.size();
     auto typeId = groupVector->GetTypeId();
+    // Throttled trace: proves the array path is live and its parameters are
+    // self-consistent (every key of this batch must map into [0, tableSize)).
+    static thread_local int64_t diagEmplaceCnt = 0;
+    if (diagEmplaceCnt < 2 || (diagEmplaceCnt % 8192) == 0) {
+        HDIAG("EmplaceToArrayMap cnt=%lld rows=%d typeId=%d min=%lld range=%lld tableSize=%lld "
+              "elementsSize=%lld resizeCnt=%d",
+              static_cast<long long>(diagEmplaceCnt), rowCount, static_cast<int>(typeId),
+              vectorAnalyzer->MinValue(), static_cast<int64_t>(vectorAnalyzer->GetRange()),
+              arrayTable != nullptr ? static_cast<int64_t>(arrayTable->Size()) : -1LL,
+              static_cast<int64_t>(GetElementsSize()),
+              static_cast<int32_t>(resizeArrayMapCnt));
+    }
+    diagEmplaceCnt++;
     if (aggNum == 0) {
         // no aggregator, so just perform groupby
         switch (typeId) {
@@ -1261,6 +1409,7 @@ ErrorCode HashAggregationOperator::SpillToDisk()
         auto curRows = static_cast<int32_t>(std::min<int64_t>(runRows, totalSpillCount - rowOffset));
 
         mem::ArenaState poolState {};
+        const auto runPoolUsedBefore = serialize != nullptr ? serialize->table->Pool().UsedBytes() : 0;
         if (needPoolRollBack) {
             poolState = serialize->SavePoolState();
         }
@@ -1373,6 +1522,17 @@ int64_t HashAggregationOperator::CalcSpillRunRows(int64_t totalSpillCount) const
 
 ErrorCode HashAggregationOperator::SpillHashMap()
 {
+    // Unconditional: once per spill attempt, tiny volume.
+    HDIAG("SpillHashMap enter: arrayTable=%s, elementsSize=%lld",
+          arrayTable != nullptr ? "yes" : "no", static_cast<int64_t>(GetElementsSize()));
+    // Array hash mode: migrate all entries (group keys + agg state pointers)
+    // into the fixed handler's hash map first, so the run-based spill below can
+    // traverse them like a regular table. Also force subsequent inputs onto the
+    // normal hash path to avoid maintaining data in both structures after spill.
+    if (arrayTable != nullptr) {
+        MoveEntryArrayTableToHashMap(vectorAnalyzer->MinValue());
+        vectorAnalyzer->SetNormalHashTable();
+    }
     auto rowCount = 0;
     if (serialize != nullptr) {
         rowCount = serialize->GetElementsSize();
@@ -1630,6 +1790,10 @@ VectorBatch *HashAggregationOperator::GetOutputFromDiskWithAgg(VectorBatch *outp
     int32_t rowIdx = 0;
     auto aggNum = static_cast<int32_t>(aggregators.size());
     auto groupStatesPtr = groupStates.get();
+    // The groupStates buffer is reused across output batches. The previous batch
+    // may still hold heap states (e.g. distinct sets) in these slots; free them
+    // before this batch re-initializes the same slots.
+    DestroyUnspillBatchStates();
     rowStates.resize(rowCount);
 
     std::vector<UnspillRowInfo> unspillRows(UNSPILL_ROW_COUNT_ONE_BATCH);
@@ -1657,6 +1821,7 @@ VectorBatch *HashAggregationOperator::GetOutputFromDiskWithAgg(VectorBatch *outp
 
             // construct the final output
             SetStateOutputVecBatch(output, rowIdx, groupColNum, aggNum);
+            unspillBatchStatesInUse_ = rowIdx;
             if (rowIdx < rowCount) {
                 return GetVectorBatchFromSlice(output, rowIdx);
             } else {
@@ -1762,6 +1927,7 @@ VectorBatch *HashAggregationOperator::GetOutputFromDiskWithAgg(VectorBatch *outp
             }
 
             SetStateOutputVecBatch(output, rowIdx, groupColNum, aggNum);
+            unspillBatchStatesInUse_ = rowIdx;
             return output;
         }
     }
@@ -1770,13 +1936,14 @@ VectorBatch *HashAggregationOperator::GetOutputFromDiskWithAgg(VectorBatch *outp
 void HashAggregationOperator::GetOutputFromDisk(VectorBatch **outputVecBatch)
 {
     if (spillMerger == nullptr) {
-        if (GetElementsSize() > 0) {
+        if (GetElementsSize() > 0 || arrayTable != nullptr) {
             auto result = SpillHashMap();
-            executionContext->GetArena()->Reset();
-            ResetHashmap();
             if (UNLIKELY(result != ErrorCode::SUCCESS)) {
                 throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
             }
+            DestroyActiveAggStates();
+            executionContext->GetArena()->Reset();
+            ResetHashmap();
         }
 
         spilledBytes = spiller->GetSpilledBytes();
@@ -1893,6 +2060,11 @@ ALWAYS_INLINE size_t HashAggregationOperator::GetElementsSize()
     } else if (packedInt128 != nullptr) {
         elementSize = packedInt128->GetElementsSize();
     }
+    // Array hash mode holds the groups in arrayTable while the fixed handler's
+    // table is still empty; report those elements so spill decisions see them.
+    if (elementSize == 0 && arrayTable != nullptr) {
+        elementSize = arrayTable->GetElementsSize();
+    }
     return elementSize;
 }
 
@@ -1913,6 +2085,39 @@ ALWAYS_INLINE void HashAggregationOperator::ResetHashmap()
     } else if (packedInt128 != nullptr) {
         packedInt128->ResetHashmap();
     }
+    // Defensive: SpillHashMap migrates arrayTable entries before we get here,
+    // but reset it unconditionally so a leftover table never survives a reset.
+    if (arrayTable != nullptr) {
+        arrayTable.reset();
+    }
+}
+
+void HashAggregationOperator::DestroyActiveAggStates()
+{
+    // Unconditional: runs once per spill. Tells us whether states were freed
+    // BEFORE the arena reset, so any later SIGSEGV on a state pointer means
+    // somebody kept using a freed address (lifecycle bug, not heap corruption).
+    HDIAG("destroying active agg states: aggNum=%zu elementsSize=%lld",
+          aggregators.size(), static_cast<int64_t>(GetElementsSize()));
+    for (auto &aggregator : aggregators) {
+        aggregator->DestroyAllStates();
+    }
+}
+
+void HashAggregationOperator::DestroyUnspillBatchStates()
+{
+    if (groupStates == nullptr || unspillBatchStatesInUse_ <= 0) {
+        return;
+    }
+    const auto aggNum = aggregators.size();
+    auto groupStatesPtr = groupStates.get();
+    for (int32_t rowIdx = 0; rowIdx < unspillBatchStatesInUse_; rowIdx++) {
+        auto rowState = groupStatesPtr + rowIdx * totalAggStatesSize;
+        for (size_t aggIdx = 0; aggIdx < aggNum; aggIdx++) {
+            aggregators[aggIdx]->DestroyState(rowState);
+        }
+    }
+    unspillBatchStatesInUse_ = -1;
 }
 } // end of namespace op
 } // end of namespace omniruntime

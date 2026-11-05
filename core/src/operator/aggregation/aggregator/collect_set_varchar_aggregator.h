@@ -6,6 +6,7 @@
 #ifndef OMNI_RUNTIME_COLLECT_SET_VARCHAR_AGGREGATOR_H
 #define OMNI_RUNTIME_COLLECT_SET_VARCHAR_AGGREGATOR_H
 
+#include <unordered_set>
 #include <vector>
 #include "typed_aggregator.h"
 #include "operator/hashmap/base_hash_map.h"
@@ -21,6 +22,11 @@ class CollectSetVarcharAggregator : public TypedAggregator {
 public:
     CollectSetVarcharAggregator(const DataTypes &inputTypes, const DataTypes &outputTypes,
         const std::vector<int32_t> &channels, bool inputRaw, bool outputPartial, bool isOverflowAsNull);
+    // Extended constructor for derived aggregators (e.g. CountDistinctVarcharAggregator) that reuse
+    // the set-based state machine but report a different FunctionType.
+    CollectSetVarcharAggregator(const FunctionType aggregateType, const DataTypes &inputTypes,
+        const DataTypes &outputTypes, const std::vector<int32_t> &channels, bool inputRaw,
+        bool outputPartial, bool isOverflowAsNull);
     ~CollectSetVarcharAggregator() override;
 
     void ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors, int32_t rowIndex) override;
@@ -30,6 +36,9 @@ public:
     void InitState(AggregateState *state) override;
     void InitStates(std::vector<AggregateState *> &groupStates) override;
     void DestroyState(AggregateState *state);
+    // Frees every DefaultHashMap ever allocated by this aggregator via its own
+    // address book; used by the aggregation operator after a successful spill.
+    void DestroyAllStates() override;
     std::vector<DataTypePtr> GetSpillType() override;
     size_t GetStateSize() override { return 8u; }
 
@@ -44,7 +53,9 @@ protected:
         const std::shared_ptr<NullsHelper> nullMap) override;
 
 private:
-    std::vector<int64_t> allocatedUniqueValuesAddrs_;
+    /** Addresses of DefaultHashMap allocated in InitState; freed in DestroyState,
+     * DestroyAllStates or in destructor. Hash-set for O(1) insert/erase. */
+    std::unordered_set<int64_t> allocatedUniqueValuesAddrs_;
     type::DataTypeId elementTypeId_;  // OMNI_VARCHAR, OMNI_CHAR, or OMNI_VARBINARY for output element vector
 };
 

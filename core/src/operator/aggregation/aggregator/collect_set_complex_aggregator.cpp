@@ -5,6 +5,7 @@
 #include "operator/util/function_type.h"
 #include "type/data_type.h"
 #include "vector/row_vector.h"
+#include "memory/thread_memory_manager.h"
 
 namespace omniruntime {
 namespace op {
@@ -78,7 +79,7 @@ void CollectSetComplexAggregator::InitState(AggregateState *state)
     ComplexSetState *setState = ComplexSetState::CastState(state + aggStateOffset);
     setState->setAddr = reinterpret_cast<int64_t>(new ComplexSetType(
         ComplexSliceSetComparator(targetColTypeId_, targetColDataType_.get())));
-    allocatedSetAddrs_.push_back(setState->setAddr);
+    allocatedSetAddrs_.insert(setState->setAddr);
 }
 
 void CollectSetComplexAggregator::InitStates(std::vector<AggregateState *> &groupStates)
@@ -103,10 +104,25 @@ void CollectSetComplexAggregator::DestroyState(AggregateState *state)
     }
     delete set;
     setState->setAddr = 0;
-    auto it = std::find(allocatedSetAddrs_.begin(), allocatedSetAddrs_.end(), addr);
-    if (it != allocatedSetAddrs_.end()) {
-        allocatedSetAddrs_.erase(it);
+    // Hash-set erase by key: O(1) average, keeps bulk destruction linear in the
+    // number of groups (std::find + erase(it) would be O(n) per state).
+    allocatedSetAddrs_.erase(addr);
+}
+
+void CollectSetComplexAggregator::DestroyAllStates()
+{
+    for (int64_t addr : allocatedSetAddrs_) {
+        ComplexSetType *set = reinterpret_cast<ComplexSetType *>(addr);
+        if (set != nullptr) {
+            for (BaseVector *p : *set) {
+                if (p != nullptr) {
+                    ReleaseComplexSliceCopy(p, targetColTypeId_);
+                }
+            }
+            delete set;
+        }
     }
+    allocatedSetAddrs_.clear();
 }
 
 // Add slice to std::set (deduplication via set ordering). Always copy and insert;

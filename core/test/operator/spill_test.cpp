@@ -16,6 +16,13 @@ using namespace omniruntime::vec;
 using namespace omniruntime::type;
 
 namespace omniruntime::SpillTest {
+static uint64_t ScalarBatchSize(int32_t rowCount)
+{
+    // row count + one null bitmap and values for int/long/short.
+    return sizeof(int32_t) + 3 * BitUtil::Nbytes(rowCount) +
+        rowCount * (sizeof(int32_t) + sizeof(int64_t) + sizeof(int16_t));
+}
+
 TEST(SpillTest, TestWriteRead)
 {
     const int32_t dataSize = 5;
@@ -32,8 +39,8 @@ TEST(SpillTest, TestWriteRead)
     ChildSpillTracker spillTracker(&(GetRootSpillTracker()), UINT64_MAX);
 
     SpillWriter writer(sourceTypes, path);
-    writer.WriteVecBatch(vecBatch, 100);
-    writer.Close();
+    ASSERT_EQ(writer.WriteVecBatch(vecBatch, ScalarBatchSize(dataSize)), ErrorCode::SUCCESS);
+    ASSERT_EQ(writer.Close(), ErrorCode::SUCCESS);
     VectorHelper::FreeVecBatch(vecBatch);
 
     auto spillFile = writer.GetSpillFileInfo();
@@ -105,8 +112,8 @@ TEST(SpillTest, TestWriteReadWithCompress)
     ChildSpillTracker spillTracker(&(GetRootSpillTracker()), UINT64_MAX);
 
     SpillWriter writer(sourceTypes, path, 0, true);
-    writer.WriteVecBatch(vecBatch, 100);
-    writer.Close();
+    ASSERT_EQ(writer.WriteVecBatch(vecBatch, ScalarBatchSize(dataSize)), ErrorCode::SUCCESS);
+    ASSERT_EQ(writer.Close(), ErrorCode::SUCCESS);
     VectorHelper::FreeVecBatch(vecBatch);
 
     auto spillFile = writer.GetSpillFileInfo();
@@ -122,6 +129,78 @@ TEST(SpillTest, TestWriteReadWithCompress)
     ASSERT_TRUE(isEnd);
     outputVecBatch = nullptr;
 
+    rmdir(path.c_str());
+}
+
+TEST(SpillTest, TestArrayBatchSizeAndReaderReuse)
+{
+    auto arrayType = std::make_shared<ArrayType>(IntType());
+    DataTypes sourceTypes(std::vector<DataTypePtr>({arrayType}));
+    std::string path = TestUtil::GenerateSpillPath();
+    mkdir(path.c_str(), 0750);
+
+    // Keep the buffer smaller than the two batches combined so the first run
+    // is flushed before the second one. This exercises both buffered and
+    // direct spill-format paths.
+    SpillWriter writer(sourceTypes, path, 64);
+
+    auto firstElements = std::shared_ptr<BaseVector>(new Vector<int32_t>(3));
+    auto *firstElementVector = static_cast<Vector<int32_t> *>(firstElements.get());
+    firstElementVector->SetValue(0, 10);
+    firstElementVector->SetValue(1, 20);
+    firstElementVector->SetValue(2, 30);
+    auto *firstArray = new ArrayVector(2, firstElements);
+    firstArray->SetOffset(0, 0);
+    firstArray->SetOffset(1, 2);
+    firstArray->SetOffset(2, 3);
+    auto *firstBatch = new VectorBatch(2);
+    firstBatch->Append(firstArray);
+
+    auto secondElements = std::shared_ptr<BaseVector>(new Vector<int32_t>(1));
+    static_cast<Vector<int32_t> *>(secondElements.get())->SetValue(0, 40);
+    auto *secondArray = new ArrayVector(1, secondElements);
+    secondArray->SetOffset(0, 0);
+    secondArray->SetOffset(1, 1);
+    auto *secondBatch = new VectorBatch(1);
+    secondBatch->Append(secondArray);
+
+    // array batch size = row count + nulls + offsets + child nulls + values.
+    constexpr uint64_t firstSize = sizeof(int32_t) + BitUtil::Nbytes(2) + 3 * sizeof(int64_t) +
+        BitUtil::Nbytes(3) + 3 * sizeof(int32_t);
+    constexpr uint64_t secondSize = sizeof(int32_t) + BitUtil::Nbytes(1) + 2 * sizeof(int64_t) +
+        BitUtil::Nbytes(1) + sizeof(int32_t);
+    ASSERT_EQ(writer.WriteVecBatch(firstBatch, firstSize), ErrorCode::SUCCESS);
+    ASSERT_EQ(writer.WriteVecBatch(secondBatch, secondSize), ErrorCode::SUCCESS);
+    ASSERT_EQ(writer.Close(), ErrorCode::SUCCESS);
+    delete firstBatch;
+    delete secondBatch;
+
+    auto spillFile = writer.GetSpillFileInfo();
+    SpillReader reader(sourceTypes, spillFile.filePath, spillFile.fileLength, spillFile.totalRowCount, false);
+    std::unique_ptr<VectorBatch> output;
+    bool isEnd = false;
+    ASSERT_EQ(reader.ReadVecBatch(output, isEnd), ErrorCode::SUCCESS);
+    ASSERT_FALSE(isEnd);
+    ASSERT_EQ(output->GetRowCount(), 2);
+    auto *firstOutput = static_cast<ArrayVector *>(output->Get(0));
+    ASSERT_EQ(firstOutput->GetOffset(0), 0);
+    ASSERT_EQ(firstOutput->GetOffset(1), 2);
+    ASSERT_EQ(firstOutput->GetOffset(2), 3);
+    auto *firstOutputElements = static_cast<Vector<int32_t> *>(firstOutput->GetElementVector().get());
+    ASSERT_EQ(firstOutputElements->GetValue(0), 10);
+    ASSERT_EQ(firstOutputElements->GetValue(2), 30);
+
+    ASSERT_EQ(reader.ReadVecBatch(output, isEnd), ErrorCode::SUCCESS);
+    ASSERT_FALSE(isEnd);
+    ASSERT_EQ(output->GetRowCount(), 1);
+    auto *secondOutput = static_cast<ArrayVector *>(output->Get(0));
+    ASSERT_EQ(secondOutput->GetOffset(0), 0);
+    ASSERT_EQ(secondOutput->GetOffset(1), 1);
+    auto *secondOutputElements = static_cast<Vector<int32_t> *>(secondOutput->GetElementVector().get());
+    ASSERT_EQ(secondOutputElements->GetValue(0), 40);
+
+    ASSERT_EQ(reader.ReadVecBatch(output, isEnd), ErrorCode::SUCCESS);
+    ASSERT_TRUE(isEnd);
     rmdir(path.c_str());
 }
 }

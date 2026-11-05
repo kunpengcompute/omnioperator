@@ -169,6 +169,19 @@ private:
 
     VectorBatch *GetOutputFromDiskWithAgg(VectorBatch *output);
 
+    /// Frees heap states owned by all aggregators (e.g. the distinct set of
+    /// CountDistinct/CollectSet) after they have been persisted by a successful
+    /// spill. Must be called after SpillHashMap() succeeded and before the
+    /// state buffers (arena / hash tables) are reset; otherwise each spill round
+    /// leaks the spilled groups' sets and memory keeps growing.
+    void DestroyActiveAggStates();
+
+    /// Frees the heap states of the previous unspill output batch that live in
+    /// the reused groupStates buffer. groupStates is allocated once and each
+    /// output batch re-initializes the same slots; without this the final
+    /// output phase leaks one batch worth of sets per call.
+    void DestroyUnspillBatchStates();
+
     void SetStateOutputVecBatch(VectorBatch *outputVecBatch, int32_t rowCount, int32_t groupColNum, int32_t aggNum);
 
     void CalcAndSetStatesSize();
@@ -215,6 +228,10 @@ private:
     uint64_t spillTotalRowCount = 0;
     uint64_t spillRowOffset = 0;
     std::unique_ptr<AggregateState[]> groupStates = nullptr;
+    // Number of group slots of the groupStates buffer actually initialized by
+    // the previous GetOutputFromDiskWithAgg batch; destroyed lazily at the start
+    // of the next batch. -1 marks "not used yet" (buffer fresh).
+    int32_t unspillBatchStatesInUse_ = -1;
     std::vector<AggregateState *> rowStates;
     uint64_t spilledBytes = 0;
     uint64_t usedMemBytes = 0;

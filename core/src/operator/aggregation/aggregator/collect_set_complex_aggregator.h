@@ -5,6 +5,7 @@
 #ifndef OMNI_RUNTIME_COLLECT_SET_COMPLEX_AGGREGATOR_H
 #define OMNI_RUNTIME_COLLECT_SET_COMPLEX_AGGREGATOR_H
 
+#include <unordered_set>
 #include "typed_aggregator.h"
 #include "complex_aggregator_util.h"
 #include "vector/array_vector.h"
@@ -38,6 +39,9 @@ public:
     void InitState(AggregateState *state) override;
     void InitStates(std::vector<AggregateState *> &groupStates) override;
     void DestroyState(AggregateState *state) override;
+    // Frees every ComplexSetType allocated by this aggregator; called by the
+    // aggregation operator after a successful spill.
+    void DestroyAllStates() override;
     std::vector<DataTypePtr> GetSpillType() override;
     size_t GetStateSize() override { return 8u; }
     void ProcessGroupUnspill(std::vector<UnspillRowInfo> &unspillRows, int32_t rowCount, int32_t &vectorIndex) override;
@@ -61,7 +65,7 @@ protected:
 private:
     type::DataTypeId targetColTypeId_;
     type::DataTypePtr targetColDataType_;
-    std::vector<int64_t> allocatedSetAddrs_;
+    std::unordered_set<int64_t> allocatedSetAddrs_;
 };
 
 }  // namespace op

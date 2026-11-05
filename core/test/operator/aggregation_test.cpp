@@ -5790,6 +5790,82 @@ TEST(HashAggregationOperatorTest, test_hashagg_groupbysingle_spill)
     VectorHelper::FreeVecBatch(expectVecBatch1);
 }
 
+// Array hash path + COUNT DISTINCT spill. Regression test for the issue where the
+// array hash path returned before the NeedSpill() check, so low-cardinality int
+// group keys never spilled and per-group distinct sets grew unbounded (OOM with
+// large input). Spills on every input (elements threshold 2, two groups), forcing
+// the arrayTable -> fixed hash map migration inside SpillHashMap and the disk
+// merge path in GetOutput. Complete mode: input raw int, output int64 count.
+TEST(HashAggregationOperatorTest, test_hashagg_arrayhash_countdistinct_spill)
+{
+    auto prevRule = ConfigUtil::GetAggHashTableRule();
+    ConfigUtil::SetAggHashTableRule(AggHashTableRule::ARRAY);
+
+    // 3 batches over 3 groups; distinct sets per group: {10,20,30,40}/{10,20}/{30,50}
+    int32_t groupKeys0[] = {1, 1, 2};
+    int64_t values0[] = {10, 20, 10};
+    int32_t groupKeys1[] = {2, 1, 3};
+    int64_t values1[] = {20, 30, 30};
+    int32_t groupKeys2[] = {1, 2, 3};
+    int64_t values2[] = {40, 20, 50};
+    DataTypes dataTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
+    VectorBatch *vecBatch0 = CreateVectorBatch(dataTypes, 3, groupKeys0, values0);
+    VectorBatch *vecBatch1 = CreateVectorBatch(dataTypes, 3, groupKeys1, values1);
+    VectorBatch *vecBatch2 = CreateVectorBatch(dataTypes, 3, groupKeys2, values2);
+
+    std::vector<uint32_t> groupByCol({0});
+    DataTypes groupInputTypes(std::vector<DataTypePtr>({IntType()}));
+    std::vector<uint32_t> aggInputCols({1});
+    auto aggInputColsWrap = AggregatorUtil::WrapWithVector(aggInputCols);
+    DataTypes aggInputTypes(std::vector<DataTypePtr>({LongType()}));
+    auto aggInputTypesWrap = AggregatorUtil::WrapWithVector(aggInputTypes);
+    DataTypes aggOutputTypes(std::vector<DataTypePtr>({LongType()}));
+    auto aggOutputTypesWrap = AggregatorUtil::WrapWithVector(aggOutputTypes);
+    std::vector<uint32_t> aggFuncTypes = {OMNI_AGGREGATION_TYPE_COUNT_DISTINCT};
+    std::vector<uint32_t> maskColsVector = {static_cast<uint32_t>(-1)};
+    auto inputRaws = std::vector<bool>(aggFuncTypes.size(), true);
+    auto outputPartials = std::vector<bool>(aggFuncTypes.size(), false);
+    // Spill once 2 groups exist, so every AddInput below goes through the spill
+    // path (first one via arrayTable migration, later ones via the input spill).
+    SparkSpillConfig spillConfig(GenerateSpillPath(), 2);
+    OperatorConfig operatorConfig(spillConfig);
+    auto hashAggOperatorFactory = new HashAggregationOperatorFactory(groupByCol, groupInputTypes, aggInputColsWrap,
+                                                                     aggInputTypesWrap, aggOutputTypesWrap, aggFuncTypes, maskColsVector, inputRaws, outputPartials, operatorConfig);
+    hashAggOperatorFactory->Init();
+    auto *hashAggOperator = static_cast<HashAggregationOperator *>(hashAggOperatorFactory->CreateOperator());
+
+    hashAggOperator->AddInput(vecBatch0);
+    hashAggOperator->AddInput(vecBatch1);
+    hashAggOperator->AddInput(vecBatch2);
+    std::vector<VectorBatch *> result;
+    while (hashAggOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+        VectorBatch *outputVecBatch = nullptr;
+        hashAggOperator->GetOutput(&outputVecBatch);
+        result.emplace_back(outputVecBatch);
+    }
+
+    // Spill must have actually happened on the array hash path.
+    EXPECT_GT(hashAggOperator->GetSpilledBytes(), 0);
+
+    int32_t expectData1[] = {1, 2, 3};
+    int64_t expectData2[] = {4, 2, 2};
+    DataTypes expectTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
+    VectorBatch *expectVecBatch = CreateVectorBatch(expectTypes, 3, expectData1, expectData2);
+
+    EXPECT_EQ(1, result.size());
+    EXPECT_TRUE(VecBatchMatchIgnoreOrder(result[0], expectVecBatch));
+
+    omniruntime::op::Operator::DeleteOperator(hashAggOperator);
+    delete hashAggOperatorFactory;
+    VectorHelper::FreeVecBatches(result);
+    VectorHelper::FreeVecBatch(expectVecBatch);
+    VectorHelper::FreeVecBatch(vecBatch0);
+    VectorHelper::FreeVecBatch(vecBatch1);
+    VectorHelper::FreeVecBatch(vecBatch2);
+
+    ConfigUtil::SetAggHashTableRule(prevRule);
+}
+
 TEST(HashAggregationOperatorTest, test_step) {
         std::vector<uint32_t> groupByCol({0});
         DataTypes groupInputTypes(std::vector<DataTypePtr>({LongType()}));

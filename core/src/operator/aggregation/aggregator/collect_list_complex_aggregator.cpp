@@ -6,6 +6,7 @@
 #include "type/data_type.h"
 #include "vector/map_vector.h"
 #include "vector/row_vector.h"
+#include "memory/thread_memory_manager.h"
 
 namespace omniruntime {
 namespace op {
@@ -70,7 +71,7 @@ void CollectListComplexAggregator::InitState(AggregateState *state)
 {
     ComplexListState *listState = ComplexListState::CastState(state + aggStateOffset);
     listState->listAddr = reinterpret_cast<int64_t>(new ComplexListType());
-    allocatedListAddrs_.push_back(listState->listAddr);
+    allocatedListAddrs_.insert(listState->listAddr);
 }
 
 void CollectListComplexAggregator::InitStates(std::vector<AggregateState *> &groupStates)
@@ -95,10 +96,23 @@ void CollectListComplexAggregator::DestroyState(AggregateState *state)
     }
     delete list;
     listState->listAddr = 0;
-    auto it = std::find(allocatedListAddrs_.begin(), allocatedListAddrs_.end(), addr);
-    if (it != allocatedListAddrs_.end()) {
-        allocatedListAddrs_.erase(it);
+    allocatedListAddrs_.erase(addr);
+}
+
+void CollectListComplexAggregator::DestroyAllStates()
+{
+    for (int64_t addr : allocatedListAddrs_) {
+        ComplexListType *list = reinterpret_cast<ComplexListType *>(addr);
+        if (list != nullptr) {
+            for (BaseVector *p : *list) {
+                if (p != nullptr) {
+                    ReleaseComplexSliceCopy(p, targetColTypeId_);
+                }
+            }
+            delete list;
+        }
     }
+    allocatedListAddrs_.clear();
 }
 
 // Append one complex slice (from input row) to the group's list.

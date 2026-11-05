@@ -603,16 +603,19 @@ public:
         }
 
         int index = 0;
-        while (remainNum) {
+        while (remainNum && index < capacity) {
             __builtin_prefetch(identifiers + index + 1, 0, 3);
             __builtin_prefetch(slots + index + 1, 0, 3);
-            while (IsEmptyOrDeleted(*(identifiers + index))) {
+            while (index < capacity && IsEmptyOrDeleted(*(identifiers + index))) {
                 // ctrl is not necessarily aligned to Group::kWidth. It is also likely
                 // to read past the space for ctrl bytes and into slots. This is ok
                 // because ctrl has sizeof() == 1 and slot has sizeof() >= 1 so there
                 // is no way to read outside the combined slot array.
                 size_t shift = CountLeadingValue<ctrl_t, Group::kWidth>(kEmpty, identifiers + index);
                 index += shift;
+            }
+            if (index >= capacity) {
+                break;
             }
             auto &slot = slots[index];
             func(slot.GetKey(), slot.GetValue());
@@ -631,16 +634,19 @@ public:
         }
 
         int index = 0;
-        while (remainNum) {
+        while (remainNum && index < capacity) {
             __builtin_prefetch(identifiers + index + 1, 0, 3);
             __builtin_prefetch(slots + index + 1, 0, 3);
-            while (IsEmptyOrDeleted(*(identifiers + index))) {
+            while (index < capacity && IsEmptyOrDeleted(*(identifiers + index))) {
                 // ctrl is not necessarily aligned to Group::kWidth. It is also likely
                 // to read past the space for ctrl bytes and into slots. This is ok
                 // because ctrl has sizeof() == 1 and slot has sizeof() >= 1 so there
                 // is no way to read outside the combined slot array.
                 size_t shift = CountLeadingValue<ctrl_t, Group::kWidth>(kEmpty, identifiers + index);
                 index += shift;
+            }
+            if (index >= capacity) {
+                break;
             }
             auto &slot = slots[index];
             func(slot.GetKey(), slot.GetValue());
@@ -661,13 +667,16 @@ public:
         while (remainNum && index < capacity) {
             __builtin_prefetch(identifiers + index + 1, 0, 3);
             __builtin_prefetch(slots + index + 1, 0, 3);
-            while (IsEmptyOrDeleted(*(identifiers + index))) {
+            while (index < capacity && IsEmptyOrDeleted(*(identifiers + index))) {
                 // ctrl is not necessarily aligned to Group::kWidth. It is also likely
                 // to read past the space for ctrl bytes and into slots. This is ok
                 // because ctrl has sizeof() == 1 and slot has sizeof() >= 1 so there
                 // is no way to read outside the combined slot array.
                 size_t shift = CountLeadingValue<ctrl_t, Group::kWidth>(kEmpty, identifiers + index);
                 index += shift;
+            }
+            if (index >= capacity) {
+                break;
             }
             auto &slot = slots[index];
             func(slot.GetValue(), index);
@@ -823,16 +832,19 @@ private:
         InitSlots(reHashSize);
         int remainNum = oldElements - (HasNullCell() ? 1 : 0);
         int index = 0;
-        while (remainNum != 0) {
+        while (remainNum != 0 && index < oldCapacity) {
             __builtin_prefetch(identifiers + index + 1, 0, 3);
             __builtin_prefetch(oldSlots + index + 1, 0, 3);
-            while (IsEmptyOrDeleted(*(oldIdentifiers + index))) {
+            while (index < oldCapacity && IsEmptyOrDeleted(*(oldIdentifiers + index))) {
                 // ctrl is not necessarily aligned to Group::kWidth. It is also likely
                 // to read past the space for ctrl bytes and into slots. This is ok
                 // because ctrl has sizeof() == 1 and slot has sizeof() >= 1 so there
                 // is no way to read outside the combined slot array.
                 size_t shift = CountLeadingValue<ctrl_t, Group::kWidth>(kEmpty, oldIdentifiers + index);
                 index += shift;
+            }
+            if (index >= oldCapacity) {
+                break;
             }
             Reinsert(std::move(oldSlots[index]));
             --remainNum;
@@ -845,7 +857,11 @@ private:
 
     bool NeedRehash()
     {
-        return elementsSize > grower.GetThreshHold();
+        // Emplace checks this before inserting.  With a strict '>' check the
+        // element that reaches the threshold is inserted into the table first;
+        // for a 16-slot table this permits a full SIMD control group and can
+        // make probing wrap over the end of the control array.
+        return elementsSize >= grower.GetThreshHold();
     }
 
     static bool IsEmptyOrDeleted(ctrl_t c)
@@ -863,10 +879,25 @@ private:
     {
         auto seq = Probe<Group::kWidth>(hashValue);
         auto hashValueH2 = static_cast<ctrl_t>(H2(hashValue));
+        // SIMD matching operates on a contiguous group of 16 control bytes.
+        // The control array has a sentinel tail, but it does not mirror the
+        // beginning of the table.  A probe group starting near the end must
+        // therefore be materialised with modulo addressing; otherwise the
+        // SIMD result can refer to the wrong slot after wrap-around (notably
+        // when capacity == Group::kWidth, as used by count-distinct states).
+        alignas(Group::kWidth) ctrl_t wrappedGroup[Group::kWidth];
         __builtin_prefetch(identifiers + seq.GetOffset(), 0, 3);
-        while (identifiers[seq.GetOffset()] != kEmpty) {
-            __builtin_prefetch(identifiers + seq.GetOffset() + Group::kWidth, 0, 3);
-            auto maskIter = FindMatchNibbles<ctrl_t, Group::kWidth>(static_cast<ctrl_t>(hashValueH2), identifiers + seq.GetOffset());
+        while (true) {
+            const size_t offset = seq.GetOffset();
+            const ctrl_t *controlGroup = identifiers + offset;
+            if (offset + Group::kWidth > capacity) {
+                for (size_t i = 0; i < Group::kWidth; ++i) {
+                    wrappedGroup[i] = identifiers[(offset + i) & (capacity - 1)];
+                }
+                controlGroup = wrappedGroup;
+            }
+            __builtin_prefetch(identifiers + offset + Group::kWidth, 0, 3);
+            auto maskIter = FindMatchNibbles<ctrl_t, Group::kWidth>(static_cast<ctrl_t>(hashValueH2), controlGroup);
             // Traverse all the keys which match the low 7 bit hash
             while (maskIter.HasNext()) {
                 auto v = maskIter.Next();
@@ -875,18 +906,30 @@ private:
                 }
             }
 
-            auto firstIndex = FindFirstNibbles<ctrl_t, Group::kWidth>(kEmpty, identifiers + seq.GetOffset());
+            auto firstIndex = FindFirstNibbles<ctrl_t, Group::kWidth>(kEmpty, controlGroup);
             if (firstIndex != -1) {
                 inserted = true;
                 return seq.GetOffset(firstIndex);
             }
             seq.GetNext();
-            if (seq.GetIndex() > capacity) {
+            if (seq.GetIndex() >= capacity) {
                 break;
             }
         }
+
+        // The load-factor check should make this path unreachable.  Keep a
+        // bounded scalar fallback so a malformed/full table cannot return a
+        // position that overwrites an existing key or walk past the table.
+        const size_t start = seq.GetOffset();
+        for (size_t i = 0; i < capacity; ++i) {
+            const size_t pos = (start + i) & (capacity - 1);
+            if (identifiers[pos] == kEmpty) {
+                inserted = true;
+                return pos;
+            }
+        }
         inserted = true;
-        return seq.GetOffset();
+        return start;
     }
 
     // update newIsAssigned when rehash

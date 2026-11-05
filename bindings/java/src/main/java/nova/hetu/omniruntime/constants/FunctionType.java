@@ -75,6 +75,7 @@ public class FunctionType extends Constant {
     public static final FunctionType OMNI_WINDOW_TYPE_DENSE_RANK = next();
     public static final FunctionType OMNI_AGGREGATION_TYPE_REGR_AVGX = next();
     public static final FunctionType OMNI_AGGREGATION_TYPE_REGR_AVGY = next();
+    public static final FunctionType OMNI_AGGREGATION_TYPE_COUNT_DISTINCT = next();
 
     public FunctionType(int value) {
         super(value);

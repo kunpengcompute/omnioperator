@@ -7,6 +7,7 @@
 #define OMNI_RUNTIME_COLLECT_LIST_AGGREGATOR_H
 
 #include <fmt/format.h>
+#include <unordered_set>
 #include <vector>
 #include "typed_aggregator.h"
 
@@ -115,6 +116,9 @@ public:
     void InitStates(std::vector<AggregateState *> &groupStates) override;
     // Frees the std::vector<T> in state. Call before freeing state buffer to avoid leak.
     void DestroyState(AggregateState *state);
+    // Frees every std::vector<T> ever allocated by this aggregator via its own
+    // address book; used by the aggregation operator after a successful spill.
+    void DestroyAllStates() override;
     std::vector<DataTypePtr> GetSpillType() override;
 
     // Fixed 8 bytes so that collect_list(col_a) and collect_list(col_b) with different element types
@@ -150,8 +154,9 @@ public:
     void ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector, const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter) override;
 
 protected:
-    /** Addresses of std::vector<T> allocated in InitState; freed in DestroyState or in destructor. */
-    std::vector<int64_t> allocatedListAddrs_;
+    /** Addresses of std::vector<T> allocated in InitState; freed in DestroyState,
+     * DestroyAllStates or in destructor. Hash-set for O(1) insert/erase. */
+    std::unordered_set<int64_t> allocatedListAddrs_;
 
     void ProcessSingleInternal(AggregateState *state, BaseVector *vector, const int32_t rowOffset, const int32_t rowCount, const std::shared_ptr<NullsHelper> nullMap) override;
     void ProcessGroupInternal(std::vector<AggregateState *> &rowStates, BaseVector *vector, const int32_t rowOffset, const std::shared_ptr<NullsHelper> nullMap) override;

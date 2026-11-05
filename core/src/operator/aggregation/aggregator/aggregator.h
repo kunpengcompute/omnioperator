@@ -256,6 +256,12 @@ public:
     // Optional: free state-owned resources before state buffer is freed. Default no-op; overridden by collect_set/collect_list style aggregators.
     virtual void DestroyState(AggregateState *state) {}
 
+    // Optional: free ALL heap states this aggregator allocated, via its own address
+    // book, independent of any hash-table traversal. Called by the aggregation operator
+    // after a successful spill (states are already persisted to disk) so that memory drops
+    // before new groups are created. Aggregators without heap states keep the default no-op.
+    virtual void DestroyAllStates() {}
+
     // set result to output vector
     virtual void ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors,
         const int32_t rowIndex) = 0;
