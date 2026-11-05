@@ -3968,4 +3968,244 @@ TEST(NativeOmniSortTest, TestSortWithConstVectorVarchar)
     DeleteSortOperatorFactory(operatorFactory);
 }
 
+// ============================================================
+// Double/float epsilon comparison regression tests
+// Fix: DoubleEqual/FloatEqual previously used absolute + relative
+// epsilon, treating 1-ULP-apart doubles as "equal". Now uses exact
+// comparison (left == right), matching Spark/Velox semantics.
+// ============================================================
+
+TEST(NativeOmniSortTest, TestSortDoubleNearEqualAsc)
+{
+    // 3.0 and 3.0000000000000004 are 1 ULP apart (diff ≈ 4.44e-16).
+    // Before fix: relative epsilon treats them as "equal" → input order kept.
+    // After fix: exact comparison orders them correctly.
+    const int32_t dataSize = 4;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+    double inputData[dataSize] = {3.0000000000000004, 3.0, 1.0, 2.0};
+    int32_t inputId[dataSize] = {1, 2, 3, 4};
+    auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, inputData, inputId);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    sortOperator->AddInput(vecBatch);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC: 1.0 < 2.0 < 3.0 < 3.0000000000000004 (exact comparison)
+    double expectedData[dataSize] = {1.0, 2.0, 3.0, 3.0000000000000004};
+    int32_t expectedId[dataSize] = {3, 4, 2, 1}; // id follows the sorted values
+    auto expectVecBatch = CreateVectorBatch(sourceTypes, dataSize, expectedData, expectedId);
+    EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    VectorHelper::FreeVecBatch(expectVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortDoubleNearEqualDesc)
+{
+    const int32_t dataSize = 4;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+    double inputData[dataSize] = {3.0, 3.0000000000000004, 1.0, 2.0};
+    int32_t inputId[dataSize] = {1, 2, 3, 4};
+    auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, inputData, inputId);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {0}; // DESC
+    int nullFirsts[] = {0};
+
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    sortOperator->AddInput(vecBatch);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // DESC: 3.0000000000000004 > 3.0 > 2.0 > 1.0
+    double expectedData[dataSize] = {3.0000000000000004, 3.0, 2.0, 1.0};
+    int32_t expectedId[dataSize] = {2, 1, 4, 3};
+    auto expectVecBatch = CreateVectorBatch(sourceTypes, dataSize, expectedData, expectedId);
+    EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    VectorHelper::FreeVecBatch(expectVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortDoubleNearEqualMultiKey)
+{
+    // Multi-key sort: the first key (d) should determine the order,
+    // not the second key (id). Before fix, epsilon-equal values let the
+    // second key decide, producing wrong output.
+    const int32_t dataSize = 4;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+    // id=1 has the larger d value; if epsilon-equal, id would put it first
+    double inputData[dataSize] = {3.0000000000000004, 3.0, 1.0, 2.0};
+    int32_t inputId[dataSize] = {1, 2, 3, 4};
+    auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, inputData, inputId);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0}; // sort by d only; id is just an output column
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    sortOperator->AddInput(vecBatch);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC by exact value: 1.0 < 2.0 < 3.0 < 3.0000000000000004
+    // (not id-ordered: id=1 with 3.0000000000000004 must come last)
+    double expectedData[dataSize] = {1.0, 2.0, 3.0, 3.0000000000000004};
+    int32_t expectedId[dataSize] = {3, 4, 2, 1};
+    auto expectVecBatch = CreateVectorBatch(sourceTypes, dataSize, expectedData, expectedId);
+    EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    VectorHelper::FreeVecBatch(expectVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortDoubleNearEqualLargeValue)
+{
+    // 1e300 and the next double after it differ by ~1 ULP ≈ 1.5e284.
+    // Before fix: relative epsilon threshold = 1e300 * 2.22e-16 ≈ 2.22e284,
+    // so 1-ULP-apart values were "equal" (1.5e284 < 2.22e284).
+    // After fix: exact comparison distinguishes them.
+    const double large = 1e300;
+    const double next = std::nextafter(large, std::numeric_limits<double>::infinity());
+    ASSERT_TRUE(large < next); // verify they are distinct doubles
+    ASSERT_TRUE(std::fabs(next - large) < large * std::numeric_limits<double>::epsilon());
+
+    const int32_t dataSize = 4;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+    double inputData[dataSize] = {next, large, 1.0, 2.0};
+    int32_t inputId[dataSize] = {1, 2, 3, 4};
+    auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, inputData, inputId);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    sortOperator->AddInput(vecBatch);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC: 1.0 < 2.0 < large < next
+    double expectedData[dataSize] = {1.0, 2.0, large, next};
+    int32_t expectedId[dataSize] = {3, 4, 2, 1};
+    auto expectVecBatch = CreateVectorBatch(sourceTypes, dataSize, expectedData, expectedId);
+    EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    VectorHelper::FreeVecBatch(expectVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortFloatNearEqualAsc)
+{
+    // Float version: 3.0f and the next float after it (1 ULP ≈ 2.38e-7).
+    const float base = 3.0f;
+    const float next = std::nextafter(base, std::numeric_limits<float>::infinity());
+    ASSERT_TRUE(base < next);
+
+    const int32_t dataSize = 4;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ FloatType(), IntType() }));
+    float inputData[dataSize] = {next, base, 1.0f, 2.0f};
+    int32_t inputId[dataSize] = {1, 2, 3, 4};
+    auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, inputData, inputId);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    sortOperator->AddInput(vecBatch);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC: 1.0 < 2.0 < 3.0 < next
+    float expectedData[dataSize] = {1.0f, 2.0f, base, next};
+    int32_t expectedId[dataSize] = {3, 4, 2, 1};
+    auto expectVecBatch = CreateVectorBatch(sourceTypes, dataSize, expectedData, expectedId);
+    EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    VectorHelper::FreeVecBatch(expectVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, TestSortDoubleNearEqualWithSpill)
+{
+    // Spill merge path: CompareFlatTemplate already uses exact comparison,
+    // but the in-memory sort in each run used epsilon. Verify the full
+    // pipeline produces correct order.
+    const int32_t batchSize = 2;
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ DoubleType(), IntType() }));
+
+    double data1[batchSize] = {3.0000000000000004, 1.0};
+    int32_t id1[batchSize] = {1, 2};
+    auto batch1 = CreateVectorBatch(sourceTypes, batchSize, data1, id1);
+
+    double data2[batchSize] = {3.0, 2.0};
+    int32_t id2[batchSize] = {3, 4};
+    auto batch2 = CreateVectorBatch(sourceTypes, batchSize, data2, id2);
+
+    int outputCols[] = {0, 1};
+    int sortCols[] = {0};
+    int ascendings[] = {1};
+    int nullFirsts[] = {0};
+
+    SparkSpillConfig spillConfig(GenerateSpillPath(), MAX_SPILL_BYTES, 1);
+    OperatorConfig operatorConfig(spillConfig);
+    auto operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(
+        sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1, operatorConfig);
+    auto sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+
+    sortOperator->AddInput(batch1);
+    sortOperator->AddInput(batch2);
+    sortOperator->noMoreInput();
+    VectorBatch *outputVecBatch = nullptr;
+    sortOperator->GetOutput(&outputVecBatch);
+
+    // ASC: 1.0 < 2.0 < 3.0 < 3.0000000000000004
+    const int32_t totalSize = 4;
+    double expectedData[totalSize] = {1.0, 2.0, 3.0, 3.0000000000000004};
+    int32_t expectedId[totalSize] = {2, 4, 3, 1};
+    auto expectVecBatch = CreateVectorBatch(sourceTypes, totalSize, expectedData, expectedId);
+    EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
+
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    VectorHelper::FreeVecBatch(expectVecBatch);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+}
+
 } // namespace SortTest
