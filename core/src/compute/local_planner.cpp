@@ -83,7 +83,8 @@ bool AreJoinSpillKeysSupported(const std::shared_ptr<const HashJoinNode> &joinNo
             }
             const auto id = key->GetReturnTypeId();
             if (id != omniruntime::type::OMNI_INT && id != omniruntime::type::OMNI_LONG &&
-                id != omniruntime::type::OMNI_DATE32 && id != omniruntime::type::OMNI_VARCHAR) {
+                id != omniruntime::type::OMNI_DATE32 && id != omniruntime::type::OMNI_VARCHAR &&
+                id != omniruntime::type::OMNI_BOOLEAN) {
                 return false;
             }
         }
@@ -94,11 +95,16 @@ bool AreJoinSpillKeysSupported(const std::shared_ptr<const HashJoinNode> &joinNo
 
 bool IsJoinSpillSupported(const std::shared_ptr<const HashJoinNode> &joinNode)
 {
+    if (joinNode->IsNullAware()) {
+        return false;
+    }
+    const bool probeOnlyBuildRight =
+        (joinNode->IsLeftSemi() || joinNode->IsLeftAnti() || joinNode->IsExistence()) && joinNode->IsBuildRight();
     const bool joinTypeSupported = joinNode->IsInnerJoin() || joinNode->IsFullJoin() ||
         (joinNode->IsLeftJoin() && joinNode->IsBuildRight()) ||
         (joinNode->IsRightJoin() && joinNode->IsBuildLeft()) ||
         (joinNode->IsLeftJoin() && joinNode->IsBuildLeft()) ||
-        (joinNode->IsRightJoin() && joinNode->IsBuildRight());
+        (joinNode->IsRightJoin() && joinNode->IsBuildRight()) || probeOnlyBuildRight;
     if (!joinTypeSupported) {
         return false;
     }

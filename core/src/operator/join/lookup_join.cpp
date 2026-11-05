@@ -684,9 +684,11 @@ bool LookupJoinOperator::TrySpillPathAProbeInput(omniruntime::vec::VectorBatch *
     for (size_t row = 0; row < buckets.size(); ++row) {
         positions[buckets[row]].push_back(static_cast<int32_t>(row));
     }
-    const bool oppositeOuter = (joinType == OMNI_JOIN_TYPE_LEFT && buildSide == OMNI_BUILD_RIGHT) ||
+    // Unspilled buckets are probed now. LeftAnti emits the unmatched probe row.
+    // LeftSemi drops it, the same as Inner. Existence emits it with exists=false.
+    const bool emitUnmatchedProbe = (joinType == OMNI_JOIN_TYPE_LEFT && buildSide == OMNI_BUILD_RIGHT) ||
         (joinType == OMNI_JOIN_TYPE_RIGHT && buildSide == OMNI_BUILD_LEFT) ||
-        joinType == OMNI_JOIN_TYPE_FULL;
+        joinType == OMNI_JOIN_TYPE_FULL || joinType == OMNI_JOIN_TYPE_LEFT_ANTI;
     for (uint32_t subPartition = 0; subPartition < positions.size(); ++subPartition) {
         if (positions[subPartition].empty()) {
             continue;
@@ -694,7 +696,9 @@ bool LookupJoinOperator::TrySpillPathAProbeInput(omniruntime::vec::VectorBatch *
         const bool inIds = std::find(pathASpillPartitionIds_.begin(), pathASpillPartitionIds_.end(),
             subPartition) != pathASpillPartitionIds_.end();
         if (!inIds) {
-            if (oppositeOuter) {
+            if (joinType == OMNI_JOIN_TYPE_EXISTENCE) {
+                EmitPathAExistenceMisses(owned.get(), positions[subPartition]);
+            } else if (emitUnmatchedProbe) {
                 UniqueVecBatch nullPad(CopyRowsForJoinSpill(owned.get(), positions[subPartition]));
                 if (nullPad != nullptr) {
                     if (firstVecBatch) {
@@ -740,6 +744,32 @@ bool LookupJoinOperator::TrySpillPathAProbeInput(omniruntime::vec::VectorBatch *
     ResetInputVecBatch();
     SetStatus(OMNI_STATUS_NORMAL);
     return true;
+}
+
+void LookupJoinOperator::EmitPathAExistenceMisses(VectorBatch *source, const std::vector<int32_t> &positions)
+{
+    UniqueVecBatch rows(CopyRowsForJoinSpill(source, positions));
+    if (rows == nullptr) {
+        return;
+    }
+    if (curInputBatch != nullptr) {
+        VectorHelper::FreeVecBatch(curInputBatch);
+    }
+    curInputBatch = rows.release();
+    curProbePosition = 0;
+    PrepareCurrentProbe();
+    PrepareSerializers();
+    // ConstructExistenceColumn sizes the flag column from all pending rows, so flush before
+    // the builder holds more than one output batch.
+    for (int32_t i = 0; i < curInputBatch->GetRowCount(); ++i) {
+        outputBuilder->AppendExistenceRow<false>(i);
+        if (outputBuilder->IsFull()) {
+            EnqueueCurrentOutput();
+        }
+    }
+    EnqueueCurrentOutput();
+    VectorHelper::FreeVecBatch(curInputBatch);
+    curInputBatch = nullptr;
 }
 
 namespace {
@@ -931,31 +961,32 @@ bool LookupJoinOperator::MaybeTriggerHeldTableSpill(const char *site)
     const bool overThreshold =
         joinSpillState_ != nullptr && joinSpillState_->AccountedMemoryOverThreshold();
 
-    auto logHeldCheckpoint = [&](const char *action, const std::string &detail) {
+    auto logHeldCheckpoint = [&](const char *action, const char *detail) {
         if (!joinSpillEnabled_) {
             return;
         }
-        LogJoinSpillMemCheckpoint(site, accounted, threshold, overThreshold, action,
-            detail.empty() ? nullptr : detail.c_str());
+        LogJoinSpillMemCheckpoint(site, accounted, threshold, overThreshold, action, detail);
     };
 
     if (!joinSpillEnabled_ || joinSpillState_ == nullptr) {
         return false;
     }
     if (!joinSpillState_->CanFlushHeldTable()) {
-        const auto hand = joinSpillState_->TableInHand();
-        const auto phase = joinSpillState_->GetHandoffPhase();
-        const char *phaseName = phase == JoinHandoffPhase::RestoreRound ? "restore_round" :
-            phase == JoinHandoffPhase::ProbePathA              ? "probe_path_a" :
-            phase == JoinHandoffPhase::Complete                ? "complete" :
-                                                                 "idle";
-        const char *handName = hand.kind == JoinSpillTableInHandKind::FullTable ? "full_table" :
-            hand.kind == JoinSpillTableInHandKind::RestoreSmallTable       ? "restore_small" :
-                                                                             "none";
-        logHeldCheckpoint("skip",
-            std::string("reason=can_flush_false handoff=") + phaseName + " hand=" + handName +
-                " probe_in_nrs=" + (joinSpillState_->ProbeInNrs() ? "1" : "0") +
-                " has_more_probe=" + (joinSpillState_->HasMoreProbeInput() ? "1" : "0"));
+        if (UNLIKELY(IsDebugEnable())) {
+            const auto hand = joinSpillState_->TableInHand();
+            const auto phase = joinSpillState_->GetHandoffPhase();
+            const char *phaseName = phase == JoinHandoffPhase::RestoreRound ? "restore_round" :
+                phase == JoinHandoffPhase::ProbePathA              ? "probe_path_a" :
+                phase == JoinHandoffPhase::Complete                ? "complete" :
+                                                                     "idle";
+            const char *handName = hand.kind == JoinSpillTableInHandKind::FullTable ? "full_table" :
+                hand.kind == JoinSpillTableInHandKind::RestoreSmallTable       ? "restore_small" :
+                                                                                 "none";
+            const std::string detail = std::string("reason=can_flush_false handoff=") + phaseName +
+                " hand=" + handName + " probe_in_nrs=" + (joinSpillState_->ProbeInNrs() ? "1" : "0") +
+                " has_more_probe=" + (joinSpillState_->HasMoreProbeInput() ? "1" : "0");
+            logHeldCheckpoint("skip", detail.c_str());
+        }
         return false;
     }
     if (!overThreshold) {

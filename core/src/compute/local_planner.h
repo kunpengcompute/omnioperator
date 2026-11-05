@@ -24,6 +24,9 @@ namespace omniruntime {
 namespace compute {
 
 std::shared_ptr<omniruntime::op::Operator> createOperator(OperatorFactory* factory);
+
+bool IsJoinSpillSupported(const std::shared_ptr<const HashJoinNode> &joinNode);
+
 OperatorFactory* createOperatorFactory(
     const std::shared_ptr<const PlanNode>& planNode,
     const config::QueryConfig& queryConfig);
