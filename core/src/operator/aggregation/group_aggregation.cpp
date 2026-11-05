@@ -346,7 +346,11 @@ void HashAggregationOperator::EnsureInputFits(const VectorBatch *vecBatch)
         }
     }
 
-    const uint64_t growthReservation =
+    // Velox GroupingSet::ensureInputFits never reserves for a partial
+    // aggregation: its table is capped and flushes. Keep only the batch's own
+    // demand for a capped partial table, so a denial brings the flush forward
+    // without asking the siblings for a growth cushion first.
+    const uint64_t growthReservation = PartialFlushActive() ? 0 :
         multiply(currentUsage, static_cast<uint64_t>(spillableReservationGrowthPct_)) / 100;
     const int64_t target = static_cast<int64_t>(std::max(headroom, growthReservation));
     ReservationRequestSection request(
@@ -371,7 +375,7 @@ void HashAggregationOperator::EnsureInputFits(const VectorBatch *vecBatch)
     // task). Velox never spills a partial aggregation; treat the denial as
     // "table full": this batch still goes in, then the table is flushed
     // downstream and the memory returns.
-    if (partialFlushEligible_ && maxPartialAggregationMemory_ != 0 && !hasSpill && !abandonPartialRequested_) {
+    if (PartialFlushActive()) {
         partialFull_ = true;
     }
 }
@@ -408,7 +412,10 @@ void NO_INLINE HashAggregationOperator::ReinitializeHashmapAfterRelease()
 
 void HashAggregationOperator::EnsureOutputFits()
 {
-    if (pool_ == nullptr || isStepPartials ||
+    // A flushing partial table (including the first/last aggregations kept
+    // out of isStepPartials) emits its flush from the memory it already holds;
+    // reserving an output cushion for every flush only spills its siblings.
+    if (pool_ == nullptr || isStepPartials || PartialFlushActive() ||
         !operatorConfig.GetSpillConfig()->IsSpillEnabled() || hasSpill ||
         spillMerger != nullptr || GetElementsSize() == 0) {
         return;
@@ -495,6 +502,11 @@ uint64_t HashAggregationOperator::reclaimableBytes() const
     return bytes;
 }
 
+bool HashAggregationOperator::PartialFlushActive() const
+{
+    return partialFlushEligible_ && maxPartialAggregationMemory_ != 0 && !hasSpill && !abandonPartialRequested_;
+}
+
 bool HashAggregationOperator::PartialFlushPreferredOverSpill()
 {
     // Velox never spills a partial aggregation (AggregationNode::canSpill is
@@ -503,8 +515,7 @@ bool HashAggregationOperator::PartialFlushPreferredOverSpill()
     // a reclaim request only brings the flush forward. Above the extended cap
     // (the driver has not drained a pending flush yet) the table stays a
     // donor, so a request that nothing else can serve is still honoured.
-    return partialFlushEligible_ && maxPartialAggregationMemory_ != 0 && !hasSpill &&
-        !abandonPartialRequested_ && !outputStarted_ && !partialFlushing_ &&
+    return PartialFlushActive() && !outputStarted_ && !partialFlushing_ &&
         PartialTableBytes() <= maxExtendedPartialAggregationMemory_;
 }
 
@@ -928,7 +939,12 @@ void HashAggregationOperator::CompletePartialFlush(int32_t outputRows)
     constexpr double kPartialMinFinalPct = 40.0;
     if (aggregationPct > kPartialMinFinalPct &&
         maxPartialAggregationMemory_ >= maxExtendedPartialAggregationMemory_) {
-        abandonPartialRequested_ = true;
+        // The wrapper only turns the request into pass-through for step
+        // partials. A first/last partial (kept out of isStepPartials upstream)
+        // keeps flushing at the extended cap instead of growing into a spill.
+        if (isStepPartials) {
+            abandonPartialRequested_ = true;
+        }
     } else {
         maxPartialAggregationMemory_ =
             std::min(maxPartialAggregationMemory_ * 2, maxExtendedPartialAggregationMemory_);

@@ -244,6 +244,8 @@ private:
     uint64_t PartialTableBytes();
 
     bool PartialFlushPreferredOverSpill();
+    /// A capped partial table that still returns its memory by flushing.
+    bool PartialFlushActive() const;
 
     void MaybeMarkPartialFull();
 
