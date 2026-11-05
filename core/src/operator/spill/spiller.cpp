@@ -119,8 +119,10 @@ ErrorCode Spiller::MergeRecentFiles(size_t startIdx, bool compareWithHashVal)
     ErrorCode result = ErrorCode::SUCCESS;
     bool isEqual = false; // equal groups are irrelevant when relocating rows
     int32_t dstRowIdx = 0;
+    uint64_t loopBudget =
+        merger->GetTotalRowCount() / static_cast<uint64_t>(maxRowCountPerBatch) + 1;
     try {
-        for (;;) {
+        for (; loopBudget > 0; loopBudget--) {
             // Reset varchar offsets so the string containers stay bounded to
             // one batch instead of growing with the whole merged data set.
             VectorHelper::ResetVarcharVectorsForReuse(mergedVecBatchPtr);
@@ -178,6 +180,12 @@ ErrorCode Spiller::MergeRecentFiles(size_t startIdx, bool compareWithHashVal)
             if (result != ErrorCode::SUCCESS) {
                 break;
             }
+        }
+        if (result == ErrorCode::SUCCESS && loopBudget == 0) {
+            LogError("Spill merge loop exhausted its iteration budget with rows "
+                     "left in %zu run files.",
+                recentFiles.size());
+            result = ErrorCode::READ_FAILED;
         }
     } catch (...) {
         // SpillMergeStream::Pop throws on read failure.

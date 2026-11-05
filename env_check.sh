@@ -169,7 +169,7 @@ setup_dependencies() {
 # package build_script/build.sh functionality here
 build() {
   local workspace=$(pwd)
-  export OMNI_COMPILER_THREAD_COUNT=8
+  export OMNI_COMPILER_THREAD_COUNT=32
   sh $workspace/build_scripts/build.sh "$@"
   cd $workspace
 }
