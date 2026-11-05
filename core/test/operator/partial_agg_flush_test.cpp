@@ -232,7 +232,7 @@ TEST(PartialAggFlushTest, flush_keeps_result_varchar_keys)
 // No reduction at all: the first flush extends the cap once, the second flush at
 // the extended cap gives up (Velox kPartialMinFinalPct); the distinct-key count
 // stays cumulative across flushes so the wrapper's ratio rule can see it.
-TEST(PartialAggFlushTest, no_reduction_requests_abandon_and_counts_cumulative_keys)
+TEST(PartialAggFlushTest, no_reduction_keeps_flushing_at_the_base_cap_and_counts_cumulative_keys)
 {
     ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
     constexpr int32_t kRows = 100;
@@ -260,20 +260,20 @@ TEST(PartialAggFlushTest, no_reduction_requests_abandon_and_counts_cumulative_ke
 
     feed(0);
     EXPECT_EQ(op->PartialFlushTimes(), 1u);
-    EXPECT_FALSE(op->PartialAggregationAbandonRequested()) << "first flush only extends the cap";
+    EXPECT_FALSE(op->PartialAggregationAbandonRequested()) << "the core never asks to abandon; the wrapper's row ratio does";
     EXPECT_EQ(op->GetHashMapUniqueKeys(), 0u) << "table is empty after the flush";
     EXPECT_EQ(op->CumulativeDistinctKeys(), 100u) << "the abandon rule's count stays cumulative";
 
     feed(1);
-    EXPECT_EQ(op->PartialFlushTimes(), 2u);
-    EXPECT_TRUE(op->PartialAggregationAbandonRequested()) << "100 % distinct at the extended cap";
+    EXPECT_EQ(op->PartialFlushTimes(), 2u) << "no reduction: the cap stays at its base and the table keeps flushing";
+    EXPECT_FALSE(op->PartialAggregationAbandonRequested());
     EXPECT_EQ(op->CumulativeDistinctKeys(), 200u);
 
     feed(2);
-    EXPECT_EQ(op->PartialFlushTimes(), 2u) << "no further flush once abandon is requested";
+    EXPECT_EQ(op->PartialFlushTimes(), 3u);
     EXPECT_TRUE(op->needsInput());
-    EXPECT_EQ(op->GetHashMapUniqueKeys(), 100u) << "100 in memory";
-    EXPECT_EQ(op->CumulativeDistinctKeys(), 300u) << "200 flushed + 100 in memory";
+    EXPECT_EQ(op->GetHashMapUniqueKeys(), 0u) << "flushed again";
+    EXPECT_EQ(op->CumulativeDistinctKeys(), 300u) << "300 flushed";
 
     Drain(op, outs);
     EXPECT_EQ(TotalRows(outs), 300u);
@@ -284,8 +284,8 @@ TEST(PartialAggFlushTest, no_reduction_requests_abandon_and_counts_cumulative_ke
 }
 
 // Through the expression wrapper the driver sees needsInput()/GetOutput() of the
-// wrapper: the flush is emitted mid-input, the abandon-after-flush turns into
-// pass-through, and the final sum is still right.
+// wrapper: the flush is emitted mid-input, keeps going at the base cap, and
+// the final sum is still right.
 TEST(PartialAggFlushTest, wrapper_flushes_mid_input_and_abandons)
 {
     ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
@@ -320,7 +320,7 @@ TEST(PartialAggFlushTest, wrapper_flushes_mid_input_and_abandons)
         int64_t keys[kRows];
         int64_t vals[kRows];
         for (int32_t i = 0; i < kRows; ++i) {
-            keys[i] = b * kRows + i; // every key distinct: flush, extend, abandon, pass through
+            keys[i] = b * kRows + i; // every key distinct: flush at the base cap, keep flushing
             vals[i] = 2;
         }
         EXPECT_TRUE(op->needsInput());

@@ -319,6 +319,9 @@ private:
     bool partialFlushEligible_ = false;
     bool partialFull_ = false;
     bool partialFlushing_ = false;
+    // A partial whose last flush showed no reduction keeps a small table.
+    bool partialCapDegraded_ = false;
+    uint64_t basePartialAggregationMemory_ = 0;
     bool abandonPartialRequested_ = false;
     uint64_t partialInputRowsSinceFlush_ = 0;
     uint64_t flushedRows_ = 0;

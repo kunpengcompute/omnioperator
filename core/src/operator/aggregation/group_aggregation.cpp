@@ -863,6 +863,7 @@ bool HashAggregationOperator::needsInput()
 void HashAggregationOperator::SetPartialFlushMemory(uint64_t maxBytes, uint64_t maxExtendedBytes)
 {
     maxPartialAggregationMemory_ = maxBytes;
+    basePartialAggregationMemory_ = maxBytes;
     maxExtendedPartialAggregationMemory_ = std::max(maxBytes, maxExtendedBytes);
 }
 
@@ -935,17 +936,30 @@ void HashAggregationOperator::CompletePartialFlush(int32_t outputRows)
     partialFlushing_ = false;
     partialInputRowsSinceFlush_ = 0;
 
-    // If more than this many are unique at full memory, give up on partial agg.
+    // Velox abandons the partial aggregation when a flush at the extended cap
+    // left more than this many rows unique; Omni keeps flushing instead. The
+    // rows a table deduplicates inside the task are rows the shuffle writer
+    // never has to serialize, and on q3 SF1000 abandoning sent 1 568 M rows
+    // through the writer where flushing at the base cap sent 1 245 M, with
+    // 12 GB of writer spill against none and 89 s against 80 s. So the cap
+    // follows the reduction: a flush that reduced well may grow it to the
+    // extended cap, a flush that did not shrinks it back, so that the memory
+    // goes to the operators that reduce data. The wrapper's cumulative
+    // row-ratio rule stays the one abandon path for step partials.
     constexpr double kPartialMinFinalPct = 40.0;
-    if (aggregationPct > kPartialMinFinalPct &&
-        maxPartialAggregationMemory_ >= maxExtendedPartialAggregationMemory_) {
-        // The wrapper only turns the request into pass-through for step
-        // partials. A first/last partial (kept out of isStepPartials upstream)
-        // keeps flushing at the extended cap instead of growing into a spill.
-        if (isStepPartials) {
-            abandonPartialRequested_ = true;
-        }
+    const bool noReduction = aggregationPct > kPartialMinFinalPct;
+    if (noReduction) {
+        // A first/last partial (kept out of isStepPartials upstream) has no
+        // pass-through at all, so its table of unique keys stays small (q3
+        // SF1000 st16: 112 MB of 99 % distinct keys next to a shuffle writer
+        // that spilled 13 GB for want of 60 MB).
+        constexpr uint64_t kFirstLastDegradedCapDivisor = 8;
+        maxPartialAggregationMemory_ = isStepPartials
+            ? std::max<uint64_t>(1, basePartialAggregationMemory_)
+            : std::max<uint64_t>(1, maxExtendedPartialAggregationMemory_ / kFirstLastDegradedCapDivisor);
+        partialCapDegraded_ = true;
     } else {
+        partialCapDegraded_ = false;
         maxPartialAggregationMemory_ =
             std::min(maxPartialAggregationMemory_ * 2, maxExtendedPartialAggregationMemory_);
     }
