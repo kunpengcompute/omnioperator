@@ -467,6 +467,7 @@ int32_t JoinResultBuilder::ConstructInnerJoinOutput()
 int32_t JoinResultBuilder::ConstructLeftJoinOutput()
 {
     auto inputSize = static_cast<int32_t>(streamedTableValueAddresses.size());
+    const int32_t addressStart = addressOffset;
     // Rows already materialized in buildVectorBatch from previous AddJoinValueAddresses in the same batch
     const int32_t rowBase = buildRowCount;
     leftOutputBatchIds.clear();
@@ -579,6 +580,17 @@ int32_t JoinResultBuilder::ConstructLeftJoinOutput()
                     buildVectorBatch->Get(buildColumnIdx), rowBase + segmentStart);
             }
         }
+    }
+
+    // Input vectors are still needed while the output columns are copied. Release only
+    // after materialization, and only for addresses consumed by this output batch.
+    for (int32_t processedAddress = addressStart; processedAddress < addressOffset; processedAddress++) {
+        const int32_t leftBatchId = DecodeSliceIndex(streamedTableValueAddresses[processedAddress]);
+        const int32_t rightBatchId = DecodeSliceIndex(bufferedTableValueAddresses[processedAddress]);
+        if (leftBatchId == JOIN_NULL_FLAG || rightBatchId == JOIN_NULL_FLAG) {
+            continue;
+        }
+        FreeVectorBatches(isPreKeyMatched[processedAddress], leftBatchId, rightBatchId);
     }
 
     buildRowCount = rowBase + numOutputRows;
