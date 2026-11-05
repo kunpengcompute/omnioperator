@@ -19,12 +19,14 @@
 #include "util/test_util.h"
 #include "util/config_util.h"
 #include "util/type_util.h"
+#include "util/test_pool_fixture.h"
 
 namespace omniruntime {
 using namespace omniruntime::vec;
 using namespace omniruntime::op;
 using namespace TestUtil;
 using namespace omniruntime::expressions;
+using omniruntime::test::TestPoolFixture;
 
 namespace {
 // sum(long) group by one key column (long or varchar).
@@ -336,6 +338,63 @@ TEST(PartialAggFlushTest, wrapper_flushes_mid_input_and_abandons)
     ASSERT_EQ(sums.size(), static_cast<size_t>(kRows) * kBatches);
     for (auto &kv : sums) {
         EXPECT_EQ(kv.second, 2) << "key " << kv.first;
+    }
+}
+
+// A flushable partial table within its cap is not a spill donor: the pool skips
+// it (reclaimableBytes() == 0) and a reclaim request only brings the flush
+// forward. Without a cap the table is a donor as before.
+TEST_F(TestPoolFixture, flushable_partial_table_is_not_a_spill_donor)
+{
+    ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
+    constexpr int32_t kRows = 2000;
+    DataTypes groupType(std::vector<DataTypePtr>{LongType()});
+    DataTypes sourceTypes(std::vector<DataTypePtr>{LongType(), LongType()});
+    auto makeBatch = [&]() {
+        int64_t keys[kRows];
+        int64_t vals[kRows];
+        for (int32_t i = 0; i < kRows; ++i) {
+            keys[i] = i % 500;
+            vals[i] = 1;
+        }
+        return CreateVectorBatch(sourceTypes, kRows, keys, vals);
+    };
+
+    auto capped = MakeSumFactory(groupType, AggregationNode::Step::K_PARTIAL, true, true);
+    auto *op = static_cast<HashAggregationOperator *>(capped->CreateOperator(pool()));
+    op->Init();
+    op->setNoMoreInput(false);
+    op->SetPartialFlushMemory(64 * 1024 * 1024, 96 * 1024 * 1024); // far above this table
+    op->AddInput(makeBatch());
+    EXPECT_TRUE(op->needsInput());
+    EXPECT_EQ(op->reclaimableBytes(), 0u) << "within its cap the table flushes, it does not spill";
+    EXPECT_EQ(op->reclaim(1 << 20), 0);
+    EXPECT_TRUE(op->IsPartialFlushing()) << "a reclaim request brings the flush forward";
+    EXPECT_FALSE(op->needsInput());
+    std::vector<VectorBatch *> outs;
+    Pump(op, outs);
+    EXPECT_EQ(TotalRows(outs), 500u);
+    EXPECT_EQ(op->PartialFlushTimes(), 1u);
+    EXPECT_TRUE(op->needsInput());
+    Drain(op, outs);
+    op::Operator::DeleteOperator(op);
+    auto sums = FinalSums(groupType, outs, LongKey);
+    ASSERT_EQ(sums.size(), 500u);
+    for (auto &kv : sums) {
+        EXPECT_EQ(kv.second, 4) << "key " << kv.first;
+    }
+
+    auto uncapped = MakeSumFactory(groupType, AggregationNode::Step::K_PARTIAL, true, true);
+    auto *donor = static_cast<HashAggregationOperator *>(uncapped->CreateOperator(pool()));
+    donor->Init();
+    donor->setNoMoreInput(false);
+    donor->AddInput(makeBatch());
+    EXPECT_GT(donor->reclaimableBytes(), 0u) << "no cap: the table is a spill donor as before";
+    std::vector<VectorBatch *> rest;
+    Drain(donor, rest);
+    op::Operator::DeleteOperator(donor);
+    for (auto *b : rest) {
+        VectorHelper::FreeVecBatch(b);
     }
 }
 } // namespace omniruntime

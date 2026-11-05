@@ -461,7 +461,8 @@ uint64_t HashAggregationOperator::reclaimableBytes() const
 {
     if (!isInited || outputStarted_ || spillMerger != nullptr ||
         reclaimInProgress_.load(std::memory_order_acquire) ||
-        const_cast<HashAggregationOperator *>(this)->GetElementsSize() == 0) {
+        const_cast<HashAggregationOperator *>(this)->GetElementsSize() == 0 ||
+        const_cast<HashAggregationOperator *>(this)->PartialFlushPreferredOverSpill()) {
         return 0;
     }
     // reclaim() resets the arena but deliberately retains its first chunk;
@@ -494,9 +495,31 @@ uint64_t HashAggregationOperator::reclaimableBytes() const
     return bytes;
 }
 
+bool HashAggregationOperator::PartialFlushPreferredOverSpill()
+{
+    // Velox never spills a partial aggregation (AggregationNode::canSpill is
+    // final/single only). A flushable partial table that is still within its
+    // extended cap returns its memory by flushing: it is not a spill donor, and
+    // a reclaim request only brings the flush forward. Above the extended cap
+    // (the driver has not drained a pending flush yet) the table stays a
+    // donor, so a request that nothing else can serve is still honoured.
+    return partialFlushEligible_ && maxPartialAggregationMemory_ != 0 && !hasSpill &&
+        !abandonPartialRequested_ && !outputStarted_ && !partialFlushing_ &&
+        PartialTableBytes() <= maxExtendedPartialAggregationMemory_;
+}
+
 int64_t HashAggregationOperator::reclaim(int64_t targetBytes)
 {
-    if (targetBytes <= 0 || pool_ == nullptr || isInNonReclaimableSection() || reclaimableBytes() == 0) {
+    if (targetBytes <= 0 || pool_ == nullptr || isInNonReclaimableSection()) {
+        return 0;
+    }
+    if (PartialFlushPreferredOverSpill()) {
+        if (GetElementsSize() != 0) {
+            partialFull_ = true;
+        }
+        return 0;
+    }
+    if (reclaimableBytes() == 0) {
         return 0;
     }
     bool expected = false;

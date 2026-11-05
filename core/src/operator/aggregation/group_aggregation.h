@@ -243,6 +243,8 @@ private:
 
     uint64_t PartialTableBytes();
 
+    bool PartialFlushPreferredOverSpill();
+
     void MaybeMarkPartialFull();
 
     void FinishOutput(int32_t outputRows);
