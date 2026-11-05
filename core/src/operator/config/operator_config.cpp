@@ -106,8 +106,22 @@ OperatorConfig OperatorConfig::DeserializeOperatorConfig(const std::string &conf
                     result.at("spillConfig").at("numElementsForSpillThreshold").get<int32_t>();
                 auto memUsagePctForSpillThreshold =
                     result.at("spillConfig").at("memUsagePctForSpillThreshold").get<int32_t>();
+                // Optional run-based spill knobs: absent in configs produced by older
+                // planners, in which case the constructor defaults keep the legacy
+                // single-run spill behavior.
+                auto hashAggSpillRunFraction = 1.0;
+                if (result.at("spillConfig").contains("hashAggSpillRunFraction")) {
+                    hashAggSpillRunFraction =
+                        result.at("spillConfig").at("hashAggSpillRunFraction").get<double>();
+                }
+                auto hashAggSpillMaxRunRows = 4UL << 20;
+                if (result.at("spillConfig").contains("hashAggSpillMaxRunRows")) {
+                    hashAggSpillMaxRunRows =
+                        result.at("spillConfig").at("hashAggSpillMaxRunRows").get<uint64_t>();
+                }
                 resultSpillConfig = new SparkSpillConfig(spillEnabled, spillPath, maxSpillBytes,
-                    numElementsForSpillThreshold, memUsagePctForSpillThreshold, writeBufferSize, false);
+                    numElementsForSpillThreshold, memUsagePctForSpillThreshold, writeBufferSize, false,
+                    hashAggSpillRunFraction, hashAggSpillMaxRunRows);
                 break;
             }
             default: {

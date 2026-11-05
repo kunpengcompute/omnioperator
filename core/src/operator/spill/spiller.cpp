@@ -83,6 +83,145 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
     }
 }
 
+ErrorCode Spiller::MergeRecentFiles(size_t startIdx, bool compareWithHashVal)
+{
+    // Merge only when the last spill round produced multiple run files; a
+    // single run file already has the legacy one-file-per-round shape.
+    if (startIdx >= spillFiles.size() || spillFiles.size() - startIdx < 2) {
+        return ErrorCode::SUCCESS;
+    }
+    std::vector<SpillFileInfo> recentFiles(spillFiles.begin() + static_cast<std::ptrdiff_t>(startIdx),
+        spillFiles.end());
+
+    // SpillMerger takes ownership of the tracker passed to Create (it is
+    // deleted in ~SpillMerger), so hand it a throwaway child tracker and keep
+    // this Spiller's own tracker alive for later spill rounds and read-back.
+    // No spill budget is reserved for the merged file: it only relocates bytes
+    // that were already reserved when the run files were written.
+    auto *mergeTracker = GetRootSpillTracker().CreateSpillTracker(UINT64_MAX);
+    auto *merger = SpillMerger::Create(dataTypes, sortCols, sortOrders,
+        mergeTracker, recentFiles, isSpillCompressEnabled, compareWithHashVal);
+    if (merger == nullptr) {
+        // Create failed before taking ownership of the tracker.
+        delete mergeTracker;
+        LogError("Create spill merger to merge %zu run files failed.", recentFiles.size());
+        return ErrorCode::READ_FAILED;
+    }
+
+    auto writer = std::make_unique<SpillWriter>(dataTypes, dirPaths[0], writeBufferSize,
+        isSpillCompressEnabled);
+    // Rows are appended one by one into this reusable batch, mirroring the
+    // batch reuse pattern of Spill().
+    auto mergedVecBatch = std::make_unique<VectorBatch>(maxRowCountPerBatch);
+    VectorHelper::AppendVectors(mergedVecBatch.get(), dataTypes, maxRowCountPerBatch);
+    auto mergedVecBatchPtr = mergedVecBatch.get();
+
+    ErrorCode result = ErrorCode::SUCCESS;
+    bool isEqual = false; // equal groups are irrelevant when relocating rows
+    int32_t dstRowIdx = 0;
+    uint64_t loopBudget =
+        merger->GetTotalRowCount() / static_cast<uint64_t>(maxRowCountPerBatch) + 1;
+    try {
+        for (; loopBudget > 0; loopBudget--) {
+            // Reset varchar offsets so the string containers stay bounded to
+            // one batch instead of growing with the whole merged data set.
+            VectorHelper::ResetVarcharVectorsForReuse(mergedVecBatchPtr);
+            // VectorBatch::Resize clears the null flags, keep the reused
+            // batch clean before every fill cycle.
+            mergedVecBatchPtr->Resize(maxRowCountPerBatch);
+            dstRowIdx = 0;
+            while (dstRowIdx < maxRowCountPerBatch) {
+                auto *srcBatch = merger->CurrentBatchWithEqual(isEqual);
+                if (srcBatch == nullptr) {
+                    break; // all run files drained
+                }
+                auto srcRowIdx = merger->CurrentRowIndex();
+                auto vecCount = srcBatch->GetVectorCount();
+                for (int32_t colIdx = 0; colIdx < vecCount; colIdx++) {
+                    auto *srcVector = srcBatch->Get(colIdx);
+                    auto *dstVector = mergedVecBatchPtr->Get(colIdx);
+                    if (srcVector->IsNull(srcRowIdx)) {
+                        VectorHelper::SetNull(dstVector, dstRowIdx);
+                    } else {
+                        VectorHelper::CopyValue(srcVector, srcRowIdx, dstVector, dstRowIdx);
+                    }
+                }
+                dstRowIdx++;
+                merger->Pop();
+            }
+            if (dstRowIdx == 0) {
+                break;
+            }
+            if (dstRowIdx < maxRowCountPerBatch) {
+                // Tail rows: copy them into a fresh batch. Slicing is not an
+                // option here because SpillWriter serializes varchar values
+                // and null bits from the buffer start and is not offset-aware,
+                // and Resize would clear the null flags of the filled rows.
+                auto tailBatch = std::make_unique<VectorBatch>(dstRowIdx);
+                VectorHelper::AppendVectors(tailBatch.get(), dataTypes, dstRowIdx);
+                auto vecCount = mergedVecBatchPtr->GetVectorCount();
+                for (int32_t rowIdx = 0; rowIdx < dstRowIdx; rowIdx++) {
+                    for (int32_t colIdx = 0; colIdx < vecCount; colIdx++) {
+                        auto *srcVector = mergedVecBatchPtr->Get(colIdx);
+                        auto *dstVector = tailBatch->Get(colIdx);
+                        if (srcVector->IsNull(rowIdx)) {
+                            VectorHelper::SetNull(dstVector, rowIdx);
+                        } else {
+                            VectorHelper::CopyValue(srcVector, rowIdx, dstVector, rowIdx);
+                        }
+                    }
+                }
+                auto vecBatchSize = CollectVecBatchSize(tailBatch.get());
+                result = writer->WriteVecBatch(tailBatch.get(), vecBatchSize);
+                break;
+            }
+            auto vecBatchSize = CollectVecBatchSize(mergedVecBatchPtr);
+            result = writer->WriteVecBatch(mergedVecBatchPtr, vecBatchSize);
+            if (result != ErrorCode::SUCCESS) {
+                break;
+            }
+        }
+        if (result == ErrorCode::SUCCESS && loopBudget == 0) {
+            LogError("Spill merge loop exhausted its iteration budget with rows "
+                     "left in %zu run files.",
+                recentFiles.size());
+            result = ErrorCode::READ_FAILED;
+        }
+    } catch (...) {
+        // SpillMergeStream::Pop throws on read failure.
+        result = ErrorCode::READ_FAILED;
+    }
+    delete merger;
+    if (result == ErrorCode::SUCCESS) {
+        result = writer->Close();
+    }
+    if (result != ErrorCode::SUCCESS) {
+        // Drop the unusable merged file and keep the run files untouched:
+        // read-back falls back to merging them as before.
+        auto partialFile = writer->GetSpillFileInfo();
+        if (!partialFile.filePath.empty()) {
+            remove(partialFile.filePath.c_str());
+        }
+        LogError("Merge %zu spill run files failed, read-back will merge them instead.",
+            recentFiles.size());
+        return result;
+    }
+
+    for (const auto &fileInfo : recentFiles) {
+        remove(fileInfo.filePath.c_str());
+    }
+    spillFiles.resize(startIdx);
+    // All run files were empty (no group ever spilled): nothing to register,
+    // an empty file entry would break read-back file opening.
+    auto mergedInfo = writer->GetSpillFileInfo();
+    if (!mergedInfo.filePath.empty()) {
+        spillFiles.emplace_back(mergedInfo);
+        LogInfo("Merged %zu spill run files into %s.", recentFiles.size(),
+            mergedInfo.filePath.c_str());
+    }
+    return ErrorCode::SUCCESS;
+}
+
 ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRadixSort, Operator* op)
 {
     int64_t totalRowCount = pagesIndex->GetRowCount();

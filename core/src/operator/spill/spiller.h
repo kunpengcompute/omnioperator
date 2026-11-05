@@ -127,6 +127,21 @@ public:
         return spillFiles;
     }
 
+    size_t GetSpillFileCount() const
+    {
+        return spillFiles.size();
+    }
+
+    /// Merge the spill files appended after startIdx into one sorted file and
+    /// replace them. After run-based spill split one spill round into several
+    /// run files, this restores the legacy one-file-per-round shape so
+    /// read-back merges the same number of streams as without run-based spill.
+    /// The merged file relocates data whose bytes were already reserved when
+    /// the run files were written, so no extra spill budget is consumed.
+    /// On failure the run files are kept untouched and read-back falls back to
+    /// merging them.
+    ErrorCode MergeRecentFiles(size_t startIdx, bool compareWithHashVal);
+
     SpillMerger *CreateSpillMerger(const std::vector<SpillFileInfo> &spillFiles, bool isSpillCompressEnabled)
     {
         auto merger = SpillMerger::Create(dataTypes, sortCols, sortOrders, spillTracker, spillFiles, isSpillCompressEnabled);

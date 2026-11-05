@@ -165,6 +165,13 @@ public:
         if (isEnd) {
             currentRowIdx = 0;
             currentRowCount = 0;
+            // Release the batch buffer as soon as this stream is exhausted: an
+            // exhausted stream is never selected by the loser tree (HasData()
+            // is false), so nothing dereferences the batch afterwards. Without
+            // this, every stream's peak-sized buffer stays resident until the
+            // whole SpillMerger is destroyed.
+            currentBatch.reset();
+            currentBatchPtr = nullptr;
             return result;
         }
 

@@ -1238,70 +1238,137 @@ ErrorCode HashAggregationOperator::SpillToDisk()
     } else if (packedInt128 != nullptr) {
         totalSpillCount = packedInt128->GetElementsSize();
     }
-    aggregationSort->ResizeKvVector(totalSpillCount);
+
+    // Run-based spill: materialize/sort/write at most runRows groups per run, then
+    // roll back the run's auxiliary memory (key re-serialization chunks in the
+    // table pool) before the next run starts. Keeps spill-time memory at
+    // O(runRows) instead of O(totalSpillCount). Single run when disabled.
+    auto runRows = CalcSpillRunRows(totalSpillCount);
 
     auto aggregationSortPtr = aggregationSort.get();
-    OutputState curOutputState;
-    {
-        if (serialize != nullptr) {
-            if (aggregationSort->IsLazyKeySerializationEnabled()) {
-                serialize->SpillExtractRows(totalSpillCount, spillOutputState,
-                    [&](uint8_t* row, int64_t hashVal, uint8_t* value, int32_t idx) mutable {
-                        aggregationSortPtr->ParseHashMapRowToVectorWithHashVal(row, value, idx, hashVal);
+    ErrorCode result = ErrorCode::SUCCESS;
+    // Only the non-lazy serialize path re-serializes keys into the table pool
+    // during SpillExtract; those chunks are what per-run rollback releases.
+    // Fixed/packed paths keep keys in kvString (owned by AggregationSort), and
+    // the lazy path defers serialization to write time, so neither needs rollback.
+    const bool needPoolRollBack = serialize != nullptr && !aggregationSort->IsLazyKeySerializationEnabled();
+
+    // Files belonging to earlier spill rounds must stay separate; merge-back
+    // below only folds together the run files this round appends.
+    const auto fileCountBeforeSpill = spiller->GetSpillFileCount();
+
+    for (int64_t rowOffset = 0; rowOffset < totalSpillCount && result == ErrorCode::SUCCESS; rowOffset += runRows) {
+        auto curRows = static_cast<int32_t>(std::min<int64_t>(runRows, totalSpillCount - rowOffset));
+
+        mem::ArenaState poolState {};
+        if (needPoolRollBack) {
+            poolState = serialize->SavePoolState();
+        }
+
+        // kvVec/kvString only shrink in size; capacity is retained so later runs
+        // reuse the first run's allocation instead of re-growing.
+        aggregationSort->ResizeKvVector(curRows);
+        {
+            if (serialize != nullptr) {
+                if (aggregationSort->IsLazyKeySerializationEnabled()) {
+                    serialize->SpillExtractRows(curRows, spillOutputState,
+                        [&](uint8_t* row, int64_t hashVal, uint8_t* value, int32_t idx) mutable {
+                            aggregationSortPtr->ParseHashMapRowToVectorWithHashVal(row, value, idx, hashVal);
+                    });
+                } else {
+                    serialize->SpillExtract(curRows, spillOutputState,
+                        [&](const auto& key, int64_t hashVal, uint8_t* value, int32_t idx) mutable {
+                            aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
+                        }, [&](const auto& key, int64_t hashVal, uint8_t* value, int32_t idx) mutable {
+                            aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
+                    });
+                }
+            } else if (fixedInt32 != nullptr) {
+                fixedInt32->Extract(curRows, spillOutputState,
+                    [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseHashMapToVector(key, value, idx);
+                    }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
                 });
-            } else {
-                serialize->SpillExtract(totalSpillCount, spillOutputState,
-                    [&](const auto& key, int64_t hashVal, uint8_t* value, int32_t idx) mutable {
-                        aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
-                    }, [&](const auto& key, int64_t hashVal, uint8_t* value, int32_t idx) mutable {
-                        aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
+            } else if (fixedInt64 != nullptr) {
+                fixedInt64->Extract(curRows, spillOutputState,
+                    [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseHashMapToVector(key, value, idx);
+                    }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
+                });
+            } else if (fixedInt16 != nullptr) {
+                fixedInt16->Extract(curRows, spillOutputState,
+                    [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseHashMapToVector(key, value, idx);
+                    }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
+                });
+            } else if (packedInt32 != nullptr) {
+                packedInt32->Extract(curRows, spillOutputState,
+                    [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseHashMapToVectorAsBytes(key, value, idx);
+                    }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
+                });
+            } else if (packedInt64 != nullptr) {
+                packedInt64->Extract(curRows, spillOutputState,
+                    [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseHashMapToVectorAsBytes(key, value, idx);
+                    }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+                    aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
                 });
             }
-        } else if (fixedInt32 != nullptr) {
-            fixedInt32->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
-        } else if (fixedInt64 != nullptr) {
-            fixedInt64->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
-        } else if (fixedInt16 != nullptr) {
-            fixedInt16->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
-        } else if (packedInt32 != nullptr) {
-            packedInt32->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVectorAsBytes(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
-        } else if (packedInt64 != nullptr) {
-            packedInt64->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVectorAsBytes(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
+        }
+
+        aggregationSort->SortKvVector(serialize != nullptr);
+        auto rowCount = aggregationSort->GetRowCount();
+        LogDebug("Spill data to disk starting in hash aggregation operator, rowCount=%lld\n", rowCount);
+        // Each run produces one spill file; SpillMerger merges all files later.
+        result = spiller->Spill(aggregationSort.get(), this, serialize != nullptr);
+        LogDebug("Spill data to disk finished in hash aggregation operator, rowCount=%lld\n", rowCount);
+
+        if (needPoolRollBack) {
+            // This run's re-serialized keys have been persisted to disk and kvVec
+            // entries pointing at them are overwritten by the next run's extract.
+            serialize->RollBackPoolState(poolState);
         }
     }
 
-    aggregationSort->SortKvVector(serialize != nullptr);
-    auto rowCount = aggregationSort->GetRowCount();
-    LogDebug("Spill data to disk starting in hash aggregation operator, rowCount=%lld\n", rowCount);
-    ErrorCode result = spiller->Spill(aggregationSort.get(), this, serialize != nullptr);
-    LogDebug("Spill data to disk finished in hash aggregation operator, rowCount=%lld\n", rowCount);
+    // Merge this round's run files back into a single sorted file: read-back
+    // then opens one stream per spill round exactly like the legacy single-run
+    // spill, while the loop above keeps spill-time memory bounded per run.
+    // Merge failure is non-fatal: the run files survive and read-back merges
+    // them as before, only with more streams.
+    if (result == ErrorCode::SUCCESS) {
+        (void)spiller->MergeRecentFiles(fileCountBeforeSpill, serialize != nullptr);
+    }
     aggregationSort->ClearVector();
     return result;
+}
+
+int64_t HashAggregationOperator::CalcSpillRunRows(int64_t totalSpillCount) const
+{
+    // Floor to keep at least a few batches per run: tiny runs explode the spill
+    // file count and per-run sort overhead without meaningful memory savings.
+    constexpr int64_t kMinRunRows = 4096;
+    if (totalSpillCount <= kMinRunRows) {
+        return std::max<int64_t>(totalSpillCount, 1);
+    }
+
+    auto spillConfig = operatorConfig.GetSpillConfig();
+    auto runFraction = spillConfig->GetHashAggSpillRunFraction();
+    auto maxRunRows = spillConfig->GetHashAggSpillMaxRunRows();
+    if (runFraction >= 1.0) {
+        return totalSpillCount; // run-based spill disabled, legacy single run
+    }
+
+    auto byFraction = static_cast<int64_t>(std::ceil(totalSpillCount * runFraction));
+    auto runRows = std::min<int64_t>(std::max<int64_t>(byFraction, kMinRunRows), totalSpillCount);
+    if (maxRunRows > 0) {
+        runRows = std::min<int64_t>(runRows, static_cast<int64_t>(maxRunRows));
+    }
+    return std::max<int64_t>(runRows, 1);
 }
 
 ErrorCode HashAggregationOperator::SpillHashMap()

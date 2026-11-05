@@ -102,6 +102,19 @@ public:
         return spillCompressEnabled;
     }
 
+    /// Fraction of the hash aggregation table materialized per spill run.
+    /// 1.0 (default) keeps the legacy single-run spill behavior.
+    virtual double GetHashAggSpillRunFraction() const
+    {
+        return 1.0;
+    }
+
+    /// Max rows materialized per hash aggregation spill run.
+    virtual uint64_t GetHashAggSpillMaxRunRows() const
+    {
+        return UINT64_MAX;
+    }
+
 protected:
     static constexpr uint64_t DEFAULT_MAX_SPILL_BYTES = 100UL * (1 << 30);
     static constexpr uint64_t DEFAULT_WRITE_BUFFER_SIZE = 4 * (1 << 20);
@@ -129,9 +142,12 @@ public:
 class SparkSpillConfig : public SpillConfig {
 public:
     SparkSpillConfig(bool enabled, const std::string &spillPath, uint64_t maxSpillBytes, int32_t numElementsThreshold,
-        int32_t memUsagePctThreshold, uint64_t writeBufferSize, bool isCompressEnabled)
+        int32_t memUsagePctThreshold, uint64_t writeBufferSize, bool isCompressEnabled,
+        double hashAggSpillRunFraction = 1.0, uint64_t hashAggSpillMaxRunRows = 4UL << 20)
         : SpillConfig(SPILL_CONFIG_SPARK, enabled, spillPath, maxSpillBytes, writeBufferSize, isCompressEnabled),
-          numElementsForSpillThreshold(numElementsThreshold)
+          numElementsForSpillThreshold(numElementsThreshold),
+          hashAggSpillRunFraction(hashAggSpillRunFraction),
+          hashAggSpillMaxRunRows(hashAggSpillMaxRunRows)
     {
         auto limit = mem::MemoryManager::GetGlobalMemoryLimit();
         if (limit == mem::MemoryManager::UNLIMIT) {
@@ -153,7 +169,9 @@ public:
     SparkSpillConfig(const SparkSpillConfig &spillConfig)
         : SpillConfig((SpillConfig &)spillConfig),
           numElementsForSpillThreshold(spillConfig.numElementsForSpillThreshold),
-          memUsageForSpillThreshold(spillConfig.memUsageForSpillThreshold)
+          memUsageForSpillThreshold(spillConfig.memUsageForSpillThreshold),
+          hashAggSpillRunFraction(spillConfig.hashAggSpillRunFraction),
+          hashAggSpillMaxRunRows(spillConfig.hashAggSpillMaxRunRows)
     {}
 
     ~SparkSpillConfig() override = default;
@@ -172,9 +190,21 @@ public:
         return memUsageForSpillThreshold;
     }
 
+    double GetHashAggSpillRunFraction() const override
+    {
+        return hashAggSpillRunFraction;
+    }
+
+    uint64_t GetHashAggSpillMaxRunRows() const override
+    {
+        return hashAggSpillMaxRunRows;
+    }
+
 private:
     int32_t numElementsForSpillThreshold;
     int64_t memUsageForSpillThreshold;
+    double hashAggSpillRunFraction = 1.0;
+    uint64_t hashAggSpillMaxRunRows = 4UL << 20;
 };
 
 
