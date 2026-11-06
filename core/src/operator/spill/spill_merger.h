@@ -116,10 +116,10 @@ class SpillMergeStream {
 public:
     static SpillMergeStream *Create(const type::DataTypes &dataTypes, const SpillFileInfo &fileInfo,
         const std::vector<int32_t> &sortCols, std::vector<OperatorUtil::CompareFunc> &sortCompareFuncs,
-        SpillTracker *tracker, bool isSpillCompressEnabled, bool deleteFileOnClose = true)
+        SpillTracker *tracker, bool spillCompressEnabled, bool deleteFileOnClose = true)
     {
         auto *stream = new SpillMergeStream(dataTypes, fileInfo, sortCols, sortCompareFuncs, tracker,
-            isSpillCompressEnabled, deleteFileOnClose);
+            spillCompressEnabled, deleteFileOnClose);
         auto result = stream->GetNextBatch();
         if (result != ErrorCode::SUCCESS) {
             delete stream;
@@ -246,7 +246,7 @@ private:
 class SpillMerger {
 public:
     static SpillMerger *Create(const type::DataTypes &dataTypes, const std::vector<int32_t> &sortCols,
-        const std::vector<SortOrder> &sortOrders, SpillTracker *spillTracker,
+        const std::vector<SortOrder> &sortOrders, SpillTracker *tracker,
         const std::vector<SpillFileInfo> &spillFiles, bool isSpillCompressEnabled, bool compareWithHashVal = false,
         bool deleteFileOnClose = true)
     {
@@ -262,9 +262,9 @@ public:
         uint64_t totalRowCount = 0;
         for (auto &fileInfo : spillFiles) {
             auto stream = compareWithHashVal ? SpillMergeStream::Create(dataTypes, fileInfo, sortCols,
-                sortCompareFuncsWithHashVal, spillTracker, isSpillCompressEnabled, compareWithHashVal,
+                sortCompareFuncsWithHashVal, tracker, isSpillCompressEnabled, compareWithHashVal,
                 deleteFileOnClose)
-                : SpillMergeStream::Create(dataTypes, fileInfo, sortCols, sortCompareFuncs, spillTracker,
+                : SpillMergeStream::Create(dataTypes, fileInfo, sortCols, sortCompareFuncs, tracker,
                     isSpillCompressEnabled, deleteFileOnClose);
             if (stream == nullptr) {
                 for (auto createdStream : streams) {
@@ -275,7 +275,7 @@ public:
             streams.emplace_back(stream);
             totalRowCount += fileInfo.totalRowCount;
         }
-        return new SpillMerger(streams, totalRowCount, spillTracker);
+        return new SpillMerger(streams, totalRowCount, tracker);
     }
 
     ~SpillMerger()

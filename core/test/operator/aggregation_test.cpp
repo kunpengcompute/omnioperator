@@ -5859,9 +5859,6 @@ TEST(HashAggregationOperatorTest, test_hashagg_arrayhash_countdistinct_spill)
     delete hashAggOperatorFactory;
     VectorHelper::FreeVecBatches(result);
     VectorHelper::FreeVecBatch(expectVecBatch);
-    VectorHelper::FreeVecBatch(vecBatch0);
-    VectorHelper::FreeVecBatch(vecBatch1);
-    VectorHelper::FreeVecBatch(vecBatch2);
 
     ConfigUtil::SetAggHashTableRule(prevRule);
 }
