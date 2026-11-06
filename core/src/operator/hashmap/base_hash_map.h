@@ -887,7 +887,7 @@ private:
         // when capacity == Group::kWidth, as used by count-distinct states).
         alignas(Group::kWidth) ctrl_t wrappedGroup[Group::kWidth];
         __builtin_prefetch(identifiers + seq.GetOffset(), 0, 3);
-        while (true) {
+        do {
             const size_t offset = seq.GetOffset();
             const ctrl_t *controlGroup = identifiers + offset;
             if (offset + Group::kWidth > capacity) {
@@ -912,10 +912,7 @@ private:
                 return seq.GetOffset(firstIndex);
             }
             seq.GetNext();
-            if (seq.GetIndex() >= capacity) {
-                break;
-            }
-        }
+        } while (seq.GetIndex() < capacity);
 
         // The load-factor check should make this path unreachable.  Keep a
         // bounded scalar fallback so a malformed/full table cannot return a

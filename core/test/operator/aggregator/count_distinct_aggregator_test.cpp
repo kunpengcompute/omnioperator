@@ -491,7 +491,8 @@ TEST(CountDistinctAggregatorTest, CompleteVarcharExtractValuesForSpillEmitsArray
         VectorHelper::CreateVector(OMNI_FLAT, OMNI_VARCHAR, 0));
     BaseVector *spillVector = new ArrayVector(1, std::shared_ptr<BaseVector>(spillElements));
     std::vector<BaseVector *> spillVectors = {spillVector};
-    agg->ExtractValuesForSpill(std::vector<AggregateState *>{state.get()}, spillVectors);
+    std::vector<AggregateState *> groupStates = {state.get()};
+    agg->ExtractValuesForSpill(groupStates, spillVectors);
 
     // The spilled row must be the distinct set {"x", "y", "z"} (3 elements), not a Long.
     auto *arrayVec = static_cast<ArrayVector *>(spillVectors[0]);

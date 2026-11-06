@@ -16,25 +16,14 @@
 
 namespace omniruntime {
 namespace op {
-static constexpr int32_t ERROR_BUFFER_SIZE = 128;
+constexpr int32_t ERROR_BUFFER_SIZE = 128;
 // The ORC-style compression header stores the block length in 23 bits
 // (7 bits in byte 0 and 8 bits each in bytes 1 and 2). Keep the writer block
 // comfortably below that wire-format limit.
-static constexpr size_t SPILL_COMPRESSION_MAX_BLOCK_SIZE = (1U << 23) - 1;
-static constexpr int32_t SPILL_COMPRESSION_BLOCK_SIZE = 4 * 1024 * 1024;
+constexpr size_t SPILL_COMPRESSION_MAX_BLOCK_SIZE = (1U << 23) - 1;
+constexpr int32_t SPILL_COMPRESSION_BLOCK_SIZE = 4 * 1024 * 1024;
 
-static void GetErrorMsg(int32_t errorCode, char *buffer, int32_t bufferLen)
-{
-    if (buffer == nullptr || bufferLen <= 0) return;
-
-    const char* msg = strerror(errorCode);
-    if (msg == nullptr) {
-        msg = "Unknown error";
-    }
-
-    strncpy(buffer, msg, bufferLen - 1);
-    buffer[bufferLen - 1] = '\0';
-}
+void GetErrorMsg(int32_t errorCode, char *buffer, int32_t bufferLen);
 
 class SortOrder {
 public:
@@ -127,9 +116,9 @@ class SpillMergeStream {
 public:
     static SpillMergeStream *Create(const type::DataTypes &dataTypes, const SpillFileInfo &fileInfo,
         const std::vector<int32_t> &sortCols, std::vector<OperatorUtil::CompareFunc> &sortCompareFuncs,
-        SpillTracker *spillTracker, bool isSpillCompressEnabled, bool deleteFileOnClose = true)
+        SpillTracker *tracker, bool isSpillCompressEnabled, bool deleteFileOnClose = true)
     {
-        auto *stream = new SpillMergeStream(dataTypes, fileInfo, sortCols, sortCompareFuncs, spillTracker,
+        auto *stream = new SpillMergeStream(dataTypes, fileInfo, sortCols, sortCompareFuncs, tracker,
             isSpillCompressEnabled, deleteFileOnClose);
         auto result = stream->GetNextBatch();
         if (result != ErrorCode::SUCCESS) {

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <unistd.h>
+#include <cstring>
 #include "spill_merger.h"
 #include "vector/map_vector.h"
 #include "vector/row_vector.h"
@@ -15,6 +16,20 @@ using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
 
 static constexpr size_t NUMBER_OF_ELEMENTS = 1;
 using namespace omniSpark;
+
+void GetErrorMsg(int32_t errorCode, char *buffer, int32_t bufferLen)
+{
+    if (buffer == nullptr || bufferLen <= 0) return;
+
+    const char* msg = strerror(errorCode);
+    if (msg == nullptr) {
+        msg = "Unknown error";
+    }
+
+    strncpy(buffer, msg, bufferLen - 1);
+    buffer[bufferLen - 1] = '\0';
+}
+
 SpillReader::~SpillReader()
 {
     if (file != nullptr) {
