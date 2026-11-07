@@ -3,6 +3,7 @@
  */
 
 #include "aggregator_factory.h"
+#include "count_distinct_aggregator.h"
 #include "type/data_type.h"
 
 namespace omniruntime {
@@ -93,6 +94,70 @@ std::unique_ptr<Aggregator> CollectSetAggregatorFactory::CreateAggregator(const 
         default: {
             std::string omniExceptionInfo =
                 "CollectSet unsupported element type " + std::to_string(elementTypeId);
+            throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
+        }
+    }
+}
+
+/*
+ * e.g(Partial):
+ * input: T, output: Array<T> (distinct set), CountDistinctAggregator<T>
+ *
+ * e.g(Final):
+ * input: Array<T>, output: Long, CountDistinctAggregator<T>
+ */
+std::unique_ptr<Aggregator> CountDistinctAggregatorFactory::CreateAggregator(const type::DataTypes &inputTypes,
+                                                                          const type::DataTypes &outputTypes, std::vector<int32_t> &channels, bool inputRaw, bool outputPartial,
+                                                                          bool isOverflowAsNull)
+{
+    type::DataTypeId elementTypeId = GetCollectElementTypeId(inputTypes, inputRaw);
+    switch (elementTypeId) {
+        case type::OMNI_BOOLEAN:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_BOOLEAN>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_BYTE:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_BYTE>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_SHORT:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_SHORT>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_DATE32:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_DATE32>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_TIME32:
+        case type::OMNI_INT:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_INT>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_DATE64:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_DATE64>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_TIMESTAMP:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_TIMESTAMP>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_LONG:
+        case type::OMNI_TIME64:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_LONG>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_FLOAT:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_FLOAT>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_DOUBLE:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_DOUBLE>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_DECIMAL64:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_DECIMAL64>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_DECIMAL128:
+            return std::make_unique<CountDistinctAggregator<type::OMNI_DECIMAL128>>(inputTypes, outputTypes,
+                channels, inputRaw, outputPartial, isOverflowAsNull);
+        case type::OMNI_VARCHAR:
+        case type::OMNI_CHAR:
+        case type::OMNI_VARBINARY:
+            return std::make_unique<CountDistinctVarcharAggregator>(inputTypes, outputTypes, channels, inputRaw,
+                outputPartial, isOverflowAsNull);
+        default: {
+            std::string omniExceptionInfo =
+                "CountDistinct unsupported element type " + std::to_string(elementTypeId);
             throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
         }
     }
@@ -266,6 +331,9 @@ std::unique_ptr<AggregatorFactory> CreateAggregatorFactory(FunctionType aggType)
         }
         case OMNI_AGGREGATION_TYPE_COLLECT_SET: {
             return std::make_unique<CollectSetAggregatorFactory>();
+        }
+        case OMNI_AGGREGATION_TYPE_COUNT_DISTINCT: {
+            return std::make_unique<CountDistinctAggregatorFactory>();
         }
         case OMNI_AGGREGATION_TYPE_COLLECT_LIST: {
             return std::make_unique<CollectListAggregatorFactory>();

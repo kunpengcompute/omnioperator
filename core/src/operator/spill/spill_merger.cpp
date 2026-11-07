@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <unistd.h>
+#include <cstring>
 #include "spill_merger.h"
 #include "vector/map_vector.h"
 #include "vector/row_vector.h"
@@ -15,10 +16,33 @@ using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
 
 static constexpr size_t NUMBER_OF_ELEMENTS = 1;
 using namespace omniSpark;
+
+void GetErrorMsg(int32_t errorCode, char *buffer, int32_t bufferLen)
+{
+    if (buffer == nullptr || bufferLen <= 0) return;
+
+    const char* msg = strerror(errorCode);
+    if (msg == nullptr) {
+        msg = "Unknown error";
+    }
+
+    strncpy(buffer, msg, bufferLen - 1);
+    buffer[bufferLen - 1] = '\0';
+}
+
 SpillReader::~SpillReader()
 {
-    // the spill file can be deleted if there is exception
-    remove(filePath.c_str());
+    if (file != nullptr) {
+        fclose(file);
+        file = nullptr;
+    }
+    // A temporary merger (used by Spiller::MergeRecentFiles) must not remove
+    // its input runs: if one run cannot be read, the caller still needs every
+    // original file for the read-back fallback.  The final read-back merger
+    // owns its files and keeps the historical cleanup behaviour.
+    if (deleteFileOnClose) {
+        remove(filePath.c_str());
+    }
     if (prevBuffer_ != nullptr) {
         delete[] prevBuffer_;
         prevBuffer_ = nullptr;
@@ -29,14 +53,21 @@ ErrorCode SpillReader::ReadVecBatch(std::unique_ptr<vec::VectorBatch> &vectorBat
 {
     if (rowOffset >= totalRowCount) {
         isEnd = true;
-        fclose(file);
-        // the spill file can be deleted if all data has been read
-        remove(filePath.c_str());
+        if (file != nullptr) {
+            fclose(file);
+            file = nullptr;
+        }
+        // The spill file can be deleted if all data has been read.  Do not do
+        // so for a temporary merger, which may still need to fall back to the
+        // original run files after another stream fails.
+        if (deleteFileOnClose) {
+            remove(filePath.c_str());
+        }
         return ErrorCode::SUCCESS;
     }
 
     if (file == nullptr) {
-        file = fopen(filePath.c_str(), "r");
+        file = fopen(filePath.c_str(), "rb");
         if (file == nullptr) {
             auto errorNum = errno;
             char errorBuf[ERROR_BUFFER_SIZE];
@@ -50,23 +81,22 @@ ErrorCode SpillReader::ReadVecBatch(std::unique_ptr<vec::VectorBatch> &vectorBat
     int32_t rowCount = 0;
     if (Read(&rowCount, sizeof(int32_t)) != ErrorCode::SUCCESS) {
         isEnd = true;
-        fclose(file);
+        if (file != nullptr) {
+            fclose(file);
+            file = nullptr;
+        }
         LogError("Read row count from %s failed.", filePath.c_str());
         return ErrorCode::READ_FAILED;
     }
-
-    // A zero-sized batch is not a valid spill record. Treat it as a corrupt or
-    // misaligned stream instead of silently marking the merge stream empty.
-    const auto remainingRows = totalRowCount - rowOffset;
-    if (rowCount <= 0 || static_cast<uint64_t>(rowCount) > remainingRows) {
-        long filePosition = ftell(file);
-        LogWarn("[HashAggSpillTrace] invalid-reader-batch rowCount=%d loaded=%llu "
-                "remaining=%llu declaredRows=%llu fileOffset=%ld path=%s",
-            rowCount, static_cast<unsigned long long>(rowOffset),
-            static_cast<unsigned long long>(remainingRows),
-            static_cast<unsigned long long>(totalRowCount), filePosition, filePath.c_str());
+    if (rowCount <= 0 || static_cast<uint64_t>(rowCount) > totalRowCount - rowOffset) {
         isEnd = true;
-        fclose(file);
+        if (file != nullptr) {
+            fclose(file);
+            file = nullptr;
+        }
+        LogError("Invalid row count %d in spill file %s (rowOffset=%llu, totalRows=%llu).", rowCount,
+            filePath.c_str(), static_cast<unsigned long long>(rowOffset),
+            static_cast<unsigned long long>(totalRowCount));
         return ErrorCode::READ_FAILED;
     }
 
@@ -86,7 +116,10 @@ ErrorCode SpillReader::ReadVecBatch(std::unique_ptr<vec::VectorBatch> &vectorBat
         ErrorCode result = ReadComplexVector(dataTypes.GetType(vecIndex), vector, rowCount);
         if (result != ErrorCode::SUCCESS) {
             isEnd = true;
-            fclose(file);
+            if (file != nullptr) {
+                fclose(file);
+                file = nullptr;
+            }
             return result;
         }
     }
@@ -124,6 +157,16 @@ template <typename T> ErrorCode SpillReader::ReadVector(BaseVector *vector, int3
             return ErrorCode::READ_FAILED;
         }
 
+        if (offsets[0] != 0) {
+            LogError("Invalid string offsets in %s: first offset=%d.", filePath.c_str(), offsets[0]);
+            return ErrorCode::READ_FAILED;
+        }
+        for (int32_t i = 1; i <= rowCount; ++i) {
+            if (offsets[i] < offsets[i - 1]) {
+                LogError("Invalid string offsets in %s at row=%d.", filePath.c_str(), i);
+                return ErrorCode::READ_FAILED;
+            }
+        }
         auto length = offsets[rowCount] - offsets[0];
         if (length > 0) {
             // read values
@@ -194,6 +237,17 @@ ErrorCode SpillReader::ReadArrayVector(const DataTypePtr &dataType, BaseVector *
         LogError("Read array offsets from %s failed.", filePath.c_str());
         return ErrorCode::READ_FAILED;
     }
+    if (offsets[0] != 0) {
+        LogError("Invalid array offsets in %s: first offset=%lld.", filePath.c_str(),
+            static_cast<long long>(offsets[0]));
+        return ErrorCode::READ_FAILED;
+    }
+    for (int32_t i = 1; i <= rowCount; ++i) {
+        if (offsets[i] < offsets[i - 1] || offsets[i] > INT32_MAX) {
+            LogError("Invalid array offsets in %s at row=%d.", filePath.c_str(), i);
+            return ErrorCode::READ_FAILED;
+        }
+    }
 
     auto arrayType = std::dynamic_pointer_cast<ArrayType>(dataType);
     if (!arrayType) {
@@ -240,6 +294,18 @@ ErrorCode SpillReader::ReadMapVector(const DataTypePtr &dataType, BaseVector *ve
     if (Read(offsets, offsetsSize) != ErrorCode::SUCCESS) {
         LogError("Read map offsets from %s failed.", filePath.c_str());
         return ErrorCode::READ_FAILED;
+    }
+
+    if (offsets[0] != 0) {
+        LogError("Invalid map offsets in %s: first offset=%lld.", filePath.c_str(),
+            static_cast<long long>(offsets[0]));
+        return ErrorCode::READ_FAILED;
+    }
+    for (int32_t i = 1; i <= rowCount; ++i) {
+        if (offsets[i] < offsets[i - 1] || offsets[i] > INT32_MAX) {
+            LogError("Invalid map offsets in %s at row=%d.", filePath.c_str(), i);
+            return ErrorCode::READ_FAILED;
+        }
     }
 
     int32_t entryCount = static_cast<int32_t>(offsets[rowCount]);
@@ -397,16 +463,13 @@ ErrorCode SpillReader::ReadWithCompress(void *buf, size_t bufSize)
                 LogError("Read header from %s failed: %s (errno=%d)", filePath.c_str(), errorBuf, savedErrno);
                 return ErrorCode::READ_FAILED;
             }
-
-            std::pair<size_t, bool> header_info = parseCompressionHeader(header_data);
-            size_t compressed_block_size = header_info.first;
-            bool is_original_data = header_info.second;
-            if (compressed_block_size == 0) {
-                LogError("Read compressed data from %s failed: zero-sized block.", filePath.c_str());
+            auto [compressed_block_size, is_original_data] = parseCompressionHeader(header_data);
+            if (compressed_block_size == 0 || compressed_block_size > SPILL_COMPRESSION_MAX_BLOCK_SIZE) {
+                LogError("Invalid compressed block size %zu in %s.", compressed_block_size, filePath.c_str());
                 return ErrorCode::READ_FAILED;
             }
-            char* compressed_data = new char[compressed_block_size];
-            nread = fread(compressed_data, 1, compressed_block_size, file);
+            std::unique_ptr<char[]> compressed_data(new char[compressed_block_size]);
+            nread = fread(compressed_data.get(), 1, compressed_block_size, file);
             if (nread != compressed_block_size) {
                 int savedErrno = ferror(file) ? errno : 0;
                 if (savedErrno == 0 && feof(file)) {
@@ -415,17 +478,16 @@ ErrorCode SpillReader::ReadWithCompress(void *buf, size_t bufSize)
                 char errorBuf[ERROR_BUFFER_SIZE];
                 GetErrorMsg(savedErrno, errorBuf, ERROR_BUFFER_SIZE);
                 LogError("Read compressed data from %s failed: %s (errno=%d)", filePath.c_str(), errorBuf, savedErrno);
-                delete[] compressed_data;
                 return ErrorCode::READ_FAILED;
             }
             if (is_original_data) {
-                prevBuffer_ = compressed_data;
+                prevBuffer_ = compressed_data.release();
                 currentBuffer_ = prevBuffer_;
                 remainLength = static_cast<int32_t>(compressed_block_size);
             } else {
                 auto [decomp_data, decomp_len] = decompressLZ4(
-                    compressed_data, static_cast<int32_t>(compressed_block_size), 32 * 1024 * 1024);
-                delete[] compressed_data;
+                    compressed_data.get(), static_cast<int32_t>(compressed_block_size),
+                    SPILL_COMPRESSION_BLOCK_SIZE);
                 if (decomp_data == nullptr || decomp_len <= 0) {
                     return ErrorCode::READ_FAILED;
                 }

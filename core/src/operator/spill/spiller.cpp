@@ -21,6 +21,20 @@ static int32_t SPILL_TEMPLATE_SIZE = static_cast<int32_t>(SPILL_TEMPLATE.size())
 constexpr int PID_LENGTH = 10;
 constexpr int TID_LENGTH = 10;
 
+template <typename T>
+static bool AreSpillOffsetsValid(const T *offsets, int32_t rowCount, int64_t maxEnd)
+{
+    if (offsets == nullptr || rowCount < 0 || offsets[0] != 0) {
+        return false;
+    }
+    for (int32_t i = 1; i <= rowCount; ++i) {
+        if (offsets[i] < offsets[i - 1] || static_cast<int64_t>(offsets[i]) > maxEnd) {
+            return false;
+        }
+    }
+    return true;
+}
+
 ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool comapreWithHashVal)
 {
     size_t totalRowCount = aggregationSort->GetRowCount();
@@ -36,16 +50,14 @@ ErrorCode Spiller::Spill(AggregationSort *aggregationSort, Operator* op, bool co
     try {
     int64_t totalRowOffset = 0;
     int32_t vecBatchCount = OperatorUtil::GetVecBatchCount(totalRowCount, maxRowCountPerBatch);
-    int32_t maxRowCount = 0; // for reuse vector batch memory
     for (int32_t vecBatchIdx = 0; vecBatchIdx < vecBatchCount; vecBatchIdx++) {
         auto rowCount = std::min(maxRowCountPerBatch, static_cast<int32_t>(totalRowCount - totalRowOffset));
-        if (spillVecBatch == nullptr || rowCount > maxRowCount) {
-            spillVecBatch = std::make_unique<VectorBatch>(rowCount);
-            VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount);
-            maxRowCount = rowCount;
-        } else {
-            spillVecBatch->Resize(rowCount);
-        }
+        // Aggregation spill vectors include ArrayVector columns for collect_set
+        // / count_distinct. VectorBatch::Resize only changes the row count and
+        // null bits; it does not reset array offsets or the child element
+        // vector. Build a fresh batch for every aggregation spill block.
+        spillVecBatch = std::make_unique<VectorBatch>(rowCount);
+        VectorHelper::AppendVectors(spillVecBatch.get(), dataTypes, rowCount);
         auto spillVecBatchPtr = spillVecBatch.get();
         aggregationSort->SetSpillVectorBatch(spillVecBatchPtr, totalRowOffset, comapreWithHashVal);
         auto vecBatchSize = CollectVecBatchSize(spillVecBatchPtr);
@@ -100,7 +112,7 @@ ErrorCode Spiller::MergeRecentFiles(size_t startIdx, bool compareWithHashVal)
     // that were already reserved when the run files were written.
     auto *mergeTracker = GetRootSpillTracker().CreateSpillTracker(UINT64_MAX);
     auto *merger = SpillMerger::Create(dataTypes, sortCols, sortOrders,
-        mergeTracker, recentFiles, isSpillCompressEnabled, compareWithHashVal);
+        mergeTracker, recentFiles, isSpillCompressEnabled, compareWithHashVal, false);
     if (merger == nullptr) {
         // Create failed before taking ownership of the tracker.
         delete mergeTracker;
@@ -110,30 +122,30 @@ ErrorCode Spiller::MergeRecentFiles(size_t startIdx, bool compareWithHashVal)
 
     auto writer = std::make_unique<SpillWriter>(dataTypes, dirPaths[0], writeBufferSize,
         isSpillCompressEnabled);
-    // Rows are appended one by one into this reusable batch, mirroring the
-    // batch reuse pattern of Spill().
-    auto mergedVecBatch = std::make_unique<VectorBatch>(maxRowCountPerBatch);
-    VectorHelper::AppendVectors(mergedVecBatch.get(), dataTypes, maxRowCountPerBatch);
-    auto mergedVecBatchPtr = mergedVecBatch.get();
 
     ErrorCode result = ErrorCode::SUCCESS;
     bool isEqual = false; // equal groups are irrelevant when relocating rows
-    int32_t dstRowIdx = 0;
-    uint64_t loopBudget =
-        merger->GetTotalRowCount() / static_cast<uint64_t>(maxRowCountPerBatch) + 1;
+    uint64_t rowsRemaining = merger->GetTotalRowCount();
     try {
-        for (; loopBudget > 0; loopBudget--) {
-            // Reset varchar offsets so the string containers stay bounded to
-            // one batch instead of growing with the whole merged data set.
-            VectorHelper::ResetVarcharVectorsForReuse(mergedVecBatchPtr);
-            // VectorBatch::Resize clears the null flags, keep the reused
-            // batch clean before every fill cycle.
-            mergedVecBatchPtr->Resize(maxRowCountPerBatch);
-            dstRowIdx = 0;
-            while (dstRowIdx < maxRowCountPerBatch) {
+        while (rowsRemaining > 0) {
+            // Build a fresh destination batch for every output block.  In
+            // particular, ArrayVector keeps an element vector and offsets in
+            // addition to the row count; VectorBatch::Resize only resets
+            // nulls/size, so reusing it would leave offsets[0] pointing past
+            // the previous block and serialize invalid array lengths.
+            auto batchRowCount = static_cast<int32_t>(
+                std::min<uint64_t>(rowsRemaining, static_cast<uint64_t>(maxRowCountPerBatch)));
+            auto mergedVecBatch = std::make_unique<VectorBatch>(batchRowCount);
+            VectorHelper::AppendVectors(mergedVecBatch.get(), dataTypes, batchRowCount);
+            auto *mergedVecBatchPtr = mergedVecBatch.get();
+            int32_t dstRowIdx = 0;
+            while (dstRowIdx < batchRowCount) {
                 auto *srcBatch = merger->CurrentBatchWithEqual(isEqual);
                 if (srcBatch == nullptr) {
-                    break; // all run files drained
+                    LogError("Spill merger ended early: expected %llu more rows.",
+                        static_cast<unsigned long long>(rowsRemaining));
+                    result = ErrorCode::READ_FAILED;
+                    break;
                 }
                 auto srcRowIdx = merger->CurrentRowIndex();
                 auto vecCount = srcBatch->GetVectorCount();
@@ -149,30 +161,7 @@ ErrorCode Spiller::MergeRecentFiles(size_t startIdx, bool compareWithHashVal)
                 dstRowIdx++;
                 merger->Pop();
             }
-            if (dstRowIdx == 0) {
-                break;
-            }
-            if (dstRowIdx < maxRowCountPerBatch) {
-                // Tail rows: copy them into a fresh batch. Slicing is not an
-                // option here because SpillWriter serializes varchar values
-                // and null bits from the buffer start and is not offset-aware,
-                // and Resize would clear the null flags of the filled rows.
-                auto tailBatch = std::make_unique<VectorBatch>(dstRowIdx);
-                VectorHelper::AppendVectors(tailBatch.get(), dataTypes, dstRowIdx);
-                auto vecCount = mergedVecBatchPtr->GetVectorCount();
-                for (int32_t rowIdx = 0; rowIdx < dstRowIdx; rowIdx++) {
-                    for (int32_t colIdx = 0; colIdx < vecCount; colIdx++) {
-                        auto *srcVector = mergedVecBatchPtr->Get(colIdx);
-                        auto *dstVector = tailBatch->Get(colIdx);
-                        if (srcVector->IsNull(rowIdx)) {
-                            VectorHelper::SetNull(dstVector, rowIdx);
-                        } else {
-                            VectorHelper::CopyValue(srcVector, rowIdx, dstVector, rowIdx);
-                        }
-                    }
-                }
-                auto vecBatchSize = CollectVecBatchSize(tailBatch.get());
-                result = writer->WriteVecBatch(tailBatch.get(), vecBatchSize);
+            if (result != ErrorCode::SUCCESS) {
                 break;
             }
             auto vecBatchSize = CollectVecBatchSize(mergedVecBatchPtr);
@@ -180,21 +169,16 @@ ErrorCode Spiller::MergeRecentFiles(size_t startIdx, bool compareWithHashVal)
             if (result != ErrorCode::SUCCESS) {
                 break;
             }
+            rowsRemaining -= static_cast<uint64_t>(batchRowCount);
         }
-        if (result == ErrorCode::SUCCESS && loopBudget == 0) {
-            LogError("Spill merge loop exhausted its iteration budget with rows "
-                     "left in %zu run files.",
-                recentFiles.size());
-            result = ErrorCode::READ_FAILED;
+        if (result == ErrorCode::SUCCESS) {
+            result = writer->Close();
         }
     } catch (...) {
         // SpillMergeStream::Pop throws on read failure.
         result = ErrorCode::READ_FAILED;
     }
     delete merger;
-    if (result == ErrorCode::SUCCESS) {
-        result = writer->Close();
-    }
     if (result != ErrorCode::SUCCESS) {
         // Drop the unusable merged file and keep the run files untouched:
         // read-back falls back to merging them as before.
@@ -290,11 +274,11 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
 uint64_t Spiller::CollectVecBatchSize(vec::VectorBatch *vectorBatch)
 {
     uint64_t result = sizeof(int32_t); // for row count size
+    int32_t rowCount = vectorBatch->GetRowCount();
     int32_t vecCount = vectorBatch->GetVectorCount();
     for (int32_t i = 0; i < vecCount; i++) {
         auto vector = vectorBatch->Get(i);
         auto dataType = dataTypes.GetType(i);
-        int32_t rowCount = vector->GetSize();
         result += CollectComplexVectorSize(dataType, vector, rowCount);
     }
     return result;
@@ -302,6 +286,9 @@ uint64_t Spiller::CollectVecBatchSize(vec::VectorBatch *vectorBatch)
 
 uint64_t Spiller::CollectComplexVectorSize(const DataTypePtr& dataType, vec::BaseVector* vector, int32_t rowCount)
 {
+    if (dataType == nullptr || vector == nullptr || rowCount < 0 || rowCount > vector->GetSize()) {
+        throw omniruntime::exception::OmniException("SPILL_FAILED", "Invalid vector size when collecting spill size");
+    }
     switch (dataType->GetId()) {
     case OMNI_BOOLEAN:
         return CollectVectorSize<bool>(vector, rowCount);
@@ -341,6 +328,10 @@ uint64_t Spiller::CollectComplexVectorSize(const DataTypePtr& dataType, vec::Bas
 
 uint64_t Spiller::CollectArrayVectorSize(const DataTypePtr &arrayType, vec::BaseVector *vector, int32_t rowCount)
 {
+    auto arrayTypePtr = std::dynamic_pointer_cast<ArrayType>(arrayType);
+    if (!arrayTypePtr) {
+        throw omniruntime::exception::OmniException("SPILL_FAILED", "Data type is not ArrayType");
+    }
     auto arrayVec = static_cast<omniruntime::vec::ArrayVector*>(vector);
     // nulls
     uint64_t result = BitUtil::Nbytes(rowCount);
@@ -348,19 +339,22 @@ uint64_t Spiller::CollectArrayVectorSize(const DataTypePtr &arrayType, vec::Base
     // offsets
     result += (rowCount + 1) * sizeof(int64_t);
 
-    // elementRowCount = last offset
+    // Spill files store offsets and child values from the beginning of their
+    // buffers, so only normalized complex vectors can be serialized.
     int64_t* rawOffsets = arrayVec->GetOffsets();
-    int32_t elementRowCount = static_cast<int32_t>(rawOffsets[rowCount]);
+    if (!AreSpillOffsetsValid(rawOffsets, rowCount, INT32_MAX)) {
+        throw omniruntime::exception::OmniException("SPILL_FAILED", "Invalid array offsets");
+    }
+    int64_t elementCount = rawOffsets[rowCount];
+    int32_t elementRowCount = static_cast<int32_t>(elementCount);
 
     // element vector
     auto elementVec = arrayVec->GetElementVector();
     if (!elementVec) {
-        LogError("ArrayVector has null element vector in size collection");
-        return result;
+        throw omniruntime::exception::OmniException("SPILL_FAILED", "ArrayVector has null element vector");
     }
 
-    auto elementType = std::dynamic_pointer_cast<ArrayType>(arrayType)->ElementType();
-    result += CollectComplexVectorSize(elementType, elementVec.get(), elementRowCount);
+    result += CollectComplexVectorSize(arrayTypePtr->ElementType(), elementVec.get(), elementRowCount);
 
     return result;
 }
@@ -372,7 +366,11 @@ uint64_t Spiller::CollectMapVectorSize(const DataTypePtr &mapType, vec::BaseVect
     result += (rowCount + 1) * sizeof(int64_t);
 
     int64_t *rawOffsets = mapVec->GetOffsets();
-    int32_t entryCount = static_cast<int32_t>(rawOffsets[rowCount]);
+    if (!AreSpillOffsetsValid(rawOffsets, rowCount, INT32_MAX)) {
+        throw omniruntime::exception::OmniException("SPILL_FAILED", "Invalid map offsets");
+    }
+    int64_t entryCount64 = rawOffsets[rowCount];
+    int32_t entryCount = static_cast<int32_t>(entryCount64);
 
     auto mapTypePtr = std::dynamic_pointer_cast<MapType>(mapType);
     if (!mapTypePtr) {
@@ -409,9 +407,10 @@ uint64_t Spiller::CollectRowVectorSize(const DataTypePtr &rowType, vec::BaseVect
     return result;
 }
 
-    bool Spiller::isSpillCompressEnable() const {
-        return isSpillCompressEnabled;
-    }
+bool Spiller::isSpillCompressEnable() const
+{
+    return isSpillCompressEnabled;
+}
 
 template <typename T> uint64_t Spiller::CollectVectorSize(vec::BaseVector *vector, int32_t rowCount)
 {
@@ -422,6 +421,9 @@ template <typename T> uint64_t Spiller::CollectVectorSize(vec::BaseVector *vecto
         // value length
         auto varcharVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vector);
         auto offsets = unsafe::UnsafeStringVector::GetOffsets(varcharVector);
+        if (!AreSpillOffsetsValid(offsets, rowCount, INT32_MAX)) {
+            throw omniruntime::exception::OmniException("SPILL_FAILED", "Invalid string offsets");
+        }
         result += offsets[rowCount] - offsets[0];
     } else {
         // value length
@@ -473,6 +475,10 @@ ErrorCode SpillWriter::CreateTempFile()
 
 ErrorCode SpillWriter::WriteVecBatch(vec::VectorBatch *vectorBatch, uint64_t vectorBatchSize)
 {
+    if (vectorBatch == nullptr || vectorBatch->GetRowCount() <= 0) {
+        LogError("Cannot write an empty spill vector batch.");
+        return ErrorCode::WRITE_FAILED;
+    }
     ErrorCode result = ErrorCode::SUCCESS;
     if (fd == -1) {
         result = CreateTempFile();
@@ -494,13 +500,21 @@ ErrorCode SpillWriter::WriteVecBatch(vec::VectorBatch *vectorBatch, uint64_t vec
             writeBufferOffset = 0;
         }
         if (vectorBatchSize > writeBufferSize) {
+            auto bytesBefore = logicalBytesWritten;
             result = WriteVecBatchToFile(vectorBatch);
             if (result == ErrorCode::SUCCESS) {
+                auto actualSize = logicalBytesWritten - bytesBefore;
+                if (actualSize != vectorBatchSize) {
+                    LogError("Spill batch size mismatch for %s: expected=%llu, actual=%llu.", filePath.c_str(),
+                        static_cast<unsigned long long>(vectorBatchSize),
+                        static_cast<unsigned long long>(actualSize));
+                    return ErrorCode::WRITE_FAILED;
+                }
                 fileLength += vectorBatchSize;
             }
         } else {
             // write vector batch to writer buffer
-            result = WriteVecBatchToBuffer(vectorBatch);
+            result = WriteVecBatchToBuffer(vectorBatch, vectorBatchSize);
             if (result == ErrorCode::SUCCESS) {
                 writeBufferOffset += vectorBatchSize;
             }
@@ -508,14 +522,21 @@ ErrorCode SpillWriter::WriteVecBatch(vec::VectorBatch *vectorBatch, uint64_t vec
         return result;
     }
 
+    auto bytesBefore = logicalBytesWritten;
     result = WriteVecBatchToFile(vectorBatch);
     if (result == ErrorCode::SUCCESS) {
+        auto actualSize = logicalBytesWritten - bytesBefore;
+        if (actualSize != vectorBatchSize) {
+            LogError("Spill batch size mismatch for %s: expected=%llu, actual=%llu.", filePath.c_str(),
+                static_cast<unsigned long long>(vectorBatchSize), static_cast<unsigned long long>(actualSize));
+            return ErrorCode::WRITE_FAILED;
+        }
         fileLength += vectorBatchSize;
     }
     return result;
 }
 
-ErrorCode SpillWriter::WriteVecBatchToBuffer(vec::VectorBatch *vectorBatch)
+ErrorCode SpillWriter::WriteVecBatchToBuffer(vec::VectorBatch *vectorBatch, uint64_t expectedSize)
 {
     int32_t rowCount = vectorBatch->GetRowCount();
     int32_t writeOffset = writeBufferOffset;
@@ -530,6 +551,12 @@ ErrorCode SpillWriter::WriteVecBatchToBuffer(vec::VectorBatch *vectorBatch)
         if (result != ErrorCode::SUCCESS) {
             return result;
         }
+    }
+    auto actualSize = static_cast<uint64_t>(writeOffset - static_cast<int32_t>(writeBufferOffset));
+    if (actualSize != expectedSize) {
+        LogError("Spill batch size mismatch for %s: expected=%llu, actual=%llu.", filePath.c_str(),
+            static_cast<unsigned long long>(expectedSize), static_cast<unsigned long long>(actualSize));
+        return ErrorCode::WRITE_FAILED;
     }
     totalRowCount += rowCount;
     return ErrorCode::SUCCESS;
@@ -546,13 +573,17 @@ ErrorCode SpillWriter::WriteVectorToBuffer(vec::BaseVector *vector, int32_t rowC
     if constexpr (std::is_same_v<T, std::string_view>) {
         // write offsets
         auto valueOffsets = reinterpret_cast<int32_t *>(VectorHelper::UnsafeGetOffsetsAddr(vector));
+        if (!AreSpillOffsetsValid(valueOffsets, rowCount, INT32_MAX)) {
+            LogError("Invalid string offsets when writing %s.", filePath.c_str());
+            return ErrorCode::WRITE_FAILED;
+        }
         auto offsetLength = (static_cast<ssize_t>(rowCount) + 1) * sizeof(int32_t);
         memcpy(writeBuffer + writeOffset, valueOffsets, offsetLength);
         writeOffset += offsetLength;
 
         // write values
         char *values = unsafe::UnsafeStringVector::GetValues(reinterpret_cast<VarcharVector *>(vector));
-        auto valueLength = static_cast<ssize_t>(valueOffsets[rowCount] - valueOffsets[0]);
+        auto valueLength = static_cast<ssize_t>(valueOffsets[rowCount]);
         memcpy(writeBuffer + writeOffset, values, valueLength);
         writeOffset += valueLength;
         return ErrorCode::SUCCESS;
@@ -568,6 +599,10 @@ ErrorCode SpillWriter::WriteVectorToBuffer(vec::BaseVector *vector, int32_t rowC
 ErrorCode SpillWriter::WriteArrayVectorToBuffer(const DataTypePtr &dataType, vec::BaseVector *vector, int32_t rowCount, int32_t &writeOffset)
 {
     auto arrayType = std::dynamic_pointer_cast<ArrayType>(dataType);
+    if (!arrayType) {
+        LogError("WriteArrayVectorToBuffer: dataType is not ArrayType");
+        return ErrorCode::WRITE_FAILED;
+    }
     auto arrayVec = static_cast<omniruntime::vec::ArrayVector*>(vector);
 
     // nulls
@@ -578,6 +613,11 @@ ErrorCode SpillWriter::WriteArrayVectorToBuffer(const DataTypePtr &dataType, vec
 
     // offsets (int64_t[RowCount + 1])
     int64_t* offsets = arrayVec->GetOffsets();
+    if (!AreSpillOffsetsValid(offsets, rowCount, INT32_MAX)) {
+        LogError("Invalid array offsets when writing %s.", filePath.c_str());
+        return ErrorCode::WRITE_FAILED;
+    }
+    int64_t elementCount = offsets[rowCount];
     ssize_t offsetsSize = static_cast<ssize_t>((rowCount + 1) * sizeof(int64_t));
 
     memcpy(writeBuffer + writeOffset, offsets, static_cast<size_t>(offsetsSize));
@@ -590,7 +630,7 @@ ErrorCode SpillWriter::WriteArrayVectorToBuffer(const DataTypePtr &dataType, vec
         return ErrorCode::WRITE_FAILED;
     }
 
-    int32_t elementRowCount = static_cast<int32_t>(offsets[rowCount]);
+    int32_t elementRowCount = static_cast<int32_t>(elementCount);
     auto res = WriteComplexVectorToBuffer(arrayType->ElementType(), elementVec.get(), elementRowCount, writeOffset);
     return res;
 }
@@ -609,11 +649,16 @@ ErrorCode SpillWriter::WriteMapVectorToBuffer(const DataTypePtr &dataType, vec::
     writeOffset += nullsSize;
 
     int64_t *offsets = mapVec->GetOffsets();
+    if (!AreSpillOffsetsValid(offsets, rowCount, INT32_MAX)) {
+        LogError("Invalid map offsets when writing %s.", filePath.c_str());
+        return ErrorCode::WRITE_FAILED;
+    }
+    int64_t entryCount64 = offsets[rowCount];
     ssize_t offsetsSize = static_cast<ssize_t>((rowCount + 1) * sizeof(int64_t));
     memcpy(writeBuffer + writeOffset, offsets, static_cast<size_t>(offsetsSize));
     writeOffset += offsetsSize;
 
-    int32_t entryCount = static_cast<int32_t>(offsets[rowCount]);
+    int32_t entryCount = static_cast<int32_t>(entryCount64);
     auto keyVec = mapVec->GetKeyVector();
     auto valueVec = mapVec->GetValueVector();
     if (keyVec) {
@@ -749,13 +794,17 @@ template <typename T> ErrorCode SpillWriter::WriteVector(omniruntime::vec::BaseV
         if constexpr (std::is_same_v<T, std::string_view>) {
             // write offsets
             auto offsets = reinterpret_cast<int32_t *>(VectorHelper::UnsafeGetOffsetsAddr(vector));
+            if (!AreSpillOffsetsValid(offsets, rowCount, INT32_MAX)) {
+                LogError("Invalid string offsets when writing %s.", filePath.c_str());
+                return op::ErrorCode::WRITE_FAILED;
+            }
             auto offsetSize = static_cast<ssize_t>((rowCount + 1) * sizeof(int32_t));
             if (Write(offsets, offsetSize) != ErrorCode::SUCCESS) {
                 LogError("Write value offsets to %s failed.", filePath.c_str());
                 return op::ErrorCode::WRITE_FAILED;
             }
 
-            auto valueLength = static_cast<ssize_t>(offsets[rowCount] - offsets[0]);
+            auto valueLength = static_cast<ssize_t>(offsets[rowCount]);
             if (valueLength > 0) {
                 // write values
                 char *values = unsafe::UnsafeStringVector::GetValues(reinterpret_cast<VarcharVector *>(vector));
@@ -786,7 +835,10 @@ template <typename T> ErrorCode SpillWriter::WriteVector(omniruntime::vec::BaseV
     if constexpr (std::is_same_v<T, std::string_view>) {
         offsetsSize = (rowCount + 1) * sizeof(int32_t);
         auto offsets = reinterpret_cast<int32_t *>(VectorHelper::UnsafeGetOffsetsAddr(vector));
-        valuesSize = offsets[rowCount] - offsets[0];
+        if (!AreSpillOffsetsValid(offsets, rowCount, INT32_MAX)) {
+            return ErrorCode::WRITE_FAILED;
+        }
+        valuesSize = offsets[rowCount];
         totalSize += offsetsSize + valuesSize;
     } else {
         valuesSize = rowCount * sizeof(T);
@@ -817,6 +869,7 @@ template <typename T> ErrorCode SpillWriter::WriteVector(omniruntime::vec::BaseV
     if (valuesSize > 0) {
         void *values_ptr = nullptr;
         if constexpr (std::is_same_v<T, std::string_view>) {
+            // String offsets are required to be normalized above.
             values_ptr = unsafe::UnsafeStringVector::GetValues(reinterpret_cast<VarcharVector *>(vector));
         } else {
             values_ptr = unsafe::UnsafeVector::GetRawValues(reinterpret_cast<Vector<T> *>(vector));
@@ -837,6 +890,10 @@ template <typename T> ErrorCode SpillWriter::WriteVector(omniruntime::vec::BaseV
 ErrorCode SpillWriter::WriteArrayVector(const DataTypePtr& dataType, omniruntime::vec::BaseVector* vector, int32_t rowCount)
 {
     auto arrayType = std::dynamic_pointer_cast<ArrayType>(dataType);
+    if (!arrayType) {
+        LogError("WriteArrayVector: dataType is not ArrayType");
+        return ErrorCode::WRITE_FAILED;
+    }
     auto arrayVec = static_cast<omniruntime::vec::ArrayVector*>(vector);
 
     uint8_t* nulls = unsafe::UnsafeBaseVector::GetNulls(vector);
@@ -848,25 +905,28 @@ ErrorCode SpillWriter::WriteArrayVector(const DataTypePtr& dataType, omniruntime
 
     // write offsets
     int64_t* offsets = arrayVec->GetOffsets();
+    if (!AreSpillOffsetsValid(offsets, rowCount, INT32_MAX)) {
+        LogError("Invalid array offsets when writing %s.", filePath.c_str());
+        return ErrorCode::WRITE_FAILED;
+    }
+    int64_t elementCount = offsets[rowCount];
     ssize_t offsetsSize = static_cast<ssize_t>((rowCount + 1) * sizeof(int64_t));
     if (Write(offsets, offsetsSize) != ErrorCode::SUCCESS) {
         LogError("Write value offsets to %s failed.", filePath.c_str());
         return op::ErrorCode::WRITE_FAILED;
     }
 
-    auto valueLength = static_cast<ssize_t>(offsets[rowCount] - offsets[0]);
-    if (valueLength > 0) {
-        // write values
-        auto elementVec = arrayVec->GetElementVector();
-        if (!elementVec) {
-            LogError("ArrayVector has null element vector");
-            return ErrorCode::WRITE_FAILED;
-        }
-        int32_t elementRowCount = static_cast<int32_t>(offsets[rowCount]);
-        auto res = WriteComplexVector(arrayType->ElementType(), elementVec.get(), elementRowCount);
-        return res;
+    // Child metadata is part of the format even when the array contains zero
+    // elements (for example, varchar still has its single zero offset and a
+    // nested array still has its zero offset). Omitting it shifts the next
+    // column/batch and makes the reader fail at EOF.
+    auto elementVec = arrayVec->GetElementVector();
+    if (!elementVec) {
+        LogError("ArrayVector has null element vector");
+        return ErrorCode::WRITE_FAILED;
     }
-    return ErrorCode::SUCCESS;
+    int32_t elementRowCount = static_cast<int32_t>(elementCount);
+    return WriteComplexVector(arrayType->ElementType(), elementVec.get(), elementRowCount);
 }
 
 ErrorCode SpillWriter::WriteMapVector(const DataTypePtr &dataType, omniruntime::vec::BaseVector *vector, int32_t rowCount)
@@ -883,11 +943,16 @@ ErrorCode SpillWriter::WriteMapVector(const DataTypePtr &dataType, omniruntime::
         return ErrorCode::WRITE_FAILED;
     }
     int64_t *offsets = mapVec->GetOffsets();
+    if (!AreSpillOffsetsValid(offsets, rowCount, INT32_MAX)) {
+        LogError("Invalid map offsets when writing %s.", filePath.c_str());
+        return ErrorCode::WRITE_FAILED;
+    }
+    int64_t entryCount64 = offsets[rowCount];
     ssize_t offsetsSize = static_cast<ssize_t>((rowCount + 1) * sizeof(int64_t));
     if (Write(offsets, offsetsSize) != ErrorCode::SUCCESS) {
         return ErrorCode::WRITE_FAILED;
     }
-    int32_t entryCount = static_cast<int32_t>(offsets[rowCount]);
+    int32_t entryCount = static_cast<int32_t>(entryCount64);
     auto keyVec = mapVec->GetKeyVector();
     auto valueVec = mapVec->GetValueVector();
     if (keyVec) {
@@ -999,6 +1064,7 @@ ErrorCode SpillWriter::Write(void *buf, size_t length)
             }
             bytesWritten += actualBytes;
         }
+        logicalBytesWritten += length;
         return ErrorCode::SUCCESS;
     }
     size_t remaining_len = length;
@@ -1015,6 +1081,12 @@ ErrorCode SpillWriter::Write(void *buf, size_t length)
             compress_stream->BackUp(static_cast<int>(buffer_size - write_len));
         }
     }
+    if (remaining_len != 0) {
+        LogError("Write compressed data to %s failed: %zu bytes were not accepted by the stream.",
+            filePath.c_str(), remaining_len);
+        return ErrorCode::WRITE_FAILED;
+    }
+    logicalBytesWritten += length;
     unflushed_size += length;
     if (unflushed_size >= FLUSH_THRESHOLD) {
         totalCompressBytes += compress_stream->flush();
@@ -1040,24 +1112,27 @@ ErrorCode SpillWriter::Close()
         totalCompressBytes += compress_stream->flush();
         unflushed_size = 0;
     }
-    close(fd);
+    if (fd != -1) {
+        close(fd);
+        fd = -1;
+    }
     return result;
 }
 
 void SpillWriter::InitCompressStream()
 {
-    const int32_t compress_block_size = 32 * 1024 * 1024;
     omniSpark::WriterOptions writer_options;
     writer_options.setCompression(omniSpark::CompressionKind_LZ4);
-    writer_options.setCompressionBlockSize(compress_block_size);
+    writer_options.setCompressionBlockSize(SPILL_COMPRESSION_BLOCK_SIZE);
     writer_options.setCompressionStrategy(omniSpark::CompressionStrategy_COMPRESSION);
     out_stream = omniSpark::writeLocalFile(filePath);
     stream_factory = createStreamsFactory(writer_options, out_stream.get());
     compress_stream = stream_factory->createStream();
 }
 
-    uint64_t SpillWriter::getTotalCompressBytes() const {
-        return totalCompressBytes;
-    }
+uint64_t SpillWriter::getTotalCompressBytes() const
+{
+    return totalCompressBytes;
+}
 }
 }

@@ -24,6 +24,9 @@ static std::shared_ptr<NullsHelper> SliceNullMapForSingleRow(const std::shared_p
     }
     return rowNullMap;
 }
+/** See AGG_SET_INIT_DEGREE in collect_set_aggregator.cpp: small initial
+ * capacity per-group distinct set, grows via Rehash on demand. */
+static constexpr uint8_t AGG_SET_INIT_DEGREE = 4;
 
 #pragma pack(push, 1)
 struct CollectSetVarcharState {
@@ -40,7 +43,15 @@ static const CollectSetVarcharState *ConstCastState(const AggregateState *state)
 
 CollectSetVarcharAggregator::CollectSetVarcharAggregator(const DataTypes &inputTypes, const DataTypes &outputTypes,
     const std::vector<int32_t> &channels, bool inputRaw, bool outputPartial, bool isOverflowAsNull)
-    : TypedAggregator(OMNI_AGGREGATION_TYPE_COLLECT_SET, inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull)
+    : CollectSetVarcharAggregator(OMNI_AGGREGATION_TYPE_COLLECT_SET, inputTypes, outputTypes, channels, inputRaw,
+          outputPartial, isOverflowAsNull)
+{
+}
+
+CollectSetVarcharAggregator::CollectSetVarcharAggregator(const FunctionType aggregateType,
+    const DataTypes &inputTypes, const DataTypes &outputTypes,
+    const std::vector<int32_t> &channels, bool inputRaw, bool outputPartial, bool isOverflowAsNull)
+    : TypedAggregator(aggregateType, inputTypes, outputTypes, channels, inputRaw, outputPartial, isOverflowAsNull)
 {
     auto outType = outputTypes.GetType(0);
     if (outType->GetId() == type::OMNI_ARRAY) {
@@ -53,16 +64,26 @@ CollectSetVarcharAggregator::CollectSetVarcharAggregator(const DataTypes &inputT
 CollectSetVarcharAggregator::~CollectSetVarcharAggregator() {
     for (int64_t addr : allocatedUniqueValuesAddrs_) {
         delete reinterpret_cast<DefaultHashMap<std::string, int8_t> *>(addr);
+        mem::ThreadMemoryManager::ReclaimMemory(sizeof(DefaultHashMap<std::string, int8_t>));
     }
     allocatedUniqueValuesAddrs_.clear();
 }
 
 void CollectSetVarcharAggregator::InitState(AggregateState *state) {
     CollectSetVarcharState *s = CastState(state + aggStateOffset);
-    auto *uniqueValues = new DefaultHashMap<std::string, int8_t>();
+    // Small initial capacity (16 slots) instead of the default 32768 slots
+    // (~288KB per group): with tens of millions of groups the default footprint
+    // alone exhausts memory before spill thresholds can trigger. See
+    // AGG_SET_INIT_DEGREE above.
+    auto *uniqueValues = new DefaultHashMap<std::string, int8_t>(AGG_SET_INIT_DEGREE);
     uniqueValues->Reset();
     s->uniqueValuesAddr = reinterpret_cast<int64_t>(uniqueValues);
-    allocatedUniqueValuesAddrs_.push_back(s->uniqueValuesAddr);
+    // Map slot/control arrays are already accounted via OmniHashmapAllocator; only
+    // the heap object header is invisible to the memory manager. NOTE: the
+    // std::string key payloads (heap buffers of the strings themselves) are still
+    // unaccounted; precise tracking would require an omni-managed string allocator.
+    mem::ThreadMemoryManager::ReportMemory(sizeof(DefaultHashMap<std::string, int8_t>));
+    allocatedUniqueValuesAddrs_.insert(s->uniqueValuesAddr);
 }
 
 void CollectSetVarcharAggregator::InitStates(std::vector<AggregateState *> &groupStates) {
@@ -76,11 +97,17 @@ void CollectSetVarcharAggregator::DestroyState(AggregateState *state) {
     int64_t addr = s->uniqueValuesAddr;
     if (addr == 0) return;
     delete reinterpret_cast<DefaultHashMap<std::string, int8_t> *>(addr);
+    mem::ThreadMemoryManager::ReclaimMemory(sizeof(DefaultHashMap<std::string, int8_t>));
     s->uniqueValuesAddr = 0;
-    auto it = std::find(allocatedUniqueValuesAddrs_.begin(), allocatedUniqueValuesAddrs_.end(), addr);
-    if (it != allocatedUniqueValuesAddrs_.end()) {
-        allocatedUniqueValuesAddrs_.erase(it);
+    allocatedUniqueValuesAddrs_.erase(addr);
+}
+
+void CollectSetVarcharAggregator::DestroyAllStates() {
+    for (int64_t addr : allocatedUniqueValuesAddrs_) {
+        delete reinterpret_cast<DefaultHashMap<std::string, int8_t> *>(addr);
+        mem::ThreadMemoryManager::ReclaimMemory(sizeof(DefaultHashMap<std::string, int8_t>));
     }
+    allocatedUniqueValuesAddrs_.clear();
 }
 
 void CollectSetVarcharAggregator::ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors, int32_t rowIndex) {
@@ -158,7 +185,10 @@ static void UpdatePartialStateVarchar(DefaultHashMap<std::string, int8_t> *uniqu
         for (int32_t i = 0; i < rowCount; i++) {
             if ((nullMap == nullptr || !(*nullMap)[baseRowIndex + i]) &&
                 !vector->IsNull(baseRowIndex + i)) {
-                std::string_view sv = dictVec->GetValue(i);
+                // Value reads must be offset by baseRowIndex to match the null
+                // checks; before this fix the caller had to Slice each row
+                // into a one-row vector (a heap allocation per row).
+                std::string_view sv = dictVec->GetValue(baseRowIndex + i);
                 uniqueValues->Emplace(std::string(sv));
             }
         }
@@ -167,7 +197,7 @@ static void UpdatePartialStateVarchar(DefaultHashMap<std::string, int8_t> *uniqu
         for (int32_t i = 0; i < rowCount; i++) {
             if ((nullMap == nullptr || !(*nullMap)[baseRowIndex + i]) &&
                 !vector->IsNull(baseRowIndex + i)) {
-                std::string_view sv = flatVec->GetValue(i);
+                std::string_view sv = flatVec->GetValue(baseRowIndex + i);
                 uniqueValues->Emplace(std::string(sv));
             }
         }
@@ -179,7 +209,8 @@ static void UpdateFinalStateVarchar(DefaultHashMap<std::string, int8_t> *uniqueV
     for (int32_t i = 0; i < rowCount; i++) {
         if ((nullMap == nullptr || !(*nullMap)[baseRowIndex + i]) &&
             !arrayVector->IsNull(baseRowIndex + i)) {
-            std::shared_ptr<BaseVector> elemHolder = arrayVector->GetArrayAt(i, false);
+            // Index the base vector, not the loop counter (see UpdatePartialStateVarchar).
+            std::shared_ptr<BaseVector> elemHolder = arrayVector->GetArrayAt(baseRowIndex + i, false);
             BaseVector *elemVec = elemHolder.get();
             if (elemVec == nullptr || elemVec->GetSize() == 0) continue;
             auto *strElemVec = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(elemVec);

@@ -7,6 +7,7 @@
 #include "vector/vector_helper.h"
 #include "vector/vector.h"
 #include "vector/nulls_buffer.h"
+#include "memory/thread_memory_manager.h"
 #include <algorithm>
 
 namespace omniruntime::op {
@@ -53,6 +54,7 @@ CollectListVarcharAggregator::CollectListVarcharAggregator(const DataTypes &inpu
 CollectListVarcharAggregator::~CollectListVarcharAggregator() {
     for (int64_t addr : allocatedListAddrs_) {
         delete reinterpret_cast<std::vector<std::string> *>(addr);
+        mem::ThreadMemoryManager::ReclaimMemory(sizeof(std::vector<std::string>));
     }
     allocatedListAddrs_.clear();
 }
@@ -61,7 +63,10 @@ void CollectListVarcharAggregator::InitState(AggregateState *state) {
     CollectListVarcharState *s = CastState(state + aggStateOffset);
     auto *list = new std::vector<std::string>();
     s->listAddr = reinterpret_cast<int64_t>(list);
-    allocatedListAddrs_.push_back(s->listAddr);
+    // Track the heap object header in global accounting; string payloads inside
+    // the vector still escape accounting (std::allocator).
+    mem::ThreadMemoryManager::ReportMemory(sizeof(std::vector<std::string>));
+    allocatedListAddrs_.insert(s->listAddr);
 }
 
 void CollectListVarcharAggregator::InitStates(std::vector<AggregateState *> &groupStates) {
@@ -75,11 +80,17 @@ void CollectListVarcharAggregator::DestroyState(AggregateState *state) {
     int64_t addr = s->listAddr;
     if (addr == 0) return;
     delete reinterpret_cast<std::vector<std::string> *>(addr);
+    mem::ThreadMemoryManager::ReclaimMemory(sizeof(std::vector<std::string>));
     s->listAddr = 0;
-    auto it = std::find(allocatedListAddrs_.begin(), allocatedListAddrs_.end(), addr);
-    if (it != allocatedListAddrs_.end()) {
-        allocatedListAddrs_.erase(it);
+    allocatedListAddrs_.erase(addr);
+}
+
+void CollectListVarcharAggregator::DestroyAllStates() {
+    for (int64_t addr : allocatedListAddrs_) {
+        delete reinterpret_cast<std::vector<std::string> *>(addr);
+        mem::ThreadMemoryManager::ReclaimMemory(sizeof(std::vector<std::string>));
     }
+    allocatedListAddrs_.clear();
 }
 
 void CollectListVarcharAggregator::ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors, int32_t rowIndex) {

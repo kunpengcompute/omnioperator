@@ -28,6 +28,10 @@ public:
 
     ~SpillWriter()
     {
+        if (fd != -1) {
+            close(fd);
+            fd = -1;
+        }
         delete[] writeBuffer;
     }
 
@@ -46,7 +50,7 @@ public:
 private:
     ErrorCode CreateTempFile();
 
-    ErrorCode WriteVecBatchToBuffer(vec::VectorBatch *vectorBatch);
+    ErrorCode WriteVecBatchToBuffer(vec::VectorBatch *vectorBatch, uint64_t expectedSize);
 
     template <typename T>
     ErrorCode WriteVectorToBuffer(vec::BaseVector *vector, int32_t rowCount, int32_t &writeOffset);
@@ -93,6 +97,11 @@ private:
     constexpr static uint64_t FLUSH_THRESHOLD = 64 * 1024 * 1024;
     bool IsSpillCompressEnabled = false;
     uint64_t totalCompressBytes = 0;
+    // Number of uncompressed spill-format bytes accepted by Write().  This is
+    // used to verify the caller's size estimate on direct-write paths; the
+    // estimate also drives file offsets and spill accounting, so accepting a
+    // mismatch would silently corrupt every following batch.
+    uint64_t logicalBytesWritten = 0;
 };
 
 class Spiller {

@@ -6,6 +6,7 @@
 #include "collect_list_aggregator.h"
 #include "vector/vector_helper.h"
 #include "vector/nulls_buffer.h"
+#include "memory/thread_memory_manager.h"
 #include <algorithm>
 
 namespace omniruntime::op {
@@ -118,14 +119,18 @@ void CollectListAggregator<IN_ID, OUT_ID>::InitState(AggregateState *state) {
     using stateType = typename AggNativeAndVectorType<IN_ID>::type;
     std::vector<stateType> *list = new std::vector<stateType>();
     listState->listAddr = reinterpret_cast<int64_t>(list);
-    allocatedListAddrs_.push_back(listState->listAddr);
+    // Report the heap object header so global accounting sees per-group state
+    // objects; the vector's element buffer grows through std::allocator and is
+    // not tracked here (same limitation as CollectSet's string payloads).
+    mem::ThreadMemoryManager::ReportMemory(sizeof(std::vector<stateType>));
+    allocatedListAddrs_.insert(listState->listAddr);
 }
 
 /**
  * Frees the std::vector<T> allocated in InitState and removes it from the tracked list (so destructor won't double-free).
  * Call before freeing the state buffer if you want to release early; otherwise destructor will free all tracked lists.
  */
-template <DataTypeId IN_ID, DataTypeId OUT_ID>
+template<DataTypeId IN_ID, DataTypeId OUT_ID>
 void CollectListAggregator<IN_ID, OUT_ID>::DestroyState(AggregateState *state) {
     using stateType = typename AggNativeAndVectorType<IN_ID>::type;
     ListState<stateType> *listState = ListState<stateType>::CastState(state + aggStateOffset);
@@ -135,11 +140,24 @@ void CollectListAggregator<IN_ID, OUT_ID>::DestroyState(AggregateState *state) {
     }
     std::vector<stateType> *list = reinterpret_cast<std::vector<stateType> *>(addr);
     delete list;
+    mem::ThreadMemoryManager::ReclaimMemory(sizeof(std::vector<stateType>));
     listState->listAddr = 0;
-    auto it = std::find(allocatedListAddrs_.begin(), allocatedListAddrs_.end(), addr);
-    if (it != allocatedListAddrs_.end()) {
-        allocatedListAddrs_.erase(it);
+    allocatedListAddrs_.erase(addr);
+}
+
+/**
+ * Frees every std::vector<T> tracked by this aggregator and clears the address book.
+ * Called by the aggregation operator after a successful spill, before the arena and
+ * hash tables are reset.
+ */
+template<DataTypeId IN_ID, DataTypeId OUT_ID>
+void CollectListAggregator<IN_ID, OUT_ID>::DestroyAllStates() {
+    using stateType = typename AggNativeAndVectorType<IN_ID>::type;
+    for (int64_t addr : allocatedListAddrs_) {
+        delete reinterpret_cast<std::vector<stateType> *>(addr);
+        mem::ThreadMemoryManager::ReclaimMemory(sizeof(std::vector<stateType>));
     }
+    allocatedListAddrs_.clear();
 }
 
 /**
@@ -347,6 +365,7 @@ CollectListAggregator<IN_ID, OUT_ID>::~CollectListAggregator() {
     using stateType = typename AggNativeAndVectorType<IN_ID>::type;
     for (int64_t addr : allocatedListAddrs_) {
         delete reinterpret_cast<std::vector<stateType> *>(addr);
+        mem::ThreadMemoryManager::ReclaimMemory(sizeof(std::vector<stateType>));
     }
     allocatedListAddrs_.clear();
 }

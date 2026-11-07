@@ -29,6 +29,9 @@ public:
     void InitState(AggregateState *state) override;
     void InitStates(std::vector<AggregateState *> &groupStates) override;
     void DestroyState(AggregateState *state);
+    // Frees every std::vector<std::string> allocated by this aggregator; called
+    // by the aggregation operator after a successful spill.
+    void DestroyAllStates() override;
     std::vector<DataTypePtr> GetSpillType() override;
     size_t GetStateSize() override { return 8u; }
 
@@ -43,7 +46,10 @@ protected:
         const std::shared_ptr<NullsHelper> nullMap) override;
 
 private:
-    std::vector<int64_t> allocatedListAddrs_;
+    /** Addresses of std::vector<std::string> allocated in InitState; freed in
+     * DestroyState, DestroyAllStates or in destructor. Hash-set: O(1) insert/erase
+     * keeps state destruction linear even with tens of millions of groups. */
+    std::unordered_set<int64_t> allocatedListAddrs_;
     type::DataTypeId elementTypeId_;  // OMNI_VARCHAR, OMNI_CHAR, or OMNI_VARBINARY for output element vector
 };
 

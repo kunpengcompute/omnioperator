@@ -2968,6 +2968,16 @@ public:
     {
         table->Clear();
         nullValue.clear();
+        // nullValue stores a *copy* of the null-key aggregate state, whose
+        // uniqueValuesAddr is owned by DestroyActiveAggStates' lifecycle.
+        // After a spill those heap objects are deleted and the arena is reset,
+        // so the copy inside nullValue dangles. If shouldExtractNull stays
+        // true, the next batch's handleNull() skips re-initialization and
+        // feeds the stale copy straight to the aggregators, which then call
+        // Emplace() on a freed map (SIGSEGV, exit code 134). Reset the flags
+        // so the next null key re-initializes nullValue from a fresh state.
+        shouldExtractNull = false;
+        nullValueSize = 0;
     }
     private:
     using UnsignedKey = std::conditional_t<std::is_same_v<T, omniruntime::type::int128_t>,

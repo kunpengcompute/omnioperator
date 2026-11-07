@@ -7,6 +7,7 @@
 #define OMNI_RUNTIME_COLLECT_SET_AGGREGATOR_H
 
 #include <fmt/format.h>
+#include <unordered_set>
 #include <vector>
 #include "typed_aggregator.h"
 #include "operator/hashmap/base_hash_map.h"
@@ -37,9 +38,12 @@ namespace omniruntime::op {
                 T *valuePtr = unsafe::UnsafeDictionaryVector::GetDictionary(dictVector);
                 const int32_t *ids = unsafe::UnsafeDictionaryVector::GetIds(dictVector);
                 for (uint32_t i = 0; i < static_cast<uint32_t>(rowCount); i++) {
+                    // Value reads must be offset by baseRowIndex to match the null
+                    // checks; before this fix the caller had to Slice each row
+                    // into a one-row vector (a heap allocation per row).
                     if ((nullMap == nullptr || !(*nullMap)[baseRowIndex + i]) &&
                         !vector->IsNull(static_cast<int32_t>(baseRowIndex + i))) {
-                        uniqueValues->Emplace(valuePtr[ids[i]]);
+                        uniqueValues->Emplace(valuePtr[ids[baseRowIndex + i]]);
                     }
                 }
             } else {
@@ -48,7 +52,7 @@ namespace omniruntime::op {
                 for (uint32_t i = 0; i < static_cast<uint32_t>(rowCount); i++) {
                     if ((nullMap == nullptr || !(*nullMap)[baseRowIndex + i]) &&
                         !vector->IsNull(static_cast<int32_t>(baseRowIndex + i))) {
-                        uniqueValues->Emplace(valuePtr[i]);
+                        uniqueValues->Emplace(valuePtr[baseRowIndex + i]);
                     }
                 }
             }
@@ -60,7 +64,11 @@ namespace omniruntime::op {
             for (uint32_t i = 0; i < static_cast<uint32_t>(rowCount); i++) {
                 if ((nullMap == nullptr || !(*nullMap)[baseRowIndex + i]) &&
                     !arrayVector->IsNull(static_cast<int32_t>(baseRowIndex + i))) {
-                    auto elementVector = arrayVector->GetArrayAt(i, false);
+                    // Index the base vector, not the loop counter: null checks
+                    // above use baseRowIndex + i, so the array read must too,
+                    // otherwise rows [baseRowIndex, baseRowIndex+rowCount) read
+                    // the wrong array slot.
+                    auto elementVector = arrayVector->GetArrayAt(baseRowIndex + i, false);
                     auto elementSize = elementVector->GetSize();
                     if (isDictionary) {
                         auto *dictVector = reinterpret_cast<Vector<DictionaryContainer<T>> *>(elementVector.get());
@@ -109,6 +117,9 @@ class CollectSetAggregator : public TypedAggregator {
 
 public:
     CollectSetAggregator(const DataTypes &inputTypes, const DataTypes &outputTypes, const std::vector<int32_t> &channels, const bool inputRaw, const bool outputPartial, const bool isOverflowAsNull);
+    // Extended constructor for derived aggregators (e.g. CountDistinctAggregator) that reuse the
+    // set-based state machine but report a different FunctionType.
+    CollectSetAggregator(const FunctionType aggregateType, const DataTypes &inputTypes, const DataTypes &outputTypes, const std::vector<int32_t> &channels, const bool inputRaw, const bool outputPartial, const bool isOverflowAsNull);
     ~CollectSetAggregator() override;
     void ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors, int32_t rowIndex) override;
     void ExtractValuesBatch(std::vector<AggregateState *> &groupStates, std::vector<BaseVector *> &vectors, int32_t rowOffset, int32_t rowCount) override;
@@ -117,6 +128,10 @@ public:
     void InitStates(std::vector<AggregateState *> &groupStates) override;
     // Frees the DefaultHashMap in state. Call before freeing state buffer to avoid leak.
     void DestroyState(AggregateState *state);
+    // Frees every DefaultHashMap ever allocated by this aggregator via its own
+    // address book; used by the aggregation operator after a successful spill.
+    // O(1) average per state (hash-set based), suitable for tens of millions of groups.
+    void DestroyAllStates() override;
     std::vector<DataTypePtr> GetSpillType() override;
 
     // Fixed 8 bytes so that collect_set(col_a) and collect_set(col_b) with different element types
@@ -152,8 +167,10 @@ public:
     void ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector, const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter) override;
 
 protected:
-    /** Addresses of DefaultHashMap allocated in InitState; freed in DestroyState or in destructor. */
-    std::vector<int64_t> allocatedUniqueValuesAddrs_;
+    /** Addresses of DefaultHashMap allocated in InitState; freed in DestroyState,
+     * DestroyAllStates or in destructor. Hash-set: O(1) insert/erase keeps state
+     * destruction linear even with tens of millions of groups. */
+    std::unordered_set<int64_t> allocatedUniqueValuesAddrs_;
 
     void ProcessSingleInternal(AggregateState *state, BaseVector *vector, const int32_t rowOffset, const int32_t rowCount, const std::shared_ptr<NullsHelper> nullMap) override;
 

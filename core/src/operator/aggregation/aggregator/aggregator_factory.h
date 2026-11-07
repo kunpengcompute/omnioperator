@@ -415,6 +415,17 @@ public:
         std::vector<int32_t> &channels, bool inputRaw, bool outputPartial, bool isOverflowAsNull) override;
 };
 
+// CountDistinct (count(distinct x) without Expand): same element-type-driven creation strategy as
+// CollectSet. Partial: raw T -> CountDistinctAggregator<T>; Final: input Array<T> -> element type T.
+// String types (OMNI_CHAR, OMNI_VARCHAR, OMNI_VARBINARY) -> CountDistinctVarcharAggregator.
+class CountDistinctAggregatorFactory : public AggregatorFactory {
+public:
+    CountDistinctAggregatorFactory() = default;
+    ~CountDistinctAggregatorFactory() override = default;
+    std::unique_ptr<Aggregator> CreateAggregator(const DataTypes &inputTypes, const DataTypes &outputTypes,
+        std::vector<int32_t> &channels, bool inputRaw, bool outputPartial, bool isOverflowAsNull) override;
+};
+
 class CollectListAggregatorFactory : public AggregatorFactory {
 public:
     CollectListAggregatorFactory() = default;

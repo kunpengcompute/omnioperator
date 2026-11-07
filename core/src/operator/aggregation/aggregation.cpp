@@ -142,6 +142,10 @@ OmniStatus AggregationCommonOperatorFactory::CreateAggregatorFactories(
                 CreateAggregatorFactory<CollectSetAggregatorFactory>(aggregatorFactories, maskCols[i]);
                 break;
             }
+            case OMNI_AGGREGATION_TYPE_COUNT_DISTINCT: {
+                CreateAggregatorFactory<CountDistinctAggregatorFactory>(aggregatorFactories, maskCols[i]);
+                break;
+            }
             case OMNI_AGGREGATION_TYPE_COLLECT_LIST: {
                 CreateAggregatorFactory<CollectListAggregatorFactory>(aggregatorFactories, maskCols[i]);
                 break;
