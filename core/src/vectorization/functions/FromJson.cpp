@@ -23,6 +23,7 @@ void FromJsonFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
 
     auto *inputArg = args.top();
     args.pop();
+    auto inputGuard = MakeVectorArgGuard(inputArg);
 
     // Validate output type is ROW
     if (outputType->GetId() != OMNI_ROW) {
@@ -88,7 +89,6 @@ void FromJsonFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
         std::string_view jsonStr = isConstVector ? constJsonStr : GetStringValue(inputArg, row);
         ParseJsonToRow(jsonStr, rowType, resultVec, row);
     }
-    delete inputArg;
 }
 
 void FromJsonFunction::ParseJsonToRow(const std::string_view &jsonStr, const RowType &rowType,

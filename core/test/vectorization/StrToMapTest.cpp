@@ -55,6 +55,10 @@ public:
         ExecutionContext context;
         context.SetResultRowSize(rowSize);
         std::stack<BaseVector *> args;
+        // caller-owned, do not let Apply delete
+        inputVec->SetIsField(true);
+        entryDelimVec->SetIsField(true);
+        kvDelimVec->SetIsField(true);
         args.push(inputVec);
         args.push(entryDelimVec.get());
         args.push(kvDelimVec.get());

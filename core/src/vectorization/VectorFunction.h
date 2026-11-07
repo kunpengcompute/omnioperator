@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <memory>
 #include <stack>
 #include "vector/vector.h"
 #include "operator/execution_context.h"
@@ -59,6 +60,15 @@ using SimpleFunctionFactory = std::function<std::shared_ptr<VectorFunction>(
 using SimpleFunctionFactoryMap = std::unordered_map<FunctionSignaturePtr, FunctionFactory, Hash, Equals>;
 
 using VectorPtr = vec::BaseVector*;
+
+// Owns a BaseVector popped from the Apply args stack. Captureless deleter so the
+// unique_ptr type is the same in every TU. unique_ptr skips the deleter for nullptr.
+using VectorArgGuard = std::unique_ptr<vec::BaseVector, void (*)(vec::BaseVector *)>;
+
+inline VectorArgGuard MakeVectorArgGuard(vec::BaseVector *p)
+{
+    return VectorArgGuard(p, [](vec::BaseVector *v) { delete v; });
+}
 
 class VectorFunction {
 public:

@@ -92,6 +92,8 @@ public:
         ExecutionContext context;
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
+        strVec->SetIsField(true);  // caller-owned, do not let Apply delete
+        patternVec->SetIsField(true);
         args.push(strVec);
         args.push(patternVec);
         function->Apply(args, outputType, result, &context);
@@ -107,8 +109,11 @@ public:
         ExecutionContext context;
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
+        strVec->SetIsField(true);  // caller-owned, do not let Apply delete
+        patternVec->SetIsField(true);
         args.push(strVec);
         args.push(patternVec);
+        groupVec->SetIsField(true);
         args.push(groupVec);
         function->Apply(args, outputType, result, &context);
     }
@@ -123,8 +128,11 @@ public:
         ExecutionContext context;
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
+        strVec->SetIsField(true);  // caller-owned, do not let Apply delete
+        patternVec->SetIsField(true);
         args.push(strVec);
         args.push(patternVec);
+        groupVec->SetIsField(true);
         args.push(groupVec);
         function->Apply(args, outputType, result, &context);
     }

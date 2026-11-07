@@ -131,6 +131,7 @@ protected:
 private:
     type::DataTypeId targetColTypeId_;
     type::DataTypePtr targetColDataType_;
+    ComplexValueOwner ownedValues_;
 };
 
 } // namespace op

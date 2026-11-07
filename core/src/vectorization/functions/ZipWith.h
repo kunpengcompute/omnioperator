@@ -26,8 +26,10 @@ namespace omniruntime::vectorization {
         {
             BaseVector *rightBaseVec = args.top();
             args.pop();
+            auto rightGuard = MakeVectorArgGuard(rightBaseVec);
             BaseVector *leftBaseVec = args.top();
             args.pop();
+            auto leftGuard = MakeVectorArgGuard(leftBaseVec);
 
             const expressions::LambdaExpr *lambdaExpr = context->GetCurrentLambda();
             if (lambdaExpr == nullptr) {
@@ -65,8 +67,6 @@ namespace omniruntime::vectorization {
                 auto leftEleVec = leftArrVec->GetElementVector();
                 DataTypeId eleTypeId = leftEleVec ? leftEleVec->GetTypeId() : OMNI_INT;
                 VectorHelper::EmptyArrayProjection(dstArrVec, eleTypeId);
-                delete leftArrVec;
-                delete rightArrVec;
                 return;
             }
 
@@ -91,14 +91,10 @@ namespace omniruntime::vectorization {
             context->SetResultRowSize(rowSize);
             BaseVector *flatResultVec = lambdaEval.GetResult();
             if (flatResultVec == nullptr) {
-                delete leftArrVec;
-                delete rightArrVec;
                 throw OmniException("ZIP_WITH_ERROR", "Lambda execute return null result");
             }
 
             dstArrVec->SetElementVectorFromRaw(flatResultVec);
-            delete leftArrVec;
-            delete rightArrVec;
         }
 
     private:

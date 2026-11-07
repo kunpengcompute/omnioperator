@@ -172,6 +172,7 @@ static void MergeArrayRowIntoSet(ComplexSetType *set, BaseVector *rowSlice, type
             for (int32_t j = 0; j < n; j++) {
                 BaseVector *elem = arr->GetValue(j);
                 AddComplexSliceToSet(set, elem, colTypeId, colDataType);
+                delete elem;
             }
             break;
         }

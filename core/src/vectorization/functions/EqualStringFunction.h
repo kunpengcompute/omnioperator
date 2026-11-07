@@ -109,8 +109,10 @@ class EqualStringFunction final : public VectorFunction {
     {
         auto rightArg = args.top();
         args.pop();
+        auto rightGuard = MakeVectorArgGuard(rightArg);
         auto leftArg = args.top();
         args.pop();
+        auto leftGuard = MakeVectorArgGuard(leftArg);
         auto rowSize = context->GetResultRowSize();
         auto *flatResult = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowSize));
         auto alignedBuffer = unsafe::UnsafeVector::GetValues(flatResult)->GetBuffer();
@@ -138,8 +140,6 @@ class EqualStringFunction final : public VectorFunction {
             OMNI_THROW("EqualStringFunction Error:", typeDesc);
         }
         result = flatResult;
-        delete rightArg;
-        delete leftArg;
     }
 };
 }

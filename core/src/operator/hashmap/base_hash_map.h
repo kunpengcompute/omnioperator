@@ -103,11 +103,47 @@ static const double MAX_LOAD_FACTOR = 0.9;
 
 /**
  * Basic Unit of Hashmap, Hashmap contains a continuous memory of HashSlots
- * Slot will cache hash value by default to compare value easily.
+ * Slot will cache hash value by default to compare value easily. The cached hash is only
+ * needed by maps that rehash (e.g. groupby); join hash tables are pre-sized and never
+ * rehash, so the join instantiation disables the cache to shrink the slot size.
  * @tparam KeyType the key type of hashmap
  * @tparam ValueType the value type of hashmap
+ * @tparam kCacheHash whether to cache the slot hash value
  */
-template <typename KeyType, typename ValueType> class HashSlot {
+/**
+ * Conditional storage for the cached slot hash value.
+ * - kCacheHash == true:  stores the hash (groupby/collect_set maps rehash and reuse it)
+ * - kCacheHash == false: empty storage (join hash tables never rehash, see Reinsert)
+ */
+template <bool kCacheHash>
+struct HashSlotHashCache {
+    size_t GetHashVal() const
+    {
+        return hashVal;
+    }
+
+    void SetHashVal(const size_t hashValueIn)
+    {
+        hashVal = hashValueIn;
+    }
+
+    size_t hashVal = 0;
+};
+
+template <>
+struct HashSlotHashCache<false> {
+    size_t GetHashVal() const
+    {
+        return 0;
+    }
+
+    void SetHashVal(const size_t)
+    {
+    }
+};
+
+template <typename KeyType, typename ValueType, bool kCacheHash>
+class HashSlot : private HashSlotHashCache<kCacheHash> {
 public:
     HashSlot() = default;
 
@@ -120,10 +156,7 @@ public:
 
     explicit HashSlot(KeyType &&keyParam) : kv(std::move(keyParam), ValueType {}) {}
 
-    HashSlot(HashSlot &&o) noexcept : kv(std::move(o.kv)), hashVal(o.hashVal)
-    {
-        o.hashVal = 0;
-    }
+    HashSlot(HashSlot &&o) noexcept : HashSlotHashCache<kCacheHash>(std::move(o)), kv(std::move(o.kv)) {}
 
     HashSlot(const KeyType &key, const ValueType &value) : kv(key, value) {}
 
@@ -141,7 +174,7 @@ public:
 
     size_t GetHashVal() const
     {
-        return hashVal;
+        return HashSlotHashCache<kCacheHash>::GetHashVal();
     }
 
     void SetValue(const ValueType &value)
@@ -166,7 +199,7 @@ public:
 
     void SetHashVal(const size_t hashValueIn)
     {
-        hashVal = hashValueIn;
+        HashSlotHashCache<kCacheHash>::SetHashVal(hashValueIn);
     }
 
     HashSlot &operator = (const HashSlot &o)
@@ -184,7 +217,6 @@ public:
 
 private:
     std::pair<KeyType, ValueType> kv;
-    size_t hashVal;
 };
 
 /**
@@ -459,11 +491,12 @@ private:
  * @tparam Allocator memory allocator
  */
 template <typename KeyType, typename ValueType, typename HashType, typename GrowStrategy, typename Allocator,
+    bool kCacheHash = true,
     std::enable_if_t<std::is_move_constructible_v<KeyType> && std::is_move_constructible_v<ValueType> &&
     (std::is_move_assignable_v<ValueType> || std::is_copy_assignable_v<ValueType>)>* = nullptr>
 class BaseHashMap {
 public:
-    using Slot = HashSlot<KeyType, ValueType>;
+    using Slot = HashSlot<KeyType, ValueType, kCacheHash>;
     using HashKey = KeyType;
     using ResultType = InsertResult<ValueType>;
     using Keys = KeyType;
@@ -728,8 +761,8 @@ public:
 
     class HashmapIteratorOutput {
     public:
-        HashmapIteratorOutput(BaseHashMap<KeyType, ValueType, HashType, GrowStrategy, Allocator> *mapPtr, uint32_t pos,
-            uint32_t hasBeenOutputCount, ctrl_t *identifiers)
+        HashmapIteratorOutput(BaseHashMap<KeyType, ValueType, HashType, GrowStrategy, Allocator, kCacheHash> *mapPtr,
+            uint32_t pos, uint32_t hasBeenOutputCount, ctrl_t *identifiers)
             : hashMapPtr(mapPtr)
         {
             remainSlot = hashMapPtr->GetElementsSize() - (hashMapPtr->HasNullCell() ? 1 : 0) - hasBeenOutputCount;
@@ -783,7 +816,7 @@ public:
         }
 
     private:
-        BaseHashMap<KeyType, ValueType, HashType, GrowStrategy, Allocator> *hashMapPtr;
+        BaseHashMap<KeyType, ValueType, HashType, GrowStrategy, Allocator, kCacheHash> *hashMapPtr;
         ctrl_t *identifiers_ = EmptyGroup();
         uint32_t pos = 0;
         uint32_t remainSlot = 0;
@@ -814,8 +847,15 @@ public:
 private:
     void Reinsert(Slot &&cell)
     {
-        auto pos = FindPosition(cell.GetKey(), cell.GetHashVal());
-        identifiers[pos] = (h2_t)H2(cell.GetHashVal());
+        size_t hashValue;
+        if constexpr (kCacheHash) {
+            hashValue = cell.GetHashVal();
+        } else {
+            // join hash tables never rehash, but keep this correct by recomputing
+            hashValue = CalculateHash(cell.GetKey());
+        }
+        auto pos = FindPosition(cell.GetKey(), hashValue);
+        identifiers[pos] = (h2_t)H2(hashValue);
         new (&slots[pos]) Slot(std::move(cell));
     }
 

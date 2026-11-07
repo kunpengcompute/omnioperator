@@ -31,6 +31,17 @@ public:
         auto inputArg = args.top();
         args.pop();
 
+        // Delimiter checks and duplicate-key detection throw; guards release the args on those paths too.
+        using VectorGuard = std::unique_ptr<BaseVector, void (*)(BaseVector *)>;
+        auto deleter = [](BaseVector *v) {
+            if (!v->GetIsField()) {
+                delete v;
+            }
+        };
+        VectorGuard kvDelimiterGuard(kvDelimiterArg, deleter);
+        VectorGuard entryDelimiterGuard(entryDelimiterArg, deleter);
+        VectorGuard inputGuard(inputArg, deleter);
+
         auto *entryDelimConst = dynamic_cast<ConstVector<std::string_view> *>(entryDelimiterArg);
         std::string_view entryDelimiter = entryDelimConst->GetConstValue();
         if (entryDelimiter.size() != 1) {

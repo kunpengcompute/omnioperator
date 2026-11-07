@@ -24,8 +24,10 @@ namespace omniruntime::vectorization {
         {
             BaseVector *rightMapBase = args.top();
             args.pop();
+            auto rightGuard = MakeVectorArgGuard(rightMapBase);
             BaseVector *leftMapBase = args.top();
             args.pop();
+            auto leftGuard = MakeVectorArgGuard(leftMapBase);
 
             const expressions::LambdaExpr *lambdaExpr = context->GetCurrentLambda();
             if (lambdaExpr == nullptr) {
@@ -120,8 +122,6 @@ namespace omniruntime::vectorization {
 
             if (totalMergedElements == 0) {
                 VectorHelper::EmptyMapProjection(dstMap, keyTypeId, leftValueTypeId);
-                delete leftMap;
-                delete rightMap;
                 return;
             }
 
@@ -174,16 +174,11 @@ namespace omniruntime::vectorization {
             context->SetResultRowSize(rowSize);
             BaseVector *lambdaResult = lambdaEval.GetResult();
             if (lambdaResult == nullptr) {
-                delete leftMap;
-                delete rightMap;
                 throw OmniException("MAP_ZIP_WITH_ERROR", "Lambda execute return null result");
             }
 
             dstMap->AddKeys(mergedKeysHolder.release());
             dstMap->AddValues(lambdaResult);
-
-            delete leftMap;
-            delete rightMap;
         }
 
     private:

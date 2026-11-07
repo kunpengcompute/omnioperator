@@ -37,7 +37,7 @@ void LastComplexAggregator::DestroyState(AggregateState *state)
 {
     auto *s = LastComplexState::CastState(state + aggStateOffset);
     if (s->storedValue != nullptr) {
-        ReleaseComplexSliceCopy(s->storedValue, colTypeId_);
+        ownedValues_.Release(s->storedValue);
         s->storedValue = nullptr;
     }
 }
@@ -68,7 +68,8 @@ void LastComplexAggregator::ProcessGroup(AggregateState *state, VectorBatch *vec
     if (colVector == nullptr) {
         return;
     }
-    vec::BaseVector *slice = GetComplexColSlice(colVector, colTypeId_, rowIndex);
+    ComplexSliceHolder sliceHolder(GetComplexColSlice(colVector, colTypeId_, rowIndex));
+    vec::BaseVector *slice = sliceHolder.get();
 
     if (ignoreNull_ && IsComplexSliceNull(slice, colTypeId_)) {
         return;
@@ -76,11 +77,11 @@ void LastComplexAggregator::ProcessGroup(AggregateState *state, VectorBatch *vec
     lastState->valueSet = true;
     lastState->valIsNull = IsComplexSliceNull(slice, colTypeId_);
     if (lastState->storedValue != nullptr) {
-        ReleaseComplexSliceCopy(lastState->storedValue, colTypeId_);
+        ownedValues_.Release(lastState->storedValue);
         lastState->storedValue = nullptr;
     }
     if (!lastState->valIsNull && slice != nullptr) {
-        lastState->storedValue = CopyComplexSliceToOwned(slice, colTypeId_, colDataType_);
+        lastState->storedValue = ownedValues_.Copy(slice, colTypeId_, colDataType_);
     }
 }
 
@@ -163,6 +164,9 @@ void LastComplexAggregator::ExtractValuesForSpill(std::vector<AggregateState *> 
         } else {
             SetComplexColValue(vectors[0], colTypeId_, rowIndex, lastState->storedValue);
         }
+        // Spilled states are discarded (arena reset) after extraction.
+        ownedValues_.Release(lastState->storedValue);
+        lastState->storedValue = nullptr;
         if (valueSetVector != nullptr) {
             valueSetVector->SetValue(rowIndex, lastState->valueSet);
         }
@@ -184,18 +188,19 @@ void LastComplexAggregator::ProcessGroupUnspill(std::vector<UnspillRowInfo> &uns
             continue;
         }
         auto *lastState = LastComplexState::CastState(row.state + aggStateOffset);
-        vec::BaseVector *slice = GetComplexColSlice(colVector, colTypeId_, row.rowIdx);
+        ComplexSliceHolder sliceHolder(GetComplexColSlice(colVector, colTypeId_, row.rowIdx));
+        vec::BaseVector *slice = sliceHolder.get();
         if (ignoreNull_ && IsComplexSliceNull(slice, colTypeId_)) {
             continue;
         }
         lastState->valueSet = true;
         lastState->valIsNull = IsComplexSliceNull(slice, colTypeId_);
         if (lastState->storedValue != nullptr) {
-            ReleaseComplexSliceCopy(lastState->storedValue, colTypeId_);
+            ownedValues_.Release(lastState->storedValue);
             lastState->storedValue = nullptr;
         }
         if (!lastState->valIsNull && slice != nullptr) {
-            lastState->storedValue = CopyComplexSliceToOwned(slice, colTypeId_, colDataType_);
+            lastState->storedValue = ownedValues_.Copy(slice, colTypeId_, colDataType_);
         }
         if (outputPartial && valueSetVecIdx >= 0) {
             bool intermediate = reinterpret_cast<vec::Vector<bool> *>(row.batch->Get(valueSetVecIdx))->GetValue(row.rowIdx);

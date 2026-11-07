@@ -95,6 +95,7 @@ void ExecuteLeastGreatest(const std::string& funcName,
     // Push args to stack (reverse order for stack)
     std::stack<BaseVector*> argStack;
     for (int i = static_cast<int>(inputs.size()) - 1; i >= 0; --i) {
+        inputs[i]->SetIsField(true);  // caller-owned, do not let Apply delete
         argStack.push(inputs[i]);
     }
     auto outputType = std::make_shared<DataType>(outputTypeId);

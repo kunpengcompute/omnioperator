@@ -23,6 +23,7 @@ namespace omniruntime::vectorization {
         {
             BaseVector *mapBaseVec = args.top();
             args.pop();
+            auto mapGuard = MakeVectorArgGuard(mapBaseVec);
 
             const expressions::LambdaExpr *lambdaExpr = context->GetCurrentLambda();
             if (lambdaExpr == nullptr) {
@@ -46,7 +47,6 @@ namespace omniruntime::vectorization {
                     dstMapVec->SetNull(i);
                 }
                 VectorHelper::EmptyMapProjection(dstMapVec, srcKeyTypeId, srcValueTypeId);
-                delete srcMapVec;
                 return;
             }
 
@@ -60,10 +60,8 @@ namespace omniruntime::vectorization {
                     }
                 }
                 VectorHelper::EmptyMapProjection(dstMapVec, srcKeyTypeId, srcValueTypeId);
-                delete srcMapVec;
                 return;
             }
-            std::unique_ptr<BaseVector> srcMapVecHolder(srcMapVec);
             std::unique_ptr<BaseVector> keyForLambdaHolder(keyElementVec->Slice(0, keyElementVec->GetSize()));
             std::unique_ptr<BaseVector> valueForLambdaHolder(valueElementVec->Slice(0, valueElementVec->GetSize()));
             BaseVector *keyForLambda = keyForLambdaHolder.get();

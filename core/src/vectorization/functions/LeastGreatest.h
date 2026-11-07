@@ -35,12 +35,16 @@ enum class CompareMode {
 template<CompareMode Mode>
 class LeastGreatestFunction : public VectorFunction {
 public:
-    explicit LeastGreatestFunction() {}
+    explicit LeastGreatestFunction(size_t numArgs = 2) : numArgs_(numArgs) {}
 
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
         ExecutionContext *context) const override;
 
 private:
+    /// Arity of the resolved signature: Apply() must pop exactly this many vectors off the
+    /// shared argument stack, otherwise the enclosing expression sees stale operands.
+    size_t numArgs_;
+
     template<typename T>
     T GetValueFromVector(BaseVector *vec, int32_t row) const;
     

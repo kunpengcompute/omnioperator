@@ -38,9 +38,9 @@ void MaxByComplexVarcharAggregator<COL2_ID>::ExtractValues(const AggregateState 
         }
         if (s->targetValue == nullptr) {
             vectors[0]->SetNull(rowIndex);
-            return;
+        } else {
+            SetComplexColValue(vectors[0], targetColTypeId_, rowIndex, s->targetValue);
         }
-        SetComplexColValue(vectors[0], targetColTypeId_, rowIndex, s->targetValue);
         const_cast<State *>(s)->ReleaseSortKey();
     }
 }
@@ -78,9 +78,9 @@ void MaxByComplexVarcharAggregator<COL2_ID>::ExtractValuesBatch(std::vector<Aggr
             }
             if (s->targetValue == nullptr) {
                 vectors[0]->SetNull(i);
-                continue;
+            } else {
+                SetComplexColValue(vectors[0], targetColTypeId_, i, s->targetValue);
             }
-            SetComplexColValue(vectors[0], targetColTypeId_, i, s->targetValue);
             const_cast<State *>(s)->ReleaseSortKey();
         }
     }
@@ -108,6 +108,10 @@ void MaxByComplexVarcharAggregator<COL2_ID>::ExtractValuesForSpill(std::vector<A
         } else {
             SetComplexColValue(vectors[0], targetColTypeId_, rowIndex, s->targetValue);
         }
+        // Spilled states are discarded (arena reset) after extraction.
+        ownedValues_.Release(s->targetValue);
+        s->targetValue = nullptr;
+        s->ReleaseSortKey();
     }
 }
 
@@ -166,15 +170,16 @@ void MaxByComplexVarcharAggregator<COL2_ID>::ProcessGroupUnspill(std::vector<Uns
             }
         }
         if (shouldUpdate) {
-            BaseVector *targetSlice = GetComplexColSlice(targetVec, targetColTypeId_, row.rowIdx);
+            ComplexSliceHolder sliceHolder(GetComplexColSlice(targetVec, targetColTypeId_, row.rowIdx));
+            BaseVector *targetSlice = sliceHolder.get();
             if (ShouldSkipRowTargetNull(targetSlice, targetColTypeId_, targetVec, row.rowIdx)) {
                 continue;  // Spark: only consider rows with non-null target
             }
             s->SetStrKey(reinterpret_cast<int64_t>(sortKey.data()), static_cast<int32_t>(sortKey.size()));
             if (s->targetValue != nullptr) {
-                ReleaseComplexSliceCopy(s->targetValue, targetColTypeId_);
+                ownedValues_.Release(s->targetValue);
             }
-            s->targetValue = CopyComplexSliceToOwned(targetSlice, targetColTypeId_, targetColDataType_.get());
+            s->targetValue = ownedValues_.Copy(targetSlice, targetColTypeId_, targetColDataType_.get());
             s->SaveSortKey();
         }
     }
@@ -197,16 +202,17 @@ void MaxByComplexVarcharAggregator<COL2_ID>::ProcessSingleInternal(AggregateStat
             continue;  // Spark: NULL values are ignored from processing by aggregate functions
         }
         std::string_view strView = VectorHelper::GetFlatValue<COL2_ID>(col2Vector, i);
-        vec::BaseVector *slice = GetComplexColSlice(col1Vector, targetColTypeId_, i);
+        ComplexSliceHolder sliceHolder(GetComplexColSlice(col1Vector, targetColTypeId_, i));
+        vec::BaseVector *slice = sliceHolder.get();
         if (ShouldSkipRowTargetNull(slice, targetColTypeId_, col1Vector, i)) {
             continue;  // Spark: only consider rows with non-null target
         }
         if (s->GetStrKeyAddress() == 0) {
             s->SetStrKey(reinterpret_cast<int64_t>(strView.data()), static_cast<int32_t>(strView.size()));
             if (s->targetValue != nullptr) {
-                ReleaseComplexSliceCopy(s->targetValue, targetColTypeId_);
+                ownedValues_.Release(s->targetValue);
             }
-            s->targetValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+            s->targetValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
         } else {
             const char *curVal = strView.data();
             int32_t curLen = static_cast<int32_t>(strView.size());
@@ -215,9 +221,9 @@ void MaxByComplexVarcharAggregator<COL2_ID>::ProcessSingleInternal(AggregateStat
             if (cmp < 0 || (cmp == 0 && s->GetStrKeyLen() <= curLen)) {
                 s->SetStrKey(reinterpret_cast<int64_t>(strView.data()), curLen);
                 if (s->targetValue != nullptr) {
-                    ReleaseComplexSliceCopy(s->targetValue, targetColTypeId_);
+                    ownedValues_.Release(s->targetValue);
                 }
-                s->targetValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+                s->targetValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
             }
         }
     }
@@ -243,16 +249,17 @@ void MaxByComplexVarcharAggregator<COL2_ID>::ProcessGroupInternal(std::vector<Ag
         }
         auto *s = State::CastState(rowStates[i] + aggStateOffset);
         std::string_view strView = VectorHelper::GetFlatValue<COL2_ID>(col2Vector, rowIdx);
-        vec::BaseVector *slice = GetComplexColSlice(col1Vector, targetColTypeId_, rowIdx);
+        ComplexSliceHolder sliceHolder(GetComplexColSlice(col1Vector, targetColTypeId_, rowIdx));
+        vec::BaseVector *slice = sliceHolder.get();
         if (ShouldSkipRowTargetNull(slice, targetColTypeId_, col1Vector, rowIdx)) {
             continue;  // Spark: only consider rows with non-null target
         }
         if (s->GetStrKeyAddress() == 0) {
             s->SetStrKey(reinterpret_cast<int64_t>(strView.data()), static_cast<int32_t>(strView.size()));
             if (s->targetValue != nullptr) {
-                ReleaseComplexSliceCopy(s->targetValue, targetColTypeId_);
+                ownedValues_.Release(s->targetValue);
             }
-            s->targetValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+            s->targetValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
         } else {
             const char *curVal = strView.data();
             int32_t curLen = static_cast<int32_t>(strView.size());
@@ -261,9 +268,9 @@ void MaxByComplexVarcharAggregator<COL2_ID>::ProcessGroupInternal(std::vector<Ag
             if (cmp < 0 || (cmp == 0 && s->GetStrKeyLen() <= curLen)) {
                 s->SetStrKey(reinterpret_cast<int64_t>(strView.data()), curLen);
                 if (s->targetValue != nullptr) {
-                    ReleaseComplexSliceCopy(s->targetValue, targetColTypeId_);
+                    ownedValues_.Release(s->targetValue);
                 }
-                s->targetValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+                s->targetValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
             }
         }
     }

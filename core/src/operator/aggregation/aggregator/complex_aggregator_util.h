@@ -10,7 +10,9 @@
 #ifndef OMNI_RUNTIME_COMPLEX_AGGREGATOR_UTIL_H
 #define OMNI_RUNTIME_COMPLEX_AGGREGATOR_UTIL_H
 
+#include <memory>
 #include <set>
+#include <unordered_set>
 
 #include "vector/array_vector.h"
 #include "vector/map_vector.h"
@@ -68,7 +70,8 @@ inline bool ShouldSkipRowTargetNull(vec::BaseVector *slice, type::DataTypeId col
 
 /**
  * Get the value at rowIndex from a complex-type column as a slice (view).
- * Returned pointer is valid as long as colVector is not modified; caller does not own.
+ * The returned vector is newly allocated and owned by the caller (hold it in a ComplexSliceHolder);
+ * it shares buffers with colVector, so it is only valid while colVector is alive and unmodified.
  * Returns nullptr when the row is null (so caller can treat uniformly via IsComplexSliceNull).
  *
  * - OMNI_ARRAY: ArrayVector::GetValue(rowIndex) -> BaseVector* (element Slice for that row).
@@ -158,6 +161,46 @@ inline void ReleaseComplexSliceCopy(vec::BaseVector *ownedSlice, type::DataTypeI
     }
     delete ownedSlice;
 }
+
+using ComplexSliceHolder = std::unique_ptr<vec::BaseVector>;
+
+/**
+ * Owns the CopyComplexSliceToOwned copies an aggregator stores in its group states.
+ * States live in the operator arena and DestroyState is never invoked on them, so copies still held
+ * when the aggregator is destroyed are released here.
+ */
+class ComplexValueOwner {
+public:
+    ComplexValueOwner() = default;
+    ComplexValueOwner(const ComplexValueOwner &) = delete;
+    ComplexValueOwner &operator=(const ComplexValueOwner &) = delete;
+
+    ~ComplexValueOwner()
+    {
+        for (vec::BaseVector *value : values_) {
+            delete value;
+        }
+    }
+
+    vec::BaseVector *Copy(vec::BaseVector *slice, type::DataTypeId colTypeId, type::DataType *colDataType = nullptr)
+    {
+        ComplexSliceHolder value(CopyComplexSliceToOwned(slice, colTypeId, colDataType));
+        if (value != nullptr) {
+            values_.insert(value.get());
+        }
+        return value.release();
+    }
+
+    void Release(vec::BaseVector *value)
+    {
+        if (value != nullptr && values_.erase(value) > 0) {
+            delete value;
+        }
+    }
+
+private:
+    std::unordered_set<vec::BaseVector *> values_;
+};
 
 /**
  * Write one row into the output complex-type column from a slice previously obtained by GetComplexColSlice.

@@ -63,6 +63,9 @@ public:
                 result->SetNotNull(i);
             });
         }
+        if (!inputArg->GetIsField()) {
+            delete inputArg;
+        }
     }
 };
 } // namespace

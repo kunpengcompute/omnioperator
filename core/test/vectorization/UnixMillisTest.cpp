@@ -82,6 +82,7 @@ public:
         ExecutionContext context;
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
+        inputVec->SetIsField(true);  // caller-owned, do not let Apply delete
         args.push(inputVec);
 
         ASSERT_NO_THROW(function->Apply(args, outputType, result, &context))

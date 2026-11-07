@@ -5,6 +5,7 @@
 
 #include "Cast.h"
 #include "vector/vector.h"
+#include <algorithm>
 #include <limits>
 #include <cstring>
 #include <type/Conversions.h>
@@ -1044,35 +1045,37 @@ void CastFunction::CastTimestampToString(BaseVector* input, BaseVector*& result,
     auto options = hooks_->timestampToStringOptions();
     auto size = context->GetResultRowSize();
     result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+    auto *resultVec = dynamic_cast<Vector<LargeStringContainer<std::string_view>> *>(result);
+    // Format into a stack buffer; SetValue copies into the vector's string arena.
+    const auto bufferSize = std::max<size_t>(getMaxStringLength(options) + 1, 64);
+    std::vector<char> buffer(bufferSize);
+
+    auto formatTimestamp = [&](Timestamp inputValue) -> std::string_view {
+        if (options.timeZone) {
+            inputValue.toTimezone(*(options.timeZone));
+        }
+        return Timestamp::tsToStringView(inputValue, options, buffer.data());
+    };
+
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         if (input->IsNull(0)) {
             result->SetNulls(0, true, size);
             return;
         }
         Timestamp inputValue = Timestamp::fromMicros(static_cast<ConstVector<int64_t> *>(input)->GetConstValue());
-        if (options.timeZone) {
-            inputValue.toTimezone(*(options.timeZone));
-        }
-        std::string strValue = inputValue.toString(options);
-        std::string_view strView(strValue);
+        auto strView = formatTimestamp(inputValue);
         for (int32_t row = 0; row < size; ++row) {
-            dynamic_cast<Vector<LargeStringContainer<std::string_view>> *>(result)->SetValue(row,strView);
+            resultVec->SetValue(row, strView);
         }
     } else {
-        char *rawBuffer = static_cast<char *>(VectorHelper::UnsafeGetValues(result));
         for (int32_t row = 0; row < size; ++row) {
             if (input->IsNull(row)) {
                 result->SetNull(row);
                 continue;
             }
             int64_t value = VectorHelper::GetValueFromVector<int64_t>(input, row);
-            Timestamp inputValue = Timestamp::fromMicros(value);
-            if (options.timeZone) {
-                inputValue.toTimezone(*(options.timeZone));
-            }
-            auto strView = Timestamp::tsToStringView(inputValue, options, rawBuffer);
-            dynamic_cast<Vector<LargeStringContainer<std::string_view>> *>(result)->SetValue(row,strView);
-            rawBuffer += strView.size();
+            auto strView = formatTimestamp(Timestamp::fromMicros(value));
+            resultVec->SetValue(row, strView);
         }
     }
 }

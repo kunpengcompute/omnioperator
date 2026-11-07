@@ -17,33 +17,25 @@ using namespace omniruntime::vec;
 void ConcatFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType,
     BaseVector *&result, ExecutionContext *context) const
 {
-    if (args.size() < 2) {
+    if (numArgs_ < 2 || args.size() < numArgs_) {
         OMNI_THROW("Concat function Error", "Concat requires at least 2 arguments");
     }
 
-    // Pop exactly 2 arguments from stack (as Gluten's UnfoldConcatStringFunc always creates
-    // nested 2-argument concat calls for multi-argument concat)
-    // In ExprEval, arguments are pushed in order: first arg (left) pushed first, second arg (right) pushed last
-    // So stack order: top = arg2 (right), next = arg1 (left)
-    // For concat(str1, str2), we want to concatenate str1 + str2
+    // ExprEval pushes arguments left to right, so the top of the stack is the last argument.
+    // Pop all numArgs_ of them and restore the source order before concatenating.
     std::vector<BaseVector *> argVectors;
-
-    // Pop arg2 (right argument) - top of stack
-    BaseVector *arg2 = args.top();
-    args.pop();
-
-    // Pop arg1 (left argument) - next on stack
-    BaseVector *arg1 = args.top();
-    args.pop();
-
-    // Order: arg1 first, then arg2 for correct concatenation order (left + right)
-    argVectors.push_back(arg1);
-    argVectors.push_back(arg2);
+    argVectors.reserve(numArgs_);
+    for (size_t i = 0; i < numArgs_; ++i) {
+        argVectors.push_back(args.top());
+        args.pop();
+    }
+    std::reverse(argVectors.begin(), argVectors.end());
 
     ApplyConcat(argVectors, result, outputType, context);
 
-    delete arg1;
-    delete arg2;
+    for (auto *argVec : argVectors) {
+        delete argVec;
+    }
 }
 
 void ConcatFunction::ApplyConcat(const std::vector<BaseVector *> &argVectors, BaseVector *&result,

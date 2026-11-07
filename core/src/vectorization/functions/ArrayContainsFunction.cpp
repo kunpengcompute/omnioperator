@@ -22,25 +22,21 @@ void ArrayContainsFunction::Apply(std::stack<BaseVector *> &args, const DataType
     // Stack order: top = search value, bottom = array
     auto searchArg = args.top();
     args.pop();
+    auto searchGuard = MakeVectorArgGuard(searchArg);
     auto arrayArg = args.top();
     args.pop();
+    auto arrayGuard = MakeVectorArgGuard(arrayArg);
 
     if (arrayArg == nullptr || searchArg == nullptr) {
-        delete arrayArg;
-        delete searchArg;
         OMNI_THROW("ArrayContainsFunction Error:", "Input vector is null");
     }
 
     if (arrayArg->GetTypeId() != OMNI_ARRAY) {
-        delete arrayArg;
-        delete searchArg;
         OMNI_THROW("ArrayContainsFunction Error:", "First argument is not an array type");
     }
 
     auto *arrayVec = dynamic_cast<ArrayVector *>(arrayArg);
     if (arrayVec == nullptr) {
-        delete arrayArg;
-        delete searchArg;
         OMNI_THROW("ArrayContainsFunction Error:", "Failed to cast to ArrayVector");
     }
 
@@ -49,8 +45,6 @@ void ArrayContainsFunction::Apply(std::stack<BaseVector *> &args, const DataType
     result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowSize);
     auto *resultVec = dynamic_cast<Vector<bool> *>(result);
     if (resultVec == nullptr) {
-        delete arrayArg;
-        delete searchArg;
         OMNI_THROW("ArrayContainsFunction Error:", "Failed to create result vector");
     }
 
@@ -95,14 +89,9 @@ void ArrayContainsFunction::Apply(std::stack<BaseVector *> &args, const DataType
             ProcessArrayContainsVarchar(arrayVec, searchArg, resultVec, rowSize);
             break;
         default:
-            delete arrayArg;
-            delete searchArg;
             OMNI_THROW("ArrayContainsFunction Error:",
                 "Unsupported element type: " + std::to_string(elementTypeId));
     }
-
-    delete arrayArg;
-    delete searchArg;
 }
 
 template <typename T>

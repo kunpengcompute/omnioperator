@@ -48,6 +48,7 @@ namespace omniruntime::vectorization {
 
         auto inputArg = args.top();
         args.pop();
+        auto inputGuard = MakeVectorArgGuard(inputArg);
 
         DataTypeId inputTypeId = inputArg->GetTypeId();
 
@@ -67,11 +68,6 @@ namespace omniruntime::vectorization {
             default:
                 OMNI_THROW("TimestampMicros function Error",
                            "Unsupported input type: " + TypeUtil::TypeToString(inputTypeId));
-        }
-
-        // Clean up input argument (temporary objects created by ColumnProjectionHelper/Slice)
-        if (inputArg != nullptr) {
-            delete inputArg;
         }
     }
 
@@ -102,6 +98,7 @@ namespace omniruntime::vectorization {
 
         auto inputArg = args.top();
         args.pop();
+        auto inputGuard = MakeVectorArgGuard(inputArg);
 
         DataTypeId inputTypeId = inputArg->GetTypeId();
 
@@ -121,11 +118,6 @@ namespace omniruntime::vectorization {
             default:
                 OMNI_THROW("TimestampMillis function Error",
                            "Unsupported input type: " + TypeUtil::TypeToString(inputTypeId));
-        }
-
-        // Clean up input argument (temporary objects created by ColumnProjectionHelper/Slice)
-        if (inputArg != nullptr) {
-            delete inputArg;
         }
     }
 
@@ -156,6 +148,7 @@ namespace omniruntime::vectorization {
 
         auto inputArg = args.top();
         args.pop();
+        auto inputGuard = MakeVectorArgGuard(inputArg);
 
         DataTypeId inputTypeId = inputArg->GetTypeId();
 
@@ -181,11 +174,6 @@ namespace omniruntime::vectorization {
             default:
                 OMNI_THROW("TimestampSeconds function Error",
                            "Unsupported input type: " + TypeUtil::TypeToString(inputTypeId));
-        }
-
-        // Clean up input argument (temporary objects created by ColumnProjectionHelper/Slice)
-        if (inputArg != nullptr) {
-            delete inputArg;
         }
     }
 

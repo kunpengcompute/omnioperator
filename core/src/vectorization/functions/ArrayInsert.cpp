@@ -19,12 +19,16 @@ void ArrayInsertImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &o
 {
     auto *legacyArg = args.top();
     args.pop();
+    auto legacyGuard = MakeVectorArgGuard(legacyArg);
     auto *itemArg = args.top();
     args.pop();
+    auto itemGuard = MakeVectorArgGuard(itemArg);
     auto *posArg = args.top();
     args.pop();
+    auto posGuard = MakeVectorArgGuard(posArg);
     auto *arrayArg = args.top();
     args.pop();
+    auto arrayGuard = MakeVectorArgGuard(arrayArg);
 
     bool legacyNegativeIndex = false;
     if (legacyArg != nullptr && legacyArg->GetTypeId() == OMNI_BOOLEAN) {
@@ -206,19 +210,6 @@ void ArrayInsertImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &o
     }
 
     result = resultArray;
-
-    if (legacyArg != nullptr) {
-        delete legacyArg;
-    }
-    if (itemArg != nullptr) {
-        delete itemArg;
-    }
-    if (posArg != nullptr) {
-        delete posArg;
-    }
-    if (arrayArg != nullptr) {
-        delete arrayArg;
-    }
 }
 
 int32_t ArrayInsertImpl::GetPosValue(BaseVector *posArg, int32_t row) const

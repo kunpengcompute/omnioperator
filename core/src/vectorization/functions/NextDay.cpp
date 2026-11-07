@@ -158,6 +158,12 @@ public:
                 result->SetNotNull(i);
             });
         }
+        if (!dayOfWeekArg->GetIsField()) {
+            delete dayOfWeekArg;
+        }
+        if (!dateArg->GetIsField()) {
+            delete dateArg;
+        }
     }
 };
 } // namespace

@@ -82,6 +82,7 @@ public:
         ExecutionContext context;
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
+        inputVec->SetIsField(true);  // caller-owned, do not let Apply delete
         args.push(inputVec);
 
         ASSERT_NO_THROW(function->Apply(args, outputType, result, &context))
@@ -387,6 +388,7 @@ TEST(DateFromUnixDateTest, InverseOfUnixDate) {
     ExecutionContext context1;
     context1.SetResultRowSize(dateInputVec->GetSize());
     std::stack<BaseVector*> args1;
+    dateInputVec->SetIsField(true);  // caller-owned, do not let Apply delete
     args1.push(dateInputVec);
     unixDateFunction->Apply(args1, intOutputType, unixDateResult, &context1);
 

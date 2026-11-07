@@ -23,6 +23,7 @@ void CardinalityFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
     }
     auto inputArg = args.top();
     args.pop();
+    auto inputGuard = MakeVectorArgGuard(inputArg);
     if (inputArg == nullptr) {
         OMNI_THROW("CardinalityFunction Error:", "Input vector is null");
     }
@@ -37,7 +38,6 @@ void CardinalityFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
     } else {
         OMNI_THROW("CardinalityFunction Error:", "Unsupported input type: " + std::to_string(inputTypeId));
     }
-    delete inputArg;
 }
 
 void CardinalityFunction::ProcessArrayCardinality(BaseVector *arrayArg, Vector<int64_t> *resultVec, int32_t rowSize) const

@@ -12,10 +12,7 @@ namespace op {
 
 using namespace vec;
 
-MaxComplexAggregator::~MaxComplexAggregator()
-{
-    // State cleanup is done per-group; we don't own global state here
-}
+MaxComplexAggregator::~MaxComplexAggregator() = default;
 
 MaxComplexAggregator::MaxComplexAggregator(const DataTypes &inputTypes, const DataTypes &outputTypes,
     const std::vector<int32_t> &channels, bool inputRaw, bool outputPartial, bool isOverflowAsNull,
@@ -55,7 +52,8 @@ void MaxComplexAggregator::ProcessSingleInternal(AggregateState *state, BaseVect
     BaseVector *colVector = curVectorBatch->Get(channels[0]);
     for (int32_t i = 0; i < rowCount; i++) {
         int32_t rowIndex = rowOffset + i;
-        vec::BaseVector *slice = GetComplexColSlice(colVector, targetColTypeId_, rowIndex);
+        ComplexSliceHolder sliceHolder(GetComplexColSlice(colVector, targetColTypeId_, rowIndex));
+        vec::BaseVector *slice = sliceHolder.get();
         if (ShouldSkipRowTargetNull(slice, targetColTypeId_, colVector, rowIndex)) {
             continue;
         }
@@ -64,14 +62,14 @@ void MaxComplexAggregator::ProcessSingleInternal(AggregateState *state, BaseVect
         if (complexState->isEmpty) {
             complexState->isEmpty = false;
             if (complexState->currentValue != nullptr) {
-                ReleaseComplexSliceCopy(complexState->currentValue, targetColTypeId_);
+                ownedValues_.Release(complexState->currentValue);
             }
-            complexState->currentValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+            complexState->currentValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
         } else {
             int cmp = CompareComplexSlice(slice, complexState->currentValue, targetColTypeId_, targetColDataType_.get());
             if (cmp > 0) {
-                ReleaseComplexSliceCopy(complexState->currentValue, targetColTypeId_);
-                complexState->currentValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+                ownedValues_.Release(complexState->currentValue);
+                complexState->currentValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
             }
         }
     }
@@ -86,7 +84,8 @@ void MaxComplexAggregator::ProcessGroupInternal(std::vector<AggregateState *> &r
     const size_t rowCount = rowStates.size();
     for (size_t i = 0; i < rowCount; i++) {
         int32_t rowIdx = static_cast<int32_t>(rowOffset + i);
-        vec::BaseVector *slice = GetComplexColSlice(colVector, targetColTypeId_, rowIdx);
+        ComplexSliceHolder sliceHolder(GetComplexColSlice(colVector, targetColTypeId_, rowIdx));
+        vec::BaseVector *slice = sliceHolder.get();
         if (ShouldSkipRowTargetNull(slice, targetColTypeId_, colVector, rowIdx)) {
             continue;
         }
@@ -94,14 +93,14 @@ void MaxComplexAggregator::ProcessGroupInternal(std::vector<AggregateState *> &r
         if (complexState->isEmpty) {
             complexState->isEmpty = false;
             if (complexState->currentValue != nullptr) {
-                ReleaseComplexSliceCopy(complexState->currentValue, targetColTypeId_);
+                ownedValues_.Release(complexState->currentValue);
             }
-            complexState->currentValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+            complexState->currentValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
         } else {
             int cmp = CompareComplexSlice(slice, complexState->currentValue, targetColTypeId_, targetColDataType_.get());
             if (cmp > 0) {
-                ReleaseComplexSliceCopy(complexState->currentValue, targetColTypeId_);
-                complexState->currentValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+                ownedValues_.Release(complexState->currentValue);
+                complexState->currentValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
             }
         }
     }
@@ -154,6 +153,9 @@ void MaxComplexAggregator::ExtractValuesForSpill(std::vector<AggregateState *> &
             vectors[0]->SetNull(rowIndex);
         } else {
             SetComplexColValue(vectors[0], targetColTypeId_, rowIndex, complexState->currentValue);
+            // Spilled states are discarded (arena reset) after extraction.
+            ownedValues_.Release(complexState->currentValue);
+            complexState->currentValue = nullptr;
         }
     }
 }
@@ -168,21 +170,22 @@ void MaxComplexAggregator::ProcessGroupUnspill(std::vector<UnspillRowInfo> &unsp
         int32_t index = row.rowIdx;
         BaseVector *valueVector = batch->Get(valueVecIdx);
         auto *complexState = ComplexState::CastState(row.state + aggStateOffset);
-        vec::BaseVector *slice = GetComplexColSlice(valueVector, targetColTypeId_, index);
+        ComplexSliceHolder sliceHolder(GetComplexColSlice(valueVector, targetColTypeId_, index));
+        vec::BaseVector *slice = sliceHolder.get();
         if (IsComplexSliceNull(slice, targetColTypeId_)) {
             continue;
         }
         if (complexState->isEmpty) {
             complexState->isEmpty = false;
             if (complexState->currentValue != nullptr) {
-                ReleaseComplexSliceCopy(complexState->currentValue, targetColTypeId_);
+                ownedValues_.Release(complexState->currentValue);
             }
-            complexState->currentValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+            complexState->currentValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
         } else {
             int cmp = CompareComplexSlice(slice, complexState->currentValue, targetColTypeId_, targetColDataType_.get());
             if (cmp > 0) {
-                ReleaseComplexSliceCopy(complexState->currentValue, targetColTypeId_);
-                complexState->currentValue = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
+                ownedValues_.Release(complexState->currentValue);
+                complexState->currentValue = ownedValues_.Copy(slice, targetColTypeId_, targetColDataType_.get());
             }
         }
     }
@@ -199,8 +202,8 @@ void MaxComplexAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector
             outVector->SetNull(index);
             continue;
         }
-        vec::BaseVector *slice = GetComplexColSlice(originVector, targetColTypeId_, index);
-        SetComplexColValue(outVector, targetColTypeId_, index, slice);
+        ComplexSliceHolder slice(GetComplexColSlice(originVector, targetColTypeId_, index));
+        SetComplexColValue(outVector, targetColTypeId_, index, slice.get());
     }
     result->Append(outVector);
 }

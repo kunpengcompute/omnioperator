@@ -17,12 +17,17 @@ void ToJsonFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &ou
 {
     auto *inputArg = args.top();
     args.pop();
+    // appendToJson throws on unsupported types / encodings; the guard releases the input on that path too.
+    std::unique_ptr<BaseVector, void (*)(BaseVector *)> inputGuard(inputArg, [](BaseVector *v) {
+        if (!v->GetIsField()) {
+            delete v;
+        }
+    });
     // Input DataType carries struct field names (set by the evaluator); may be null if
     // unavailable, in which case we fall back to field0/field1/... key names.
     const DataType *inputType = (context != nullptr) ? context->GetToJsonInputType() : nullptr;
     int32_t rowSize = inputArg->GetSize();
     auto *stringResult = new Vector<LargeStringContainer<std::string_view>>(rowSize);
-    stringResult->SetIsField(true);
     for (int32_t row = 0; row < rowSize; ++row) {
         if (inputArg->IsNull(row)) {
             stringResult->SetNull(row);

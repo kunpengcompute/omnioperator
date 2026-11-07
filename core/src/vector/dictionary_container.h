@@ -28,11 +28,7 @@ public:
           dictOffset(dictOffset),
           isSliced(false)
     {
-        this->values.reserve(valueSize);
-        // init values
-        for (int32_t i = 0; i < valueSize; i++) {
-            this->values[i] = values[i];
-        }
+        this->values.assign(values, values + valueSize);
     }
 
     DictionaryContainer(std::vector<int32_t> &values, int32_t valueSize, std::shared_ptr<DictType> dictionary,
