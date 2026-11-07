@@ -601,7 +601,7 @@ TEST(omni_row, array_byte_yarn_missing_tinyints_roundtrip_wide_row)
     rows.reserve(rowNumber);
     rowBuffer.TransValueFromVectorBatch(vecBatch, 0);
     auto len = rowBuffer.FillBuffer();
-    rows.emplace_back(rowBuffer.TakeRowBuffer(), len);
+    rows.emplace_back(rowBuffer.TakeRowBuffer(), len, true);
 
     auto parser = std::make_unique<RowParser>(types);
     BaseVector *vecs[4];
