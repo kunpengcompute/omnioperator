@@ -168,8 +168,32 @@ char* LargeStringContainer<RAW_DATA_TYPE>::ExpandBufferToCapacity(size_t toCapac
 template<typename RAW_DATA_TYPE>
 void LargeStringContainer<RAW_DATA_TYPE>::Expand(int32_t needSize)
 {
+    if (needSize < 0) {
+        throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "string container size invalid");
+    }
+    const int32_t oldSize = size;
+    // Reserve() can grow the container ahead of the vector's logical size. A later
+    // Vector::Expand() within that reservation must not shrink offsets: vector::resize
+    // would retain the allocation while memory accounting incorrectly reclaimed it.
+    if (needSize <= oldSize) {
+        return;
+    }
+    const size_t offsetCount = static_cast<size_t>(needSize) + 1;
+    // The ctor reports GetContainerCapacity() by the creation row count while ~Vector
+    // reclaims it by the FINAL row count, so the offsets growth bytes must be reported
+    // here; otherwise every grow leaves accounted permanently lower by 4*(grown rows).
+    const int64_t delta = static_cast<int64_t>(sizeof(int32_t)) *
+        (static_cast<int64_t>(needSize) - static_cast<int64_t>(oldSize));
+    // Report before allocating so a memory-cap failure leaves the container
+    // untouched. Roll the report back if std::vector growth itself fails.
+    omniruntime::mem::ThreadMemoryManager::ReportMemory(delta);
+    try {
+        offsets.resize(offsetCount);
+    } catch (...) {
+        omniruntime::mem::ThreadMemoryManager::ReclaimMemory(delta);
+        throw;
+    }
     size = needSize;
-    offsets.resize(needSize + 1);
 }
 
 template<typename RAW_DATA_TYPE>

@@ -881,22 +881,29 @@ public:
         }
 
         if (needCapacity <= this->capacity) {
-            this->size = needCapacity;
+            // Expand the string offsets before publishing the new logical size. The
+            // container reports memory and may throw MEM_CAP_EXCEEDED; committing size
+            // first would make an identical retry return early with undersized offsets.
             container->Expand(needCapacity);
+            this->size = needCapacity;
             return;
         }
 
         int32_t newCapacity = std::max(this->capacity * 2, needCapacity);
         int32_t oldSize = this->size;
 
+        // Stage every throwing operation in local state. Only publish the new null
+        // buffer/capacity/size after the string container has expanded successfully.
+        // This keeps the vector retryable if either allocation hits the memory cap.
         auto oldNullsBuffer = this->nullsBuffer;
-        this->nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
+        auto newNullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
         if (oldNullsBuffer != nullptr) {
-            this->nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
+            newNullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
         }
+        container->Expand(needCapacity);
+        this->nullsBuffer.swap(newNullsBuffer);
         this->capacity = newCapacity;
         this->size = needCapacity;
-        container->Expand(needCapacity);
     }
 
     void Reserve(int32_t suggestedCapacity, bool copyNulls, bool copyValues) override
@@ -904,15 +911,18 @@ public:
         if(suggestedCapacity <= this->capacity || this->offset != 0) {
             return;
         }
+        std::shared_ptr<NullsBuffer> newNullsBuffer;
         if (copyNulls && this->nullsBuffer != nullptr) {
-            auto oldNullsBuffer = std::move(this->nullsBuffer);
-            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
-            this->nullsBuffer->SetNulls(0, oldNullsBuffer.get(), this->size);
+            newNullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
+            newNullsBuffer->SetNulls(0, this->nullsBuffer.get(), this->size);
         } else {
-            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
+            newNullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
         }
-        this->capacity = suggestedCapacity;
+        // Keep the original vector intact when container memory accounting rejects
+        // the growth. A subsequent call with the same capacity must still retry.
         container->Expand(suggestedCapacity);
+        this->nullsBuffer.swap(newNullsBuffer);
+        this->capacity = suggestedCapacity;
     }
 
 private:
