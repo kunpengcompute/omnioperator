@@ -6,7 +6,7 @@
 
 配置LD\_PRELOAD环境变量的情况下，基于毕昇JDK 1.8.0.262执行Spark，偶发JVM core dump，报错堆栈如下。
 
-```
+```output
 Stack: [0x0000ffd2ce0d0000, 0x0000ffd2ce2d00001, sp=0x0000ffd2ce2cb830, free space=2030k
 Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
 C [libzip.so+0x52a4] fill_window+0x164
@@ -40,14 +40,13 @@ C 0x00000007822fef70
 
 毕昇JDK不具备向前兼容性，通过升级毕昇JDK版本至推荐版本1.8.0.342可规避该问题。
 
-
 ## 基于Hadoop 3.2.0版本的libhdfs.so，执行Spark查询Parquet数据源偶发core dump问题的解决方法<a name="ZH-CN_TOPIC_0000002517451242"></a>
 
 **问题现象描述<a name="zh-cn_topic_0000001647616694_zh-cn_topic_0000001518928837_zh-cn_topic_0000001259822511_section456714280469"></a>**
 
 使用Spark查询Parquet数据源时，若开启OmniOperator并依赖Hadoop 3.2.0版本的libhdfs.so时，会偶发core dump，报错堆栈如下。
 
-```
+```output
 Stack: [0x00007fb9e8e5d000,0x00007fb9e8f5e000], sp=0x00007fb9e8f5cd40, free space=1023k
 Native frames: (J=compiled Java code, j=interpreted , Vv=VM code, C=native code)
 C [libhdfs.so+0xcd39]  hdfsThreadDestructor+0xb9
@@ -70,7 +69,6 @@ Compressed class space size: 1073741824 Address: 0x0000000100000000
 
 通过提前判断操作系统中JVM是否存在，并在确认JVM存在的情况下，基于已获取的JNIEnv指针对当前线程执行detach操作，可以有效规避JNIEnv为野指针时引发的core dump异常。使用本版本提供的libhdfs.so可以规避该问题。或者使用社区的Patch重新编译libhdfs.so。可参考[Github](https://github.com/apache/hadoop/pull/5955)。
 
-
 ## Spark 3.1.1版本运行10T大数据集时，偶发OneForOneBlockFetcher相关错误的解决方法<a name="ZH-CN_TOPIC_0000002517451258"></a>
 
 **问题现象描述<a name="zh-cn_topic_0000001701032480_zh-cn_topic_0000001454201442_section758133012554"></a>**
@@ -85,14 +83,13 @@ Compressed class space size: 1073741824 Address: 0x0000000100000000
 
 考虑将spark.network.timeout调大，避免fetch数据超时。推荐设为600，可解决本例中问题。
 
-
 ## Spark执行INSERT语句查询多个大宽表Join时，SMJ算子出现内存不足导致core dump问题的解决方法<a name="ZH-CN_TOPIC_0000002517291318"></a>
 
 **问题现象描述<a name="zh-cn_topic_0000001950009665_zh-cn_topic_0000001454201442_section758133012554"></a>**
 
 在Spark执行INSERT语句且只有1个数据分区的场景下，当出现50个表连续SMJ（Sort Merge Join）操作时，可能会导致SMJ算子在堆外内存耗尽时调用new来申请vector内存，从而引发core dump问题。
 
-![](figures/9A6D576E-BF4E-45C1-AFB0-1DC31EFDF3A6.png)
+![Spark单分区执行50个SMJ算子时堆外内存耗尽引发core dump的报错堆栈截图](figures/9A6D576E-BF4E-45C1-AFB0-1DC31EFDF3A6.png)
 
 **关键过程、根本原因分析<a name="zh-cn_topic_0000001950009665_zh-cn_topic_0000001454201442_section145813300553"></a>**
 
@@ -107,27 +104,26 @@ Compressed class space size: 1073741824 Address: 0x0000000100000000
 - 调整spark.memory.offHeap.size参数增大堆外内存后重新触发业务。
 - 回退到Spark开源版本流程触发业务。
 
-
 ## 在Spark SQL中执行包含大量列（例如500列）的cast string to double表达式时查询性能差的解决方法<a name="ZH-CN_TOPIC_0000002549011119"></a>
 
 **问题现象描述<a name="zh-cn_topic_0000001921984084_zh-cn_topic_0000001454201442_section758133012554"></a>**
 
 当使用Spark OmniOperator对包含大量变长类型列（如500列）的数据进行聚合查询时，SQL查询性能可能会下降。
 
-![](figures/zh-cn_image_0000001950071221.png)
+![500列cast string to double聚合查询开启算子加速前后的耗时对比柱状图，查询性能明显下降
+](figures/zh-cn_image_0000001950071221.png)
 
 **关键过程、根本原因分析<a name="zh-cn_topic_0000001921984084_zh-cn_topic_0000001454201442_section145813300553"></a>**
 
 在对变长类型列进行聚合操作时，需通过Codegen实现字符串到双精度浮点数的类型转换。由于Codegen本身存在编译开销，SQL查询的性能将受到编译时间和算子执行时间的双重影响。当超多列需要同时进行Codegen编译时，编译开销远大于OmniOperator算子执行时间，导致整体SQL查询性能慢。
 
-![](figures/zh-cn_image_0000001922362322.png)
+![超多列Codegen编译耗时与算子执行耗时占比对比图，编译开销明显大于算子执行时间](figures/zh-cn_image_0000001922362322.png)
 
-![](figures/zh-cn_image_0000001922202730.png)
+![回退Spark开源版本前后的多列聚合查询耗时对比图，回退后查询性能明显回升](figures/zh-cn_image_0000001922202730.png)
 
 **结论、解决方案及效果<a name="zh-cn_topic_0000001921984084_section239217135912"></a>**
 
 当存在超多列需要进行表达式Codegen的SQL查询场景，建议回退至Spark开源版本进行查询，该操作不影响任务结果的一致性。
-
 
 ## Hive 3.1.0版本运行某些包含Group By算子的SQL集时，出现Unable to create serializer "org.apache.hive.com.esotericsoftware.kryo.serializers.FieldSerializer" for class: com.huawei.boostkit.hive.OmniGroupByOperator相关错误的解决方法<a name="ZH-CN_TOPIC_0000002548891121"></a>
 
@@ -135,7 +131,7 @@ Compressed class space size: 1073741824 Address: 0x0000000100000000
 
 某些SQL包含Group By算子，Hive OmniOperator会出现Unable to create serializer "org.apache.hive.com.esotericsoftware.kryo.serializers.FieldSerializer" for class: com.huawei.boostkit.hive.OmniGroupByOperator报错。
 
-![](figures/zh-cn_image_0000002070583738.png)
+![Hive OmniOperator执行Group By算子时报Unable to create serializer错误的运行日志截图](figures/zh-cn_image_0000002070583738.png)
 
 **关键过程、根本原因分析<a name="zh-cn_topic_0000002070738706_zh-cn_topic_0000001921984084_zh-cn_topic_0000001454201442_section145813300553"></a>**
 
@@ -145,8 +141,7 @@ Compressed class space size: 1073741824 Address: 0x0000000100000000
 
 需要在Hive工程的pom文件将Kryo的version改为4.0.0重新编译打包，替换Hive安装目录“lib“下的hive-exec-3.1.0.jar，也可以使用已经编译好的[Hive JAR包](https://gitee.com/kunpengcompute/boostkit-bigdata/releases/download/tag_24.0.0_release_hive/hive-exec-3.1.0.jar)进行替换。
 
-
-## Hive MetaStore远程部署，出现q64卡顿<a name="ZH-CN_TOPIC_0000002517291328"></a>
+## Hive MetaStore远程部署运行TPCDS-99时q64卡顿的解决方法<a name="ZH-CN_TOPIC_0000002517291328"></a>
 
 **问题现象描述<a name="zh-cn_topic_0000002145370381_zh-cn_topic_0000002105043824_zh-cn_topic_0000002070738706_zh-cn_topic_0000001921984084_zh-cn_topic_0000001454201442_section758133012554"></a>**
 
@@ -162,7 +157,6 @@ Hive的MetaStore使用远程部署，运行1TB ORC TPCDS-99时，q64会卡住，
 
 方案2：使用远程模式部署时，优先执行q64，将q64的执行顺序调整至q44之前。
 
-
 ## 执行Spark引擎业务过程中运行Gluten提示error in opening zip file的解决方法<a name="ZH-CN_TOPIC_0000002549011121"></a>
 
 **问题现象描述<a name="zh-cn_topic_0000002484820694_zh-cn_topic_0000002425493241_zh-cn_topic_0000002145370381_zh-cn_topic_0000002105043824_zh-cn_topic_0000002070738706_zh-cn_topic_0000001921984084_zh-cn_topic_0000001454201442_section758133012554"></a>**
@@ -177,18 +171,17 @@ Gluten社区代码里有一个步骤是遍历部署文件夹下的所有文件�
 
 1. 在环境的/usr/local目录下输入**ll**命令查看tez软链接。
 
-    ```
+    ```shell
     ll
     ```
 
 2. 删除tez软链接。
 
-    ```
+    ```shell
     unlink tez
     ```
 
 3. 再次运行Gluten。
-
 
 ## 执行Spark引擎业务过程中运行Gluten提示libabsl\_xxx.so.2501.0.0 no such file的解决方法<a name="ZH-CN_TOPIC_0000002548891105"></a>
 
@@ -204,7 +197,7 @@ Gluten社区代码里有一个步骤是遍历部署文件夹下的所有文件�
 
 安装2501或以上版本的libabsl即可解决问题。执行如下命令安装libabsl：
 
-```
+```shell
 cd /home/
 git clone https://github.com/abseil/abseil-cpp.git
 git checkout tags/20250127.0
@@ -215,4 +208,8 @@ make -j32
 make install
 ```
 
+## 修订记录
 
+| 文档版本 | 发布日期 | 修改说明 |
+| --- | --- | --- |
+| 01 | 2026-06-30 | 第一次正式发布。 |

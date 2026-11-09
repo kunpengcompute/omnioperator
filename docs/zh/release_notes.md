@@ -7,7 +7,7 @@
 <a name="table227mcpsimp"></a>
 <table><tbody><tr id="row232mcpsimp"><th class="firstcol" valign="top" width="30%" id="mcps1.1.3.1.1"><p id="p234mcpsimp"><a name="p234mcpsimp"></a><a name="p234mcpsimp"></a>产品名称</p>
 </th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.1.3.1.1 "><p id="p236mcpsimp"><a name="p236mcpsimp"></a><a name="p236mcpsimp"></a>Kunpeng BoostKit</p>
+<td class="cellrowborder" valign="top" width="70%" headers="mcps1.1.3.1.1 "><p id="p236mcpsimp"><a name="p236mcpsimp"></a><a name="p236mcpsimp"></a>鲲鹏BoostKit</p>
 </td>
 </tr>
 <tr id="row237mcpsimp"><th class="firstcol" valign="top" width="30%" id="mcps1.1.3.2.1"><p id="p239mcpsimp"><a name="p239mcpsimp"></a><a name="p239mcpsimp"></a>产品版本</p>
@@ -23,7 +23,6 @@
 </tbody>
 </table>
 
-
 ### 软件版本配套说明<a name="ZH-CN_TOPIC_0000002515610832"></a>
 
 |项目| 版本                                                                                            |
@@ -36,8 +35,6 @@
 |Python| 3.10.2及以上                                                                                     |
 |文件系统| HDFS                                                                                          |
 |数据格式| ORC、PARQUET                                                                                   |
-
-
 
 ### 硬件版本配套说明<a name="ZH-CN_TOPIC_0000002547210819"></a>
 
@@ -54,7 +51,6 @@
 </tr>
 </tbody>
 </table>
-
 
 ### 病毒扫描结果<a name="ZH-CN_TOPIC_0000002515450916"></a>
 
@@ -147,8 +143,6 @@
 </tbody>
 </table>
 
-
-
 ## V2.1.0<a name="ZH-CN_TOPIC_0000002517208390"></a>
 
 ### 更新说明<a name="ZH-CN_TOPIC_0000002548808279"></a>
@@ -168,17 +162,13 @@
 
 无
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002548688267"></a>
 
 无
 
-
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002517048478"></a>
 
 无
-
-
 
 ## V2.0.0<a name="ZH-CN_TOPIC_0000002547210805"></a>
 
@@ -189,7 +179,7 @@
 **新增特性<a name="section9559165534817"></a>**
 
 - 新增适配Spark的Gluten 1.3版本适配层。
-- SparkExtension新增支持`concat_ws`、regexp、`regexp_replace`、trim和floor表达式。
+- SparkExtension新增支持`concat_ws`、`regexp`、`regexp_replace`、`trim`和`floor`表达式
 
 **修改特性<a name="section299616132492"></a>**
 
@@ -199,17 +189,13 @@
 
 无
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002515610898"></a>
 
 无
 
-
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002515610880"></a>
 
 无
-
-
 
 ## V1.9.0<a name="ZH-CN_TOPIC_0000002547130825"></a>
 
@@ -230,17 +216,13 @@
 
 无
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002515450930"></a>
 
 无
 
-
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002547210785"></a>
 
 无
-
-
 
 ## V1.8.0<a name="ZH-CN_TOPIC_0000002547210809"></a>
 
@@ -264,17 +246,13 @@
 
 该版本不适配CentOS 7.9。
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002547130777"></a>
 
 无
 
-
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002547210795"></a>
 
 无
-
-
 
 ## V1.7.0<a name="ZH-CN_TOPIC_0000002515450928"></a>
 
@@ -302,17 +280,13 @@
 
 无
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002515450942"></a>
 
 无
 
-
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002515450960"></a>
 
 无
-
-
 
 ## V1.6.0<a name="ZH-CN_TOPIC_0000002515610908"></a>
 
@@ -335,7 +309,6 @@
 
 无
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002547210769"></a>
 
 <a name="zh-cn_topic_0000001498002964_table1077520124617"></a>
@@ -353,12 +326,9 @@
 </tbody>
 </table>
 
-
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002547210813"></a>
 
 无
-
-
 
 ## V1.5.0<a name="ZH-CN_TOPIC_0000002547130781"></a>
 
@@ -382,11 +352,9 @@
 
 无
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002547130817"></a>
 
 无
-
 
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002547130753"></a>
 
@@ -425,8 +393,6 @@
 </tbody>
 </table>
 
-
-
 ## V1.4.0<a name="ZH-CN_TOPIC_0000002515450946"></a>
 
 ### 更新说明<a name="ZH-CN_TOPIC_0000002515610850"></a>
@@ -452,17 +418,13 @@
 
 无
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002547130743"></a>
 
 无
 
-
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002515610890"></a>
 
 无
-
-
 
 ## V1.3.0<a name="ZH-CN_TOPIC_0000002547130771"></a>
 
@@ -484,17 +446,13 @@
 
 无
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002547210777"></a>
 
 无
 
-
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002515610852"></a>
 
 无
-
-
 
 ## V1.2.0<a name="ZH-CN_TOPIC_0000002515610910"></a>
 
@@ -519,17 +477,13 @@
 
 无
 
-
 ### 已解决的问题<a name="ZH-CN_TOPIC_0000002515450958"></a>
 
 无
 
-
 ### 遗留问题<a name="ZH-CN_TOPIC_0000002547210745"></a>
 
 无
-
-
 
 ## 版本配套文档<a name="ZH-CN_TOPIC_0000002547130797"></a>
 
@@ -541,8 +495,6 @@
 |安装指南|提供OmniOperator的安装部署指导。|开源仓|
 |使用指南|提供OmniOperator的使用操作指导。|开源仓|
 |常见问题|记录安装、部署和使用OmniOperator过程中可能遇到的问题及其解决方法。|开源仓|
-
-
 
 ### 获取文档的方法<a name="ZH-CN_TOPIC_0000002547210757"></a>
 
