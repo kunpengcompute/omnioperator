@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <sstream>
 #include <utility>
+#include <limits>
 #include "operator/spill/spiller.h"
 #include "operator/reclaim_context.h"
 #include "operator/util/operator_util.h"
@@ -3074,19 +3075,27 @@ static NO_INLINE BaseVector *ConstructBuildColumn(
     return ret;
 }
 
+// Build-side string columns of one output batch. The strings are resolved first and the
+// output buffer is sized to their total: a probe batch that matches one or two rows gets a
+// few bytes instead of the 32 KB default, and the buffer never has to grow while it is
+// filled. The vector is charged to the task pool like the rest of the join output.
 template<bool isInnerJoin, bool isShuffleExchangeBuildPlan>
 static NO_INLINE BaseVector *ConstructBuildVarcharColumn(
-    const std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t> *buildTemp, uint32_t outputCol, int32_t numRows)
+    const std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t> *buildTemp, uint32_t outputCol, int32_t numRows,
+    mem::OmniTaskMemoryPool *pool)
 {
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
     using DictionaryVector = Vector<DictionaryContainer<std::string_view>>;
-    auto *ret = new VarcharVector(numRows);
-    std::string_view value;
+    static thread_local std::vector<std::string_view> values;
+    static thread_local std::vector<uint8_t> nulls;
+    values.resize(static_cast<size_t>(numRows));
+    nulls.assign(static_cast<size_t>(numRows), 0);
+    int64_t totalBytes = 0;
     for (int32_t i = 0; i < numRows; ++i) {
         BaseVector ***array = std::get<1>(buildTemp[i]);
         if constexpr (!isInnerJoin) {
             if (array == nullptr) {
-                static_cast<VarcharVector *>(ret)->SetNull(i);
+                nulls[i] = 1;
                 continue;
             }
         }
@@ -3094,9 +3103,10 @@ static NO_INLINE BaseVector *ConstructBuildVarcharColumn(
         auto buildRowIdx = std::get<3>(buildTemp[i]);
         auto buildVector = array[outputCol][vecBatchIndex];
         if (buildVector->IsNull(buildRowIdx)) {
-            ret->SetNull(i);
+            nulls[i] = 1;
             continue;
         }
+        std::string_view value;
         if (buildVector->GetEncoding() == OMNI_ENCODING_CONST) {
             value = static_cast<ConstVector<std::string_view> *>(buildVector)->GetConstValue();
         } else if (buildVector->GetEncoding() == OMNI_DICTIONARY) {
@@ -3104,7 +3114,18 @@ static NO_INLINE BaseVector *ConstructBuildVarcharColumn(
         } else {
             value = static_cast<VarcharVector *>(buildVector)->GetValue(buildRowIdx);
         }
-        ret->SetValue(i, value);
+        values[i] = value;
+        totalBytes += static_cast<int64_t>(value.size());
+    }
+    const int capacityInBytes = static_cast<int>(std::min<int64_t>(std::max<int64_t>(totalBytes, 1),
+        std::numeric_limits<int32_t>::max()));
+    auto *ret = new VarcharVector(numRows, pool, capacityInBytes);
+    for (int32_t i = 0; i < numRows; ++i) {
+        if (nulls[i] != 0) {
+            ret->SetNull(i);
+        } else {
+            ret->SetValue(i, values[i]);
+        }
     }
     return ret;
 }
@@ -3287,7 +3308,8 @@ void NO_INLINE LookupJoinOutputBuilder::ConstructBuildColumns(VectorBatch *vecto
             case OMNI_VARBINARY:
             case OMNI_VARCHAR:
             case OMNI_CHAR:
-                buildColumn = ConstructBuildVarcharColumn<isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount);
+                buildColumn = ConstructBuildVarcharColumn<isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp,
+                    outputCol, rowCount, pool_);
                 break;
             case OMNI_DECIMAL128:
                 buildColumn = ConstructBuildColumn<Decimal128, isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount);
