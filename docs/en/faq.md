@@ -6,7 +6,7 @@
 
 When the LD\_PRELOAD environment variable is configured and Spark is executed based on BiSheng JDK 1.8.0.262, JVM coredump occasionally occurs. The error stack is as follows:
 
-```
+```text
 Stack: [0x0000ffd2ce0d0000, 0x0000ffd2ce2d00001, sp=0x0000ffd2ce2cb830, free space=2030k
 Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
 C [libzip.so+0x52a4] fill_window+0x164
@@ -40,14 +40,13 @@ This is a bug of BiSheng JDK 1.8.0.262. If a JVM uses  **java.util.zip.ZipFile**
 
 The BiSheng JDK is not forward compatible. You can upgrade the BiSheng JDK to version 1.8.0.342 \(recommended\) to avoid this problem.
 
-
 ## Core Dumps Occasionally Occur When Spark Is Executed to Query the Parquet Data Source Based on libhdfs.so of Hadoop 3.2.0<a name="EN-US_TOPIC_0000002517451242"></a>
 
 **Symptom<a name="en-us_topic_0000001647616694_en-us_topic_0000001518928837_en-us_topic_0000001259822511_section456714280469"></a>**
 
 When Spark is used to query the Parquet data source, if OmniOperator is enabled and depends on libhdfs.so of Hadoop 3.2.0, a core dump occasionally occurs. The error stack is as follows:
 
-```
+```text
 Stack: [0x00007fb9e8e5d000,0x00007fb9e8f5e000], sp=0x00007fb9e8f5cd40, free space=1023k
 Native frames: (J=compiled Java code, j=interpreted , Vv=VM code, C=native code)
 C [libhdfs.so+0xcd39]  hdfsThreadDestructor+0xb9
@@ -70,7 +69,6 @@ This is a bug in Hadoop 3.2.0. For details, see  [Issues](https://issues.apache.
 
 Check whether a JVM exists in the operating system in advance. If yes, use the obtained JVM pointer to detach the current thread to prevent core dumps caused by JNIEnv being a wild pointer. Use the  **libhdfs.so**  file provided in this version to avoid this problem. Alternatively, use the patch provided by the community to recompile  **libhdfs.so**. For details, see  [GitHub](https://github.com/apache/hadoop/pull/5955).
 
-
 ## OneForOneBlockFetcher Errors Occasionally Occur When a 10 TB Dataset Is Run on Spark 3.1.1<a name="EN-US_TOPIC_0000002517451258"></a>
 
 **Symptom<a name="en-us_topic_0000001701032480_en-us_topic_0000001454201442_section758133012554"></a>**
@@ -84,7 +82,6 @@ For a 10 TB dataset, the default  **spark.network.timeout**  of Spark is set to 
 **Conclusion and Solution<a name="en-us_topic_0000001701032480_section239217135912"></a>**
 
 Increase the value of  **spark.network.timeout**  to avoid data fetch timeout. The recommended value is  **600**, which can solve the problem in this case.
-
 
 ## When Spark Executes INSERT Statements to Query Multiple Wide Tables Using JOIN, a Core Dump Occurs Due to Insufficient Memory of the SMJ Operator<a name="EN-US_TOPIC_0000002517291318"></a>
 
@@ -107,7 +104,6 @@ This case is a rare scenario. Spark jobs aim to leverage the concurrency advanta
 - Adjust the value of  **spark.memory.offHeap.size**  to increase the off-heap memory and trigger the service again.
 - Roll back to the Spark open source version to trigger services.
 
-
 ## Query Performance Degraded When Executing a Cast String to Double Expression Containing a Large Number of Columns \(for Example, 500 Columns\) in Spark SQL<a name="EN-US_TOPIC_0000002549011119"></a>
 
 **Symptom<a name="en-us_topic_0000001921984084_en-us_topic_0000001454201442_section758133012554"></a>**
@@ -128,7 +124,6 @@ Aggregation operations on varchar columns involve the cast string to double expr
 
 If SQL query is to be performed on a large number of columns that involve expression processing and Codegen compilation, you are advised to roll back to the open source Spark for query, which does not affect the consistency of task results.
 
-
 ## "Unable to create serializer 'org.apache.hive.com.esotericsoftware.kryo.serializers.FieldSerializer' for class: com.huawei.boostkit.hive.OmniGroupByOperator" Is Reported When Hive 3.1.0 Runs SQL Statements That Contain the GroupBy Operator<a name="EN-US_TOPIC_0000002548891121"></a>
 
 **Symptom<a name="en-us_topic_0000002070738706_en-us_topic_0000001921984084_en-us_topic_0000001454201442_section758133012554"></a>**
@@ -144,7 +139,6 @@ This problem may also occur when open source SQL statements are executed in Hive
 **Conclusion and Solution<a name="en-us_topic_0000002070738706_section19775722175318"></a>**
 
 In the POM file of the Hive project, change the Kryo version to 4.0.0, recompile the package, and use it to replace the  **hive-exec-3.1.0.jar**  package in the  **lib**  directory of the Hive installation directory. You can also replace the  **hive-exec-3.1.0.jar**  package with a compiled  [Hive JAR](https://gitee.com/kunpengcompute/boostkit-bigdata/releases/download/tag_24.0.0_release_hive/hive-exec-3.1.0.jar)  package.
-
 
 ## q64 Suspended During Remote Deployment of Hive MetaStore<a name="EN-US_TOPIC_0000002517291328"></a>
 
@@ -162,7 +156,6 @@ Solution 1: Choose local deployment instead to prevent SQL statement execution p
 
 Solution 2: If you still use remote deployment, execute q64 before q44.
 
-
 ## "error in opening zip file" Displayed When Running Gluten for Spark<a name="EN-US_TOPIC_0000002549011121"></a>
 
 **Symptom<a name="en-us_topic_0000002484820694_en-us_topic_0000002425493241_en-us_topic_0000002145370381_en-us_topic_0000002105043824_en-us_topic_0000002070738706_en-us_topic_0000001921984084_en-us_topic_0000001454201442_section758133012554"></a>**
@@ -177,18 +170,17 @@ One step in the Gluten community code is to traverse all files in the deployment
 
 1. Run the  **ll**  command in the  **/usr/local**  directory to view the Tez soft link.
 
-    ```
+    ```bash
     ll
     ```
 
 2. Delete the soft link.
 
-    ```
+    ```bash
     unlink tez
     ```
 
 3. Run Gluten again.
-
 
 ## "libabsl\_xxx.so.2501.0.0 no such file" Displayed When Running Gluten for Spark<a name="EN-US_TOPIC_0000002548891105"></a>
 
@@ -204,9 +196,9 @@ The libabsl version installed in the current environment is too early.
 
 Install libabsl 2501 or later. Run the following commands to install libabsl:
 
-```
+```bash
 cd /home/
-git clone https://szv-open.codehub.huawei.com/OpenSourceCenter/abseil/abseil-cpp.git
+git clone https://github.com/abseil/abseil-cpp.git
 git checkout tags/20250127.0
 cd abseil-cpp/
 mkdir build && cd build
@@ -214,5 +206,3 @@ cmake ..   -DCMAKE_CXX_STANDARD=17   -DCMAKE_CXX_STANDARD_REQUIRED=ON   -DABSL_P
 make -j32
 make install
 ```
-
-
