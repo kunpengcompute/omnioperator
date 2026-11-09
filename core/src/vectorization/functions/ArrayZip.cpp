@@ -41,12 +41,15 @@ void ArrayZipImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outp
 {
     // Pop exactly numArrays_ arguments from the stack (reverse order)
     std::vector<BaseVector *> inputArgs(numArrays_);
+    std::vector<VectorArgGuard> argGuards;
+    argGuards.reserve(numArrays_);
     for (int32_t i = numArrays_ - 1; i >= 0; --i) {
         if (args.empty()) {
             OMNI_THROW("ArrayZip error:", "Not enough arguments on stack");
         }
         inputArgs[i] = args.top();
         args.pop();
+        argGuards.emplace_back(MakeVectorArgGuard(inputArgs[i]));
     }
 
     // Cast all inputs to ArrayVector
@@ -154,12 +157,6 @@ void ArrayZipImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outp
     resultArray->SetElementVector(std::shared_ptr<BaseVector>(rowVector));
 
     result = resultArray;
-
-    for (auto *arg : inputArgs) {
-        if (arg != nullptr) {
-            delete arg;
-        }
-    }
 }
 
 } // namespace omniruntime::vectorization

@@ -89,6 +89,8 @@ public:
         ExecutionContext context;
         context.SetResultRowSize(dateVec->GetSize());
         std::stack<BaseVector*> args;
+        dateVec->SetIsField(true);  // caller-owned, do not let Apply delete
+        dowVec->SetIsField(true);
         args.push(dateVec);
         args.push(dowVec);
 

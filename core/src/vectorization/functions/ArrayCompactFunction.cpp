@@ -46,19 +46,18 @@ void ArrayCompactFunction::Apply(std::stack<BaseVector *> &args, const DataTypeP
 
     auto inputArg = args.top();
     args.pop();
+    auto inputGuard = MakeVectorArgGuard(inputArg);
 
     if (inputArg == nullptr) {
         OMNI_THROW("ArrayCompactFunction Error:", "Input vector is null");
     }
 
     if (inputArg->GetTypeId() != OMNI_ARRAY) {
-        delete inputArg;
         OMNI_THROW("ArrayCompactFunction Error:", "Input is not an array type");
     }
 
     auto *arrayVec = dynamic_cast<ArrayVector *>(inputArg);
     if (arrayVec == nullptr) {
-        delete inputArg;
         OMNI_THROW("ArrayCompactFunction Error:", "Failed to cast to ArrayVector");
     }
 
@@ -78,7 +77,6 @@ void ArrayCompactFunction::Apply(std::stack<BaseVector *> &args, const DataTypeP
         }
         resultArray->SetOffset(rowSize, 0);
         result = resultArray;
-        delete inputArg;
         return;
     }
 
@@ -108,7 +106,6 @@ void ArrayCompactFunction::Apply(std::stack<BaseVector *> &args, const DataTypeP
     } else if (complexElement) {
         auto elemDt = ResolveArrayElementDataType(outputType, arrayVec, inputElementVector);
         if (elemDt == nullptr) {
-            delete inputArg;
             OMNI_THROW("ArrayCompactFunction Error:",
                 "Cannot resolve element type for nested array_compact (array/map/struct elements)");
         }
@@ -147,8 +144,6 @@ void ArrayCompactFunction::Apply(std::stack<BaseVector *> &args, const DataTypeP
     resultArray->SetOffset(rowSize, newElementIndex);
     resultArray->SetElementVector(std::shared_ptr<BaseVector>(newElementVector));
     result = resultArray;
-
-    delete inputArg;
 }
 
 } // namespace omniruntime::vectorization

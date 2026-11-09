@@ -56,9 +56,11 @@ void ArrayShuffleImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
         seedArg = args.top();
         args.pop();
     }
+    auto seedGuard = MakeVectorArgGuard(seedArg);
 
     auto *arrayArg = args.top();
     args.pop();
+    auto arrayGuard = MakeVectorArgGuard(arrayArg);
 
     auto *arrayVec = dynamic_cast<ArrayVector *>(arrayArg);
     if (arrayVec == nullptr) {
@@ -128,13 +130,6 @@ void ArrayShuffleImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
 
     resultArray->SetElementVector(std::shared_ptr<BaseVector>(newElementVector));
     result = resultArray;
-
-    if (seedArg != nullptr) {
-        delete seedArg;
-    }
-    if (arrayArg != nullptr) {
-        delete arrayArg;
-    }
 }
 
 } // namespace omniruntime::vectorization

@@ -143,6 +143,7 @@ static void MergeArrayRowIntoList(ComplexListType *list, BaseVector *rowSlice, t
             for (int32_t j = 0; j < n; j++) {
                 BaseVector *elem = arr->GetValue(j);
                 AppendComplexSliceToList(list, elem, colTypeId, colDataType);
+                delete elem;
             }
             break;
         }

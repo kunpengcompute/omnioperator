@@ -41,6 +41,17 @@ void RegexpExtractAllFunction::Apply(std::stack<BaseVector *> &args, const DataT
     strVec = args.top();
     args.pop();
 
+    // ExtractAllMatches throws on empty / invalid patterns; guards release the args on that path too.
+    using VectorGuard = std::unique_ptr<BaseVector, void (*)(BaseVector *)>;
+    auto deleter = [](BaseVector *v) {
+        if (!v->GetIsField()) {
+            delete v;
+        }
+    };
+    VectorGuard groupIdxGuard(groupIdxVec, deleter);
+    VectorGuard patternGuard(patternVec, deleter);
+    VectorGuard strGuard(strVec, deleter);
+
     ApplyRegexpExtractAll(strVec, patternVec, groupIdxVec, result, outputType);
 }
 

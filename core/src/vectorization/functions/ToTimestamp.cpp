@@ -83,8 +83,10 @@ public:
 
         auto formatArg = args.top();
         args.pop();
+        auto formatGuard = MakeVectorArgGuard(formatArg);
         auto inputArg = args.top();
         args.pop();
+        auto inputGuard = MakeVectorArgGuard(inputArg);
 
         const auto size = inputArg->GetSize();
 
@@ -139,12 +141,6 @@ public:
             }
         }
 
-        if (inputArg != nullptr) {
-            delete inputArg;
-        }
-        if (formatArg != nullptr) {
-            delete formatArg;
-        }
     }
 };
 
@@ -174,10 +170,13 @@ public:
             // Args are pushed in order, so stack top is the last arg (policy).
             auto policyArg = args.top();
             args.pop();
+            auto policyGuard = MakeVectorArgGuard(policyArg);
             auto tzArg = args.top();
             args.pop();
+            auto tzGuard = MakeVectorArgGuard(tzArg);
             auto formatArg = args.top();
             args.pop();
+            auto formatGuard = MakeVectorArgGuard(formatArg);
             auto inputArg = args.top();
 
             DataTypeId inputTypeId = inputArg->GetTypeId();
@@ -186,36 +185,29 @@ public:
             bool isLegacy = ExtractLegacyPolicy(policyArg);
 
             if (inputTypeId == OMNI_TIMESTAMP || inputTypeId == OMNI_LONG) {
-                delete policyArg;
-                delete tzArg;
-                delete formatArg;
                 ApplyTimestamp(args, outputType, result);
             } else if (inputTypeId == OMNI_DATE32 || inputTypeId == OMNI_INT) {
-                delete policyArg;
-                delete formatArg;
                 ApplyDate(args, outputType, result, sessionTz);
-                delete tzArg;
             } else {
                 // String path with explicit format and timezone
+                formatGuard.release();
                 args.push(formatArg);
                 ApplyStringWithFormat(args, outputType, result, context, sessionTz, isLegacy);
-                delete policyArg;
-                delete tzArg;
             }
         } else if (argCount >= 2) {
             auto formatArg = args.top();
             args.pop();
+            auto formatGuard = MakeVectorArgGuard(formatArg);
             auto inputArg = args.top();
             DataTypeId inputTypeId = inputArg->GetTypeId();
 
             if (inputTypeId == OMNI_TIMESTAMP || inputTypeId == OMNI_LONG) {
-                delete formatArg;
                 ApplyTimestamp(args, outputType, result);
             } else if (inputTypeId == OMNI_DATE32 || inputTypeId == OMNI_INT) {
-                delete formatArg;
                 const tz::TimeZone *sessionTz = getTimeZoneFromConfig(context->queryConfig());
                 ApplyDate(args, outputType, result, sessionTz);
             } else {
+                formatGuard.release();
                 args.push(formatArg);
                 ApplyStringWithFormat(args, outputType, result, context);
             }
@@ -232,6 +224,7 @@ public:
                 ApplyDate(args, outputType, result, sessionTz);
             } else {
                 args.pop();
+                auto inputGuard = MakeVectorArgGuard(inputArg);
                 OMNI_THROW("ToUnixTimestamp function Error",
                     "Unsupported input type: " + TypeUtil::TypeToString(inputTypeId));
             }
@@ -300,6 +293,7 @@ private:
     {
         auto inputArg = args.top();
         args.pop();
+        auto inputGuard = MakeVectorArgGuard(inputArg);
 
         const auto size = inputArg->GetSize();
 
@@ -333,10 +327,6 @@ private:
                 result->SetNull(row);
             }
         }
-
-        if (inputArg != nullptr) {
-            delete inputArg;
-        }
     }
 
     void ApplyStringWithFormat(std::stack<BaseVector *> &args, const DataTypePtr &outputType,
@@ -346,8 +336,10 @@ private:
     {
         auto formatArg = args.top();
         args.pop();
+        auto formatGuard = MakeVectorArgGuard(formatArg);
         auto inputArg = args.top();
         args.pop();
+        auto inputGuard = MakeVectorArgGuard(inputArg);
 
         const auto size = inputArg->GetSize();
 
@@ -401,13 +393,6 @@ private:
                 result->SetNull(row);
             }
         }
-
-        if (inputArg != nullptr) {
-            delete inputArg;
-        }
-        if (formatArg != nullptr) {
-            delete formatArg;
-        }
     }
 
     void ApplyTimestamp(std::stack<BaseVector *> &args, const DataTypePtr &outputType,
@@ -415,6 +400,7 @@ private:
     {
         auto inputArg = args.top();
         args.pop();
+        auto inputGuard = MakeVectorArgGuard(inputArg);
 
         const auto size = inputArg->GetSize();
 
@@ -436,10 +422,6 @@ private:
             resultVec->SetValue(row, seconds);
             result->SetNotNull(row);
         }
-
-        if (inputArg != nullptr) {
-            delete inputArg;
-        }
     }
 
     void ApplyDate(std::stack<BaseVector *> &args, const DataTypePtr &outputType,
@@ -447,6 +429,7 @@ private:
     {
         auto inputArg = args.top();
         args.pop();
+        auto inputGuard = MakeVectorArgGuard(inputArg);
 
         const auto size = inputArg->GetSize();
 
@@ -476,10 +459,6 @@ private:
             auto *resultVec = static_cast<Vector<int64_t> *>(result);
             resultVec->SetValue(row, seconds);
             result->SetNotNull(row);
-        }
-
-        if (inputArg != nullptr) {
-            delete inputArg;
         }
     }
 };

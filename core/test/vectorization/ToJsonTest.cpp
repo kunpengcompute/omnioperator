@@ -103,6 +103,7 @@ public:
         ExecutionContext ctx;
         ctx.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
+        inputVec->SetIsField(true);  // caller-owned, do not let Apply delete
         args.push(inputVec);
         ASSERT_NO_THROW(fn->Apply(args, outputType, result, &ctx));
     }
@@ -118,6 +119,7 @@ public:
         ctx.SetResultRowSize(inputVec->GetSize());
         ctx.SetToJsonInputType(inputDataType);
         std::stack<BaseVector*> args;
+        inputVec->SetIsField(true);  // caller-owned, do not let Apply delete
         args.push(inputVec);
         ASSERT_NO_THROW(fn->Apply(args, outputType, result, &ctx));
     }

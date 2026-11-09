@@ -707,13 +707,15 @@ public:
         }
     }
 
+    // vecs is copied; the caller keeps ownership of the array and of the vectors it points to.
     RowParser(DataTypeId *types, long *vecs, int32_t len)
     {
         ResizeFuncs(len);
+        this->vecs.reserve(len);
         for (int i = 0; i < len; ++i) {
             PushBackFunc(types[i]);
+            this->vecs.push_back(reinterpret_cast<BaseVector *>(vecs[i]));
         }
-        this->vecs = vecs;
     }
 
     RowParser(std::vector<DataTypePtr> &typeIds)
@@ -737,7 +739,7 @@ public:
     {
         for (int i = 0; i < typeParser.size(); ++i) {
             auto parseFunc = typeParser[i];
-            row = parseFunc(row, (BaseVector *)(vecs[i]), rowIndex);
+            row = parseFunc(row, vecs[i], rowIndex);
         }
     }
 
@@ -747,11 +749,6 @@ public:
             auto printFunc = printParser[i];
             row = printFunc(row);
         }
-    }
-
-    ~RowParser()
-    {
-        delete[] vecs;
     }
 
 private:
@@ -769,27 +766,68 @@ private:
 
     std::vector<RowToVecFuncPtr> typeParser;
     std::vector<PrintRowFuncPtr> printParser;
-    long *vecs = nullptr;
+    std::vector<BaseVector *> vecs;
 };
 
 class RowInfo {
 public:
     uint8_t *row;
     int32_t length;
+    bool ownsRow = false;
 
-    RowInfo(uint8_t *row, int32_t length) : row(row), length(length) {}
+    RowInfo(uint8_t *row, int32_t length, bool ownsRow = false) : row(row), length(length), ownsRow(ownsRow) {}
 
     RowInfo() = default;
 
-    RowInfo(const RowInfo &rowInfo)
+    // Copy is a non-owning view of the same buffer. Copying ownsRow would make
+    // both objects free the same allocation in their destructors.
+    RowInfo(const RowInfo &rowInfo) : row(rowInfo.row), length(rowInfo.length), ownsRow(false) {}
+
+    RowInfo(RowInfo &&rowInfo) noexcept : row(rowInfo.row), length(rowInfo.length), ownsRow(rowInfo.ownsRow)
     {
-        this->row = rowInfo.row;
-        this->length = rowInfo.length;
+        rowInfo.row = nullptr;
+        rowInfo.length = 0;
+        rowInfo.ownsRow = false;
+    }
+
+    RowInfo &operator=(const RowInfo &rowInfo)
+    {
+        if (this != &rowInfo) {
+            ReleaseOwnedRow();
+            row = rowInfo.row;
+            length = rowInfo.length;
+            ownsRow = false;
+        }
+        return *this;
+    }
+
+    RowInfo &operator=(RowInfo &&rowInfo) noexcept
+    {
+        if (this != &rowInfo) {
+            ReleaseOwnedRow();
+            row = rowInfo.row;
+            length = rowInfo.length;
+            ownsRow = rowInfo.ownsRow;
+            rowInfo.row = nullptr;
+            rowInfo.length = 0;
+            rowInfo.ownsRow = false;
+        }
+        return *this;
     }
 
     ~RowInfo()
     {
-        mem::Allocator::GetAllocator()->Free(row, length);
+        ReleaseOwnedRow();
+    }
+
+private:
+    void ReleaseOwnedRow()
+    {
+        if (ownsRow) {
+            mem::Allocator::GetAllocator()->Free(row, length);
+            ownsRow = false;
+            row = nullptr;
+        }
     }
 };
 
@@ -804,10 +842,7 @@ public:
     RowBatch(int32_t rowCount, const std::vector<DataTypeId> &typeIds)
     {
         rowArray.resize(rowCount);
-        this->types.reserve(typeIds.size());
-        for (int i = 0; i < typeIds.size(); ++i) {
-            types[i] = typeIds[i];
-        }
+        this->types = typeIds;
     }
 
     void Resize(int32_t rowCount)
@@ -822,10 +857,7 @@ public:
 
     void SetTypes(std::vector<DataTypeId> typeIds)
     {
-        types.reserve(typeIds.size());
-        for (int i = 0; i < typeIds.size(); ++i) {
-            types[i] = typeIds[i];
-        }
+        types = std::move(typeIds);
     }
 
     void SetRow(int32_t index, uint8_t *buffer)

@@ -27,9 +27,12 @@ public:
         }
 
         std::vector<MapVector *> mapArgs(numArgs_);
+        std::vector<VectorArgGuard> argGuards;
+        argGuards.reserve(numArgs_);
         for (int32_t i = numArgs_ - 1; i >= 0; --i) {
             BaseVector *vec = args.top();
             args.pop();
+            argGuards.emplace_back(MakeVectorArgGuard(vec));
             mapArgs[i] = dynamic_cast<MapVector *>(vec);
             if (mapArgs[i] == nullptr) {
                 OMNI_THROW("MapConcat Error:", "map_concat argument must be MAP type");
@@ -97,10 +100,6 @@ public:
 
         dstMap->SetKeyVector(combinedKeys);
         dstMap->SetValueVector(combinedValues);
-
-        for (int32_t i = 0; i < numArgs_; ++i) {
-            delete mapArgs[i];
-        }
     }
 
 private:

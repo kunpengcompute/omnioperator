@@ -29,9 +29,12 @@ constexpr int32_t BITS_OF_DECIMAL = 64;
 constexpr int32_t BITS_OF_LONGLONG = 128;
 constexpr int32_t NOT_EXPECTED_TYPE = 0;
 
+// Join hash tables are pre-sized to 0.75 load factor and never rehash, so caching the hash
+// per slot would be dead weight. Disabling it shrinks the slot from 24B to 16B for
+// int32/int64 keys (~33% of the slot array).
 template <typename KeyType, typename ValueType>
 using JoinHashMap =
-    BaseHashMap<KeyType, ValueType, omniruntime::simdutil::HashCRC32<KeyType>, Grower, OmniHashmapAllocator>;
+    BaseHashMap<KeyType, ValueType, omniruntime::simdutil::HashCRC32<KeyType>, Grower, OmniHashmapAllocator, false>;
 
 template <typename KeyType, typename RowRefListType>
 using JoinHashTableVariant = ColumnSerializeHandler<JoinHashMap<KeyType, RowRefListType *>>;

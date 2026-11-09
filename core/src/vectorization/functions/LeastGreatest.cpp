@@ -47,11 +47,24 @@ static bool shouldReplace(const T &newVal, const T &currentVal) {
 template<CompareMode Mode>
 void LeastGreatestFunction<Mode>::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, 
     BaseVector *&result, ExecutionContext *context) const {
+    if (numArgs_ < 2 || args.size() < numArgs_) {
+        OMNI_THROW("LeastGreatest function Error", "Least/Greatest requires at least 2 arguments");
+    }
+    using VectorGuard = std::unique_ptr<BaseVector, void (*)(BaseVector *)>;
+    auto deleter = [](BaseVector *v) {
+        if (!v->GetIsField()) {
+            delete v;
+        }
+    };
     std::vector<BaseVector *> argVectors;
-    argVectors.push_back(args.top());
-    args.pop();
-    argVectors.push_back(args.top());
-    args.pop();
+    std::vector<VectorGuard> argGuards;
+    argVectors.reserve(numArgs_);
+    argGuards.reserve(numArgs_);
+    for (size_t i = 0; i < numArgs_; ++i) {
+        argVectors.push_back(args.top());
+        argGuards.emplace_back(args.top(), deleter);
+        args.pop();
+    }
     std::reverse(argVectors.begin(), argVectors.end());
     DispatchCompare(argVectors, outputType, result, context);
 }
@@ -332,14 +345,15 @@ void LeastGreatestFunction<Mode>::SetStringValueToVector(BaseVector *vec, int32_
 }
 
 // Factory functions
+// inputArgs carries the call site argument types, so its size is the real arity of the call.
 std::shared_ptr<VectorFunction> makeGreatest(const std::string &name, 
     const std::vector<DataTypeId> &inputArgs, const config::QueryConfig &) {
-    return std::make_shared<GreatestFunction>();
+    return std::make_shared<GreatestFunction>(inputArgs.size());
 }
 
 std::shared_ptr<VectorFunction> makeLeast(const std::string &name, 
     const std::vector<DataTypeId> &inputArgs, const config::QueryConfig &) {
-    return std::make_shared<LeastFunction>();
+    return std::make_shared<LeastFunction>(inputArgs.size());
 }
 
 // Helper function to generate signatures for both least and greatest

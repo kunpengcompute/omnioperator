@@ -75,7 +75,9 @@ int32_t UnionOperator::GetOutput(VectorBatch **outputVecBatch)
         return 0;
     }
 
+    // Ownership moves downstream; clear the slot so Close() does not free it again.
     *outputVecBatch = inputVecBatches[vecBatchIndex];
+    inputVecBatches[vecBatchIndex] = nullptr;
     vecBatchIndex++;
     if (vecBatchIndex == vecBatchCount) {
         vecBatchCount = 0;

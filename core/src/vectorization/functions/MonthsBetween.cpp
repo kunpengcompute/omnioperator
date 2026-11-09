@@ -127,6 +127,18 @@ public:
         const auto timestamp1Arg = args.top();
         args.pop();
 
+        // Guards cover the const-null early returns below and a throwing tz::locateZone.
+        using VectorGuard = std::unique_ptr<BaseVector, void (*)(BaseVector *)>;
+        auto deleter = [](BaseVector *v) {
+            if (!v->GetIsField()) {
+                delete v;
+            }
+        };
+        VectorGuard timezoneGuard(timezoneArg, deleter);
+        VectorGuard roundOffGuard(roundOffArg, deleter);
+        VectorGuard timestamp2Guard(timestamp2Arg, deleter);
+        VectorGuard timestamp1Guard(timestamp1Arg, deleter);
+
         // Determine batch size from the first non-constant argument,
         // since ConstVector may not carry the correct batch size.
         int32_t size = 0;
@@ -257,18 +269,6 @@ public:
             resultRaw[i] = ComputeMonthsBetween(tm1, tm2, roundOff);
             result->SetNotNull(i);
         });
-        if (timestamp1Arg != nullptr) {
-            delete timestamp1Arg;
-        }
-        if (timestamp2Arg != nullptr) {
-            delete timestamp2Arg;
-        }
-        if (roundOffArg != nullptr) {
-            delete roundOffArg;
-        }
-        if (timezoneArg != nullptr) {
-            delete timezoneArg;
-        }
     }
 };
 } // namespace

@@ -26,6 +26,7 @@ namespace omniruntime::vectorization {
         {
             BaseVector *arrBaseVec = args.top();
             args.pop();
+            auto arrGuard = MakeVectorArgGuard(arrBaseVec);
 
             const expressions::LambdaExpr *lambdaExpr = context->GetCurrentLambda();
             if (lambdaExpr == nullptr) {
@@ -33,7 +34,7 @@ namespace omniruntime::vectorization {
             }
             expressions::Expr *lambdaBody = lambdaExpr->GetBody();
             if (lambdaBody->GetType() == expressions::ExprType::PARAM_REF_E) {
-                result = arrBaseVec;
+                result = arrGuard.release();
                 return;
             }
             int32_t mapRowSize = arrBaseVec->GetSize();
@@ -56,7 +57,6 @@ namespace omniruntime::vectorization {
 
             if (mapRowSize == 0 || srcMapVec->GetNullCount() == mapRowSize) {
                 VectorHelper::EmptyMapProjection(dstMapVec, srcKeyEleTypeId, srcValueEleTypeId);
-                delete srcMapVec;
                 return;
             }
 
@@ -67,7 +67,6 @@ namespace omniruntime::vectorization {
             if (keyElementVec == nullptr || keyElementVec->GetSize() == 0 ||
                 valueElementVec == nullptr || valueElementVec->GetSize() == 0) {
                 VectorHelper::EmptyMapProjection(dstMapVec, srcKeyEleTypeId, srcValueEleTypeId);
-                delete srcMapVec;
                 return;
             }
             keyElementVec->SetIsField(true);
@@ -83,7 +82,6 @@ namespace omniruntime::vectorization {
             context->SetResultRowSize(mapRowSize);
             BaseVector *flatResultVec = lambdaEval.GetResult();
             if (flatResultVec == nullptr) {
-                delete srcMapVec;
                 throw OmniException("TRANSFORM_ERROR", "Lambda execute return null result");
             }
 
@@ -94,7 +92,6 @@ namespace omniruntime::vectorization {
                 dstMapVec->SetKeyVector(srcMapVec->GetKeyVector());
                 dstMapVec->AddValues(flatResultVec);
             }
-            delete srcMapVec;
         }
     };
 }

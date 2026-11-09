@@ -321,7 +321,7 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_transFromVect
         auto oneRowLen = rowBuffer->FillBuffer();
 
         // 3.set one row
-        rowBatch->SetRow(i, new RowInfo(rowBuffer->TakeRowBuffer(), oneRowLen));
+        rowBatch->SetRow(i, new RowInfo(rowBuffer->TakeRowBuffer(), oneRowLen, true));
     }
     return reinterpret_cast<jlong>(rowBatch.release());
 }
@@ -334,7 +334,8 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeser
     auto *vecs = env->GetLongArrayElements(vecArray, &isCopy);
     auto len = env->GetArrayLength(typeArray);
     auto *parser = new RowParser((type::DataTypeId *)types, vecs, len);
-    env->ReleaseIntArrayElements(typeArray, types, 0);
+    env->ReleaseLongArrayElements(vecArray, vecs, JNI_ABORT);
+    env->ReleaseIntArrayElements(typeArray, types, JNI_ABORT);
     return reinterpret_cast<intptr_t>(parser);
 }
 

@@ -24,6 +24,7 @@ namespace omniruntime::vectorization {
         {
             BaseVector *arrBaseVec = args.top();
             args.pop();
+            auto arrGuard = MakeVectorArgGuard(arrBaseVec);
 
             const expressions::LambdaExpr *lambdaExpr = context->GetCurrentLambda();
             if (lambdaExpr == nullptr) {
@@ -55,7 +56,6 @@ namespace omniruntime::vectorization {
                     dstArrVec->SetNull(i);
                 }
                 VectorHelper::EmptyArrayProjection(dstArrVec, srcEleTypeId);
-                delete srcArrVec;
                 return;
             }
 
@@ -67,7 +67,6 @@ namespace omniruntime::vectorization {
                     }
                 }
                 VectorHelper::EmptyArrayProjection(dstArrVec, srcEleTypeId);
-                delete srcArrVec;
                 return;
             }
             flatElementVec->SetIsField(true);
@@ -86,11 +85,9 @@ namespace omniruntime::vectorization {
             BaseVector *boolResultVec = lambdaEval.GetResult();
             if (boolResultVec == nullptr) {
                 delete result;
-                delete srcArrVec;
                 OMNI_THROW("FILTER_ERROR", "Lambda execute return null result");
             }
 
-            std::unique_ptr<BaseVector> srcArrVecHolder(srcArrVec);
             std::unique_ptr<BaseVector> boolResultVecHolder(boolResultVec);
 
             std::vector<int> selectedIndices;

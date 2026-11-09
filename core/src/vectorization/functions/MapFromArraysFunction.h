@@ -26,8 +26,10 @@ namespace omniruntime::vectorization {
         {
             BaseVector* valueVec = args.top();
             args.pop();
+            auto valueGuard = MakeVectorArgGuard(valueVec);
             BaseVector* keyVec = args.top();
             args.pop();
+            auto keyGuard = MakeVectorArgGuard(keyVec);
 
             if (keyVec == nullptr || valueVec == nullptr) {
                 OMNI_THROW("MapFromArrays Error:", "map_from_arrays received null vector arg ment");
@@ -64,12 +66,6 @@ namespace omniruntime::vectorization {
                     dstMapVec->SetNull(i);
                     continue;
                 }
-            }
-            if (keyVec != nullptr) {
-                delete keyVec;
-            }
-            if (valueVec != nullptr) {
-                delete valueVec;
             }
         }
     };

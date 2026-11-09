@@ -67,18 +67,13 @@ void RegisterStringFunctions(const std::string &prefix)
     RegisterFunction<SubstrFunction, std::string, std::string_view, int32_t, int32_t>(
         prefix + "substr", {OMNI_VARCHAR, OMNI_INT, OMNI_INT}, OMNI_VARCHAR);
 
-    // Register concat function with variable arity support
-    // Register multiple signatures for different argument counts (2 to 10 arguments)
-    auto concatFunction = std::make_shared<ConcatFunction>();
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
-    VectorFunction::RegisterVectorFunction("concat", {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, concatFunction);
+    // Register concat function with variable arity support (2 to 10 arguments).
+    // Each arity gets its own instance so that Apply() knows how many operands to pop.
+    constexpr size_t maxConcatArity = 10;
+    for (size_t arity = 2; arity <= maxConcatArity; ++arity) {
+        VectorFunction::RegisterVectorFunction("concat", std::vector<DataTypeId>(arity, OMNI_VARCHAR),
+            OMNI_VARCHAR, std::make_shared<ConcatFunction>(arity));
+    }
 
     // Register reverse function: reverses a string character by character
     VectorFunction::RegisterVectorFunction("reverse", {OMNI_VARCHAR}, OMNI_VARCHAR,

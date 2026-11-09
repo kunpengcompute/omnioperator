@@ -16,10 +16,12 @@ public:
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
         op::ExecutionContext *context) const override
     {
-        const auto left = args.top();
+        auto left = args.top();
         args.pop();
-        const auto right = args.top();
+        auto leftGuard = MakeVectorArgGuard(left);
+        auto right = args.top();
         args.pop();
+        auto rightGuard = MakeVectorArgGuard(right);
 
         auto size = context->GetResultRowSize();
         result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, size);
@@ -33,9 +35,6 @@ public:
         } else {
             OMNI_THROW("ComplexTypeEqualFunction", "Unsupported type for complex type equal");
         }
-
-        delete left;
-        delete right;
     }
 
 private:

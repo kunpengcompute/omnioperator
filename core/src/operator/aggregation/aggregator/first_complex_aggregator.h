@@ -54,6 +54,7 @@ private:
     type::DataTypeId colTypeId_;
     type::DataType *colDataType_;
     bool ignoreNull_;
+    ComplexValueOwner ownedValues_;
 };
 
 } // namespace op

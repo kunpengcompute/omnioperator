@@ -5,6 +5,7 @@
 
 #include "CastExpr.h"
 
+#include <algorithm>
 #include "util/omni_exception.h"
 
 namespace omniruntime::vectorization {
@@ -558,9 +559,8 @@ VectorPtr CastExpr::applyTimestampToVarcharCast(const DataTypePtr &toType, const
     auto simpleInput = reinterpret_cast<Vector<int64_t> *>(input);
 
     const auto &options = hooks_->timestampToStringOptions();
-    const uint32_t rowSize = getMaxStringLength(options);
-
-    char *rawBuffer = static_cast<char *>(VectorHelper::UnsafeGetValues(result));
+    const auto bufferSize = std::max<size_t>(getMaxStringLength(options) + 1, 64);
+    std::vector<char> buffer(bufferSize);
 
     applyToSelectedNoThrowLocal(context, rows, result, [&](vector_size_t row) {
         // Adjust input timestamp according the session timezone.
@@ -568,11 +568,8 @@ VectorPtr CastExpr::applyTimestampToVarcharCast(const DataTypePtr &toType, const
         if (options.timeZone) {
             inputValue.toTimezone(*(options.timeZone));
         }
-        auto stringView = Timestamp::tsToStringView(inputValue, options, rawBuffer);
+        auto stringView = Timestamp::tsToStringView(inputValue, options, buffer.data());
         flatResult->SetValue(row, stringView);
-        // The result of both Presto and Spark contains more than 12 digits even
-        // when 'zeroPaddingYear' is disabled.
-        rawBuffer += stringView.size();
     });
 
     return result;

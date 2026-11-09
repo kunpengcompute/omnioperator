@@ -24,6 +24,7 @@ namespace omniruntime::vectorization {
         {
             BaseVector *arrBaseVec = args.top();
             args.pop();
+            auto arrGuard = MakeVectorArgGuard(arrBaseVec);
 
             const expressions::LambdaExpr *lambdaExpr = context->GetCurrentLambda();
             if (lambdaExpr == nullptr) {
@@ -48,7 +49,6 @@ namespace omniruntime::vectorization {
             auto *boolResult = static_cast<Vector<bool> *>(result);
 
             if (arrRowSize == 0) {
-                delete srcArrVec;
                 return;
             }
 
@@ -56,7 +56,6 @@ namespace omniruntime::vectorization {
                 for (int32_t i = 0; i < arrRowSize; ++i) {
                     result->SetNull(i);
                 }
-                delete srcArrVec;
                 return;
             }
 
@@ -69,10 +68,8 @@ namespace omniruntime::vectorization {
                         boolResult->SetValue(i, false);
                     }
                 }
-                delete srcArrVec;
                 return;
             }
-            std::unique_ptr<BaseVector> srcArrVecHolder(srcArrVec);
             std::unique_ptr<BaseVector> lambdaInputHolder(flatElementVec->Slice(0, flatElementVec->GetSize()));
             BaseVector *lambdaInput = lambdaInputHolder.get();
             lambdaInput->SetIsField(true);

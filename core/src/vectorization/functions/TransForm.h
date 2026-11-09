@@ -26,6 +26,7 @@ namespace omniruntime::vectorization {
         {
             BaseVector *arrBaseVec = args.top();
             args.pop();
+            auto arrGuard = MakeVectorArgGuard(arrBaseVec);
 
             const expressions::LambdaExpr *lambdaExpr = context->GetCurrentLambda();
             if (lambdaExpr == nullptr) {
@@ -36,7 +37,7 @@ namespace omniruntime::vectorization {
             }
             expressions::Expr *lambdaBody = lambdaExpr->GetBody();
             if (lambdaBody->GetType() == expressions::ExprType::PARAM_REF_E) {
-                result = arrBaseVec;
+                result = arrGuard.release();
                 return;
             }
 
@@ -72,7 +73,6 @@ namespace omniruntime::vectorization {
                 } else {
                     VectorHelper::EmptyArrayProjection(dstArrVec, srcEleTypeId);
                 }
-                delete srcArrVec;
                 return;
             }
 
@@ -85,7 +85,6 @@ namespace omniruntime::vectorization {
                 } else {
                     VectorHelper::EmptyArrayProjection(dstArrVec, srcEleTypeId);
                 }
-                delete srcArrVec;
                 return;
             }
 
@@ -98,12 +97,10 @@ namespace omniruntime::vectorization {
             context->SetResultRowSize(dstArrVec->GetSize());
             BaseVector *flatResultVec = lambdaEval.GetResult();
             if (flatResultVec == nullptr) {
-                delete srcArrVec;
                 throw OmniException("TRANSFORM_ERROR", "Lambda execute return null result");
             }
 
             dstArrVec->SetElementVectorFromRaw(flatResultVec);
-            delete srcArrVec;
         }
     };
 }

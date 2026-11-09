@@ -186,8 +186,10 @@ void ArrayIntersectImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr
 {
     auto *rightArg = args.top();
     args.pop();
+    auto rightGuard = MakeVectorArgGuard(rightArg);
     auto *leftArg = args.top();
     args.pop();
+    auto leftGuard = MakeVectorArgGuard(leftArg);
 
     auto *leftArray = dynamic_cast<ArrayVector *>(leftArg);
     auto *rightArray = dynamic_cast<ArrayVector *>(rightArg);
@@ -292,13 +294,6 @@ void ArrayIntersectImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr
     }
 
     result = resultArray;
-
-    if (leftArg != nullptr) {
-        delete leftArg;
-    }
-    if (rightArg != nullptr) {
-        delete rightArg;
-    }
 }
 
 } // namespace omniruntime::vectorization

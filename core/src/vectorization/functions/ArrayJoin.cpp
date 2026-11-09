@@ -140,11 +140,14 @@ void ArrayJoinImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &out
         nullReplacementArg = args.top();
         args.pop();
     }
+    auto nullReplacementGuard = MakeVectorArgGuard(nullReplacementArg);
 
     auto *delimiterArg = args.top();
     args.pop();
+    auto delimiterGuard = MakeVectorArgGuard(delimiterArg);
     auto *arrayArg = args.top();
     args.pop();
+    auto arrayGuard = MakeVectorArgGuard(arrayArg);
 
     auto *arrayVec = dynamic_cast<ArrayVector *>(arrayArg);
     if (arrayVec == nullptr) {
@@ -213,16 +216,6 @@ void ArrayJoinImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &out
     }
 
     result = strResult;
-
-    if (nullReplacementArg != nullptr) {
-        delete nullReplacementArg;
-    }
-    if (delimiterArg != nullptr) {
-        delete delimiterArg;
-    }
-    if (arrayArg != nullptr) {
-        delete arrayArg;
-    }
 }
 
 } // namespace omniruntime::vectorization
