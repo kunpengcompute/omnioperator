@@ -207,6 +207,8 @@ std::shared_ptr<VectorFunction> makeLessThanOrEqual(const std::string &name,
 std::shared_ptr<VectorFunction> makeGreaterThanOrEqual(const std::string &name,
     const std::vector<type::DataTypeId> &inputArgs, const config::QueryConfig &);
 
+void RegisterComplexEquality();
+
 inline std::vector<std::shared_ptr<codegen::FunctionSignature>> ComparisonSignatures(const std::string &name)
 {
     std::vector<std::shared_ptr<codegen::FunctionSignature>> signatures;

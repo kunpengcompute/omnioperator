@@ -16,71 +16,80 @@ using namespace omniruntime::vec;
 
 void NameStructFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType,
                                BaseVector *&result, ExecutionContext *context) const {
-    if (args.empty()) {
-        OMNI_THROW("NameStruct Error", "No input arguments");
-    }
-    std::vector<BaseVector *> allArgs;
-    while (!args.empty()) {
-        allArgs.push_back(args.top());
-        args.pop();
-    }
-    std::reverse(allArgs.begin(), allArgs.end());
     auto *rowType = dynamic_cast<const RowType *>(outputType.get());
     if (rowType == nullptr) {
         OMNI_THROW("NameStruct Error", "Output type must be RowType");
     }
-    size_t fieldCount = static_cast<size_t>(rowType->Size());
-    size_t consumedCount = 0;
-    std::vector<BaseVector *> argVectors;
-    std::vector<BaseVector *> nameVectors;
-
+    const size_t fieldCount = static_cast<size_t>(rowType->Size());
     auto isNameValueLayout = [&](const std::vector<BaseVector *> &selected) {
         if (selected.size() != 2 * fieldCount) {
             return false;
         }
         for (size_t i = 0; i < fieldCount; ++i) {
-            if (!TypeUtil::IsStringType(selected[2 * i]->GetTypeId())) {
+            if (selected[2 * i] == nullptr || !TypeUtil::IsStringType(selected[2 * i]->GetTypeId())) {
                 return false;
             }
         }
         return true;
     };
-
-    auto takeFromSuffix = [&](size_t suffixCount) {
-        size_t startIdx = allArgs.size() - suffixCount;
-        std::vector<BaseVector *> selected(allArgs.begin() + static_cast<int64_t>(startIdx), allArgs.end());
-        if (suffixCount == fieldCount) {
-            argVectors = std::move(selected);
-        } else {
-            argVectors.reserve(fieldCount);
-            nameVectors.reserve(fieldCount);
-            for (size_t i = 0; i < fieldCount; ++i) {
-                nameVectors.push_back(selected[2 * i]);
-                argVectors.push_back(selected[2 * i + 1]);
-            }
+    // Pop only this call. A parent comparison leaves the other operand underneath.
+    // ExprEval sets the count. A direct call leaves it at 0, so keep the top fields
+    // and put any older stack entries back.
+    std::vector<BaseVector *> callArgs;
+    int32_t paramNums = context == nullptr ? 0 : context->getInputParamsNUms();
+    if (paramNums <= 0) {
+        std::vector<BaseVector *> popped;
+        while (!args.empty()) {
+            popped.push_back(args.top());
+            args.pop();
         }
-        consumedCount = suffixCount;
-    };
-
-    if (allArgs.size() == fieldCount) {
-        takeFromSuffix(fieldCount);
-    } else if (allArgs.size() == 2 * fieldCount) {
-        takeFromSuffix(2 * fieldCount);
-    } else if (allArgs.size() > 2 * fieldCount) {
-        // Some callers leave unrelated vectors on the stack before invoking a nested named_struct.
-        // Consume only the tail that belongs to this call and restore the prefix afterwards.
-        std::vector<BaseVector *> candidate(allArgs.end() - static_cast<int64_t>(2 * fieldCount), allArgs.end());
-        if (isNameValueLayout(candidate)) {
-            takeFromSuffix(2 * fieldCount);
+        auto takeTop = [&](size_t count) {
+            std::vector<BaseVector *> selected(popped.begin(), popped.begin() + count);
+            std::reverse(selected.begin(), selected.end());
+            return selected;
+        };
+        size_t keep = 0;
+        if (fieldCount > 0 && popped.size() >= 2 * fieldCount && isNameValueLayout(takeTop(2 * fieldCount))) {
+            keep = 2 * fieldCount;
+        } else if (fieldCount > 0 && popped.size() >= fieldCount) {
+            keep = fieldCount;
         } else {
-            takeFromSuffix(fieldCount);
+            OMNI_THROW("NameStruct Error", "Argument count mismatch: expected " +
+                std::to_string(fieldCount) + " or " + std::to_string(2 * fieldCount) +
+                " but stack has " + std::to_string(popped.size()));
         }
-    } else if (allArgs.size() > fieldCount) {
-        takeFromSuffix(fieldCount);
+        callArgs = takeTop(keep);
+        for (size_t i = popped.size(); i-- > keep;) {
+            args.push(popped[i]);
+        }
+    } else {
+        if (static_cast<size_t>(paramNums) > args.size()) {
+            OMNI_THROW("NameStruct Error", "Argument count mismatch: expected " +
+                std::to_string(paramNums) + " but stack has " + std::to_string(args.size()));
+        }
+        callArgs.reserve(static_cast<size_t>(paramNums));
+        for (int32_t i = 0; i < paramNums; ++i) {
+            callArgs.push_back(args.top());
+            args.pop();
+        }
+        std::reverse(callArgs.begin(), callArgs.end());
+    }
+
+    std::vector<BaseVector *> argVectors;
+    std::vector<BaseVector *> nameVectors;
+    if (callArgs.size() == fieldCount) {
+        argVectors = std::move(callArgs);
+    } else if (isNameValueLayout(callArgs)) {
+        argVectors.reserve(fieldCount);
+        nameVectors.reserve(fieldCount);
+        for (size_t i = 0; i < fieldCount; ++i) {
+            nameVectors.push_back(callArgs[2 * i]);
+            argVectors.push_back(callArgs[2 * i + 1]);
+        }
     } else {
         OMNI_THROW("NameStruct Error", "Argument count mismatch: expected " +
-                   std::to_string(fieldCount) + " or " + std::to_string(2 * fieldCount) +
-                   " but got " + std::to_string(allArgs.size()));
+            std::to_string(fieldCount) + " or " + std::to_string(2 * fieldCount) +
+            " but got " + std::to_string(callArgs.size()));
     }
     int32_t size = argVectors[0]->GetSize();
     for (size_t i = 1; i < argVectors.size(); ++i) {
@@ -104,9 +113,6 @@ void NameStructFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr
                 CopyFieldAtRow(srcVec, dstVec, row, fieldTypeId, readRow, pOffset);
             }
         }
-    }
-    for (size_t i = 0; i + consumedCount < allArgs.size(); ++i) {
-        args.push(allArgs[i]);
     }
     for (auto *vec : argVectors) {
         if (vec != nullptr && !vec->GetIsField()) {
@@ -259,7 +265,9 @@ std::string_view NameStructFunction::GetStringValueFromVector(BaseVector *vec, i
         auto *dictVec = static_cast<Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *>(vec);
         return dictVec->GetValue(row);
     }
-    OMNI_THROW("NameStruct Error", "Unsupported encoding type for string");
+    OMNI_THROW("NameStruct Error", "Unsupported encoding type for string encoding=" +
+        std::to_string(static_cast<int>(encoding)) + " type=" +
+        std::to_string(static_cast<int>(vec->GetTypeId())));
 }
 
 template <typename T>

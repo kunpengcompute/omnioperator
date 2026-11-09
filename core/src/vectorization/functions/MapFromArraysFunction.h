@@ -24,7 +24,10 @@ namespace omniruntime::vectorization {
         void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
                    ExecutionContext *context) const override
         {
-            if (args.size() != 2) {
+            // inputValues_ is the whole expression stack, not a fresh stack per call.
+            // Nested map_from_arrays (for example ifnull(col, map(...))) already has the
+            // outer arguments below these two.
+            if (args.size() < 2) {
                 OMNI_THROW("MapFromArrays Error:", "map_from_arrays requires exactly 2 array arguments");
             }
 

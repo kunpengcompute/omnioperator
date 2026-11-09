@@ -9,8 +9,10 @@
 #include <vectorization/functions/ConcatFunction.h>
 #include "vectorization/functions/IsNull.h"
 #include "vectorization/functions/Cast.h"
+#include "vectorization/functions/ArrayCastFunction.h"
 #include "vectorization/functions/NameStruct.h"
 #include "vectorization/functions/MapFunction.h"
+#include "vectorization/functions/CeilDecimal.h"
 #include "type/data_type.h"
 #include "vector/vector.h"
 #include "codegen/func_registry.h"
@@ -30,6 +32,18 @@ namespace expressions {
 static ExprVerifier globalExprVerifier;
 static ExprPrinter globalExprPrinter;
 const static int32_t NEON_BYTE_SIZE = 16;
+
+void AttachDecimalCeil(const std::string &funcName, const std::vector<Expr *> &arguments,
+    const DataTypePtr &returnType, std::shared_ptr<vectorization::VectorFunction> &vectorFunction)
+{
+    if (funcName != "ceil" || arguments.empty() || arguments[0]->dataType == nullptr) {
+        return;
+    }
+    auto id = arguments[0]->GetReturnTypeId();
+    if (id == OMNI_DECIMAL64 || id == OMNI_DECIMAL128) {
+        vectorFunction = std::make_shared<vectorization::CeilDecimalFunction>(arguments[0]->dataType, returnType);
+    }
+}
 
 std::vector<BaseVector *> GetConstantInputs(const std::vector<Expr *> &arguments)
 {
@@ -1058,8 +1072,17 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
     }
     if (funcName == "CAST") {
-        vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
+        const bool arrayElementCast = !arguments.empty() && arguments[0]->GetReturnTypeId() == OMNI_ARRAY &&
+            dataType->GetId() == OMNI_ARRAY;
+        if (arrayElementCast) {
+            if (vectorFunction == nullptr) {
+                vectorFunction = std::make_shared<vectorization::ArrayCastFunction>();
+            }
+        } else {
+            vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
+        }
     }
+    AttachDecimalCeil(funcName, arguments, dataType, vectorFunction);
 }
 
 FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, DataTypePtr returnType,
@@ -1086,8 +1109,17 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
     }
     if (funcName == "CAST") {
-        vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
+        const bool arrayElementCast = !arguments.empty() && arguments[0]->GetReturnTypeId() == OMNI_ARRAY &&
+            dataType->GetId() == OMNI_ARRAY;
+        if (arrayElementCast) {
+            if (vectorFunction == nullptr) {
+                vectorFunction = std::make_shared<vectorization::ArrayCastFunction>();
+            }
+        } else {
+            vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
+        }
     }
+    AttachDecimalCeil(funcName, arguments, dataType, vectorFunction);
 }
 
 FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, DataTypePtr returnType,
@@ -1112,8 +1144,17 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
         vectorFunction = std::make_shared<ConcatWsFunction>(GetInputDataTypes());
     }
     if (funcName == "CAST") {
-        vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
+        const bool arrayElementCast = !arguments.empty() && arguments[0]->GetReturnTypeId() == OMNI_ARRAY &&
+            dataType->GetId() == OMNI_ARRAY;
+        if (arrayElementCast) {
+            if (vectorFunction == nullptr) {
+                vectorFunction = std::make_shared<vectorization::ArrayCastFunction>();
+            }
+        } else {
+            vectorFunction = std::make_shared<CastFunction>(args[0]->dataType, dataType);
+        }
     }
+    AttachDecimalCeil(funcName, arguments, dataType, vectorFunction);
 }
 
 ExprType FuncExpr::GetType() const

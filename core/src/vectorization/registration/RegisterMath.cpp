@@ -8,6 +8,7 @@
 #include "../functions/Comparisons.h"
 #include "../functions/IsNull.h"
 #include "../functions/MathFunctions.h"
+#include "../functions/CeilDecimal.h"
 #include "../functions/HexFunctions.h"
 #include "../functions/ConvFunction.h"
 #include "RegistrationHelpers.h"
@@ -44,6 +45,11 @@ void RegisterMathFunctions(const std::string &prefix)
 	RegisterFunction<CbrtFunction, double, double>(prefix + "cbrt", {OMNI_DOUBLE}, OMNI_DOUBLE);
 	RegisterFunction<CeilFunction, int64_t, int64_t>(prefix + "ceil", {OMNI_LONG}, OMNI_LONG);
 	RegisterFunction<CeilFunction, int64_t, double>(prefix + "ceil", {OMNI_DOUBLE}, OMNI_LONG);
+    {
+        auto gate = std::make_shared<CeilDecimalFunction>(type::DataTypePtr(nullptr), type::DataTypePtr(nullptr));
+        VectorFunction::RegisterVectorFunction(prefix + "ceil", {OMNI_DECIMAL64}, OMNI_DECIMAL64, gate);
+        VectorFunction::RegisterVectorFunction(prefix + "ceil", {OMNI_DECIMAL128}, OMNI_DECIMAL128, gate);
+    }
     RegisterFunction<SignFunction, double, double>(prefix + "sign", {OMNI_DOUBLE}, OMNI_DOUBLE);
     RegisterFunction<SinhFunction, double, double>(prefix + "sinh", {OMNI_DOUBLE}, OMNI_DOUBLE);
     RegisterFunction<HypotFunction, double, double, double>(prefix + "hypot", {OMNI_DOUBLE, OMNI_DOUBLE}, OMNI_DOUBLE);

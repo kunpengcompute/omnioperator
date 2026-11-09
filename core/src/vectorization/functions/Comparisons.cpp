@@ -4,6 +4,8 @@
  */
 
 #include "Comparisons.h"
+#include "vector/array_vector.h"
+#include "vector/row_vector.h"
 #include "vectorization/SelectivityVector.h"
 
 namespace omniruntime::vectorization {
@@ -283,5 +285,175 @@ std::shared_ptr<VectorFunction> makeGreaterThanOrEqual(const std::string &name,
     const std::vector<DataTypeId> &inputArgs, const config::QueryConfig &)
 {
     return MakeImpl<GreaterOrEqual, std::greater_equal<>>(name, inputArgs);
+}
+
+namespace {
+enum class SqlEq { kFalse, kTrue, kUnknown };
+
+int32_t RowIndex(BaseVector *vector, int32_t row)
+{
+    return vector->GetEncoding() == OMNI_ENCODING_CONST ? 0 : row;
+}
+
+SqlEq EqAt(BaseVector *left, BaseVector *right, int32_t row, DataTypeId typeId);
+
+SqlEq EqArray(BaseVector *left, BaseVector *right, int32_t row)
+{
+    const int32_t leftRow = RowIndex(left, row);
+    const int32_t rightRow = RowIndex(right, row);
+    if (left->IsNull(leftRow) || right->IsNull(rightRow)) {
+        return SqlEq::kUnknown;
+    }
+    auto *leftArr = static_cast<ArrayVector *>(left);
+    auto *rightArr = static_cast<ArrayVector *>(right);
+    const int64_t leftLen = leftArr->GetSize(leftRow);
+    const int64_t rightLen = rightArr->GetSize(rightRow);
+    if (leftLen != rightLen) {
+        return SqlEq::kFalse;
+    }
+    if (leftLen == 0) {
+        return SqlEq::kTrue;
+    }
+    std::unique_ptr<BaseVector> leftElems(leftArr->GetValue(leftRow));
+    std::unique_ptr<BaseVector> rightElems(rightArr->GetValue(rightRow));
+    const DataTypeId elemType = leftArr->GetElementVector()->GetTypeId();
+    bool unknown = false;
+    for (int64_t i = 0; i < leftLen; ++i) {
+        const SqlEq eq = EqAt(leftElems.get(), rightElems.get(), static_cast<int32_t>(i), elemType);
+        if (eq == SqlEq::kFalse) {
+            return SqlEq::kFalse;
+        }
+        if (eq == SqlEq::kUnknown) {
+            unknown = true;
+        }
+    }
+    return unknown ? SqlEq::kUnknown : SqlEq::kTrue;
+}
+
+SqlEq EqRow(BaseVector *left, BaseVector *right, int32_t row)
+{
+    const int32_t leftRow = RowIndex(left, row);
+    const int32_t rightRow = RowIndex(right, row);
+    if (left->IsNull(leftRow) || right->IsNull(rightRow)) {
+        return SqlEq::kUnknown;
+    }
+    auto *leftRowVec = static_cast<RowVector *>(left);
+    auto *rightRowVec = static_cast<RowVector *>(right);
+    const int32_t childCount = leftRowVec->ChildSize();
+    if (childCount != rightRowVec->ChildSize()) {
+        return SqlEq::kFalse;
+    }
+    bool unknown = false;
+    for (int32_t childIdx = 0; childIdx < childCount; ++childIdx) {
+        BaseVector *leftChild = leftRowVec->ChildAt(childIdx).get();
+        BaseVector *rightChild = rightRowVec->ChildAt(childIdx).get();
+        const SqlEq eq = EqAt(leftChild, rightChild, row, leftChild->GetTypeId());
+        if (eq == SqlEq::kFalse) {
+            return SqlEq::kFalse;
+        }
+        if (eq == SqlEq::kUnknown) {
+            unknown = true;
+        }
+    }
+    return unknown ? SqlEq::kUnknown : SqlEq::kTrue;
+}
+
+template <typename T>
+SqlEq EqScalar(BaseVector *left, BaseVector *right, int32_t leftRow, int32_t rightRow)
+{
+    const T l = VectorHelper::GetValueFromVector<T>(left, leftRow);
+    const T r = VectorHelper::GetValueFromVector<T>(right, rightRow);
+    return l == r ? SqlEq::kTrue : SqlEq::kFalse;
+}
+
+SqlEq EqAt(BaseVector *left, BaseVector *right, int32_t row, DataTypeId typeId)
+{
+    const int32_t leftRow = RowIndex(left, row);
+    const int32_t rightRow = RowIndex(right, row);
+    if (left->IsNull(leftRow) || right->IsNull(rightRow)) {
+        return SqlEq::kUnknown;
+    }
+    switch (typeId) {
+        case OMNI_BOOLEAN:
+            return EqScalar<bool>(left, right, leftRow, rightRow);
+        case OMNI_BYTE:
+            return EqScalar<int8_t>(left, right, leftRow, rightRow);
+        case OMNI_SHORT:
+            return EqScalar<int16_t>(left, right, leftRow, rightRow);
+        case OMNI_INT:
+        case OMNI_DATE32:
+            return EqScalar<int32_t>(left, right, leftRow, rightRow);
+        case OMNI_LONG:
+        case OMNI_TIMESTAMP:
+        case OMNI_DECIMAL64:
+            return EqScalar<int64_t>(left, right, leftRow, rightRow);
+        case OMNI_FLOAT:
+            return EqScalar<float>(left, right, leftRow, rightRow);
+        case OMNI_DOUBLE:
+            return EqScalar<double>(left, right, leftRow, rightRow);
+        case OMNI_DECIMAL128:
+            return EqScalar<Decimal128>(left, right, leftRow, rightRow);
+        case OMNI_CHAR:
+        case OMNI_VARCHAR:
+        case OMNI_VARBINARY: {
+            const auto l = VectorHelper::GetStringValueFromVector(left, leftRow);
+            const auto r = VectorHelper::GetStringValueFromVector(right, rightRow);
+            return l == r ? SqlEq::kTrue : SqlEq::kFalse;
+        }
+        case OMNI_ARRAY:
+            return EqArray(left, right, row);
+        case OMNI_ROW:
+            return EqRow(left, right, row);
+        default:
+            OMNI_THROW("Compare error:", "unsupported complex equality type {}", static_cast<int>(typeId));
+    }
+}
+
+class SqlComplexEqual final : public VectorFunction {
+public:
+    explicit SqlComplexEqual(bool invert) : invert_(invert) {}
+
+    void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
+        op::ExecutionContext *context) const override
+    {
+        (void)outputType;
+        BaseVector *left = args.top();
+        args.pop();
+        BaseVector *right = args.top();
+        args.pop();
+        const int32_t size = static_cast<int32_t>(context->GetResultRowSize());
+        if (result == nullptr) {
+            result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, size);
+        }
+        auto *out = static_cast<Vector<bool> *>(result);
+        out->SetNulls(0, false, size);
+        for (int32_t i = 0; i < size; ++i) {
+            SqlEq eq = EqAt(left, right, i, left->GetTypeId());
+            if (invert_ && eq != SqlEq::kUnknown) {
+                eq = eq == SqlEq::kTrue ? SqlEq::kFalse : SqlEq::kTrue;
+            }
+            if (eq == SqlEq::kUnknown) {
+                out->SetNull(i);
+            } else {
+                out->SetValue(i, eq == SqlEq::kTrue);
+            }
+        }
+        delete left;
+        delete right;
+    }
+
+private:
+    bool invert_;
+};
+} // namespace
+
+void RegisterComplexEquality()
+{
+    auto equal = std::make_shared<SqlComplexEqual>(false);
+    auto notEqual = std::make_shared<SqlComplexEqual>(true);
+    VectorFunction::RegisterVectorFunction("equal", {OMNI_ARRAY, OMNI_ARRAY}, OMNI_BOOLEAN, equal);
+    VectorFunction::RegisterVectorFunction("notEqual", {OMNI_ARRAY, OMNI_ARRAY}, OMNI_BOOLEAN, notEqual);
+    VectorFunction::RegisterVectorFunction("equal", {OMNI_ROW, OMNI_ROW}, OMNI_BOOLEAN, equal);
+    VectorFunction::RegisterVectorFunction("notEqual", {OMNI_ROW, OMNI_ROW}, OMNI_BOOLEAN, notEqual);
 }
 }
