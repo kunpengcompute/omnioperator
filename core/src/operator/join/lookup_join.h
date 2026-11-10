@@ -306,6 +306,7 @@ private:
     void PrepareCurrentProbe();
     void PrepareSerializers();
     bool TrySpillPathAProbeInput(omniruntime::vec::VectorBatch *vecBatch);
+    void EmitPathAExistenceMisses(omniruntime::vec::VectorBatch *source, const std::vector<int32_t> &positions);
     void ClosePathASpillWriters();
     bool LoadNextRestoreProbeInput();
     bool HasPendingRestoreProbeInput() const;

@@ -93,6 +93,37 @@ VectorBatch *MakeCompositeBatch(const std::vector<int64_t> &k1, const std::vecto
     batch->Append(value);
     return batch;
 }
+// Null-safe key as Spark rewrites INTERSECT / EXCEPT: (coalesce(k, 0), isnull(k)), then a payload column.
+VectorBatch *MakeNullSafeBatch(int32_t rows, int64_t keyOffset, int32_t nullEvery, int64_t valueBase)
+{
+    auto *batch = new VectorBatch(rows);
+    auto *keyVec = new Vector<int64_t>(rows);
+    auto *isNullVec = new Vector<bool>(rows);
+    auto *valueVec = new Vector<int64_t>(rows);
+    for (int32_t i = 0; i < rows; ++i) {
+        const bool isNull = nullEvery > 0 && i % nullEvery == 0;
+        keyVec->SetValue(i, isNull ? 0 : keyOffset + i);
+        isNullVec->SetValue(i, isNull);
+        valueVec->SetValue(i, valueBase + i);
+    }
+    batch->Append(keyVec);
+    batch->Append(isNullVec);
+    batch->Append(valueVec);
+    return batch;
+}
+VectorBatch *MakeBoolKeyBatch(const std::vector<bool> &keys, const std::vector<int64_t> &values)
+{
+    auto *batch = new VectorBatch(static_cast<int32_t>(keys.size()));
+    auto *keyVec = new Vector<bool>(static_cast<int32_t>(keys.size()));
+    auto *valueVec = new Vector<int64_t>(static_cast<int32_t>(values.size()));
+    for (size_t i = 0; i < keys.size(); ++i) {
+        keyVec->SetValue(static_cast<int32_t>(i), keys[i]);
+        valueVec->SetValue(static_cast<int32_t>(i), values[i]);
+    }
+    batch->Append(keyVec);
+    batch->Append(valueVec);
+    return batch;
+}
 struct Harness {
     std::shared_ptr<JoinSpillState> state;
     HashBuilderOperatorFactory *hashFactory = nullptr;
@@ -121,9 +152,15 @@ Harness MakeHarness(const std::string &dir, const DataTypes &types, int32_t hash
     for (int32_t i = 0; i < types.GetSize(); ++i) {
         outputs[static_cast<size_t>(i)] = i;
     }
+    const bool probeOnly = joinType == OMNI_JOIN_TYPE_LEFT_SEMI || joinType == OMNI_JOIN_TYPE_LEFT_ANTI;
+    const bool existence = joinType == OMNI_JOIN_TYPE_EXISTENCE;
+    // Same build output shape as CreateLookupJoinOperatorFactory(planNode, ...).
+    const DataTypes buildOutputTypes = existence ? DataTypes(std::vector<DataTypePtr>({BooleanType()}))
+        : (probeOnly ? DataTypes(std::vector<DataTypePtr>()) : types);
+    std::vector<int32_t> buildOutputs = existence ? std::vector<int32_t>({1}) : outputs;
     harness.lookupFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(types, outputs.data(),
-        types.GetSize(), hashCols.data(), hashCount, outputs.data(), types.GetSize(), types,
-        reinterpret_cast<int64_t>(harness.hashFactory), nullptr, false, nullptr);
+        types.GetSize(), hashCols.data(), hashCount, buildOutputs.data(), buildOutputTypes.GetSize(),
+        buildOutputTypes, reinterpret_cast<int64_t>(harness.hashFactory), nullptr, false, nullptr);
     if (spill) {
         harness.lookupFactory->SetJoinSpillPolicy(true, JoinSpillTestSubPartitionConfig());
         harness.lookupFactory->SetJoinSpillState(harness.state);
@@ -171,6 +208,17 @@ enum class ParityKind {
     LongLeftRight,
     LongRightRight,
     LongFullRight,
+    LongSemiRight,
+    LongAntiRight,
+    LongExistenceRight,
+    LongExistenceRightNullKey,
+    LongExistenceRightManyMisses,
+    NullSafeInnerRight,
+    NullSafeFullRight,
+    NullSafeSemiRight,
+    NullSafeAntiRight,
+    NullSafeExistenceRight,
+    BoolSemiRight,
 };
 struct ParityParam {
     ParityKind kind;
@@ -314,9 +362,69 @@ TEST_P(ForcedSpillEqualsResidentTest, SpillMatchesResident)
             both(longTypes, 1, OMNI_JOIN_TYPE_RIGHT, OMNI_BUILD_RIGHT, outerBuild, outerProbe); break;
         case ParityKind::LongFullRight:
             both(longTypes, 1, OMNI_JOIN_TYPE_FULL, OMNI_BUILD_RIGHT, outerBuild, outerProbe); break;
+        case ParityKind::LongSemiRight:
+            both(longTypes, 1, OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_BUILD_RIGHT, outerBuild, outerProbe); break;
+        case ParityKind::LongAntiRight:
+            both(longTypes, 1, OMNI_JOIN_TYPE_LEFT_ANTI, OMNI_BUILD_RIGHT, outerBuild, outerProbe); break;
+        case ParityKind::LongExistenceRight:
+            both(longTypes, 1, OMNI_JOIN_TYPE_EXISTENCE, OMNI_BUILD_RIGHT, outerBuild, outerProbe); break;
+        case ParityKind::LongExistenceRightNullKey:
+            both(longTypes, 1, OMNI_JOIN_TYPE_EXISTENCE, OMNI_BUILD_RIGHT, outerBuild,
+                []() { return MakeLongBatch({2, 99, 5}, {200, 990, 50}, {2}); });
+            break;
+        case ParityKind::LongExistenceRightManyMisses: {
+            // Build rows sit in sub-partition 0 only, so the other sub-partitions stay unspilled.
+            // Each of them then gets more miss rows than one output batch holds.
+            const int64_t hitA = FindLongKeyForSubPartition(0);
+            const int64_t hitB = FindLongKeyForSubPartition(0, hitA);
+            const auto build = [hitA, hitB]() { return MakeLongBatch({hitA, hitB}, {10, 20}); };
+            const auto probe = [hitA]() {
+                std::vector<int64_t> keys{hitA};
+                std::vector<int64_t> values{1};
+                for (int64_t i = 0; i < 400000; ++i) {
+                    keys.push_back(1000000 + i);
+                    values.push_back(i);
+                }
+                return MakeLongBatch(keys, values);
+            };
+            both(longTypes, 1, OMNI_JOIN_TYPE_EXISTENCE, OMNI_BUILD_RIGHT, build, probe);
+            break;
+        }
+        case ParityKind::NullSafeInnerRight:
+        case ParityKind::NullSafeFullRight:
+        case ParityKind::NullSafeSemiRight:
+        case ParityKind::NullSafeAntiRight:
+        case ParityKind::NullSafeExistenceRight: {
+            const DataTypes types(std::vector<DataTypePtr>({LongType(), BooleanType(), LongType()}));
+            const JoinType joinType = GetParam().kind == ParityKind::NullSafeInnerRight ? OMNI_JOIN_TYPE_INNER
+                : GetParam().kind == ParityKind::NullSafeFullRight                     ? OMNI_JOIN_TYPE_FULL
+                : GetParam().kind == ParityKind::NullSafeSemiRight                     ? OMNI_JOIN_TYPE_LEFT_SEMI
+                : GetParam().kind == ParityKind::NullSafeAntiRight                     ? OMNI_JOIN_TYPE_LEFT_ANTI
+                                                                                       : OMNI_JOIN_TYPE_EXISTENCE;
+            // Key 0 occurs both as a real value and as the NULL marker; only same-isnull rows may match.
+            both(types, 2, joinType, OMNI_BUILD_RIGHT,
+                []() { return MakeNullSafeBatch(64, 0, 5, 1000); },
+                []() { return MakeNullSafeBatch(96, -16, 7, 5000); });
+            break;
+        }
+        case ParityKind::BoolSemiRight: {
+            const DataTypes types(std::vector<DataTypePtr>({BooleanType(), LongType()}));
+            both(types, 1, OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_BUILD_RIGHT,
+                []() { return MakeBoolKeyBatch({true, true, true}, {10, 11, 12}); },
+                []() { return MakeBoolKeyBatch({true, false, true, false}, {100, 101, 102, 103}); });
+            break;
+        }
     }
     ExpectEqual(resident, spilledRows);
     EXPECT_GT(spilled, 0u);
+    // 14 NULL probe rows match the build NULL marker; probe key 0 (not NULL) must not.
+    if (GetParam().kind == ParityKind::NullSafeSemiRight) {
+        EXPECT_EQ(58u, spilledRows.size());
+    } else if (GetParam().kind == ParityKind::NullSafeAntiRight) {
+        EXPECT_EQ(38u, spilledRows.size());
+    } else if (GetParam().kind == ParityKind::BoolSemiRight) {
+        EXPECT_EQ(2u, spilledRows.size());
+    }
 }
 INSTANTIATE_TEST_SUITE_P(JoinSpillProactiveTest, ForcedSpillEqualsResidentTest, testing::Values(
     ParityParam{ParityKind::LongInnerRight, "LongInnerRight"},
@@ -325,7 +433,18 @@ INSTANTIATE_TEST_SUITE_P(JoinSpillProactiveTest, ForcedSpillEqualsResidentTest, 
     ParityParam{ParityKind::CompositeInnerRight, "CompositeInnerRight"},
     ParityParam{ParityKind::ExprInnerRight, "ExprInnerRight"}, ParityParam{ParityKind::LongInnerLeft, "LongInnerLeft"},
     ParityParam{ParityKind::LongLeftRight, "LongLeftRight"}, ParityParam{ParityKind::LongRightRight, "LongRightRight"},
-    ParityParam{ParityKind::LongFullRight, "LongFullRight"}),
+    ParityParam{ParityKind::LongFullRight, "LongFullRight"},
+    ParityParam{ParityKind::LongSemiRight, "LongSemiRight"},
+    ParityParam{ParityKind::LongAntiRight, "LongAntiRight"},
+    ParityParam{ParityKind::LongExistenceRight, "LongExistenceRight"},
+    ParityParam{ParityKind::LongExistenceRightNullKey, "LongExistenceRightNullKey"},
+    ParityParam{ParityKind::LongExistenceRightManyMisses, "LongExistenceRightManyMisses"},
+    ParityParam{ParityKind::NullSafeInnerRight, "NullSafeInnerRight"},
+    ParityParam{ParityKind::NullSafeFullRight, "NullSafeFullRight"},
+    ParityParam{ParityKind::NullSafeSemiRight, "NullSafeSemiRight"},
+    ParityParam{ParityKind::NullSafeAntiRight, "NullSafeAntiRight"},
+    ParityParam{ParityKind::NullSafeExistenceRight, "NullSafeExistenceRight"},
+    ParityParam{ParityKind::BoolSemiRight, "BoolSemiRight"}),
     [](const testing::TestParamInfo<ParityParam> &info) { return info.param.name; });
 TEST(JoinSpillProactiveTest, DisabledAndBelowThresholdDoNotCreateSession)
 {

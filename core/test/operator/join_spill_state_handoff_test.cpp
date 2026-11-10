@@ -138,8 +138,13 @@ TEST(JoinSpillStateHandoffTest, HeldTableGateMatrix)
     state->SetSpillJoinType(OMNI_JOIN_TYPE_LEFT, OMNI_BUILD_LEFT); EXPECT_TRUE(state->CanFlushHeldTable());
     state->SetSpillJoinType(OMNI_JOIN_TYPE_RIGHT, OMNI_BUILD_RIGHT); EXPECT_TRUE(state->CanFlushHeldTable());
     state->SetSpillJoinType(OMNI_JOIN_TYPE_FULL, OMNI_BUILD_LEFT); EXPECT_TRUE(state->CanFlushHeldTable());
+    state->SetSpillJoinType(OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_BUILD_RIGHT); EXPECT_TRUE(state->CanFlushHeldTable());
+    state->SetSpillJoinType(OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_BUILD_LEFT); EXPECT_FALSE(state->CanFlushHeldTable());
+    state->SetSpillJoinType(OMNI_JOIN_TYPE_LEFT_ANTI, OMNI_BUILD_RIGHT); EXPECT_TRUE(state->CanFlushHeldTable());
+    state->SetSpillJoinType(OMNI_JOIN_TYPE_LEFT_ANTI, OMNI_BUILD_LEFT); EXPECT_FALSE(state->CanFlushHeldTable());
     state->SetSpillJoinType(OMNI_JOIN_TYPE_LEFT); EXPECT_FALSE(state->CanFlushHeldTable());
-    state->SetSpillJoinType(OMNI_JOIN_TYPE_EXISTENCE, OMNI_BUILD_RIGHT); EXPECT_FALSE(state->CanFlushHeldTable());
+    state->SetSpillJoinType(OMNI_JOIN_TYPE_EXISTENCE, OMNI_BUILD_RIGHT); EXPECT_TRUE(state->CanFlushHeldTable());
+    state->SetSpillJoinType(OMNI_JOIN_TYPE_EXISTENCE, OMNI_BUILD_LEFT); EXPECT_FALSE(state->CanFlushHeldTable());
     auto pathA = MakeState();
     pathA->SetSpillJoinType(OMNI_JOIN_TYPE_INNER);
     pathA->SetHashTableHandoff(0, {1, 2});
@@ -190,6 +195,15 @@ TEST(JoinSpillStateHandoffTest, BuildSpillSchemaAndRoundTrip)
     EXPECT_EQ(OMNI_BOOLEAN, schema->BuildSpillTypes().GetType(2)->GetId());
     schema->SetSpillJoinType(OMNI_JOIN_TYPE_FULL, OMNI_BUILD_RIGHT);
     EXPECT_TRUE(schema->NeedsVisitedFlagSpill());
+    schema->SetSpillJoinType(OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_BUILD_RIGHT);
+    EXPECT_FALSE(schema->NeedsVisitedFlagSpill());
+    EXPECT_EQ(2, schema->BuildSpillTypes().GetSize());
+    schema->SetSpillJoinType(OMNI_JOIN_TYPE_LEFT_ANTI, OMNI_BUILD_RIGHT);
+    EXPECT_FALSE(schema->NeedsVisitedFlagSpill());
+    EXPECT_EQ(2, schema->BuildSpillTypes().GetSize());
+    schema->SetSpillJoinType(OMNI_JOIN_TYPE_EXISTENCE, OMNI_BUILD_RIGHT);
+    EXPECT_FALSE(schema->NeedsVisitedFlagSpill());
+    EXPECT_EQ(2, schema->BuildSpillTypes().GetSize());
     const DataTypes types = LongTypes();
     int32_t hashCols[] = {0};
     auto *factory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(

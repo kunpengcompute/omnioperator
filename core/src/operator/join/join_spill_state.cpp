@@ -782,6 +782,10 @@ bool JoinSpillState::IsHeldTableJoinAllowed() const
     if (joinType == OMNI_JOIN_TYPE_RIGHT && buildSide == OMNI_BUILD_RIGHT) {
         return true;
     }
+    if ((joinType == OMNI_JOIN_TYPE_LEFT_SEMI || joinType == OMNI_JOIN_TYPE_LEFT_ANTI ||
+            joinType == OMNI_JOIN_TYPE_EXISTENCE) && buildSide == OMNI_BUILD_RIGHT) {
+        return true;
+    }
     return false;
 }
 
