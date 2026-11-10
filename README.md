@@ -2,10 +2,10 @@
 
 ## 最新消息<a name="ZH-CN_TOPIC_0000002547298195"></a>
 
-- \[2026.06.30\]：发布OmniOperator 2.2.0。新增ObjHashAggregateExec、InsertIntoHiveTable、GenerateExec、HiveTableScanExec支持；新增数据湖格式支持：Delta Lake 3.2.0、Hudi 0.15.0、Iceberg 1.5.0。
-- \[2026.03.30\]：发布OmniOperator 2.1.0。新增InsertIntoHadoopFsRelationCommand支持插入HDFS、WriteFile支持ORC写入、Window支持Array数据分段、FileSourceScanExec支持Array数据读取、LocalLimitExec支持Array数据截取；新增支持datediff、pmod、charTypeWriteSideCheck、least、concat_ws、get_json_object表达式。
-- \[2025.12.30\]：发布OmniOperator 2.0.0。新增适配Spark的适配层Gluten 1.3版本；SparkExtension新增支持concat_ws、regexp、regexp_replace、trim和floor表达式。
-- \[2025.06.30\]：发布OmniOperator 1.9.0。Spark 3.3.1新增Parquet格式，支持列式写入；新增支持操作系统CentOS 7.9。
+- \[2026-06-30\]：发布OmniOperator 2.2.0。新增ObjHashAggregateExec、InsertIntoHiveTable、GenerateExec、HiveTableScanExec支持；新增数据湖格式支持：Delta Lake 3.2.0、Hudi 0.15.0、Iceberg 1.5.0。
+- \[2026-03-30\]：发布OmniOperator 2.1.0。新增InsertIntoHadoopFsRelationCommand支持插入HDFS、WriteFile支持ORC写入、Window支持Array数据分段、FileSourceScanExec支持Array数据读取、LocalLimitExec支持Array数据截取；新增支持datediff、pmod、charTypeWriteSideCheck、least、concat_ws、get_json_object表达式。
+- \[2025-12-30\]：发布OmniOperator 2.0.0。新增适配Spark的适配层Gluten 1.3版本；SparkExtension新增支持concat_ws、regexp、regexp_replace、trim和floor表达式。
+- \[2025-06-30\]：发布OmniOperator 1.9.0。Spark 3.3.1新增Parquet格式，支持列式写入；新增支持操作系统CentOS 7.9。
 
 ## 项目简介<a name="ZH-CN_TOPIC_0000002547258199"></a>
 
@@ -71,6 +71,46 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 - OmniVec：一种高效的堆外内存数据组织方式。它支持零副本读取数据，且没有序列化开销。
 - Omni算子：高性能算子，使用Native Code（C/C++）替换了大数据底层的物理算子，提升了计算速度。
 
+## 性能数据<a name="ZH-CN_TOPIC_0000002547298196"></a>
+
+### TPC-DS 10TB 性能对比<a name="ZH-CN_TOPIC_0000002547298204"></a>
+
+基于 TPC-DS 99 条 SQL、10TB 数据集，对比 OmniOperator 与 Velox 的端到端执行耗时（含 a/b 拆分变体后共 103 条查询，单位：s，数值越小越好）。
+
+**图 2** TPC-DS 10TB 总耗时对比<a name="fig_tpcds_total"></a>
+
+![](docs/zh/figures/tpcds-10tb-total-time-comparison.drawio.svg "TPC-DS 10TB 总耗时对比")
+
+OmniOperator 执行总耗时为 2577.709 s，Velox 为 4208.967 s。OmniOperator 总耗时降低约 38.8%，整体性能约为 Velox 的 1.63 倍。
+
+**图 3** 逐条 SQL 耗时对比（对数坐标）<a name="fig_tpcds_all_queries"></a>
+
+![](docs/zh/figures/tpcds-10tb-per-query-time-comparison.drawio.svg "TPC-DS 10TB 逐条 SQL 耗时对比")
+
+**图 4** OmniOperator 明显优于 Velox 的典型 SQL（加速比 Top 12，按 SQL 编号排列）<a name="fig_tpcds_top_queries"></a>
+
+![](docs/zh/figures/tpcds-10tb-top-speedup-queries.drawio.svg "OmniOperator 明显优于 Velox 的典型 SQL")
+
+**表 2** 典型 SQL 耗时与加速比<a name="table_tpcds_top_queries"></a>
+
+| SQL | OmniOperator耗时（s）| Velox耗时（s）| 加速比 |
+|---|---|---|---|
+| q88 | 13.640 | 152.105 | 11.15 |
+| q95 | 22.183 | 232.253 | 10.47 |
+| q72 | 18.185 | 96.392 | 5.30 |
+| q90 | 5.996 | 21.319 | 3.56 |
+| q14b | 38.316 | 132.436 | 3.46 |
+| q14a | 42.294 | 143.495 | 3.39 |
+| q9 | 38.985 | 116.984 | 3.00 |
+| q76 | 23.213 | 59.704 | 2.57 |
+| q22 | 7.259 | 18.408 | 2.54 |
+| q44 | 21.106 | 52.981 | 2.51 |
+| q64 | 49.560 | 111.878 | 2.26 |
+| q2 | 19.064 | 42.424 | 2.23 |
+
+>![](docs/zh/public_sys-resources/icon-note.gif) **说明：**
+>加速比 = Velox耗时 / OmniOperator耗时。
+
 ## 约束与限制<a name="ZH-CN_TOPIC_0000002515665484"></a>
 
 ### 公共约束<a name="ZH-CN_TOPIC_0000002547305319"></a>
@@ -113,12 +153,12 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 
 >![](docs/zh/public_sys-resources/icon-notice.gif) **须知：** 
 >
->- Spark版本支持：
->    - SparkExtension支持Spark 3.1.1、Spark 3.3.1、Spark 3.4.3和Spark 3.5.2
->    - Gluten仅支持Spark 3.3.1、Spark 3.4.3和Spark 3.5.2
->- 操作系统差异：
->    - SparkExtension支持Centos 7.9、openEuler 20.03和openEuler 22.03
->    - Gluten支持openEuler 22.03和openEuler 24.03
+> - Spark版本支持：
+>   - SparkExtension支持Spark 3.1.1、Spark 3.3.1、Spark 3.4.3和Spark 3.5.2
+>   - Gluten仅支持Spark 3.3.1、Spark 3.4.3和Spark 3.5.2
+> - 操作系统差异：
+>   - SparkExtension支持Centos 7.9、openEuler 20.03和openEuler 22.03
+>   - Gluten支持openEuler 22.03和openEuler 24.03
 
 - 不同的负载所需内存配置不一样，例如TPC-DS 3TB数据集，SparkExtension推荐配置下，堆外内存配置不低于20GB，99条所有SQL可成功运行，运行过程中日志可能出现`MEM_CAP_EXCEEDED`但不影响最终功能，建议适当增大堆外内存配置。如果堆外内存配置过低，SQL执行结果可能不正确。
 - Spark OmniOperator算子加速支持`from_unixtime`和`unix_timestamp`表达式：
