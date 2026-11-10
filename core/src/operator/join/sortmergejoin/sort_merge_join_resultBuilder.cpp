@@ -544,6 +544,10 @@ bool JoinResultBuilder::TryBatchVarcharSegment(BaseVector *inputVector, BaseVect
     batchVarcharNulls.resize(rowCount);
     std::string_view *values = batchVarcharValues.data();
     uint8_t *nulls = batchVarcharNulls.data();
+    // Accumulate the exact payload size so SetValues can skip its per-value
+    // validation scan. Sources come from PagesIndex pages and never alias this
+    // independently allocated output container.
+    uint64_t totalBytes = 0;
     for (int32_t i = 0; i < rowCount; ++i) {
         const int32_t row = rows[i];
         // Nulls keep the per-row source semantics; a NULL row skips offset reads and
@@ -560,8 +564,9 @@ bool JoinResultBuilder::TryBatchVarcharSegment(BaseVector *inputVector, BaseVect
         const int32_t begin = offsets[row];
         const auto size = static_cast<size_t>(offsets[row + 1] - begin);
         values[i] = size == 0 ? std::string_view{} : std::string_view(bytes + begin, size);
+        totalBytes += size;
     }
-    target->SetValues(outputRowId, values, nulls, rowCount);
+    target->SetValues(outputRowId, values, nulls, rowCount, totalBytes);
     return true;
 }
 

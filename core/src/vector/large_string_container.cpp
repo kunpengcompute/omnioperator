@@ -98,6 +98,52 @@ void LargeStringContainer<RAW_DATA_TYPE>::SetValues(int32_t index, const std::st
     lastOffsetPosition = static_cast<uint32_t>(index + count - 1);
 }
 
+template<typename RAW_DATA_TYPE>
+void LargeStringContainer<RAW_DATA_TYPE>::SetValues(int32_t index, const std::string_view *values,
+    const uint8_t *nulls, int32_t count, uint64_t totalBytes)
+{
+    if (index < 0 || count < 0 || index > size || count > size - index || (count > 0 && values == nullptr)) {
+        throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "invalid batch string range");
+    }
+    if (count == 0) {
+        return;
+    }
+
+    // Payload is append-only, same contract as the validating overload.
+    const uint32_t nextPosition = lastOffsetPosition + 1;
+    if (static_cast<uint32_t>(index) < nextPosition) {
+        throw omniruntime::exception::OmniException(
+            "STRING_CONTAINER_ERROR", "batch string overwrite is not supported");
+    }
+
+    // The caller gathered these views from foreign storage and supplies the exact payload
+    // size, so the per-value overflow and aliasing scan collapses into one capacity check.
+    // index may follow an unmaterialized gap, so offsets[index] is not necessarily the
+    // current payload tail until FillSlots runs. Base the reservation on nextPosition,
+    // whose offset is already materialized, without materializing the gap prematurely.
+    const int32_t currentEndOffset = offsets[nextPosition];
+    const uint64_t maxOffset = static_cast<uint64_t>(std::numeric_limits<int32_t>::max());
+    if (currentEndOffset < 0 || totalBytes > maxOffset - static_cast<uint64_t>(currentEndOffset)) {
+        throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "batch string offsets overflow");
+    }
+    const uint64_t endOffset = static_cast<uint64_t>(currentEndOffset) + totalBytes;
+
+    char *destination = GetBufferWithSpace(static_cast<uint32_t>(endOffset));
+    FillSlots(index);
+    int32_t position = offsets[index];
+    for (int32_t i = 0; i < count; ++i) {
+        if (nulls == nullptr || !nulls[i]) {
+            const auto &value = values[i];
+            if (!value.empty()) {
+                memcpy(destination + position, value.data(), value.size());
+                position += static_cast<int32_t>(value.size());
+            }
+        }
+        offsets[index + i + 1] = position;
+    }
+    lastOffsetPosition = static_cast<uint32_t>(index + count - 1);
+}
+
 /* *
  * set the element at the index position to null
  * @param index

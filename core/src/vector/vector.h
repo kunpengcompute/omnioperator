@@ -189,6 +189,11 @@ public:
         this->isSliced = isSliced;
     }
 
+    bool IsSliced() const
+    {
+        return isSliced;
+    }
+
     void SetIsField(const bool isField)
     {
         isField_ = isField;
@@ -745,11 +750,31 @@ public:
     // Batch materialization is only valid for an independently allocated output vector.
     void SetValues(int32_t index, const std::string_view *values, const uint8_t *nulls, int32_t count)
     {
-        if (this->IsSliced() || this->offset != 0 || index < 0 || count < 0 ||
+        if (this->isSliced || this->offset != 0 || index < 0 || count < 0 ||
             index > this->size || count > this->size - index) {
             throw OmniException("OPERATOR_RUNTIME_ERROR", "invalid batch string output vector or range");
         }
         container->SetValues(index, values, nulls, count);
+        this->SetNulls(index, false, count);
+        if (nulls != nullptr) {
+            for (int32_t i = 0; i < count; ++i) {
+                if (nulls[i]) {
+                    BaseVector::SetNull(index + i);
+                }
+            }
+        }
+    }
+
+    // Same contract as the validating overload; totalBytes must be the exact sum of the
+    // non-null value lengths and the sources must not alias this vector's container buffer.
+    void SetValues(int32_t index, const std::string_view *values, const uint8_t *nulls, int32_t count,
+        uint64_t totalBytes)
+    {
+        if (this->isSliced || this->offset != 0 || index < 0 || count < 0 ||
+            index > this->size || count > this->size - index) {
+            throw OmniException("OPERATOR_RUNTIME_ERROR", "invalid batch string output vector or range");
+        }
+        container->SetValues(index, values, nulls, count, totalBytes);
         this->SetNulls(index, false, count);
         if (nulls != nullptr) {
             for (int32_t i = 0; i < count; ++i) {

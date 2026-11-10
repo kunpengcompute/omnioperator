@@ -419,6 +419,47 @@ TEST(vector2, large_string_container_set_values_fast_gap_append)
     EXPECT_EQ(std::string_view("tail"), container.GetValue(6));
 }
 
+TEST(vector2, string_vector_set_values_fast_gap_updates_nulls_and_owns_payload)
+{
+    using StringVector = Vector<LargeStringContainer<std::string_view>>;
+    StringVector vector(8, 1);
+    vector.SetValue(0, "prefix");
+
+    // Seed the target bitmap so the fast overload must clear non-null rows before
+    // applying the supplied null map. Row 1 is an unmaterialized gap.
+    auto *baseVector = static_cast<BaseVector *>(&vector);
+    for (int32_t row = 2; row <= 6; ++row) {
+        baseVector->SetNull(row);
+    }
+    std::string copiedPayload = "copied-payload";
+    std::string_view values[] = {
+        "alpha", "ignored-null", std::string_view(), copiedPayload, std::string_view()
+    };
+    uint8_t nulls[] = {0, 1, 0, 0, 0};
+    const uint64_t totalBytes = values[0].size() + values[2].size() + values[3].size() + values[4].size();
+
+    vector.SetValues(2, values, nulls, 5, totalBytes);
+    copiedPayload.assign("changed-after-copy");
+    vector.SetValue(7, "suffix");
+
+    EXPECT_EQ(vector.GetNullCount(), 1);
+    EXPECT_EQ(vector.GetValue(0), std::string_view("prefix"));
+    EXPECT_FALSE(vector.IsNull(1));
+    EXPECT_TRUE(vector.GetValue(1).empty());
+    EXPECT_FALSE(vector.IsNull(2));
+    EXPECT_EQ(vector.GetValue(2), std::string_view("alpha"));
+    EXPECT_TRUE(vector.IsNull(3));
+    EXPECT_TRUE(vector.GetValue(3).empty());
+    EXPECT_FALSE(vector.IsNull(4));
+    EXPECT_TRUE(vector.GetValue(4).empty());
+    EXPECT_FALSE(vector.IsNull(5));
+    EXPECT_EQ(vector.GetValue(5), std::string_view("copied-payload"));
+    EXPECT_FALSE(vector.IsNull(6));
+    EXPECT_TRUE(vector.GetValue(6).empty());
+    EXPECT_FALSE(vector.IsNull(7));
+    EXPECT_EQ(vector.GetValue(7), std::string_view("suffix"));
+}
+
 TEST(vector2, large_string_container_set_values_validating_gap_append)
 {
     LargeStringContainer<std::string_view> container(5, 1);
