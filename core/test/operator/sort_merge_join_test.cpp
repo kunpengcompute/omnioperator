@@ -4,6 +4,7 @@
  */
 
 #include <memory>
+#include <unordered_map>
 #include <vector>
 #include "gtest/gtest.h"
 #include "vector/vector_helper.h"
@@ -14,6 +15,7 @@
 #include "util/test_util.h"
 #include "expression/jsonparser/jsonparser.h"
 #include "type/data_type.h"
+#include "util/config/QueryConfig.h"
 #include "vector/row_vector.h"
 
 using namespace omniruntime::op;
@@ -256,6 +258,53 @@ TEST(NativeSortMergeJoinTest, TestJoinScanner1)
     delete bufferedPageIndex;
     delete streamedPageIndex;
     delete scan;
+}
+
+TEST(NativeSortMergeJoinTest, TestJoinScannerStreamedPinIncludesAddressZero)
+{
+    DataTypes streamedTypes(std::vector<DataTypePtr>{IntType()});
+    DataTypes bufferedTypes(std::vector<DataTypePtr>{IntType()});
+    int32_t keyColumns[] = {0};
+    auto *streamedPageIndex = new DynamicPagesIndex(streamedTypes, keyColumns, 1);
+    auto *bufferedPageIndex = new DynamicPagesIndex(bufferedTypes, keyColumns, 1);
+    int32_t key[] = {7};
+    auto *streamedBatch = new VectorBatch(1);
+    streamedBatch->Append(CreateVector<int32_t>(1, key));
+    streamedPageIndex->AddVecBatch(streamedBatch);
+    auto *bufferedBatch = new VectorBatch(1);
+    bufferedBatch->Append(CreateVector<int32_t>(1, key));
+    bufferedPageIndex->AddVecBatch(bufferedBatch);
+    streamedPageIndex->AddVecBatch(CreateEmptyVectorBatch(streamedTypes));
+    bufferedPageIndex->AddVecBatch(CreateEmptyVectorBatch(bufferedTypes));
+
+    auto *scanner = new SortMergeJoinScanner(streamedTypes, keyColumns, 1, streamedPageIndex,
+        bufferedTypes, keyColumns, bufferedPageIndex, JoinType::OMNI_JOIN_TYPE_INNER, false);
+    EXPECT_EQ(scanner->GetStreamedPinBatchId(), INT32_MAX);
+    scanner->FindNextJoinRows();
+    // Synthetic address 0 is batch 0 / row 0, not the unset sentinel. The scanner
+    // must publish batch 0 so the result builder cannot reclaim it prematurely.
+    EXPECT_EQ(scanner->GetStreamedPinBatchId(), 0);
+
+    std::vector<int8_t> isPreMatched;
+    std::vector<int64_t> streamedAddresses;
+    std::vector<int64_t> bufferedAddresses;
+    std::vector<int8_t> sameBufferedKeyMatched;
+    scanner->GetMatchedValueAddresses(isPreMatched, streamedAddresses, bufferedAddresses,
+        sameBufferedKeyMatched);
+    EXPECT_EQ(streamedAddresses.size(), 1);
+    EXPECT_EQ(bufferedAddresses.size(), 1);
+    if (!streamedAddresses.empty()) {
+        EXPECT_EQ(streamedAddresses[0], 0);
+    }
+    if (!bufferedAddresses.empty()) {
+        EXPECT_EQ(bufferedAddresses[0], 0);
+    }
+
+    delete scanner;
+    streamedPageIndex->FreeAllRemainingVecBatch();
+    bufferedPageIndex->FreeAllRemainingVecBatch();
+    delete streamedPageIndex;
+    delete bufferedPageIndex;
 }
 
 TEST(NativeSortMergeJoinTest, TestJoinScanner2)
@@ -1235,6 +1284,30 @@ TEST(NativeSortMergeJoinTest, TestJoinScanner7)
 namespace {
 using SmjTestVarcharVector = vec::Vector<vec::LargeStringContainer<std::string_view>>;
 
+class SmjDestructionCountingIntVector : public Vector<int32_t> {
+public:
+    SmjDestructionCountingIntVector(int32_t value, int32_t &destructionCount)
+        : Vector<int32_t>(1), destructionCount(destructionCount)
+    {
+        SetValue(0, value);
+    }
+
+    ~SmjDestructionCountingIntVector() override
+    {
+        ++destructionCount;
+    }
+
+private:
+    int32_t &destructionCount;
+};
+
+VectorBatch *CreateSmjCountingBatch(int32_t value, int32_t &destructionCount)
+{
+    auto *batch = new VectorBatch(1);
+    batch->Append(new SmjDestructionCountingIntVector(value, destructionCount));
+    return batch;
+}
+
 SmjTestVarcharVector *CreateSmjTestVarcharVector(const std::vector<std::string> &values,
     const std::vector<uint8_t> &nulls = {})
 {
@@ -1745,6 +1818,195 @@ TEST(NativeSortMergeJoinTest, TestSortMergeJoinResultBuilderComplexSelectionRegr
     delete leftPagesIndex;
     delete rightPagesIndex;
     VectorHelper::FreeVecBatch(output);
+}
+
+TEST(NativeSortMergeJoinTest, TestLeftJoinPageReleaseHonorsStreamedPin)
+{
+    DataTypes leftTypes(std::vector<DataTypePtr>{IntType()});
+    DataTypes rightTypes(std::vector<DataTypePtr>{IntType()});
+    int32_t keyColumns[] = {0};
+    auto *leftPagesIndex = new DynamicPagesIndex(leftTypes, keyColumns, 1);
+    auto *rightPagesIndex = new DynamicPagesIndex(rightTypes, keyColumns, 1);
+    std::vector<int32_t> leftDestroyed(4, 0);
+    std::vector<int32_t> rightDestroyed(4, 0);
+    for (int32_t batch = 0; batch < 4; ++batch) {
+        leftPagesIndex->AddVecBatch(CreateSmjCountingBatch(batch, leftDestroyed[batch]));
+        rightPagesIndex->AddVecBatch(CreateSmjCountingBatch(batch, rightDestroyed[batch]));
+    }
+
+    std::vector<DataTypePtr> noOutputTypes;
+    int32_t unusedOutputColumns[] = {0};
+    std::string filter;
+    auto *resultBuilder = new JoinResultBuilder(noOutputTypes, unusedOutputColumns, 0,
+        leftTypes.GetSize(), leftPagesIndex, noOutputTypes, unusedOutputColumns, 0,
+        rightTypes.GetSize(), rightPagesIndex, filter, OMNI_JOIN_TYPE_LEFT, nullptr);
+
+    // Batch 2 has been materialized, but the scanner still compares a pending row in
+    // streamed batch 1. Only batch 0 may be reclaimed on the streamed side. The
+    // buffered side has no such pin and can release both batches below batch 2.
+    AppendSmjTestAddresses(resultBuilder, {2}, {0}, {2}, {0});
+    resultBuilder->SetStreamedPinBatchId(1);
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 0);
+    EXPECT_EQ(leftDestroyed[0], 1);
+    EXPECT_EQ(leftDestroyed[1], 0);
+    EXPECT_EQ(leftDestroyed[2], 0);
+    EXPECT_EQ(leftDestroyed[3], 0);
+    EXPECT_EQ(rightDestroyed[0], 1);
+    EXPECT_EQ(rightDestroyed[1], 1);
+    EXPECT_EQ(rightDestroyed[2], 0);
+    EXPECT_EQ(rightDestroyed[3], 0);
+
+    VectorBatch *output = nullptr;
+    resultBuilder->GetOutput(&output);
+    resultBuilder->Finish();
+    delete resultBuilder;
+    leftPagesIndex->FreeAllRemainingVecBatch();
+    rightPagesIndex->FreeAllRemainingVecBatch();
+    delete leftPagesIndex;
+    delete rightPagesIndex;
+    if (output != nullptr) {
+        VectorHelper::FreeVecBatch(output);
+    }
+    for (int32_t batch = 0; batch < 4; ++batch) {
+        EXPECT_EQ(leftDestroyed[batch], 1) << "left batch " << batch;
+        EXPECT_EQ(rightDestroyed[batch], 1) << "right batch " << batch;
+    }
+}
+
+TEST(NativeSortMergeJoinTest, TestLeftJoinConsumedLeaseAcrossOutputWindowsAndClear)
+{
+    DataTypes leftTypes(std::vector<DataTypePtr>{IntType()});
+    DataTypes rightTypes(std::vector<DataTypePtr>{IntType()});
+    int32_t keyColumns[] = {0};
+    auto *leftPagesIndex = new DynamicPagesIndex(leftTypes, keyColumns, 1);
+    auto *rightPagesIndex = new DynamicPagesIndex(rightTypes, keyColumns, 1);
+    std::vector<int32_t> leftDestroyed(4, 0);
+    std::vector<int32_t> rightDestroyed(4, 0);
+    for (int32_t batch = 0; batch < 4; ++batch) {
+        leftPagesIndex->AddVecBatch(CreateSmjCountingBatch(batch, leftDestroyed[batch]));
+        rightPagesIndex->AddVecBatch(CreateSmjCountingBatch(batch, rightDestroyed[batch]));
+    }
+
+    std::vector<DataTypePtr> noOutputTypes;
+    int32_t unusedOutputColumns[] = {0};
+    std::string filter;
+    const omniruntime::config::QueryConfig oneRowConfig(
+        std::unordered_map<std::string, std::string>{
+            {omniruntime::config::QueryConfig::KMaxBatchRowCount, "1"}});
+    auto *resultBuilder = new JoinResultBuilder(noOutputTypes, unusedOutputColumns, 0,
+        leftTypes.GetSize(), leftPagesIndex, noOutputTypes, unusedOutputColumns, 0,
+        rightTypes.GetSize(), rightPagesIndex, filter, OMNI_JOIN_TYPE_LEFT, nullptr, oneRowConfig);
+
+    // Force two output windows from one duplicate-key group. The first window consumes
+    // batch 2 and establishes the lease floor; the second consumes batch 3 but must not
+    // reclaim batch 2 while the same scanner/result window is still active.
+    AppendSmjTestAddresses(resultBuilder, {2, 3}, {0, 0}, {2, 3}, {0, 0});
+    EXPECT_EQ(resultBuilder->GetMinConsumedStreamedBatchId(), INT32_MAX);
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 1);
+    EXPECT_EQ(resultBuilder->GetMinConsumedStreamedBatchId(), 2);
+    EXPECT_EQ(leftDestroyed[0], 1);
+    EXPECT_EQ(leftDestroyed[1], 1);
+    EXPECT_EQ(leftDestroyed[2], 0);
+    EXPECT_EQ(rightDestroyed[0], 1);
+    EXPECT_EQ(rightDestroyed[1], 1);
+
+    VectorBatch *firstOutput = nullptr;
+    resultBuilder->GetOutput(&firstOutput);
+    EXPECT_NE(firstOutput, nullptr);
+    if (firstOutput != nullptr) {
+        VectorHelper::FreeVecBatch(firstOutput);
+    }
+
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 1);
+    EXPECT_EQ(resultBuilder->GetMinConsumedStreamedBatchId(), 2);
+    EXPECT_EQ(leftDestroyed[2], 0);
+    EXPECT_EQ(leftDestroyed[3], 0);
+    EXPECT_EQ(rightDestroyed[2], 1);
+    EXPECT_EQ(rightDestroyed[3], 0);
+
+    VectorBatch *secondOutput = nullptr;
+    resultBuilder->GetOutput(&secondOutput);
+    EXPECT_NE(secondOutput, nullptr);
+    if (secondOutput != nullptr) {
+        VectorHelper::FreeVecBatch(secondOutput);
+    }
+
+    // Clear starts a new scanner/result window. It must drop the old lease so a new
+    // batch-3 address can advance the streamed watermark and release batch 2.
+    resultBuilder->Clear();
+    EXPECT_EQ(resultBuilder->GetMinConsumedStreamedBatchId(), INT32_MAX);
+    AppendSmjTestAddresses(resultBuilder, {3}, {0}, {3}, {0});
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 1);
+    EXPECT_EQ(leftDestroyed[2], 1);
+    EXPECT_EQ(leftDestroyed[3], 0);
+
+    VectorBatch *thirdOutput = nullptr;
+    resultBuilder->GetOutput(&thirdOutput);
+    if (thirdOutput != nullptr) {
+        VectorHelper::FreeVecBatch(thirdOutput);
+    }
+    resultBuilder->Finish();
+    delete resultBuilder;
+    delete leftPagesIndex;
+    delete rightPagesIndex;
+    for (int32_t batch = 0; batch < 4; ++batch) {
+        EXPECT_EQ(leftDestroyed[batch], 1) << "left batch " << batch;
+        EXPECT_EQ(rightDestroyed[batch], 1) << "right batch " << batch;
+    }
+}
+
+TEST(NativeSortMergeJoinTest, TestLeftJoinUnmatchedRowsAdvanceOnlyStreamedRelease)
+{
+    DataTypes leftTypes(std::vector<DataTypePtr>{IntType()});
+    DataTypes rightTypes(std::vector<DataTypePtr>{IntType()});
+    int32_t keyColumns[] = {0};
+    auto *leftPagesIndex = new DynamicPagesIndex(leftTypes, keyColumns, 1);
+    auto *rightPagesIndex = new DynamicPagesIndex(rightTypes, keyColumns, 1);
+    std::vector<int32_t> leftDestroyed(4, 0);
+    std::vector<int32_t> rightDestroyed(3, 0);
+    for (int32_t batch = 0; batch < 4; ++batch) {
+        leftPagesIndex->AddVecBatch(CreateSmjCountingBatch(batch, leftDestroyed[batch]));
+    }
+    for (int32_t batch = 0; batch < 3; ++batch) {
+        rightPagesIndex->AddVecBatch(CreateSmjCountingBatch(batch, rightDestroyed[batch]));
+    }
+
+    std::vector<DataTypePtr> noOutputTypes;
+    int32_t unusedOutputColumns[] = {0};
+    std::string filter;
+    auto *resultBuilder = new JoinResultBuilder(noOutputTypes, unusedOutputColumns, 0,
+        leftTypes.GetSize(), leftPagesIndex, noOutputTypes, unusedOutputColumns, 0,
+        rightTypes.GetSize(), rightPagesIndex, filter, OMNI_JOIN_TYPE_LEFT, nullptr);
+
+    // A right-null-padded row still consumes a real streamed row. It must advance the
+    // streamed watermark while leaving every buffered page untouched.
+    AppendSmjTestAddresses(resultBuilder, {2}, {0}, {JOIN_NULL_FLAG}, {JOIN_NULL_FLAG});
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 0);
+    EXPECT_EQ(leftDestroyed[0], 1);
+    EXPECT_EQ(leftDestroyed[1], 1);
+    EXPECT_EQ(leftDestroyed[2], 0);
+    EXPECT_EQ(leftDestroyed[3], 0);
+    for (int32_t batch = 0; batch < 3; ++batch) {
+        EXPECT_EQ(rightDestroyed[batch], 0) << "right batch " << batch;
+    }
+
+    VectorBatch *output = nullptr;
+    resultBuilder->GetOutput(&output);
+    resultBuilder->Finish();
+    delete resultBuilder;
+    leftPagesIndex->FreeAllRemainingVecBatch();
+    rightPagesIndex->FreeAllRemainingVecBatch();
+    delete leftPagesIndex;
+    delete rightPagesIndex;
+    if (output != nullptr) {
+        VectorHelper::FreeVecBatch(output);
+    }
+    for (int32_t batch = 0; batch < 4; ++batch) {
+        EXPECT_EQ(leftDestroyed[batch], 1) << "left batch " << batch;
+    }
+    for (int32_t batch = 0; batch < 3; ++batch) {
+        EXPECT_EQ(rightDestroyed[batch], 1) << "right batch " << batch;
+    }
 }
 
 TEST(NativeSortMergeJoinTest, TestSortMergeJoinResultBuilderLeftJoin)

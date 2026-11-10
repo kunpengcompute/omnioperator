@@ -139,6 +139,12 @@ public:
         std::vector<int64_t> &streamedTblValueAddresses, std::vector<int64_t> &bufferedTblValueAddresses,
         std::vector<int8_t> &isSameBufferedKeyMatched);
 
+    // The streamed batch the scanner may still read for its pending pre-row key
+    // comparison on the next FindNextJoinRows call. The result builder must not
+    // free this batch after materializing the current window. Returns INT32_MAX
+    // when no real streamed row is pinned (unset or synthetic pre address).
+    int32_t GetStreamedPinBatchId() const;
+
     ~SortMergeJoinScanner();
 
 private:

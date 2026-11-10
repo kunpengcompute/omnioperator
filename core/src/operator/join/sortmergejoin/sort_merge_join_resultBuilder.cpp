@@ -641,13 +641,50 @@ int32_t JoinResultBuilder::ConstructLeftJoinOutput()
 
     // Input vectors are still needed while the output columns are copied. Release only
     // after materialization, and only for addresses consumed by this output batch.
+    // Streamed side: every address of this window is materialized above, so the surviving
+    // streamed readers are the scanner's pending pre-row key comparison (streamedPinBatchId,
+    // wired by the operator) and this builder's pending unmatched row (preStreamedBatchId,
+    // always the last processed row here). Free everything strictly below the lowest pin;
+    // the PagesIndex monotonic guard makes repeated calls no-ops. Unmatched (right-null-
+    // padded) rows carry JOIN_NULL_FLAG on the buffered side but a valid streamed batch —
+    // skipping them would freeze the left watermark for joins whose output is dominated
+    // by unmatched rows (q3_3 retains ~1000 batches that way).
+    int32_t streamedFreeLimit = INT32_MAX;
+    bool hasStreamedAddress = false;
     for (int32_t processedAddress = addressStart; processedAddress < addressOffset; processedAddress++) {
-        const int32_t leftBatchId = DecodeSliceIndex(streamedTableValueAddresses[processedAddress]);
-        const int32_t rightBatchId = DecodeSliceIndex(bufferedTableValueAddresses[processedAddress]);
-        if (leftBatchId == JOIN_NULL_FLAG || rightBatchId == JOIN_NULL_FLAG) {
-            continue;
+        const int32_t leftBatchId = static_cast<int32_t>(DecodeSliceIndex(streamedTableValueAddresses[processedAddress]));
+        const int32_t rightBatchId = static_cast<int32_t>(DecodeSliceIndex(bufferedTableValueAddresses[processedAddress]));
+        if (rightBatchId != JOIN_NULL_FLAG) {
+            FreeRightVectorBatches(isPreKeyMatched[processedAddress], leftBatchId, rightBatchId);
         }
-        FreeVectorBatches(isPreKeyMatched[processedAddress], leftBatchId, rightBatchId);
+        if (leftBatchId >= 0) {
+            hasStreamedAddress = true;
+            if (leftBatchId < streamedFreeLimit) {
+                streamedFreeLimit = leftBatchId;
+            }
+        }
+    }
+    if (hasStreamedAddress) {
+        // Matched-group lease: with duplicated buffered keys a matched group spans
+        // several streamed batches and is consumed over multiple output windows; the
+        // floor of every address consumed so far stays guarding those batches until
+        // the group completes (cleared in Clear()).
+        if (minConsumedStreamedBatchId < streamedFreeLimit) {
+            streamedFreeLimit = minConsumedStreamedBatchId;
+        }
+        if (streamedPinBatchId < streamedFreeLimit) {
+            streamedFreeLimit = streamedPinBatchId;
+        }
+        if (preStreamedBatchId >= 0 && preStreamedBatchId < streamedFreeLimit) {
+            streamedFreeLimit = preStreamedBatchId;
+        }
+        leftTablePagesIndex->FreeBeforeVecBatch(streamedFreeLimit);
+    }
+    // Record the lease floor AFTER computing this window's release: addresses of THIS
+    // window were already walked into streamedFreeLimit above; from the next window on,
+    // those batches stay above minConsumedStreamedBatchId until Clear().
+    for (int32_t processedAddress = addressStart; processedAddress < addressOffset; processedAddress++) {
+        TrackConsumedStreamedBatch(static_cast<int32_t>(DecodeSliceIndex(streamedTableValueAddresses[processedAddress])));
     }
 
     buildRowCount = rowBase + numOutputRows;
@@ -867,6 +904,14 @@ void JoinResultBuilder::FreeVectorBatches(bool isPreMatched, int32_t leftBatchId
 {
     if (!isPreMatched && leftBatchId > lastUnMatchedStreamedBatchId) {
         leftTablePagesIndex->FreeBeforeVecBatch(leftBatchId);
+        rightTablePagesIndex->FreeBeforeVecBatch(rightBatchId);
+        lastUnMatchedStreamedBatchId = leftBatchId;
+    }
+}
+
+void JoinResultBuilder::FreeRightVectorBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId)
+{
+    if (!isPreMatched && leftBatchId > lastUnMatchedStreamedBatchId) {
         rightTablePagesIndex->FreeBeforeVecBatch(rightBatchId);
         lastUnMatchedStreamedBatchId = leftBatchId;
     }

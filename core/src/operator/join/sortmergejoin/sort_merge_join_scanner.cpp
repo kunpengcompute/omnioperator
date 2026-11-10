@@ -100,6 +100,17 @@ SortMergeJoinScanner::SortMergeJoinScanner(const DataTypes &streamedTableKeysTyp
 
 SortMergeJoinScanner::~SortMergeJoinScanner() {}
 
+int32_t SortMergeJoinScanner::GetStreamedPinBatchId() const
+{
+    // -1 doubles as both the unset sentinel and (via (uint32)-1<<32|(uint32)-1) the
+    // synthetic null-row address. Address 0 (batch0/row0) is a REAL row and must pin.
+    if (preStreamedValueAddress == -1) {
+        return INT32_MAX;
+    }
+    const int32_t batchId = static_cast<int32_t>(DecodeSliceIndex(static_cast<uint64_t>(preStreamedValueAddress)));
+    return batchId >= 0 ? batchId : INT32_MAX;
+}
+
 int64_t SortMergeJoinScanner::FindNextJoinRows()
 {
     (this->*scanFindNextRow)();

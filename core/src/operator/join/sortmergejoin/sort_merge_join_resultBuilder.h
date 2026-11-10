@@ -80,6 +80,38 @@ public:
         return isSameBufferedKeyMatched;
     }
 
+    // Called by the operator after the scanner produced the current address window
+    // and before materialization: the scanner's pending pre-row key comparison still
+    // reads this streamed batch, so the builder's streamed watermark must never free
+    // it. INT32_MAX means nothing is pinned.
+    ALWAYS_INLINE void SetStreamedPinBatchId(int32_t batchId)
+    {
+        streamedPinBatchId = batchId;
+    }
+
+    // Live-reference floor for the streamed watermark. During a duplicated-key
+    // matched group the scanner re-reads the group's FIRST streamed batch for key
+    // comparisons on every FindNextJoinRows call, while addresses of the whole group
+    // are consumed by the builder over several output windows. The per-window
+    // streamed pin only snapshots the latest pre-row, so the group head batch would
+    // lose protection after the first window. Tracking the minimum decoded batch id
+    // over every address CONSUMED so far (published by GetMatchedValueAddresses and
+    // already walked by AddJoinValueAddresses) pins the whole group head: a group
+    // spans batches [head..tail] only if its addresses do, so min consumed batch is
+    // always <= any batch the scanner may still compare against. Reset together with
+    // the address arrays in Clear().
+    ALWAYS_INLINE void TrackConsumedStreamedBatch(int32_t batchId)
+    {
+        if (batchId >= 0 && batchId < minConsumedStreamedBatchId) {
+            minConsumedStreamedBatchId = batchId;
+        }
+    }
+
+    ALWAYS_INLINE int32_t GetMinConsumedStreamedBatchId() const
+    {
+        return minConsumedStreamedBatchId;
+    }
+
     ALWAYS_INLINE bool HasNext()
     {
         return buildVectorBatchRowCount != 0;
@@ -102,6 +134,7 @@ public:
         leftOutputRowIds.clear();
         rightOutputBatchIds.clear();
         rightOutputRowIds.clear();
+        minConsumedStreamedBatchId = INT32_MAX;
     }
 
     ~JoinResultBuilder();
@@ -151,6 +184,10 @@ private:
     void JoinFilterExprCodeGen(OverflowConfig *overflowConfig);
 
     void FreeVectorBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId);
+
+    // Buffered-side half of FreeVectorBatches with the identical fresh-key gate;
+    // used by the left-join path whose streamed side frees via the pin watermark.
+    void FreeRightVectorBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId);
 
     bool CanFreeRightBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId);
 
@@ -209,6 +246,11 @@ private:
 
     int32_t lastUnMatchedStreamedBatchId = -1;
     int32_t lastUnMatchedBufferedBatchId = -1;
+    // Streamed batch the scanner still reads via its pending pre-row state; set
+    // by the operator each cycle before materialization (see SetStreamedPinBatchId).
+    int32_t streamedPinBatchId = INT32_MAX;
+    // Minimum streamed batch id over all consumed addresses (see TrackConsumedStreamedBatch).
+    int32_t minConsumedStreamedBatchId = INT32_MAX;
 
     bool isFinished = false;
     int32_t maxRowCount;
