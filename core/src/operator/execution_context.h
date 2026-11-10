@@ -297,6 +297,14 @@ public:
         throwOnError_ = throwOnError;
     }
 
+    /// True while expression evaluation must throw at the first per-row error
+    /// (is_overflow_as_null = false). Lazy conjunct evaluation is only safe
+    /// when errors degrade to NULLs, so the AND/OR visitors consult this.
+    bool ThrowOnError() const
+    {
+        return throwOnError_;
+    }
+
     void SetError(int32_t index, const std::exception_ptr &exceptionPtr);
 
     void SetStatus(vector_size_t index, const vectorization::Status &status);

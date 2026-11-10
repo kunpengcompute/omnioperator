@@ -10,6 +10,7 @@
 #include "type/data_type.h"
 #include "util/bit_util.h"
 #include "vector/unsafe_vector.h"
+#include "vectorization/ConjunctCost.h"
 #include "vectorization/functions/If.h"
 #include "vectorization/functions/Md5ConcatWsFusion.h"
 
@@ -371,6 +372,7 @@ void ExprEval::PushProjectedColumn(BaseVector *colVec, DataTypeId typeId, const 
             inputValues_.push(ColumnProjectionCopyPositionsHelper<int8_t>(colVec, selectRow, selectSize));
             break;
         case OMNI_LONG:
+        case OMNI_DATE64:
         case OMNI_TIMESTAMP:
         case OMNI_DECIMAL64:
             inputValues_.push(ColumnProjectionCopyPositionsHelper<int64_t>(colVec, selectRow, selectSize));
@@ -458,6 +460,7 @@ void ExprEval::Visit(const FieldExpr &e)
             inputValues_.push(ColumnProjectionHelper<int8_t>(colVec, rowSize));
             break;
         case OMNI_LONG:
+        case OMNI_DATE64:
         case OMNI_TIMESTAMP:
         case OMNI_DECIMAL64:
             inputValues_.push(ColumnProjectionHelper<int64_t>(colVec, rowSize));
@@ -508,6 +511,13 @@ void ExprEval::Visit(const UnaryExpr &e)
 
 void ExprEval::Visit(const BinaryExpr &e)
 {
+    // Lazy AND/OR: skip when throw-on-error is enabled, because a skipped or
+    // reordered conjunct must not change which rows surface errors (see
+    // lazy_conjunct_optimization.md section 5.3).
+    if ((e.op == expressions::Operator::AND || e.op == expressions::Operator::OR) && !context->ThrowOnError()) {
+        VisitLazyLogical(e);
+        return;
+    }
     e.left->Accept(*this);
     e.right->Accept(*this);
     if (e.vectorFunction == nullptr) {
@@ -517,6 +527,28 @@ void ExprEval::Visit(const BinaryExpr &e)
     BaseVector *result = nullptr;
     e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
+}
+
+bool ExprEval::IsFlatBoolColumnOperand(const Expr *operand) const
+{
+    if (operand->GetType() != ExprType::FIELD_E) {
+        return false;
+    }
+    // Resolve the top-level column index by walking the field access chain;
+    // an empty batch (n = 0) has no columns, so bounds-check before touching
+    // vecBatch_ (GetStructField would read out of bounds).
+    int32_t col = static_cast<const FieldExpr *>(operand)->colVal;
+    for (const FieldExpr *cur = static_cast<const FieldExpr *>(operand); cur->input != nullptr;) {
+        cur = dynamic_cast<const FieldExpr *>(cur->input);
+        if (cur == nullptr) {
+            break;
+        }
+        col = cur->colVal;
+    }
+    if (col < 0 || col >= static_cast<int32_t>(vecBatch_.size()) || vecBatch_[col] == nullptr) {
+        return false;
+    }
+    return vecBatch_[col]->GetEncoding() == OMNI_FLAT;
 }
 
 void ExprEval::Visit(const InExpr &e)
@@ -1261,7 +1293,433 @@ void MergeSwitchBranches(const std::vector<SwitchBranch> &branches, BaseVector *
             OMNI_THROW("Switch expr Error", "Unsupported output type Id:" + std::to_string(typeId));
     }
 }
+
+// ---- Lazy AND/OR (conjunct) evaluation helpers ------------------------------
+//
+// Port of Velox's lazy ConjunctExpr evaluation onto the compactor-based
+// evaluator: each conjunct runs only on the rows no earlier conjunct has
+// decided, AND drops rows on FALSE, OR drops rows on TRUE, and NULLs taint a
+// row without deciding it (three-valued logic, identical to the eager
+// AndFunction/OrFunction in Comparisons.h). Operands are ordered by estimated
+// cost so cheap, decisive conjuncts shrink the space before expensive ones
+// run. See lazy_conjunct_optimization.md.
+
+enum class ConjMix { kAllTrue, kAllFalse, kAllNull, kMix };
+
+/// Classifies the boolean values of conjVec over [0, size) in ascending
+/// order. Unlike ClassifyBoolCond, NULLs are distinguished from FALSE: a NULL
+/// conjunct taints a row without deciding it, while FALSE (AND) / TRUE (OR)
+/// decides it. For kMix fills trueBits (bit set = value true).
+ConjMix ClassifyConjunct(BaseVector *conjVec, int32_t size, std::vector<uint64_t> &trueBits)
+{
+    if (conjVec->GetEncoding() == OMNI_ENCODING_CONST) {
+        bool isNull = conjVec->HasNull() && conjVec->IsNull(0);
+        if (isNull) {
+            return ConjMix::kAllNull;
+        }
+        return static_cast<ConstVector<bool> *>(conjVec)->GetConstValue() ? ConjMix::kAllTrue : ConjMix::kAllFalse;
+    }
+    if (conjVec->GetEncoding() == OMNI_FLAT && !conjVec->HasNull()) {
+        // GetValuesBuffer returns the raw buffer start; sliced vectors carry
+        // their start in the offset, so index by logical row + offset.
+        bool *values = static_cast<Vector<bool> *>(conjVec)->GetValuesBuffer() + conjVec->GetOffset();
+        bool allTrue = true;
+        bool allFalse = true;
+        for (int32_t i = 0; i < size; ++i) {
+            if (values[i]) {
+                allFalse = false;
+            } else {
+                allTrue = false;
+            }
+        }
+        if (allTrue) {
+            return ConjMix::kAllTrue;
+        }
+        if (allFalse) {
+            return ConjMix::kAllFalse;
+        }
+        trueBits.assign(BitUtil::Nwords(size), 0);
+        for (int32_t i = 0; i < size; ++i) {
+            if (values[i]) {
+                BitUtil::SetBit(trueBits.data(), i);
+            }
+        }
+        return ConjMix::kMix;
+    }
+    // Other encodings or nulls: per-row scan resolving through the vector.
+    trueBits.assign(BitUtil::Nwords(size), 0);
+    bool anyTrue = false;
+    bool anyFalse = false;
+    bool anyNull = false;
+    for (int32_t i = 0; i < size; ++i) {
+        if (conjVec->IsNull(i)) {
+            anyNull = true;
+            continue;
+        }
+        if (VectorHelper::GetValueFromVector<bool>(conjVec, i)) {
+            BitUtil::SetBit(trueBits.data(), i);
+            anyTrue = true;
+        } else {
+            anyFalse = true;
+        }
+    }
+    // The uniform classes must be pure: a false+null mix is kMix, because the
+    // NULL rows still need tainting (FALSE OR NULL = NULL, NULL AND FALSE
+    // differs from FALSE when a later conjunct decides).
+    if (!anyTrue && anyFalse && !anyNull) {
+        return ConjMix::kAllFalse;
+    }
+    if (anyTrue && !anyFalse && !anyNull) {
+        return ConjMix::kAllTrue;
+    }
+    if (!anyTrue && !anyFalse && anyNull) {
+        return ConjMix::kAllNull;
+    }
+    return ConjMix::kMix;
+}
+
+/// One operand of a flattened AND/OR chain, with its ordering metadata.
+struct ConjunctOperand {
+    const Expr *expr = nullptr;
+    uint64_t cost = 0;
+    enum class Kind {
+        kNormal,         // evaluate + merge per row
+        kDecidingConst,  // const-FALSE for AND / const-TRUE for OR: decides the whole chain
+        kNullConst       // const NULL: taints every active row, never decides
+    } kind = Kind::kNormal;
+};
+
+/// Appends one operand, folding boolean constants immediately. An identity
+/// constant (TRUE for AND / FALSE for OR) is dropped entirely.
+void AppendConjunct(const Expr *expr, omniruntime::expressions::Operator chainOp, std::vector<ConjunctOperand> &out)
+{
+    if (expr->GetType() == ExprType::LITERAL_E) {
+        const auto *lit = static_cast<const LiteralExpr *>(expr);
+        if (lit->isNull) {
+            out.push_back({expr, 0, ConjunctOperand::Kind::kNullConst});
+            return;
+        }
+        bool decides = (chainOp == omniruntime::expressions::Operator::AND) ? !lit->boolVal : lit->boolVal;
+        if (decides) {
+            out.push_back({expr, 0, ConjunctOperand::Kind::kDecidingConst});
+        }
+        return;
+    }
+    out.push_back({expr, EstimateConjunctCost(expr), ConjunctOperand::Kind::kNormal});
+}
+
+/// Flattens a same-op chain into its operand list in left-to-right order.
+/// Children with a different operator (or any non-binary node) are single
+/// operands and are left untouched; they run their own lazy chain when the
+/// loop evaluates them.
+void CollectConjuncts(const BinaryExpr &e, omniruntime::expressions::Operator chainOp,
+    std::vector<ConjunctOperand> &out)
+{
+    if (e.left->GetType() == ExprType::BINARY_E && static_cast<const BinaryExpr *>(e.left)->op == chainOp) {
+        CollectConjuncts(*static_cast<const BinaryExpr *>(e.left), chainOp, out);
+    } else {
+        AppendConjunct(e.left, chainOp, out);
+    }
+    if (e.right->GetType() == ExprType::BINARY_E && static_cast<const BinaryExpr *>(e.right)->op == chainOp) {
+        CollectConjuncts(*static_cast<const BinaryExpr *>(e.right), chainOp, out);
+    } else {
+        AppendConjunct(e.right, chainOp, out);
+    }
+}
+
+/// Deciding constants first (they end the chain before any evaluation), then
+/// ascending estimated cost with a stable sort (equal cost keeps plan order,
+/// so evaluation stays deterministic), null constants last (they only taint).
+void OrderConjuncts(std::vector<ConjunctOperand> &ops)
+{
+    std::stable_sort(ops.begin(), ops.end(), [](const ConjunctOperand &a, const ConjunctOperand &b) {
+        auto rank = [](const ConjunctOperand &o) {
+            return o.kind == ConjunctOperand::Kind::kDecidingConst ? 0 :
+                (o.kind == ConjunctOperand::Kind::kNullConst ? 2 : 1);
+        };
+        if (rank(a) != rank(b)) {
+            return rank(a) < rank(b);
+        }
+        return a.kind == ConjunctOperand::Kind::kNormal && b.kind == ConjunctOperand::Kind::kNormal &&
+            a.cost < b.cost;
+    });
+}
+
+/// Operands cheaper than this (comparisons cost 1-5, arithmetic 2-3, casts 3,
+/// bare reads 0 — see EstimateConjunctCost) leave the ordering nothing to
+/// defer, so the lazy machinery cannot pay for itself. Regex/like/func
+/// operands cost 10-100 and keep the lazy path.
+constexpr uint64_t kCheapConjunctBailoutCost = 5;
+
+bool AllConjunctsCheap(const std::vector<ConjunctOperand> &ops)
+{
+    for (const ConjunctOperand &op : ops) {
+        if (op.cost > kCheapConjunctBailoutCost) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Projects the given rows of a vector into a new compacted vector. The same
+/// per-type dispatch as PushProjectedColumn, but the result is returned
+/// instead of pushed (used by the lazy coalesce to align branch vectors with
+/// their position lists).
+BaseVector *ProjectRows(BaseVector *srcVec, DataTypeId typeId, const int32_t *rows, int32_t count)
+{
+    switch (typeId) {
+        case OMNI_INT:
+        case OMNI_DATE32:
+            return ColumnProjectionCopyPositionsHelper<int32_t>(srcVec, rows, count);
+        case OMNI_SHORT:
+            return ColumnProjectionCopyPositionsHelper<int16_t>(srcVec, rows, count);
+        case OMNI_BYTE:
+            return ColumnProjectionCopyPositionsHelper<int8_t>(srcVec, rows, count);
+        case OMNI_LONG:
+        case OMNI_DATE64:
+        case OMNI_TIMESTAMP:
+        case OMNI_DECIMAL64:
+            return ColumnProjectionCopyPositionsHelper<int64_t>(srcVec, rows, count);
+        case OMNI_DOUBLE:
+            return ColumnProjectionCopyPositionsHelper<double>(srcVec, rows, count);
+        case OMNI_FLOAT:
+            return ColumnProjectionCopyPositionsHelper<float>(srcVec, rows, count);
+        case OMNI_BOOLEAN:
+            return ColumnProjectionCopyPositionsHelper<bool>(srcVec, rows, count);
+        case OMNI_DECIMAL128:
+            return ColumnProjectionCopyPositionsHelper<Decimal128>(srcVec, rows, count);
+        case OMNI_VARCHAR:
+        case OMNI_CHAR:
+        case OMNI_VARBINARY:
+            return ColumnProjectionVarCharCopyPositionsHelper<std::string_view>(srcVec, rows, count);
+        case OMNI_STRING_VIEW:
+            return ColumnProjectionCopyPositionsHelper<StringView>(srcVec, rows, count);
+        case OMNI_ARRAY:
+            return reinterpret_cast<ArrayVector *>(srcVec)->CopyPositions(rows, 0, count);
+        case OMNI_MAP:
+            return reinterpret_cast<MapVector *>(srcVec)->CopyPositions(rows, 0, count);
+        case OMNI_ROW:
+            return reinterpret_cast<RowVector *>(srcVec)->CopyPositions(rows, 0, count);
+        default:
+            OMNI_THROW("Coalesce expr Error", "Unsupported coalesce type Id:" + std::to_string(typeId));
+    }
+}
 } // namespace
+
+void ExprEval::VisitLazyLogical(const BinaryExpr &e)
+{
+    const bool isAnd = e.op == expressions::Operator::AND;
+
+    // Zero-overhead case: two bare flat boolean columns and no outer filter —
+    // the original eager path through AndFunction/OrFunction. The eager merge
+    // is only safe for flat inputs: it reads values through the 3-argument
+    // GetValueFromVector, which ignores nulls on constants and throws on
+    // dictionary encodings, and literals are folded by the lazy loop instead
+    // (a NULL literal must taint, not evaluate as FALSE). Under an outer
+    // filter the eager merge would size itself off the full row count while
+    // the leaves project only the surviving rows, so Act 0's compacted space
+    // is required there.
+    if (e.vectorFunction != nullptr && IsFlatBoolColumnOperand(e.left) && IsFlatBoolColumnOperand(e.right) &&
+        !(activeSel_ == nullptr && context->hasFilter)) {
+        e.left->Accept(*this);
+        e.right->Accept(*this);
+        BaseVector *eagerResult = nullptr;
+        e.vectorFunction->Apply(inputValues_, e.dataType, eagerResult, context);
+        inputValues_.push(eagerResult);
+        return;
+    }
+
+    // Act 0: under an outer filter the current rows are the filter-selected
+    // rows scattered over the full batch; convert them into an explicit
+    // compacted space first (same as Visit(IfExpr) / Visit(SwitchExpr)).
+    SelectivityVector outerSel;
+    std::vector<int32_t> outerPos;
+    std::unique_ptr<ScopedCompactEval> outerGuard;
+    if (activeSel_ == nullptr && context->hasFilter && context->GetResultRowSize() == rowSize) {
+        auto *mask = context->GetIsSelectRow();
+        int32_t fullSize = context->GetResultRowSize();
+        outerSel = SelectivityVector(fullSize, false);
+        outerPos.reserve(fullSize);
+        for (int32_t i = 0; i < fullSize; ++i) {
+            if (mask[i]) {
+                outerSel.setValid(i, true);
+                outerPos.push_back(i);
+            }
+        }
+        outerSel.updateBounds();
+        outerGuard = std::make_unique<ScopedCompactEval>(*this, outerSel, outerPos);
+    }
+
+    int32_t n = CurrentRowCount();
+
+    // Acts 1+2: flatten the same-op chain and order the operands.
+    std::vector<ConjunctOperand> operands;
+    CollectConjuncts(e, e.op, operands);
+
+    // Cheap-chain bail-out: when every operand is cheap there is nothing the
+    // cost ordering can meaningfully defer, so the shrinking-row machinery
+    // only adds per-conjunct classification scans and selectivity churn.
+    // Evaluate every operand once over the whole current space — the exact
+    // eager cost — and fold the chain with one Kleene merge (FALSE decides
+    // an AND row, TRUE decides an OR row, NULL taints without deciding).
+    // Bit-identical to the lazy loop below and to AndFunction/OrFunction;
+    // safe in both error modes because nothing is skipped. Motivated by q74
+    // in the weekend1 TPCDS run: a 9-way AND of join-key equalities (all
+    // cost 1-5) regressed +15.3s vs the eager switch build
+    // (tpcds_dip_investigation.md).
+    if (AllConjunctsCheap(operands)) {
+        BaseVector *eagerResult = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, n);
+        auto *eagerVec = static_cast<Vector<bool> *>(eagerResult);
+        std::vector<uint64_t> decided(BitUtil::Nwords(n), 0);
+        std::vector<uint64_t> taint(BitUtil::Nwords(n), 0);
+        if (n > 0) {
+            memset(unsafe::UnsafeVector::GetRawValues(eagerVec), isAnd ? 1 : 0, static_cast<size_t>(n));
+        }
+        SelectivityVector allSel(n, n > 0);
+        if (n > 0) {
+            for (const ConjunctOperand &operand : operands) {
+                BaseVector *conjVec = EvaluateBranch(operand.expr, allSel, true);
+                if (conjVec->GetEncoding() == OMNI_ENCODING_CONST) {
+                    bool isNull = conjVec->HasNull() && conjVec->IsNull(0);
+                    if (!isNull && static_cast<ConstVector<bool> *>(conjVec)->GetConstValue() != isAnd) {
+                        // Deciding constant: every row takes the deciding value, no nulls.
+                        memset(unsafe::UnsafeVector::GetRawValues(eagerVec), isAnd ? 0 : 1, static_cast<size_t>(n));
+                        memset(decided.data(), 0xFF, BitUtil::Nwords(n) * sizeof(uint64_t));
+                        delete conjVec;
+                        break;
+                    }
+                    if (isNull) {
+                        memset(taint.data(), 0xFF, BitUtil::Nwords(n) * sizeof(uint64_t));
+                    }
+                    delete conjVec;
+                    continue;
+                }
+                if (conjVec->GetEncoding() == OMNI_FLAT) {
+                    bool *values = static_cast<Vector<bool> *>(conjVec)->GetValuesBuffer() + conjVec->GetOffset();
+                    for (int32_t i = 0; i < n; ++i) {
+                        if (conjVec->IsNull(i)) {
+                            BitUtil::SetBit(taint.data(), i);
+                        } else if (values[i] != isAnd) {
+                            eagerVec->SetValue(i, !isAnd);
+                            BitUtil::SetBit(decided.data(), i);
+                        }
+                    }
+                } else {
+                    for (int32_t i = 0; i < n; ++i) {
+                        if (conjVec->IsNull(i)) {
+                            BitUtil::SetBit(taint.data(), i);
+                        } else if (VectorHelper::GetValueFromVector<bool>(conjVec, i) != isAnd) {
+                            eagerVec->SetValue(i, !isAnd);
+                            BitUtil::SetBit(decided.data(), i);
+                        }
+                    }
+                }
+                delete conjVec;
+            }
+        }
+        // Rows that stayed undecided but were tainted by a NULL conjunct are
+        // NULL (FALSE/TRUE would have decided them).
+        for (int32_t i = 0; i < n; ++i) {
+            if (!BitUtil::IsBitSet(decided.data(), i) && BitUtil::IsBitSet(taint.data(), i)) {
+                eagerResult->SetNull(i);
+            }
+        }
+        inputValues_.push(eagerResult);
+        return;
+    }
+
+    OrderConjuncts(operands);
+
+    // Result starts at the operator's identity value with no nulls: all TRUE
+    // for AND, all FALSE for OR. Rows only change when a conjunct decides
+    // them or taints them (Act 4). The values buffer is not zero-initialized,
+    // so the identity must be filled explicitly.
+    BaseVector *result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, n);
+    auto *resVec = static_cast<Vector<bool> *>(result);
+    if (n > 0) {
+        memset(unsafe::UnsafeVector::GetRawValues(resVec), isAnd ? 1 : 0, static_cast<size_t>(n));
+    }
+
+    // Act 3: run each conjunct only on the rows no earlier conjunct decided.
+    SelectivityVector active(n, n > 0);
+    std::vector<uint64_t> taint(BitUtil::Nwords(n), 0);   // active rows hit by a NULL conjunct
+    std::vector<uint64_t> trueBits;
+
+    for (const ConjunctOperand &operand : operands) {
+        if (!active.hasSelections()) {
+            break;
+        }
+        switch (operand.kind) {
+            case ConjunctOperand::Kind::kDecidingConst:
+                // const-FALSE for AND / const-TRUE for OR decides every active row.
+                active.applyToSelected([&](vector_size_t row) { resVec->SetValue(row, !isAnd); });
+                active.clearAll();
+                continue;
+            case ConjunctOperand::Kind::kNullConst:
+                active.applyToSelected([&](vector_size_t row) { BitUtil::SetBit(taint.data(), row); });
+                continue;
+            default:
+                break;
+        }
+
+        int32_t selCount = active.countSelected();
+        bool cheap = IsCheapIfBranch(operand.expr);
+        BaseVector *conjVec = EvaluateBranch(operand.expr, active, cheap);
+        bool coversAll = cheap || selCount == n;
+        ConjMix mix = ClassifyConjunct(conjVec, coversAll ? n : selCount, trueBits);
+
+        switch (mix) {
+            case ConjMix::kAllTrue:
+                if (!isAnd) {
+                    active.applyToSelected([&](vector_size_t row) { resVec->SetValue(row, true); });
+                    active.clearAll();
+                }
+                break;
+            case ConjMix::kAllFalse:
+                if (isAnd) {
+                    active.applyToSelected([&](vector_size_t row) { resVec->SetValue(row, false); });
+                    active.clearAll();
+                }
+                break;
+            case ConjMix::kAllNull:
+                active.applyToSelected([&](vector_size_t row) { BitUtil::SetBit(taint.data(), row); });
+                break;
+            case ConjMix::kMix: {
+                SelectivityVector dropSel(n, false);
+                bool anyDrop = false;
+                int32_t j = 0;
+                active.applyToSelected([&](vector_size_t row) {
+                    int32_t src = coversAll ? row : j;
+                    ++j;
+                    if (conjVec->IsNull(src)) {
+                        BitUtil::SetBit(taint.data(), row);
+                    } else if (BitUtil::IsBitSet(trueBits.data(), src) != isAnd) {
+                        // FALSE decides an AND row, TRUE decides an OR row.
+                        dropSel.setValid(row, true);
+                        anyDrop = true;
+                    }
+                });
+                if (anyDrop) {
+                    dropSel.updateBounds();
+                    dropSel.applyToSelected([&](vector_size_t row) { resVec->SetValue(row, !isAnd); });
+                    active.deselect(dropSel);
+                }
+                break;
+            }
+        }
+        delete conjVec;
+    }
+
+    // Act 4: rows that stayed undecided but were tainted by a NULL conjunct
+    // are NULL (FALSE/TRUE would have decided them).
+    active.applyToSelected([&](vector_size_t row) {
+        if (BitUtil::IsBitSet(taint.data(), row)) {
+            result->SetNull(row);
+        }
+    });
+
+    inputValues_.push(result);
+}
 
 void ExprEval::Visit(const IfExpr &e)
 {
@@ -1366,6 +1824,120 @@ void ExprEval::Visit(const IfExpr &e)
 
 void ExprEval::Visit(const CoalesceExpr &e)
 {
+    // Lazy evaluation (Velox's CoalesceExpr::evalSpecialForm): each argument
+    // runs only on the rows where every earlier argument was NULL. A non-null
+    // value decides the row (first non-null wins), rows still NULL after all
+    // arguments stay NULL. Gated off in throw-on-error mode, where skipping
+    // arguments for decided rows could change which rows surface errors —
+    // the same contract as lazy AND/OR.
+    if (!context->ThrowOnError() && !e.arguments.empty()) {
+        // Act 0: under an outer filter, materialize the surviving rows into an
+        // explicit compacted space first (same as Visit(IfExpr)/Visit(SwitchExpr)).
+        SelectivityVector outerSel;
+        std::vector<int32_t> outerPos;
+        std::unique_ptr<ScopedCompactEval> outerGuard;
+        if (activeSel_ == nullptr && context->hasFilter && context->GetResultRowSize() == rowSize) {
+            auto *mask = context->GetIsSelectRow();
+            int32_t fullSize = context->GetResultRowSize();
+            outerSel = SelectivityVector(fullSize, false);
+            outerPos.reserve(fullSize);
+            for (int32_t i = 0; i < fullSize; ++i) {
+                if (mask[i]) {
+                    outerSel.setValid(i, true);
+                    outerPos.push_back(i);
+                }
+            }
+            outerSel.updateBounds();
+            outerGuard = std::make_unique<ScopedCompactEval>(*this, outerSel, outerPos);
+        }
+
+        int32_t n = CurrentRowCount();
+        SelectivityVector remaining(n, n > 0);
+        std::vector<SwitchBranch> branches;
+        BaseVector *result = nullptr;
+
+        for (const Expr *arg : e.arguments) {
+            if (!remaining.hasSelections()) {
+                break;
+            }
+            int32_t selCount = remaining.countSelected();
+            bool cheap = IsCheapIfBranch(arg);
+            BaseVector *argVec = EvaluateBranch(arg, remaining, cheap);
+            bool coversAll = cheap || selCount == n;
+
+            // Rows where this argument is non-null are decided by it. Collect
+            // both the decided rows (current-space) and their source rows in
+            // argVec (row itself when the vector covers the whole space, the
+            // compacted index otherwise) so the decided values can be
+            // extracted into a branch vector aligned with the position list.
+            SelectivityVector decidedSel(n, false);
+            std::vector<int32_t> decidedPos;
+            std::vector<int32_t> decidedSrc;
+            if (coversAll) {
+                remaining.applyToSelected([&](vector_size_t row) {
+                    if (!argVec->IsNull(row)) {
+                        decidedSel.setValid(row, true);
+                        decidedPos.push_back(row);
+                        decidedSrc.push_back(row);
+                    }
+                });
+            } else {
+                int32_t j = 0;
+                remaining.applyToSelected([&](vector_size_t row) {
+                    if (!argVec->IsNull(j)) {
+                        decidedSel.setValid(row, true);
+                        decidedPos.push_back(row);
+                        decidedSrc.push_back(j);
+                    }
+                    ++j;
+                });
+            }
+            if (!decidedPos.empty()) {
+                decidedSel.updateBounds();
+                // The merge helpers read a branch vector at its own position
+                // cursor. argVec is already cursor-aligned when it covers the
+                // whole space (coversAll: src = dst row) or when every
+                // evaluated row was decided (the branch positions are exactly
+                // the evaluation set in ascending order). Only a proper
+                // subset needs extraction into a compacted branch vector —
+                // the gather is skipped for the common full-decide shapes
+                // (e.g. coalesce(col, 0) over almost-non-null columns).
+                BaseVector *branchVec = argVec;
+                bool branchCoversAll = coversAll;
+                if (!coversAll && static_cast<int32_t>(decidedPos.size()) < selCount) {
+                    branchVec = ProjectRows(argVec, e.dataType->GetId(), decidedSrc.data(),
+                        static_cast<int32_t>(decidedSrc.size()));
+                    delete argVec;
+                }
+                if (result == nullptr) {
+                    IfFunction::CreateResultVector(e.dataType->GetId(), n, branchVec, result);
+                }
+                branches.push_back({branchVec, std::move(decidedPos), branchCoversAll});
+                remaining.deselect(decidedSel);
+            } else {
+                delete argVec;
+            }
+        }
+
+        if (result == nullptr) {
+            // Every argument was NULL for every row: create a typed all-null
+            // result from the first argument's shape.
+            SelectivityVector allSel(n, n > 0);
+            BaseVector *sample = EvaluateBranch(e.arguments[0], allSel, false);
+            IfFunction::CreateResultVector(e.dataType->GetId(), n, sample, result);
+            delete sample;
+        }
+        // The k-way merge visits rows ascending and takes the first branch
+        // covering each row — first non-null argument wins, exactly coalesce.
+        MergeSwitchBranches(branches, result, n, e.dataType->GetId());
+        remaining.applyToSelected([&](vector_size_t row) { result->SetNull(row); });
+        for (const SwitchBranch &branch : branches) {
+            delete branch.vec;
+        }
+        inputValues_.push(result);
+        return;
+    }
+
     for (auto arg : e.arguments) {
         arg->Accept(*this);
     }
@@ -1722,7 +2294,16 @@ void ExprEval::Visit(const LambdaExpr &e) {
 
 void ExprEval::VisitExpr(const Expr &e)
 {
-    e.Accept(*this);
+    try {
+        e.Accept(*this);
+    } catch (...) {
+        // Free the partially evaluated operand stack — the dtor doesn't.
+        while (!inputValues_.empty()) {
+            delete inputValues_.top();
+            inputValues_.pop();
+        }
+        throw;
+    }
 }
 
 BaseVector *ExprEval::GetResult()
