@@ -8,6 +8,7 @@
 #include <vector>
 #include <stack>
 #include <cmath>
+#include <string_view>
 #include <type_traits>
 #include "vectorization/VectorFunction.h"
 #include "vector/vector.h"
@@ -35,6 +36,9 @@ public:
 private:
     template <typename T>
     void ProcessArrayContains(ArrayVector *arrayVec, BaseVector *searchVec,
+        Vector<bool> *resultVec, int32_t rowSize) const;
+
+    void ProcessArrayContainsVarchar(ArrayVector *arrayVec, BaseVector *searchVec,
         Vector<bool> *resultVec, int32_t rowSize) const;
 };
 

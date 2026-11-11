@@ -298,19 +298,23 @@ namespace omniruntime::vectorization {
 
     template <typename T>
     struct Log10Function {
-         template <typename TInput>
-         ALWAYS_INLINE Status call(TInput &result, const TInput &a) {
-             result = std::log10(a);
-             return Status::OK();
-         }
-     };
+        ALWAYS_INLINE bool call(double &result, double a) {
+            if (a <= 0.0) {
+                return false;
+            }
+            result = std::log10(a);
+            return true;
+        }
+    };
 
     template <typename T>
     struct Log1pFunction {
-        template <typename TInput>
-        ALWAYS_INLINE Status call(TInput &result, const TInput &a) {
+        ALWAYS_INLINE bool call(double &result, double a) {
+            if (a <= -1) {
+                return false;
+            }
             result = std::log1p(a);
-            return Status::OK();
+            return true;
         }
     };
 

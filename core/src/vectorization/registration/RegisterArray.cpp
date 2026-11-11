@@ -212,6 +212,10 @@ void RegisterArrayFunctions(const std::string &prefix)
         std::make_shared<ArrayContainsFunction>());
     VectorFunction::RegisterVectorFunction("array_contains", {OMNI_ARRAY, OMNI_BOOLEAN}, OMNI_BOOLEAN,
         std::make_shared<ArrayContainsFunction>());
+    VectorFunction::RegisterVectorFunction("array_contains", {OMNI_ARRAY, OMNI_VARCHAR}, OMNI_BOOLEAN,
+        std::make_shared<ArrayContainsFunction>());
+    VectorFunction::RegisterVectorFunction("array_contains", {OMNI_ARRAY, OMNI_VARBINARY}, OMNI_BOOLEAN,
+        std::make_shared<ArrayContainsFunction>());
 
     // Register array_repeat function for all supported element types
     // array_repeat(element T, count INT) -> array<T>

@@ -4,6 +4,7 @@
  */
 
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <re2/re2.h>
 #include <shared_mutex>
@@ -1774,7 +1775,17 @@ extern "C" DLLEXPORT int64_t CastStringToTimestamp(int64_t contextPtr, const cha
     }
 
     auto sessionTimezone = tz::locateZone("Asia/Shanghai");
-    return omniruntime::type::util::fromParsedTimestampWithTimeZone(conversionResult.value(), sessionTimezone).toMicros();
+    try {
+        return omniruntime::type::util::fromParsedTimestampWithTimeZone(conversionResult.value(), sessionTimezone)
+            .toMicros();
+    } catch (const std::exception &) {
+        // A parsed timestamp that does not fit in microseconds. Spark ANSI-off cast returns null.
+        std::string s(str, strLen);
+        std::ostringstream errorMessage;
+        errorMessage << "Cannot cast '" << s << "' to Timestamp.";
+        SetError(contextPtr, errorMessage.str());
+        return 0;
+    }
 }
 
 extern "C" DLLEXPORT int64_t CastStringToTimestampReturnNull(bool *isNull, const char *str, int32_t strLen)
@@ -1785,9 +1796,17 @@ extern "C" DLLEXPORT int64_t CastStringToTimestampReturnNull(bool *isNull, const
         *isNull = true;
         return 0;
     }
-    *isNull = false;
     auto sessionTimezone = tz::locateZone("Asia/Shanghai");
-    return omniruntime::type::util::fromParsedTimestampWithTimeZone(conversionResult.value(), sessionTimezone).toMicros();
+    try {
+        auto micros = omniruntime::type::util::fromParsedTimestampWithTimeZone(conversionResult.value(), sessionTimezone)
+            .toMicros();
+        *isNull = false;
+        return micros;
+    } catch (const std::exception &) {
+        // Spark returns null when the timestamp does not fit in microseconds.
+        *isNull = true;
+        return 0;
+    }
 }
 }
 

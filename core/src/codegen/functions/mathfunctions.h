@@ -33,6 +33,14 @@ extern "C" DLLEXPORT double CastInt32ToDouble(int32_t x);
 
 extern "C" DLLEXPORT double CastInt64ToDouble(int64_t x);
 
+extern "C" DLLEXPORT float CastInt32ToFloat(int32_t x);
+
+extern "C" DLLEXPORT float CastInt64ToFloat(int64_t x);
+
+extern "C" DLLEXPORT float CastInt16ToFloat(int16_t x);
+
+extern "C" DLLEXPORT float CastInt8ToFloat(int8_t x);
+
 extern "C" DLLEXPORT double CastTimestampMicrosToDoubleSeconds(int64_t microsSinceEpoch);
 
 extern "C" DLLEXPORT float CastTimestampMicrosToFloatSeconds(int64_t microsSinceEpoch);
@@ -48,6 +56,8 @@ extern "C" DLLEXPORT int32_t CastInt64ToInt32(int64_t x);
 extern "C" DLLEXPORT int32_t CastInt16ToInt32(int16_t x);
 
 extern "C" DLLEXPORT int32_t CastInt8ToInt32(int8_t x);
+
+extern "C" DLLEXPORT int16_t CastInt8ToInt16(int8_t x);
 
 extern "C" DLLEXPORT int64_t CastInt16ToInt64(int16_t x);
 

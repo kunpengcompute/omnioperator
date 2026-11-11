@@ -74,6 +74,11 @@ extern "C" DLLEXPORT int64_t CastInt8ToInt64(int8_t x)
     return static_cast<int64_t>(x);
 }
 
+extern "C" DLLEXPORT int16_t CastInt8ToInt16(int8_t x)
+{
+    return static_cast<int16_t>(x);
+}
+
 extern "C" DLLEXPORT double CastInt16ToDouble(int16_t x)
 {
     return static_cast<double>(x);
@@ -92,6 +97,26 @@ extern "C" DLLEXPORT double CastInt32ToDouble(int32_t x)
 extern "C" DLLEXPORT double CastInt64ToDouble(int64_t x)
 {
     return static_cast<double>(x);
+}
+
+extern "C" DLLEXPORT float CastInt32ToFloat(int32_t x)
+{
+    return static_cast<float>(x);
+}
+
+extern "C" DLLEXPORT float CastInt64ToFloat(int64_t x)
+{
+    return static_cast<float>(x);
+}
+
+extern "C" DLLEXPORT float CastInt16ToFloat(int16_t x)
+{
+    return static_cast<float>(x);
+}
+
+extern "C" DLLEXPORT float CastInt8ToFloat(int8_t x)
+{
+    return static_cast<float>(x);
 }
 
 // Spark Cast(timestamp AS double): epoch seconds as double (internal storage is microseconds).

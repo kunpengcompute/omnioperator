@@ -2013,7 +2013,14 @@ void ExprEval::Visit(const FuncExpr &e)
             OMNI_THROW("Vectorization Error:", "Vector function not found for function: " + e.funcName);
         }
     }
-    
+
+    // to_json needs the input argument's DataType (carrying struct field names) so it can
+    // emit real field names instead of field0/field1. The Apply interface only passes the
+    // output type, so stash the input type on the context for ToJson to read.
+    if (e.funcName == "to_json" && !e.arguments.empty()) {
+        context->SetToJsonInputType(e.arguments[0]->dataType.get());
+    }
+
     e.vectorFunction->Apply(inputValues_, e.dataType, result, context);
     inputValues_.push(result);
 }
