@@ -14,6 +14,9 @@
 #include "util/TimeUtils.h"
 
 namespace omniruntime {
+namespace type {
+class DataType;
+}
 namespace expressions {
 class LambdaExpr;
 }
@@ -312,6 +315,11 @@ public:
     void SetCurrentLambda(const omniruntime::expressions::LambdaExpr *lambda) { currentLambda_ = lambda; }
     const omniruntime::expressions::LambdaExpr *GetCurrentLambda() const { return currentLambda_; }
 
+    // to_json reads struct field names from the input DataType. Apply only receives the
+    // output type, so the evaluator stashes the input type here.
+    void SetToJsonInputType(const type::DataType *type) { toJsonInputType_ = type; }
+    const type::DataType *GetToJsonInputType() const { return toJsonInputType_; }
+
     int32_t getInputParamsNUms() const {
         return inputParamsNUms;
     }
@@ -327,6 +335,7 @@ private:
     bool hasError = false;
     std::string errorMessage;
     const omniruntime::expressions::LambdaExpr *currentLambda_ = nullptr;
+    const type::DataType *toJsonInputType_ = nullptr;
     config::QueryConfig queryConfig_;
     int32_t inputParamsNUms = 0;
 

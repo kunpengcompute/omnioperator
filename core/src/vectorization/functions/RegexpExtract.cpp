@@ -106,8 +106,7 @@ std::string RegexpExtractFunction::ExtractRegex(const std::string_view &plainStr
     const re2::RE2& re = *re_sp;
     int maxIdx = re.NumberOfCapturingGroups();
     if (idx > maxIdx) {
-        OMNI_THROW("The value of parameter(s) `idx` in `regexp_extract` is invalid: ",
-            "Expects group index between 0 and " + std::to_string(maxIdx) + ", but got " + std::to_string(idx));
+        return "";
     }
     std::vector<re2::StringPiece> groups(idx + 1);
     auto input = re2::StringPiece(str, strLen);

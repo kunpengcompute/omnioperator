@@ -212,6 +212,14 @@ std::vector<Function> MathFunctionRegistry::GetFunctions()
             INPUT_DATA),
         Function(reinterpret_cast<void *>(CastInt64ToDouble), MathCastFnStr(), {}, { OMNI_LONG }, OMNI_DOUBLE,
             INPUT_DATA),
+        Function(reinterpret_cast<void *>(CastInt32ToFloat), MathCastFnStr(), {}, { OMNI_INT }, OMNI_FLOAT,
+            INPUT_DATA),
+        Function(reinterpret_cast<void *>(CastInt64ToFloat), MathCastFnStr(), {}, { OMNI_LONG }, OMNI_FLOAT,
+            INPUT_DATA),
+        Function(reinterpret_cast<void *>(CastInt16ToFloat), MathCastFnStr(), {}, { OMNI_SHORT }, OMNI_FLOAT,
+            INPUT_DATA),
+        Function(reinterpret_cast<void *>(CastInt8ToFloat), MathCastFnStr(), {}, { OMNI_BYTE }, OMNI_FLOAT,
+            INPUT_DATA),
         Function(reinterpret_cast<void *>(CastDate32ToTimestampMicros), MathCastFnStr(), {},
             { OMNI_DATE32 }, OMNI_TIMESTAMP, INPUT_DATA),
         // Spark: cast(ts as double/float) uses seconds since epoch, not raw microseconds.
@@ -225,6 +233,7 @@ std::vector<Function> MathFunctionRegistry::GetFunctions()
         Function(reinterpret_cast<void *>(CastInt64ToInt32), MathCastFnStr(), {}, { OMNI_LONG }, OMNI_INT, INPUT_DATA),
         Function(reinterpret_cast<void *>(CastInt16ToInt32), MathCastFnStr(), {}, { OMNI_SHORT }, OMNI_INT, INPUT_DATA),
         Function(reinterpret_cast<void *>(CastInt8ToInt32), MathCastFnStr(), {}, { OMNI_BYTE }, OMNI_INT, INPUT_DATA),
+        Function(reinterpret_cast<void *>(CastInt8ToInt16), MathCastFnStr(), {}, { OMNI_BYTE }, OMNI_SHORT, INPUT_DATA),
 
         Function(reinterpret_cast<void *>(CastInt16ToInt64), MathCastFnStr(), {}, { OMNI_SHORT }, OMNI_LONG, INPUT_DATA),
         Function(reinterpret_cast<void *>(CastInt8ToInt64), MathCastFnStr(), {}, { OMNI_BYTE }, OMNI_LONG, INPUT_DATA),

@@ -124,10 +124,8 @@ static uint32_t HashUnsafeBytes(char *base, uint32_t lengthInBytes, uint32_t see
     uint32_t lengthAligned = lengthInBytes - lengthInBytes % MM3_SIZE_INT;
     uint32_t h1 = HashBytesByInt(base, lengthAligned, seed);
     for (uint32_t i = lengthAligned; i < lengthInBytes; i++) {
-        auto charVal = *(base + i);
-        auto halfWord = static_cast<int32_t>(charVal);
-        halfWord &= 0x000000FF; // get the lower eight bits
-        uint32_t k1 = MixK1(halfWord);
+        int32_t halfWord = static_cast<int32_t>(static_cast<int8_t>(base[i]));
+        uint32_t k1 = MixK1(static_cast<uint32_t>(halfWord));
         h1 = MixH1(h1, k1);
     }
     return Fmix(h1, lengthInBytes);

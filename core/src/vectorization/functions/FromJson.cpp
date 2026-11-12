@@ -86,6 +86,13 @@ void FromJsonFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
 
         // For constant vectors, use the constant value, otherwise get value at row
         std::string_view jsonStr = isConstVector ? constJsonStr : GetStringValue(inputArg, row);
+        if (jsonStr.empty()) {
+            resultVec->SetNull(row);
+            for (size_t i = 0; i < rowType.Size(); ++i) {
+                resultVec->ChildAt(i)->SetNull(row);
+            }
+            continue;
+        }
         ParseJsonToRow(jsonStr, rowType, resultVec, row);
     }
     delete inputArg;
@@ -98,8 +105,8 @@ void FromJsonFunction::ParseJsonToRow(const std::string_view &jsonStr, const Row
     doc.Parse<rapidjson::kParseNoFlags>(jsonStr.data(), jsonStr.size());
 
     if (doc.HasParseError() || !doc.IsObject()) {
-        // Invalid JSON or not an object, set all fields to null but keep row not null
-        // This matches Spark SQL behavior: returns a row with null fields instead of NULL
+        // Non-empty text that is not a JSON object still yields a row of null fields.
+        // Spark returns NULL only for a null or empty input.
         resultVec->SetNotNull(row);
         for (size_t i = 0; i < rowType.Size(); ++i) {
             BaseVector *childVec = resultVec->ChildAt(i).get();

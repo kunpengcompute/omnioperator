@@ -17,6 +17,9 @@ void ToJsonFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &ou
 {
     auto *inputArg = args.top();
     args.pop();
+    // Input DataType carries struct field names (set by the evaluator); may be null if
+    // unavailable, in which case we fall back to field0/field1/... key names.
+    const DataType *inputType = (context != nullptr) ? context->GetToJsonInputType() : nullptr;
     int32_t rowSize = inputArg->GetSize();
     auto *stringResult = new Vector<LargeStringContainer<std::string_view>>(rowSize);
     stringResult->SetIsField(true);
@@ -26,29 +29,39 @@ void ToJsonFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &ou
             continue;
         }
         std::string jsonStr;
-        appendToJson(inputArg, row, inputArg->GetTypeId(), jsonStr);
+        appendToJson(inputArg, row, inputType, jsonStr);
         std::string_view sv(jsonStr);
         stringResult->SetValue(row, sv);
     }
     result = stringResult;
 }
 
-void ToJsonFunction::appendToJson(BaseVector *vec, int32_t row, DataTypeId typeId, std::string &out) const
+void ToJsonFunction::appendToJson(BaseVector *vec, int32_t row, const DataType *type, std::string &out) const
 {
+    DataTypeId typeId = (type != nullptr) ? type->GetId() : vec->GetTypeId();
     switch (typeId) {
         case OMNI_ROW: {
             auto *rowVec = static_cast<RowVector *>(vec);
-            appendRowToJson(rowVec, row, out);
+            const RowType *rowType = (type != nullptr) ? static_cast<const RowType *>(type) : nullptr;
+            appendRowToJson(rowVec, row, rowType, out);
             break;
         }
         case OMNI_ARRAY: {
             auto *arrVec = static_cast<ArrayVector *>(vec);
-            appendArrayToJson(arrVec, row, out);
+            const DataType *elemType =
+                (type != nullptr) ? static_cast<const ArrayType *>(type)->ElementType().get() : nullptr;
+            appendArrayToJson(arrVec, row, elemType, out);
             break;
         }
         case OMNI_MAP: {
             auto *mapVec = static_cast<MapVector *>(vec);
-            appendMapToJson(mapVec, row, out);
+            const DataType *keyType = nullptr;
+            const DataType *valType = nullptr;
+            if (type != nullptr) {
+                keyType = static_cast<const MapType *>(type)->Key().get();
+                valType = static_cast<const MapType *>(type)->Value().get();
+            }
+            appendMapToJson(mapVec, row, keyType, valType, out);
             break;
         }
         case OMNI_BOOLEAN: {
@@ -107,7 +120,7 @@ void ToJsonFunction::appendToJson(BaseVector *vec, int32_t row, DataTypeId typeI
     }
 }
 
-void ToJsonFunction::appendToJsonFromSlice(BaseVector *vec, int32_t startIdx, int32_t count, DataTypeId typeId, std::string &out) const
+void ToJsonFunction::appendToJsonFromSlice(BaseVector *vec, int32_t startIdx, int32_t count, const DataType *type, std::string &out) const
 {
     for (int32_t i = 0; i < count; ++i) {
         if (i > 0) out.push_back(',');
@@ -115,31 +128,29 @@ void ToJsonFunction::appendToJsonFromSlice(BaseVector *vec, int32_t startIdx, in
         if (vec->IsNull(readRow)) {
             out.append("null");
         } else {
-            appendToJson(vec, readRow, typeId, out);
+            appendToJson(vec, readRow, type, out);
         }
     }
 }
 
-void ToJsonFunction::appendArrayToJson(ArrayVector *arrVec, int32_t row, std::string &out) const
+void ToJsonFunction::appendArrayToJson(ArrayVector *arrVec, int32_t row, const DataType *elemType, std::string &out) const
 {
     out.push_back('[');
     int64_t startOffset = arrVec->GetOffset(row);
     int64_t arrSize = arrVec->GetSize(row);
     BaseVector *elemVec = arrVec->GetElementVector().get();
-    DataTypeId elemTypeId = elemVec->GetTypeId();
-    appendToJsonFromSlice(elemVec, static_cast<int32_t>(startOffset), static_cast<int32_t>(arrSize), elemTypeId, out);
+    appendToJsonFromSlice(elemVec, static_cast<int32_t>(startOffset), static_cast<int32_t>(arrSize), elemType, out);
     out.push_back(']');
 }
 
-void ToJsonFunction::appendMapToJson(MapVector *mapVec, int32_t row, std::string &out) const
+void ToJsonFunction::appendMapToJson(MapVector *mapVec, int32_t row, const DataType *keyType, const DataType *valType, std::string &out) const
 {
     out.push_back('{');
     int64_t startOffset = mapVec->GetOffset(row);
     int64_t mapSize = mapVec->GetSize(row);
     BaseVector *keyVec = mapVec->GetKeyVector().get();
     BaseVector *valVec = mapVec->GetValueVector().get();
-    DataTypeId keyTypeId = keyVec->GetTypeId();
-    DataTypeId valTypeId = valVec->GetTypeId();
+    DataTypeId keyTypeId = (keyType != nullptr) ? keyType->GetId() : keyVec->GetTypeId();
     for (int64_t i = 0; i < mapSize; ++i) {
         if (i > 0) out.push_back(',');
         int32_t idx = static_cast<int32_t>(startOffset + i);
@@ -150,35 +161,41 @@ void ToJsonFunction::appendMapToJson(MapVector *mapVec, int32_t row, std::string
             out.push_back('"');
         } else {
             out.push_back('"');
-            appendToJson(keyVec, idx, keyTypeId, out);
+            appendToJson(keyVec, idx, keyType, out);
             out.push_back('"');
         }
         out.push_back(':');
         if (valVec->IsNull(idx)) {
             out.append("null");
         } else {
-            appendToJson(valVec, idx, valTypeId, out);
+            appendToJson(valVec, idx, valType, out);
         }
     }
     out.push_back('}');
 }
 
-void ToJsonFunction::appendRowToJson(RowVector *rowVec, int32_t row, std::string &out) const
+void ToJsonFunction::appendRowToJson(RowVector *rowVec, int32_t row, const RowType *rowType, std::string &out) const
 {
     out.push_back('{');
     int32_t childCount = rowVec->ChildSize();
+    // Use real struct field names when the RowType carries them; otherwise fall back to field{i}.
+    bool hasNames = (rowType != nullptr) && (rowType->names().size() >= static_cast<size_t>(childCount));
+    bool firstEmitted = false;
     for (int32_t i = 0; i < childCount; ++i) {
-        if (i > 0) out.push_back(',');
-        std::string fieldName = "field" + std::to_string(i);
+        BaseVector *childVec = rowVec->ChildAt(i).get();
+        // Spark to_json defaults to ignoreNullFields=true: a struct field whose value is null
+        // is omitted from the output (recursively for nested structs).
+        if (childVec->IsNull(row)) {
+            continue;
+        }
+        if (firstEmitted) out.push_back(',');
+        firstEmitted = true;
+        std::string fieldName = hasNames ? rowType->nameOf(i) : ("field" + std::to_string(i));
         out.push_back('"');
         escapeJsonString(std::string_view(fieldName), out);
         out.append("\":");
-        BaseVector *childVec = rowVec->ChildAt(i).get();
-        if (childVec->IsNull(row)) {
-            out.append("null");
-        } else {
-            appendToJson(childVec, row, childVec->GetTypeId(), out);
-        }
+        const DataType *childType = (rowType != nullptr) ? rowType->childAt(i).get() : nullptr;
+        appendToJson(childVec, row, childType, out);
     }
     out.push_back('}');
 }
