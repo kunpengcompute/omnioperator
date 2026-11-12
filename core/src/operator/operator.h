@@ -274,6 +274,7 @@ protected:
         auto sortOpStats = op->stats();
         stats_.spilledBytes = sortOpStats.spilledBytes;
         stats_.spilledRows = sortOpStats.spilledRows;
+        stats_.spilledFiles = sortOpStats.spilledFiles;
     }
 
 private:

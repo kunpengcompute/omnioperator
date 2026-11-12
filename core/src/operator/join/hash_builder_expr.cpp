@@ -126,7 +126,13 @@ int32_t HashBuilderWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 {
     hashBuilderOperator->GetOutput(outputVecBatch);
     SetStatus(hashBuilderOperator->GetStatus());
+    UpdateSpilledMetrics(hashBuilderOperator);
     return 0;
+}
+
+BlockingReason HashBuilderWithExprOperator::IsBlocked(ContinueFuture *future)
+{
+    return hashBuilderOperator->IsBlocked(future);
 }
 
 OmniStatus HashBuilderWithExprOperator::Close()

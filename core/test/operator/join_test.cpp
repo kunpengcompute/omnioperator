@@ -306,6 +306,7 @@ TEST(NativeOmniJoinTest, TestInnerEqualityJoinWithOneBuildOp)
     omniruntime::op::Operator::DeleteOperator(lookupJoinOperator);
     DeleteJoinOperatorFactory(hashBuilderFactory, lookupJoinFactory);
 }
+
 // need calculate probe data partitionId
 TEST(NativeOmniJoinTest, DISABLED_TestInnerEqualityJoinWithTwoBuildOp)
 {
@@ -467,15 +468,27 @@ void TestLookupJoin(struct HashJoinThreadArgs *hashJoinThreadArgs)
     } else {
         lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(CreateTestOperator(lookupJoinOperatorFactory));
     }
+    lookupJoinOperator->setNoMoreInput(false);
     const int32_t maxLoopCount = 1000;
     for (int loop = 0; loop < maxLoopCount; loop++) {
         for (int i = 0; i < hashJoinThreadArgs->probeVecBatchCount; ++i) {
             lookupJoinOperator->AddInput(DuplicateVectorBatch(hashJoinThreadArgs->probeVecBatches[i]));
-            VectorBatch *outputVecBatch = nullptr;
-            lookupJoinOperator->GetOutput(&outputVecBatch);
-            if (outputVecBatch != nullptr) {
-                VectorHelper::FreeVecBatch(outputVecBatch);
+            while (!lookupJoinOperator->needsInput() &&
+                lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+                VectorBatch *outputVecBatch = nullptr;
+                lookupJoinOperator->GetOutput(&outputVecBatch);
+                if (outputVecBatch != nullptr) {
+                    VectorHelper::FreeVecBatch(outputVecBatch);
+                }
             }
+        }
+    }
+    lookupJoinOperator->noMoreInput();
+    while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+        VectorBatch *outputVecBatch = nullptr;
+        lookupJoinOperator->GetOutput(&outputVecBatch);
+        if (outputVecBatch != nullptr) {
+            VectorHelper::FreeVecBatch(outputVecBatch);
         }
     }
     omniruntime::op::Operator::DeleteOperator(lookupJoinOperator);

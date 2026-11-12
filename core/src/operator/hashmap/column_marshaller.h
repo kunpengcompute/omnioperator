@@ -230,6 +230,16 @@ public:
         return hashmap.GetElementsSize();
     }
 
+    ALWAYS_INLINE uint64_t EstimateAllocatedBytes() const
+    {
+        return hashmap.EstimateAllocatedBytes();
+    }
+
+    ALWAYS_INLINE uint64_t EstimateRehashAllocation(size_t additionalElements) const
+    {
+        return hashmap.EstimateRehashAllocation(additionalElements);
+    }
+
     void ResetHashmap()
     {
         hashmap.Reset();

@@ -1689,17 +1689,24 @@ TEST(JoinWithExprTest, TestInnerEqualityJoinAddInputTwoVecBatch)
     auto lookupJoinWithExprOperator = CreateTestOperator(lookupJoinWithExprOperatorFactory);
 
     std::vector<VectorBatch *> lookupJoinOutput;
+    lookupJoinWithExprOperator->setNoMoreInput(false);
     lookupJoinWithExprOperator->AddInput(probeVecBatch0);
-    while (lookupJoinWithExprOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+    while (!lookupJoinWithExprOperator->needsInput() &&
+        lookupJoinWithExprOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
         lookupJoinWithExprOperator->GetOutput(&outputVecBatch);
-        lookupJoinOutput.push_back(outputVecBatch);
+        if (outputVecBatch != nullptr) {
+            lookupJoinOutput.push_back(outputVecBatch);
+        }
     }
     lookupJoinWithExprOperator->AddInput(probeVecBatch1);
+    lookupJoinWithExprOperator->noMoreInput();
     while (lookupJoinWithExprOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
         lookupJoinWithExprOperator->GetOutput(&outputVecBatch);
-        lookupJoinOutput.push_back(outputVecBatch);
+        if (outputVecBatch != nullptr) {
+            lookupJoinOutput.push_back(outputVecBatch);
+        }
     }
 
     EXPECT_EQ(lookupJoinOutput.size(), 2);

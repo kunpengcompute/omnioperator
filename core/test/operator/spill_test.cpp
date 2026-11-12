@@ -203,4 +203,43 @@ TEST(SpillTest, TestArrayBatchSizeAndReaderReuse)
     ASSERT_TRUE(isEnd);
     rmdir(path.c_str());
 }
+
+TEST(SpillTest, TestWriteReadLongNestedJoinSpillDir)
+{
+    const int32_t dataSize = 5;
+    int32_t data1[dataSize] = {3, 5, 7, 9, 1};
+    int64_t data2[dataSize] = {8, 4, 0, 2, 6};
+    int16_t data3[dataSize] = {5, 4, 3, 2, 1};
+
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType(), ShortType() }));
+    VectorBatch *vecBatch = TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
+
+    std::string path = TestUtil::GenerateSpillPath();
+    path += "/usercache/x84434218/appcache/application_1730000000000_0001";
+    path += "/container_e01_1730000000000_0001_01_000013/gluten-spill";
+    path += "/550e8400-e29b-41d4-a716-446655440000/join-spill-0/build/run0/sp0";
+    std::string cur;
+    for (size_t i = 0; i < path.size(); ++i) {
+        cur.push_back(path[i]);
+        if (path[i] == '/' && cur.size() > 1) {
+            mkdir(cur.c_str(), 0750);
+        }
+    }
+    mkdir(path.c_str(), 0750);
+
+    SpillWriter writer(sourceTypes, path);
+    auto vecBatchSize = Spiller::CollectVecBatchSize(sourceTypes, vecBatch);
+    ASSERT_EQ(writer.WriteVecBatch(vecBatch, vecBatchSize), ErrorCode::SUCCESS);
+    ASSERT_EQ(writer.Close(), ErrorCode::SUCCESS);
+    VectorHelper::FreeVecBatch(vecBatch);
+
+    auto spillFile = writer.GetSpillFileInfo();
+    ASSERT_FALSE(spillFile.filePath.empty());
+    SpillReader reader(sourceTypes, spillFile.filePath, spillFile.fileLength, spillFile.totalRowCount, false);
+    std::unique_ptr<VectorBatch> outputVecBatch = nullptr;
+    bool isEnd = false;
+    reader.ReadVecBatch(outputVecBatch, isEnd);
+    TestUtil::AssertVecBatchEquals(outputVecBatch.get(), sourceTypes.GetSize(), dataSize, data1, data2, data3);
+    ASSERT_FALSE(isEnd);
+}
 }

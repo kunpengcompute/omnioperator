@@ -6,6 +6,7 @@
 #ifndef OMNI_RUNTIME_JOIN_HASH_TABLE_VARIANTS_H
 #define OMNI_RUNTIME_JOIN_HASH_TABLE_VARIANTS_H
 
+#include <memory>
 #include <variant>
 #include <vector>
 
@@ -102,6 +103,28 @@ public:
         totalRowCount[partitionIndex] += vecBatch->GetRowCount();
     }
 
+    ALWAYS_INLINE uint32_t GetTotalRowCount(int32_t partitionIndex) const
+    {
+        return totalRowCount[partitionIndex];
+    }
+
+    ALWAYS_INLINE std::vector<omniruntime::vec::VectorBatch *> TakeResidentBatches(int32_t partitionIndex)
+    {
+        std::vector<omniruntime::vec::VectorBatch *> taken;
+        taken.swap(inputVecBatches[partitionIndex]);
+        totalRowCount[partitionIndex] = 0;
+        return taken;
+    }
+
+    void ResetPartition(int32_t partitionIndex);
+
+    /// Drops HT / arena / resident batches after the last probe consumer is finished.
+    void ReleaseBuildState();
+    ALWAYS_INLINE bool IsBuildStateReleased() const
+    {
+        return buildStateReleased_;
+    }
+
     InsertResult<RowRefListType *> Find(std::vector<VectorSerializerIgnoreNull> &probeSerializers,
                                         ExecutionContext *probeArena, BaseVector **probeHashColumns,
                                         int32_t probeHashColCount, int32_t probePosition, uint32_t partition);
@@ -165,6 +188,113 @@ public:
         return columns[partitionIndex];
     }
 
+    /// Append a trailing BOOLEAN visited column to each resident batch. No-op when the
+    /// row-ref list type has no visited bit.
+    void AppendVisitedFlagsToResident(int32_t partitionIndex)
+    {
+        if constexpr (std::is_same_v<RowRefListType, RowRefListWithFlags>) {
+            if (partitionIndex < 0 || static_cast<uint32_t>(partitionIndex) >= hashTableCount) {
+                return;
+            }
+            auto &batches = inputVecBatches[partitionIndex];
+            for (uint32_t i = 0; i < batches.size(); ++i) {
+                if (batches[i] == nullptr) {
+                    continue;
+                }
+                const int32_t rowCount = batches[i]->GetRowCount();
+                // Vector<bool> does not zero its buffer. Unvisited rows must be false;
+                // a leftover true bit makes restore skip the unmatched build row.
+                auto *flags = new omniruntime::vec::Vector<bool>(rowCount);
+                for (int32_t row = 0; row < rowCount; ++row) {
+                    flags->SetValue(row, false);
+                }
+                std::unique_ptr<omniruntime::vec::BaseVector> flagCol(flags);
+                FillVisitedFlagColumn(partitionIndex, i, flagCol.get());
+                batches[i]->Append(flagCol.release());
+            }
+        }
+    }
+
+    /// Fill a pre-allocated OMNI_BOOLEAN column (default false) from HT visited bits for one
+    /// resident batch index. No-op for non-flag row-ref list types.
+    void FillVisitedFlagColumn(int32_t partitionIndex, uint32_t vecBatchIdx,
+        omniruntime::vec::BaseVector *flagCol)
+    {
+        if constexpr (std::is_same_v<RowRefListType, RowRefListWithFlags>) {
+            if (flagCol == nullptr || partitionIndex < 0 ||
+                static_cast<uint32_t>(partitionIndex) >= hashTableCount) {
+                return;
+            }
+            auto *boolVec = reinterpret_cast<omniruntime::vec::Vector<bool> *>(flagCol);
+            const int32_t flagSize = boolVec->GetSize();
+            auto writeFlags = [&](auto &value) {
+                auto it = value->Begin();
+                while (it.IsOk()) {
+                    if (it->vecBatchIdx == vecBatchIdx &&
+                        static_cast<int32_t>(it->rowIdx) < flagSize && it->visited) {
+                        boolVec->SetValue(static_cast<int32_t>(it->rowIdx), true);
+                    }
+                    ++it;
+                }
+            };
+            if (GetHashTableTypes(partitionIndex) == HashTableImplementationType::ARRAY_HASH_TABLE) {
+                auto &arr = GetArrayTable(partitionIndex);
+                if (arr) {
+                    arr->ForEachValue([&](const auto &value, const auto &) { writeFlags(value); });
+                }
+            } else {
+                auto &ht = GetHashTable(partitionIndex);
+                if (ht) {
+                    ht->hashmap.ForEachValue([&](const auto &value, const auto &) { writeFlags(value); });
+                }
+            }
+        }
+    }
+
+    /// Restore visited bits from peeled spill BOOLEAN columns (parallel to resident batches).
+    void ApplyVisitedFlagsFromColumns(int32_t partitionIndex,
+        const std::vector<omniruntime::vec::BaseVector *> &flags)
+    {
+        if constexpr (std::is_same_v<RowRefListType, RowRefListWithFlags>) {
+            if (flags.empty() || partitionIndex < 0 ||
+                static_cast<uint32_t>(partitionIndex) >= hashTableCount) {
+                return;
+            }
+            auto applyFlags = [&](auto &value) {
+                auto it = value->Begin();
+                while (it.IsOk()) {
+                    if (it->vecBatchIdx < flags.size()) {
+                        auto *flagCol = flags[it->vecBatchIdx];
+                        if (flagCol != nullptr) {
+                            auto *boolVec = reinterpret_cast<omniruntime::vec::Vector<bool> *>(flagCol);
+                            if (static_cast<int32_t>(it->rowIdx) < boolVec->GetSize()) {
+                                const bool visited = boolVec->GetValue(static_cast<int32_t>(it->rowIdx));
+                                if (visited && !it->visited) {
+                                    it->visited = true;
+                                    visitedCounts++;
+                                } else {
+                                    it->visited = visited;
+                                }
+                            }
+                        }
+                    }
+                    ++it;
+                }
+            };
+            if (GetHashTableTypes(partitionIndex) == HashTableImplementationType::ARRAY_HASH_TABLE) {
+                auto &arr = GetArrayTable(partitionIndex);
+                if (arr) {
+                    arr->ForEachValue([&](const auto &value, const auto &) { applyFlags(value); });
+                }
+            } else {
+                auto &ht = GetHashTable(partitionIndex);
+                if (ht) {
+                    ht->hashmap.ForEachValue([&](const auto &value, const auto &) { applyFlags(value); });
+                }
+            }
+        }
+    }
+
     ALWAYS_INLINE JoinType GetJoinType() const
     {
         return joinType;
@@ -186,6 +316,11 @@ public:
     }
 
     void BuildHashTable(int32_t partitionIndex);
+    void BuildHashTableAdaptive(int32_t partitionIndex);
+
+    /// Same open-cost as BuildHashTable + BaseHashMap::EstimateRehashAllocationFromEmpty.
+    int64_t EstimateHashTableInitBytes(int32_t partitionIndex) const;
+    int64_t EstimateRowRefArenaBytes(int32_t partitionIndex) const;
 
     void Prepare(int32_t partitionIndex);
 
@@ -282,6 +417,7 @@ private:
     size_t fixedKeysSize = 0;
     size_t sizeOfRowRefList = 0;
     bool isNeedNullKeyTable = false;
+    bool buildStateReleased_ = false;
     OmniStatus status = OmniStatus::OMNI_STATUS_NORMAL;
 };
 

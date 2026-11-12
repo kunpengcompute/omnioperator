@@ -15,18 +15,30 @@
 namespace omniruntime::exception {
 class OmniException : public std::exception {
 public:
-    OmniException(const std::string &errorCode, const std::string &message) : errorCode(errorCode), message(message) {}
+    OmniException(const std::string &errorCode, const std::string &message)
+        : errorCode(errorCode), message(message), throwStack(TraceUtil::GetStack()) {}
 
-    OmniException(const char *errorCode, const char *message) : errorCode(errorCode), message(message) {}
+    OmniException(const char *errorCode, const char *message)
+        : errorCode(errorCode), message(message), throwStack(TraceUtil::GetStack()) {}
 
-    OmniException(const char *message) : errorCode("RUNTIME_ERROR:"), message(message) {}
+    OmniException(const char *message)
+        : errorCode("RUNTIME_ERROR:"), message(message), throwStack(TraceUtil::GetStack()) {}
 
-    OmniException(const std::string &message) : errorCode("RUNTIME_ERROR:"), message(message) {}
+    OmniException(const std::string &message)
+        : errorCode("RUNTIME_ERROR:"), message(message), throwStack(TraceUtil::GetStack()) {}
 
     const char *what() const noexcept override
     {
         FillMessage();
         return elaborateMessage.c_str();
+    }
+
+    // Adds execution context at the boundary where the exception escapes a pipeline.
+    // The exception is often caught as const before it is propagated through JNI.
+    void SetPipelineContext(const std::string &context) const
+    {
+        pipelineContext = context;
+        elaborateMessage.clear();
     }
 
     bool isUserError() const
@@ -37,13 +49,19 @@ public:
 private:
     void FillMessage() const
     {
+        elaborateMessage.clear();
         elaborateMessage += "Error Code: " + errorCode + "\n";
         elaborateMessage += "Reason: " + message + "\n";
-        elaborateMessage += "Stack: " + TraceUtil::GetStack() + "\n";
+        if (!pipelineContext.empty()) {
+            elaborateMessage += pipelineContext + "\n";
+        }
+        elaborateMessage += "Throw stack: " + throwStack + "\n";
     }
 
     std::string errorCode;
     std::string message;
+    std::string throwStack;
+    mutable std::string pipelineContext;
     mutable std::string elaborateMessage;
 };
 

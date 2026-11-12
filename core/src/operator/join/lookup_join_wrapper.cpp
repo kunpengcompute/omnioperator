@@ -61,6 +61,7 @@ int32_t LookupJoinWrapperOperator::AddInput(VectorBatch *vecBatch)
     auto result = lookupJoinWithExprOperator->AddInput(vecBatch);
     // set operator pipeline status
     SetStatus(OMNI_STATUS_NORMAL);
+    UpdateSpilledMetrics(lookupJoinWithExprOperator);
     return result;
 }
 
@@ -71,12 +72,28 @@ int32_t LookupJoinWrapperOperator::GetOutput(VectorBatch **outputVecBatch)
     }
 
     if (lookupJoinWithExprOperator->GetStatus() != OMNI_STATUS_FINISHED) {
-        return lookupJoinWithExprOperator->GetOutput(outputVecBatch);
+        auto result = lookupJoinWithExprOperator->GetOutput(outputVecBatch);
+        UpdateSpilledMetrics(lookupJoinWithExprOperator);
+        if (lookupJoinWithExprOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+            SetStatus(lookupJoinWithExprOperator->GetStatus());
+        }
+        return result;
     } else {
         if (isNeedOuterJoin) {
-            // when lookup join operator end can execute
+            auto *innerJoin = lookupJoinWithExprOperator->GetLookupJoinOperator();
+            if (innerJoin != nullptr && innerJoin->UsedPathARestore()) {
+                // Path A plus restore does not use the outer iterator. Mark the probe
+                // finished the same way LookupOuterJoin does, so HashBuilder can Complete.
+                innerJoin->FinishFullTableProbeAfterOuter();
+                SetStatus(OMNI_STATUS_FINISHED);
+                return 0;
+            }
             auto result = lookupOuterJoinWithExprOperator->GetOutput(outputVecBatch);
             if (lookupOuterJoinWithExprOperator->GetStatus() == OMNI_STATUS_FINISHED) {
+                // Session and nospill: outer is the last user of this join's HT.
+                if (innerJoin != nullptr) {
+                    innerJoin->FinishFullTableProbeAfterOuter();
+                }
                 SetStatus(OMNI_STATUS_FINISHED);
             }
             return result;
@@ -85,6 +102,28 @@ int32_t LookupJoinWrapperOperator::GetOutput(VectorBatch **outputVecBatch)
             return 0;
         }
     }
+}
+
+BlockingReason LookupJoinWrapperOperator::IsBlocked(ContinueFuture *future)
+{
+    if (lookupJoinWithExprOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+        return lookupJoinWithExprOperator->IsBlocked(future);
+    }
+    if (isNeedOuterJoin) {
+        return lookupOuterJoinWithExprOperator->IsBlocked(future);
+    }
+    return BlockingReason::kNotBlocked;
+}
+
+bool LookupJoinWrapperOperator::needsInput()
+{
+    if (lookupJoinWithExprOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+        return lookupJoinWithExprOperator->needsInput();
+    }
+    if (isNeedOuterJoin) {
+        return lookupOuterJoinWithExprOperator->needsInput();
+    }
+    return false;
 }
 
 OmniStatus LookupJoinWrapperOperator::Close()

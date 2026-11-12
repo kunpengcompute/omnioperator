@@ -1138,13 +1138,15 @@ void StressTestTwoLookupJoinForVariableKey(DataTypes buildTypes, JoinType joinTy
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    lookupJoinOperator->setNoMoreInput(false);
     lookupJoinOperator->AddInput(probeVecBatch1);
-    while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+    while (!lookupJoinOperator->needsInput() && lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
         lookupJoinOperator->GetOutput(&outputVecBatch);
         VectorHelper::FreeVecBatch(outputVecBatch);
     }
     lookupJoinOperator->AddInput(probeVecBatch2);
+    lookupJoinOperator->noMoreInput();
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
         lookupJoinOperator->GetOutput(&outputVecBatch);
@@ -1217,13 +1219,15 @@ void StressTestTwoLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinType
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    lookupJoinOperator->setNoMoreInput(false);
     lookupJoinOperator->AddInput(probeVecBatch1);
-    while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+    while (!lookupJoinOperator->needsInput() && lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
         lookupJoinOperator->GetOutput(&outputVecBatch);
         VectorHelper::FreeVecBatch(outputVecBatch);
     }
     lookupJoinOperator->AddInput(probeVecBatch2);
+    lookupJoinOperator->noMoreInput();
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
         lookupJoinOperator->GetOutput(&outputVecBatch);
@@ -1412,13 +1416,15 @@ void StressTestTwoLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joinTy
         joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
         filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
+    lookupJoinOperator->setNoMoreInput(false);
     lookupJoinOperator->AddInput(probeVecBatch1);
-    while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+    while (!lookupJoinOperator->needsInput() && lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
         lookupJoinOperator->GetOutput(&outputVecBatch);
         VectorHelper::FreeVecBatch(outputVecBatch);
     }
     lookupJoinOperator->AddInput(probeVecBatch2);
+    lookupJoinOperator->noMoreInput();
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
         VectorBatch *outputVecBatch = nullptr;
         lookupJoinOperator->GetOutput(&outputVecBatch);
