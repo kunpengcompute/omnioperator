@@ -11,6 +11,7 @@
 #include "local_planner.h"
 
 #include <operator/aggregation/group_aggregation_expr.h>
+#include <operator/aggregation/sort_aggregation_expr.h>
 
 #include "operator/join/broadcast_hash_table_cache.h"
 #include "operator/join/hash_builder_expr.h"
@@ -165,6 +166,10 @@ OperatorFactory* createOperatorFactory(
     } else if (auto aggregationNode = std::dynamic_pointer_cast<const AggregationNode>(planNode)) {
         if (aggregationNode->GetGroupByKeys().empty()) {
             return AggregationWithExprOperatorFactory::CreateAggregationWithExprOperatorFactory(
+                aggregationNode, queryConfig);
+        }
+        if (aggregationNode->IsSorted()) {
+            return SortAggregationWithExprOperatorFactory::CreateSortAggregationWithExprOperatorFactory(
                 aggregationNode, queryConfig);
         }
         return HashAggregationWithExprOperatorFactory::CreateAggregationWithExprOperatorFactory(

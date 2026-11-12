@@ -208,7 +208,7 @@ std::shared_ptr<OperatorFactory> GroupingOperator::CreateResidualOperatorFactory
         aggregationNode->GetAggsOutputTypes(), aggregationNode->GetAggFuncTypes(), aggregationNode->GetAggFilters(),
         aggregationNode->GetMaskColumns(), inputRaws, aggregationNode->GetOutputPartials(),
         aggregationNode->GetIsStatisticalAggregate(), aggregationNode->OutputType(), aggregationNode->Sources()[0],
-        aggregationNode->GetStep(), aggregationNode->GetAggUdafNames());
+        aggregationNode->GetStep(), false, aggregationNode->GetAggUdafNames());
     if (aggregationNode->GetGroupByKeys().empty()) {
         return std::shared_ptr<AggregationWithExprOperatorFactory>(
             AggregationWithExprOperatorFactory::CreateAggregationWithExprOperatorFactory(residualPlanNoded,

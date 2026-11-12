@@ -130,6 +130,17 @@ class TypedAggregator : public Aggregator {
 public:
     ~TypedAggregator() override = default;
 
+    // Sort aggregation processes one row at a time. Keep this path aligned with
+    // the existing no-group and hash-aggregation implementations so every
+    // typed aggregator can be used by both aggregation operators.
+    void ProcessGroup(AggregateState *state, VectorBatch *vectorBatch, const int32_t rowIndex) override
+    {
+        curVectorBatch = vectorBatch;
+        std::shared_ptr<NullsHelper> nullMap = nullptr;
+        BaseVector *vector = GetVector(vectorBatch, rowIndex, 1, &nullMap);
+        ProcessSingleInternal(state + aggStateOffset, vector, rowIndex, 1, nullMap);
+    }
+
     // for no groupby aggregation
     void ProcessGroup(AggregateState *state, VectorBatch *vectorBatch, const int32_t rowOffset,
         const int32_t rowCount) override
