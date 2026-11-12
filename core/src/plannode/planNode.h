@@ -239,13 +239,13 @@ public:
         const std::vector<DataTypes> aggsOutputTypes, const std::vector<uint32_t> &aggFuncTypes,
         const std::vector<ExprPtr> &aggFilters, const std::vector<uint32_t> &maskColumns,
         const std::vector<bool> &inputRaws, const std::vector<bool> &outputPartials, const bool isStatisticalAggregate,
-        const DataTypesPtr outputType, PlanNodePtr source, Step step,
+        const DataTypesPtr outputType, PlanNodePtr source, Step step, bool isSorted = false,
         const std::vector<std::string> &aggUdafNames = {})
         : PlanNode(id), groupByKeys(groupByKeys), groupByNum(groupByNum), aggKeys(aggKeys),
           sourceDataTypes(sourceDataTypes), aggsOutputTypes(aggsOutputTypes), aggFuncTypes(aggFuncTypes),
           aggFilters(aggFilters), maskColumns(maskColumns), inputRaws(inputRaws), outputPartials(outputPartials),
         isStatisticalAggregate(isStatisticalAggregate), outputType(outputType), sources({source}), step(step),
-        aggUdafNames(aggUdafNames) {}
+        isSorted_(isSorted), aggUdafNames(aggUdafNames) {}
 
     ~AggregationNode() override = default;
 
@@ -281,6 +281,8 @@ public:
 
     Step GetStep() const { return step;}
 
+    bool IsSorted() const { return isSorted_; }
+
 private:
     const std::vector<ExprPtr> groupByKeys;
     const uint32_t groupByNum;
@@ -297,6 +299,7 @@ private:
     const DataTypesPtr outputType;
     const std::vector<PlanNodePtr> sources;
     const Step step;
+    const bool isSorted_;
 };
 
 class WindowNode : public PlanNode {
