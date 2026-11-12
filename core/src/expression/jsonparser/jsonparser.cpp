@@ -108,12 +108,13 @@ Expr *JSONParser::ParseJSONLiteral(const Json &jsonExpr)
         case OMNI_DECIMAL64: {
             auto decimalVal = jsonExpr["value"].get<int64_t>();
             return new LiteralExpr(decimalVal, std::make_shared<Decimal64DataType>(jsonExpr["precision"].get<int32_t>(),
-                jsonExpr["scale"].get<int32_t>()));
+                                                                                   jsonExpr["scale"].get<int32_t>()));
         }
         case OMNI_DECIMAL128: {
             auto *dec128String = new string(jsonExpr["value"].get<string>());
-            return new LiteralExpr(dec128String, std::make_shared<Decimal128DataType>(
-                jsonExpr["precision"].get<int32_t>(), jsonExpr["scale"].get<int32_t>()));
+            return new LiteralExpr(dec128String,
+                                   std::make_shared<Decimal128DataType>(jsonExpr["precision"].get<int32_t>(),
+                                                                        jsonExpr["scale"].get<int32_t>()));
         }
         case OMNI_CHAR: {
             auto *stringVal = new string(jsonExpr["value"].get<string>());
@@ -125,8 +126,7 @@ Expr *JSONParser::ParseJSONLiteral(const Json &jsonExpr)
             auto width = jsonExpr["width"].get<int32_t>();
             return new LiteralExpr(stringVal, std::make_shared<VarcharDataType>(width));
         }
-        default:
-            return new LiteralExpr(0, std::make_shared<DataType>());
+        default: return new LiteralExpr(0, std::make_shared<DataType>());
     }
 }
 
@@ -160,7 +160,7 @@ Expr *JSONParser::ParseJSONBinary(const Json &jsonExpr)
         // Directly cast one decimal to another have the possibility of precision overflow.
         // We only do this if one is not decimal type
         const auto returnDataId = dataType->GetId();
-        auto getCastFunc = [](Expr *expr, DataTypePtr returnType)->omniruntime::expressions::FuncExpr* {
+        auto getCastFunc = [](Expr *expr, DataTypePtr returnType) -> omniruntime::expressions::FuncExpr * {
             auto signature = FunctionSignature("CAST", {expr->GetReturnTypeId()}, returnType->GetId());
             auto function = omniruntime::codegen::FunctionRegistry::LookupFunction(&signature);
             if (function) {
@@ -443,7 +443,8 @@ LiteralExpr *CreateJsonQueryBehaviorLiteral(int32_t behavior)
 
 LiteralExpr *CreateNullableVarcharLiteral()
 {
-    auto *expr = new LiteralExpr(new string(""), std::make_shared<VarcharDataType>(std::numeric_limits<int32_t>::max()));
+    auto *expr =
+        new LiteralExpr(new string(""), std::make_shared<VarcharDataType>(std::numeric_limits<int32_t>::max()));
     expr->isNull = true;
     return expr;
 }
@@ -484,22 +485,16 @@ Expr *CreateJsonValueDefaultExpr(const Json &defaultValueJson)
     auto typeId = static_cast<DataTypeId>(defaultValueJson["dataType"].get<int32_t>());
     switch (typeId) {
         case OMNI_CHAR:
-        case OMNI_VARCHAR:
-            return CreateVarcharLiteral(defaultValueJson["value"].get<string>());
-        case OMNI_BOOLEAN:
-            return CreateVarcharLiteral(defaultValueJson["value"].get<bool>() ? "true" : "false");
+        case OMNI_VARCHAR: return CreateVarcharLiteral(defaultValueJson["value"].get<string>());
+        case OMNI_BOOLEAN: return CreateVarcharLiteral(defaultValueJson["value"].get<bool>() ? "true" : "false");
         case OMNI_BYTE:
         case OMNI_SHORT:
         case OMNI_INT:
-        case OMNI_DATE32:
-            return CreateVarcharLiteral(std::to_string(defaultValueJson["value"].get<int32_t>()));
+        case OMNI_DATE32: return CreateVarcharLiteral(std::to_string(defaultValueJson["value"].get<int32_t>()));
         case OMNI_LONG:
-        case OMNI_TIMESTAMP:
-            return CreateVarcharLiteral(std::to_string(defaultValueJson["value"].get<int64_t>()));
-        case OMNI_DOUBLE:
-            return CreateVarcharLiteral(defaultValueJson["value"].dump());
-        default:
-            return nullptr;
+        case OMNI_TIMESTAMP: return CreateVarcharLiteral(std::to_string(defaultValueJson["value"].get<int64_t>()));
+        case OMNI_DOUBLE: return CreateVarcharLiteral(defaultValueJson["value"].dump());
+        default: return nullptr;
     }
 }
 
@@ -697,6 +692,21 @@ Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
         }
     }
 
+    if (funcName == "is_false" || funcName == "is_not_false") {
+        if (!jsonExpr["arguments"].is_array() || args.size() != 1 || retTypeId != OMNI_BOOLEAN ||
+            args[0]->GetReturnTypeId() != OMNI_BOOLEAN) {
+            Expr::DeleteExprs(args);
+            return nullptr;
+        }
+        // COALESCE treats UNKNOWN as TRUE for IS NOT FALSE. IS FALSE is its complement.
+        const auto booleanType = std::make_shared<BooleanDataType>();
+        auto *notFalse = new CoalesceExpr(args[0], new LiteralExpr(true, booleanType));
+        if (funcName == "is_not_false") {
+            return notFalse;
+        }
+        return new SwitchExpr({{notFalse, new LiteralExpr(false, booleanType)}}, new LiteralExpr(true, booleanType));
+    }
+
     if (TypeUtil::IsStringType(retTypeId)) {
         width = jsonExpr.contains("width") ? jsonExpr["width"].get<int32_t>() : width;
         if (retTypeId == OMNI_CHAR) {
@@ -758,7 +768,7 @@ Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
     // Check that the signature matches
     vector<DataTypeId> argTypes(args.size());
     std::transform(args.begin(), args.end(), argTypes.begin(),
-        [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
+                   [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
     auto signature = FunctionSignature(funcName, argTypes, retTypeId);
     auto function = omniruntime::codegen::FunctionRegistry::LookupFunction(&signature);
     if (function != nullptr) {
@@ -779,8 +789,8 @@ Expr *JSONParser::ParseJSONFunc(const Json &jsonExpr)
 Expr *JSONParser::ParseJsonMultiAndOr(const Json &jsonExpr)
 {
     using Operator = omniruntime::expressions::Operator;
-    std::vector<Expr*> conditions;
-    BinaryExpr* binaryExpression;
+    std::vector<Expr *> conditions;
+    BinaryExpr *binaryExpression;
     DataTypePtr returnType = std::make_shared<DataType>(OMNI_BOOLEAN);
     Operator op = (jsonExpr["operator"] == "OR" ? Operator::OR : Operator::AND);
     for (const auto &item : jsonExpr["conditions"].items()) {
@@ -796,7 +806,7 @@ Expr *JSONParser::ParseJsonMultiAndOr(const Json &jsonExpr)
     assert(conditions.size() >= minConditionSize);
     binaryExpression = new BinaryExpr(op, conditions[0], conditions[1], returnType);
     for (size_t i = 2; i < conditions.size(); i++) { // chain them together
-        BinaryExpr* oldExpr = binaryExpression;
+        BinaryExpr *oldExpr = binaryExpression;
         binaryExpression = new BinaryExpr(op, oldExpr, conditions[i], returnType);
     }
     return binaryExpression;
@@ -825,7 +835,7 @@ Expr *JSONParser::ParseJSON(const Json &jsonExpr)
         return ParseJsonIsNull(jsonExpr);
     } else if (exprTypeStr == "IS_NOT_NULL") {
         return ParseJsonIsNotNull(jsonExpr);
-    }else if (exprTypeStr == "FUNC" || exprTypeStr == "FUNCTION") {
+    } else if (exprTypeStr == "FUNC" || exprTypeStr == "FUNCTION") {
         return ParseJSONFunc(jsonExpr);
     } else if (exprTypeStr == "SWITCH") {
         return ParseJSONSwitch(jsonExpr);
@@ -840,7 +850,7 @@ Expr *JSONParser::ParseJSON(const Json &jsonExpr)
 }
 
 std::vector<omniruntime::expressions::Expr *> JSONParser::ParseJSON(nlohmann::json *expressions,
-    int32_t numberOfExpressions)
+                                                                    int32_t numberOfExpressions)
 {
     std::vector<Expr *> result;
     for (int32_t i = 0; i < numberOfExpressions; i++) {

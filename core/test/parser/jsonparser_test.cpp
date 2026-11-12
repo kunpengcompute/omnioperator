@@ -4,6 +4,7 @@
  */
 #include <utility>
 #include "gtest/gtest.h"
+#include "codegen/expr_evaluator.h"
 #include "expression/expressions.h"
 #include "expression/jsonparser/jsonparser.h"
 
@@ -15,6 +16,8 @@ using namespace omniruntime::expressions;
 using namespace omniruntime::vec;
 
 namespace JsonParserTest {
+using omniruntime::expressions::Operator;
+
 const int32_t INT32_VAL = 1;
 const int64_t INT64_VAL = 123456789;
 const double DOUBLE_VAL = 2.0;
@@ -1023,4 +1026,87 @@ TEST(JSONParserTest, UnsupportedFunctionExprs)
     vector<Expr *> res = JSONParser::ParseJSON(exprs, 2);
     EXPECT_EQ(res.size(), 0);
 }
+
+class FalsePredicateTest : public testing::TestWithParam<bool> {
+protected:
+    void SetUp() override
+    {
+        batchMode = ConfigUtil::IsEnableBatchExprEvaluate();
+        ConfigUtil::SetEnableBatchExprEvaluate(GetParam());
+    }
+
+    void TearDown() override { ConfigUtil::SetEnableBatchExprEvaluate(batchMode); }
+
+    static Expr *ParsePredicate(const char *name)
+    {
+        const nlohmann::json field = {{"exprType", "FIELD_REFERENCE"}, {"dataType", OMNI_BOOLEAN}, {"colVal", 0}};
+        const nlohmann::json predicate = {{"exprType", "FUNCTION"},
+                                          {"function_name", name},
+                                          {"returnType", OMNI_BOOLEAN},
+                                          {"arguments", nlohmann::json::array({field})}};
+        return JSONParser::ParseJSON(predicate);
+    }
+
+private:
+    bool batchMode = false;
+};
+
+TEST_P(FalsePredicateTest, NullableBooleanProjectionAndFilter)
+{
+    using omniruntime::codegen::ExpressionEvaluator;
+    using omniruntime::mem::AlignedBuffer;
+    using omniruntime::op::ExecutionContext;
+    using omniruntime::op::OverflowConfig;
+
+    DataTypes inputTypes({BooleanType(), IntType()});
+    VectorBatch input(3);
+    auto *flags = new Vector<bool>(3);
+    flags->SetValue(0, true);
+    flags->SetValue(1, false);
+    flags->SetNull(2);
+    input.Append(flags);
+    auto *ids = new Vector<int32_t>(3);
+    for (int32_t row = 0; row < 3; ++row) {
+        ids->SetValue(row, row);
+    }
+    input.Append(ids);
+
+    ExecutionContext context;
+    OverflowConfig overflowConfig;
+    AlignedBuffer<int32_t> selectedRows;
+    for (const auto &test : {std::make_pair("is_false", std::vector<int32_t>{1}),
+                             std::make_pair("is_not_false", std::vector<int32_t>{0, 2})}) {
+        const auto &[name, expectedRows] = test;
+        SCOPED_TRACE(name);
+        auto *projection = ParsePredicate(name);
+        ASSERT_NE(projection, nullptr);
+        ExpressionEvaluator projector({projection}, inputTypes, &overflowConfig);
+        projector.ProjectFuncGeneration();
+        ASSERT_TRUE(projector.IsSupportedExpr());
+        std::unique_ptr<VectorBatch> projected(projector.Evaluate(&input, &context));
+        ASSERT_NE(projected, nullptr);
+        ASSERT_EQ(projected->GetRowCount(), 3);
+        auto *resultFlags = static_cast<Vector<bool> *>(projected->Get(0));
+        for (int32_t row = 0; row < 3; ++row) {
+            EXPECT_FALSE(resultFlags->IsNull(row));
+            EXPECT_EQ(resultFlags->GetValue(row),
+                      std::find(expectedRows.begin(), expectedRows.end(), row) != expectedRows.end());
+        }
+
+        auto *filter = ParsePredicate(name);
+        ASSERT_NE(filter, nullptr);
+        ExpressionEvaluator filterAndProject(filter, {new FieldExpr(1, IntType())}, inputTypes, &overflowConfig);
+        filterAndProject.FilterFuncGeneration();
+        ASSERT_TRUE(filterAndProject.IsSupportedExpr());
+        std::unique_ptr<VectorBatch> filtered(filterAndProject.Evaluate(&input, &context, &selectedRows));
+        ASSERT_NE(filtered, nullptr);
+        ASSERT_EQ(filtered->GetRowCount(), static_cast<int32_t>(expectedRows.size()));
+        auto *resultIds = static_cast<Vector<int32_t> *>(filtered->Get(0));
+        for (int32_t row = 0; row < filtered->GetRowCount(); ++row) {
+            EXPECT_EQ(resultIds->GetValue(row), expectedRows[row]);
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(CodegenModes, FalsePredicateTest, testing::Bool());
 } // namespace JsonParserTest
