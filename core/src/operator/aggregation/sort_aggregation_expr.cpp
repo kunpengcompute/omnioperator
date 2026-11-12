@@ -140,7 +140,7 @@ SortAggregationWithExprOperatorFactory *SortAggregationWithExprOperatorFactory::
                               : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
     auto spillConfig = new SparkSpillConfig(queryConfig.aggregationSpillEnabled(), queryConfig.SpillDir(),
         queryConfig.SpillDirDiskReserveSize(), queryConfig.SpillHashAggRowThreshold(),
-        queryConfig.memFractionPct(), queryConfig.SpillWriteBufferSize(), queryConfig.SpillEnableCompress());
+        queryConfig.memFraction(), queryConfig.SpillWriteBufferSize(), queryConfig.SpillEnableCompress());
     auto operatorConfig = std::make_shared<OperatorConfig>(spillConfig, overflowConfig);
 
     return new SortAggregationWithExprOperatorFactory(groupByKeys, groupByNum, aggsKeys, aggFilters, *sourceDataTypes,
