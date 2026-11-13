@@ -174,7 +174,6 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 |[安装指南](./docs/zh/installation_guide.md)|提供安装OmniOperator的详细指导。|
 |[用户指南](./docs/zh/user_guide.md)|提供使用OmniOperator的详细指导。|
 |[常见问题](./docs/zh/faq.md)|提供OmniOperator安装、使用过程的常见问题和解决方法。|
-|视频课程：[OmniRuntime特性大揭秘](https://www.hikunpeng.com/document/video-detail/2849)|提供操作视频，帮助开发者在鲲鹏服务器上了解、使能OmniRuntime特性。|
 
 ## 安全声明<a name="ZH-CN_TOPIC_0000002547265321"></a>
 
@@ -241,7 +240,7 @@ OmniOperator算子加速特性主要应用于数据分析引擎场景，通过�
 </tr>
 <tr id="row15921819775"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.3.1"><p id="p145921119774"><a name="p145921119774"></a><a name="p145921119774"></a>公网IP地址/公网URL地址/域名/邮箱地址</p>
 </th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.3.1 "><p id="p8592141918714"><a name="p8592141918714"></a><a name="p8592141918714"></a><a href="https://gcc.gnu.org/bugs/" target="_blank" rel="noopener noreferrer">https://gcc.gnu.org/bugs/</a></p>
+<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.3.1 "><p id="p8592141918714"><a name="p8592141918714"></a><a name="p8592141918714"></a><a href="https://gcc.gnu.org/bugs/" target="_blank" rel="noopener noreferrer">GCC官方Bug报告指南</a></p>
 </td>
 </tr>
 <tr id="row559214191971"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.4.1"><p id="p1359219191070"><a name="p1359219191070"></a><a name="p1359219191070"></a>所在文件类型</p>
@@ -318,10 +317,6 @@ OmniOperator docs目录下的文档适用CC-BY 4.0许可证，具体请参见[LI
 欢迎大家为社区做贡献。如果有任何疑问或建议，请提交[Issues](https://gitcode.com/openeuler/OmniOperator/issues)，我们会尽快回复。感谢您的支持。
 
 ## 致谢<a name="ZH-CN_TOPIC_0000002515658382"></a>
-
-OmniOperator由华为公司的下列部门联合贡献：
-
-鲲鹏计算Boostkit开发部
 
 感谢来自社区的每一个PR，欢迎贡献OmniOperator！
 
