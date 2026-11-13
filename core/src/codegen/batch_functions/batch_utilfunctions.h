@@ -26,7 +26,7 @@ extern "C" DLLEXPORT void FillRowIndexArray(int32_t *dataArray, int32_t rowCnt);
 // convert literal to an array
 extern "C" DLLEXPORT void FillNull(bool *nullArray, bool isNull, int32_t rowCnt);
 
-extern "C" DLLEXPORT void FillBool(int32_t *dataArray, bool *nullArray, bool literal, bool isNull, int32_t rowCnt);
+extern "C" DLLEXPORT void FillBool(bool *dataArray, bool *nullArray, bool literal, bool isNull, int32_t rowCnt);
 
 extern "C" DLLEXPORT void FillInt32(int32_t *dataArray, bool *nullArray, int32_t literal, bool isNull, int32_t rowCnt);
 
@@ -35,10 +35,10 @@ extern "C" DLLEXPORT void FillInt64(int64_t *dataArray, bool *nullArray, int64_t
 extern "C" DLLEXPORT void FillDouble(double *dataArray, bool *nullArray, double literal, bool isNull, int32_t rowCnt);
 
 extern "C" DLLEXPORT void FillDecimal128(Decimal128 *dataArray, bool *nullArray, __int128_t literal, bool isNull,
-    int32_t rowCnt);
+                                         int32_t rowCnt);
 
 extern "C" DLLEXPORT void FillString(int64_t contextPtr, uint8_t **dataArray, bool *nullArray, int32_t *lengthArray,
-    uint8_t *literal, bool isNull, int32_t length, int32_t rowCnt);
+                                     uint8_t *literal, bool isNull, int32_t length, int32_t rowCnt);
 
 // fill varchar length array according to offset array
 extern "C" DLLEXPORT void FillLength(int32_t *offsets, int32_t *rowIdxArray, int32_t *lengthArray, int32_t rowCnt);
@@ -87,11 +87,11 @@ template <typename T> extern DLLEXPORT void Coalesce(T *lArray, bool *lIsNull, T
 }
 
 extern "C" DLLEXPORT void CoalesceString(uint8_t **lArray, bool *lIsNull, int32_t *lLength, uint8_t **rArray,
-    bool *rIsNull, int32_t *rLength, int32_t rowCnt);
+                                         bool *rIsNull, int32_t *rLength, int32_t rowCnt);
 
 template <typename T>
 extern DLLEXPORT void IfExpr(bool *ifCond, bool *ifNull, T *trueValue, bool *trueNull, T *falseValue, bool *falseNull,
-    int32_t rowCnt)
+                             int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (!(ifCond[i] && !ifNull[i])) {
@@ -102,11 +102,13 @@ extern DLLEXPORT void IfExpr(bool *ifCond, bool *ifNull, T *trueValue, bool *tru
 }
 
 extern "C" DLLEXPORT void IfExprString(bool *ifCond, bool *ifNull, uint8_t **trueValue, bool *trueNull,
-    int32_t *trueLength, uint8_t **falseValue, bool *falseNull, int32_t *falseLength, int32_t rowCnt);
+                                       int32_t *trueLength, uint8_t **falseValue, bool *falseNull, int32_t *falseLength,
+                                       int32_t rowCnt);
 
 template <typename T>
 extern DLLEXPORT void SwitchExpr(int32_t whenCnt, int64_t *whenClauses, int64_t *whenBools, int64_t *resultValues,
-    int64_t *resultNulls, T *elseValue, bool *elseNull, T *finalResult, bool *finalNull, int32_t rowCnt)
+                                 int64_t *resultNulls, T *elseValue, bool *elseNull, T *finalResult, bool *finalNull,
+                                 int32_t rowCnt)
 {
     std::vector<bool *> whenValues;
     std::vector<bool *> whenNulls;
@@ -138,12 +140,14 @@ extern DLLEXPORT void SwitchExpr(int32_t whenCnt, int64_t *whenClauses, int64_t 
 }
 
 extern "C" DLLEXPORT void SwitchExprString(int32_t whenCnt, int64_t *whenClauses, int64_t *whenBools,
-    int64_t *resultValues, int64_t *resultNulls, int64_t *resultLengths, uint8_t **elseValue, bool *elseNull,
-    int32_t *elseLength, uint8_t **finalResult, bool *finalNull, int32_t *finalLength, int32_t rowCnt);
+                                           int64_t *resultValues, int64_t *resultNulls, int64_t *resultLengths,
+                                           uint8_t **elseValue, bool *elseNull, int32_t *elseLength,
+                                           uint8_t **finalResult, bool *finalNull, int32_t *finalLength,
+                                           int32_t rowCnt);
 
 template <typename T>
 extern DLLEXPORT void InExpr(int32_t cmpCnt, int64_t *cmpValues, int64_t *cmpBools, T *toCmpValue, bool *toCmpBool,
-    bool *finalResult, bool *finalNull, int32_t rowCnt)
+                             bool *finalResult, bool *finalNull, int32_t rowCnt)
 {
     std::vector<T *> cmpValuesList;
     std::vector<bool *> cmpNullsList;
@@ -166,7 +170,8 @@ extern DLLEXPORT void InExpr(int32_t cmpCnt, int64_t *cmpValues, int64_t *cmpBoo
 }
 
 extern "C" DLLEXPORT void InExprString(int32_t cmpCnt, int64_t *cmpValues, int64_t *cmpBools, int64_t *cmpLengths,
-    uint8_t **toCmpValue, bool *toCmpBool, int32_t *toCmpLength, bool *finalResult, bool *finalNull, int32_t rowCnt);
-}
+                                       uint8_t **toCmpValue, bool *toCmpBool, int32_t *toCmpLength, bool *finalResult,
+                                       bool *finalNull, int32_t rowCnt);
+} // namespace omniruntime::codegen::function
 
 #endif // OMNI_RUNTIME_BATCH_UTILFUNCTIONS_H
