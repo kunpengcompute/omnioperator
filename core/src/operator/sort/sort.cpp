@@ -317,6 +317,11 @@ void SortOperator::GetOutputFromMemory(VectorBatch **outputVecBatch)
         // second step sort
         Sort();
         hasSorted = true;
+        // 地址数组已定型：物化输出路径（StructCopy 深拷贝）开启源批增量释放，
+        // 已全部输出的源批可随输出游标提前释放，峰值从 2N 降至约 N
+        if (!canInplaceSort && !canRadixSort) {
+            pagesIndex->PrepareIncrementalRelease();
+        }
     }
 
     // third step, get sorted vector batches
@@ -348,6 +353,8 @@ void SortOperator::GetOutputFromMemory(VectorBatch **outputVecBatch)
     }
 
     rowCountOutputted += rowCountToOutput;
+    // 本轮窗口已深拷贝完成，释放所有行都已输出的源批（未激活时为空操作）
+    pagesIndex->ReleaseConsumedBatches(static_cast<int64_t>(rowCountOutputted));
     *outputVecBatch = result.release();
 }
 

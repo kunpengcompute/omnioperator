@@ -2360,6 +2360,53 @@ void PagesIndex::SetSpillVecBatch(vec::VectorBatch *spillVecBatch, std::vector<i
     }
 }
 
+void PagesIndex::PrepareIncrementalRelease()
+{
+    incrementalReleaseActive = false;
+    batchReleaseOrder.clear();
+    releaseCursor = 0;
+    // Only activate when Prepare() has established the address arrays and a source batch exists.
+    if (valueAddresses == nullptr || columns == nullptr || inputVecBatches.empty()) {
+        return;
+    }
+    const int32_t batchCount = static_cast<int32_t>(inputVecBatches.size());
+    // Single linear scan: rows are traversed in sort order; the last position each batch is accessed,
+    // which is its last occurrence in the sorted result.
+    std::vector<int64_t> lastSortedPos(batchCount, -1);
+    for (uint32_t row = 0; row < rowCount; ++row) {
+        lastSortedPos[DecodeSliceIndex(valueAddresses[row])] = row;
+    }
+    batchReleaseOrder.reserve(batchCount);
+    for (int32_t batchIdx = 0; batchIdx < batchCount; ++batchIdx) {
+        batchReleaseOrder.emplace_back(lastSortedPos[batchIdx], batchIdx);
+    }
+    std::sort(batchReleaseOrder.begin(), batchReleaseOrder.end());
+    incrementalReleaseActive = true;
+}
+
+void PagesIndex::ReleaseConsumedBatches(int64_t consumedRowCount)
+{
+    if (!incrementalReleaseActive) {
+        return;
+    }
+    while (releaseCursor < batchReleaseOrder.size()) {
+        const auto &entry = batchReleaseOrder[releaseCursor];
+        if (entry.first >= consumedRowCount) {
+            break;
+        }
+        // All rows have been deep-copied to the delivery batch; no further references from output windows.
+        auto *&slot = inputVecBatches[static_cast<size_t>(entry.second)];
+        if (slot != nullptr) {
+            VectorHelper::FreeVecBatch(slot);
+            slot = nullptr;
+            for (uint32_t colIdx = 0; colIdx < typesCount; ++colIdx) {
+                columns[colIdx][entry.second] = nullptr;
+            }
+        }
+        ++releaseCursor;
+    }
+}
+
 void PagesIndex::Clear()
 {
     if (columns != nullptr) {
@@ -2379,6 +2426,10 @@ void PagesIndex::Clear()
 
     rowCount = 0;
     totalNullCount = 0;
+    // Incremental release state reset: residual source batches are uniformly released by FreeVecBatches (released slots are empty).
+    incrementalReleaseActive = false;
+    releaseCursor = 0;
+    batchReleaseOrder.clear();
     VectorHelper::FreeVecBatches(inputVecBatches);
     inputVecBatches.clear();
 }
