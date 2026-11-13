@@ -1,0 +1,32 @@
+FROM swr.cn-north-4.myhuaweicloud.com/cloud_boostkit/openeuler_24.03_lts_sp3:omnioperator_arm_01
+
+COPY .gitcode/dockerfiles/scripts /opt/docker_build_scripts
+RUN export JAVA_HOME=/opt/buildtools/bisheng-jdk1.8.0_342 \
+&& export MAVEN_HOME=/opt/buildtools/apache-maven-3.9.9 \
+&& export PATH="${MAVEN_HOME}/bin:${JAVA_HOME}/bin:/usr/local/bin:${PATH}" \
+&& bash /opt/docker_build_scripts/install-dependencies.sh --install-base-pkgs \
+&& bash /opt/docker_build_scripts/install-dependencies.sh --setup maven \
+&& bash /opt/docker_build_scripts/install-dependencies.sh --install-all-libs \
+&& rm -rf "/root/build_cache/" && rm -rf /tmp
+
+ENV LANG=C.utf8 \
+    LC_ALL=C.utf8 \
+    LANGUAGE=C.utf8
+
+ENV Jenkins_USER=jenkins \
+    Jenkins_GROUP=jenkins \
+    Jenkins_UID=1000 \
+    Jenkins_GID=1000 \
+    AGENT_WORKDIR=/home/jenkins/agent
+
+RUN set -x \
+    && groupadd -g "${Jenkins_GID}" "${Jenkins_GROUP}" \
+    && useradd -c "Jenkins user" -d "/home/${Jenkins_USER}" -u "${Jenkins_UID}" -g "${Jenkins_GID}" -m "${Jenkins_USER}" \
+    && echo "${Jenkins_USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && mkdir -p "/home/${Jenkins_USER}/.jenkins" "${AGENT_WORKDIR}" /tmp \
+    && chown -R "${Jenkins_UID}:${Jenkins_GID}" /tmp ${AGENT_WORKDIR} \
+    && chmod -R 755 /tmp ${AGENT_WORKDIR}
+
+USER ${Jenkins_USER}
+VOLUME ["/home/jenkins/.jenkins","/home/jenkins/agent"]
+WORKDIR ${AGENT_WORKDIR}

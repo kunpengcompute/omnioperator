@@ -1,0 +1,28 @@
+FROM swr.cn-north-4.myhuaweicloud.com/cloud_boostkit/openeuler-24.03-lts-sp3:latest
+
+RUN rm -rf /etc/yum.repos.d/* && touch /etc/yum.repos.d/openEuler.repo \
+&& echo "[openEuler-everything]                                                                                            " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "name=openEuler-everything                                                                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "baseurl=http://repo.openeuler.org/openEuler-24.03-LTS-SP3/everything/aarch64/                                     " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "enabled=1                                                                                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "gpgcheck=0                                                                                                        " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "gpgkey=http://repo.openeuler.org/openEuler-24.03-LTS-SP3/everything/aarch64/RPM-GPG-KEY-openEuler                 " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "                                                                                                                  " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "[openEuler-EPOL]                                                                                                  " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "name=openEuler-epol                                                                                               " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "baseurl=http://repo.openeuler.org/openEuler-24.03-LTS-SP3/EPOL/main/aarch64/                                      " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "enabled=1                                                                                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "gpgcheck=0                                                                                                        " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "                                                                                                                  " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "[openEuler-update]                                                                                                " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "name=openEuler-update                                                                                             " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "baseurl=http://repo.openeuler.org/openEuler-24.03-LTS-SP3/update/aarch64/                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "enabled=1                                                                                                         " >> /etc/yum.repos.d/openEuler.repo \
+&& echo "gpgcheck=0                                                                                                        " >> /etc/yum.repos.d/openEuler.repo \
+&& yum clean all && yum makecache
+
+COPY .gitcode/dockerfiles/scripts /opt/docker_build_scripts
+
+RUN ls -al /opt/docker_build_scripts && bash /opt/docker_build_scripts/install-dependencies.sh --install-base-pkgs && bash /opt/docker_build_scripts/install-dependencies.sh --install-all-tools
+
+#swr.cn-north-4.myhuaweicloud.com/cloud_boostkit/openeuler_24.03_lts_sp3:omnioperator_arm_01 为第一层镜像，只安装构建工具
