@@ -229,12 +229,13 @@ int32_t SortOperator::AddInput(VectorBatch *vecBatch)
         ResetInputVecBatch();
         return 0;
     }
+    // Sorted output is produced only after all input arrives; keep only selected rows.
+    // Compacting first lets the reservation below size itself by the batch that is kept.
+    VectorHelper::CompactSparseDictionaries(vecBatch, pool());
     // Reservation happens before totalRowCount and PagesIndex mutation, so the
     // active operator can safely participate in synchronous arbitration.
     ReserveForInput(vecBatch);
     totalRowCount += rowCount;
-    // Sorted output is produced only after all input arrives; keep only selected rows.
-    VectorHelper::CompactSparseDictionaries(vecBatch, pool());
     pagesIndex->AddVecBatch(vecBatch);
     ResetInputVecBatch();
     return 0;

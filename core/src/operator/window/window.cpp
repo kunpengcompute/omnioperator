@@ -432,12 +432,14 @@ int32_t WindowOperator::AddInput(VectorBatch *vecBatch)
         ResetInputVecBatch();
         return 0;
     }
+    // Keep only the selected rows; compacting first lets the reservation below size itself by
+    // the batch that is kept.
+    VectorHelper::CompactSparseDictionaries(vecBatch, pool());
     // Reservation happens before totalRowCount and PagesIndex mutation, so the
     // active operator can safely participate in synchronous arbitration.
     ReserveForInput(vecBatch);
     UpdateAddInputInfo(rowCount);
     totalRowCount += rowCount;
-    VectorHelper::CompactSparseDictionaries(vecBatch, pool());
     pagesIndex->AddVecBatch(vecBatch);
     ResetInputVecBatch();
     return 0;
