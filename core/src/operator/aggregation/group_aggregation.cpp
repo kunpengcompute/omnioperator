@@ -504,7 +504,7 @@ uint64_t HashAggregationOperator::reclaimableBytes() const
 
 bool HashAggregationOperator::PartialFlushActive() const
 {
-    return partialFlushEligible_ && maxPartialAggregationMemory_ != 0 && !hasSpill && !abandonPartialRequested_;
+    return partialFlushEligible_ && maxPartialAggregationMemory_ != 0 && !hasSpill;
 }
 
 bool HashAggregationOperator::PartialFlushPreferredOverSpill()
@@ -549,6 +549,9 @@ int64_t HashAggregationOperator::reclaim(int64_t targetBytes)
     }
     executionContext->GetArena()->Reset();
     ReleaseHashmapCapacity();
+    // The table a pending flush would have emitted is on disk now; the disk
+    // path drains it at the end of input, so input can resume.
+    partialFull_ = false;
     return std::max<int64_t>(0, before - pool_->currentBytes());
 }
 
@@ -898,7 +901,7 @@ void HashAggregationOperator::MaybeMarkPartialFull()
     // table passed the cap stops taking input and flushes. Once the table has
     // spilled the disk path owns the rest of the operator's life, so no flush.
     if (!partialFlushEligible_ || maxPartialAggregationMemory_ == 0 || partialFull_ || hasSpill ||
-        abandonPartialRequested_ || GetElementsSize() == 0) {
+        GetElementsSize() == 0) {
         return;
     }
     if (PartialTableBytes() > maxPartialAggregationMemory_) {
@@ -957,9 +960,7 @@ void HashAggregationOperator::CompletePartialFlush(int32_t outputRows)
         maxPartialAggregationMemory_ = isStepPartials
             ? std::max<uint64_t>(1, basePartialAggregationMemory_)
             : std::max<uint64_t>(1, maxExtendedPartialAggregationMemory_ / kFirstLastDegradedCapDivisor);
-        partialCapDegraded_ = true;
     } else {
-        partialCapDegraded_ = false;
         maxPartialAggregationMemory_ =
             std::min(maxPartialAggregationMemory_ * 2, maxExtendedPartialAggregationMemory_);
     }
@@ -968,10 +969,10 @@ void HashAggregationOperator::CompletePartialFlush(int32_t outputRows)
         const int64_t usedAfter = pool_->currentBytes();
         std::fprintf(stderr,
             "[OMNI-HASHAGG] event=partial_flush operator=%p flush_times=%lu output_rows=%d input_rows=%lu "
-            "aggregation_pct=%.1f next_cap=%lu abandon=%d used_before=%ld used_after=%ld reserved=%ld\n",
+            "aggregation_pct=%.1f next_cap=%lu used_before=%ld used_after=%ld reserved=%ld\n",
             static_cast<void *>(this), static_cast<unsigned long>(flushTimes_), outputRows,
             static_cast<unsigned long>(inputRows), aggregationPct,
-            static_cast<unsigned long>(maxPartialAggregationMemory_), static_cast<int>(abandonPartialRequested_),
+            static_cast<unsigned long>(maxPartialAggregationMemory_),
             static_cast<long>(usedBefore), static_cast<long>(usedAfter), static_cast<long>(pool_->reservedBytes()));
     }
 }
@@ -1135,12 +1136,24 @@ int32_t HashAggregationOperator::GetOutput(VectorBatch **outputVecBatch)
         return 0;
     }
     if (partialFull_) {
-        if (hasSpill || noMoreInput_) {
-            // A reclaim spilled the table between AddInput and this call (the
-            // disk path drains it at the end of input), or the input ended
-            // before the flush started: the normal final output is the flush.
+        if (noMoreInput_) {
+            // The input ended before the flush started (or while it runs): the
+            // normal final output is the flush.
             partialFull_ = false;
+        } else if (hasSpill) {
+            // A reclaim spilled the table between AddInput and this call. The
+            // disk path owns it from here and drains only at the end of input:
+            // starting the merge now would finish the operator and drop every
+            // group added afterwards. Nothing to emit; input resumes.
+            partialFull_ = false;
+            SetStatus(OMNI_STATUS_NORMAL);
+            return 0;
         } else {
+            // partialFull_ stays set for the whole flush: it is what refuses
+            // input (needsInput) and keeps the driver pulling until
+            // CompletePartialFlush has emitted the last batch and reset the
+            // table. Clearing it here would resume input into a table that is
+            // only partly emitted.
             partialFlushing_ = true;
         }
     }

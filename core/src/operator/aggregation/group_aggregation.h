@@ -52,17 +52,29 @@ public:
           operatorConfig(operatorConfig)
     {
         isStepPartials = isPartialOutput(step) && !groupByCols.empty();
-        // The memory-driven flush is eligible for every grouped partial step,
-        // including the first/last aggregations excluded from isStepPartials
-        // below: a flush emits partial states in input order, so the final
-        // first/last sees them in the same order as the unflushed table's
-        // single state (and across tasks the order was never defined).
+        // The memory-driven flush is eligible for a grouped partial step. A
+        // first/last aggregation (excluded from isStepPartials below) stays
+        // eligible only in the shape Spark's count-distinct rewrite produces,
+        // first/last(x, ignoreNulls) FILTER (gid = 0): there each group has
+        // one non-null candidate, so the order in which flushed states reach
+        // the final aggregation cannot change the result. For any other
+        // first/last a flush would let that order pick the value, and the
+        // shuffle writer does not keep flush order once it has spilled
+        // (in-memory batches are written before the older spilled segments).
         partialFlushEligible_ = isStepPartials;
-        for (auto i : aggFuncTypesVector) {
-            if (i == OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL || i == OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL
-                || i == OMNI_AGGREGATION_TYPE_LAST_IGNORENULL || i == OMNI_AGGREGATION_TYPE_LAST_INCLUDENULL) {
-                isStepPartials = false;
-                break;
+        for (size_t aggIdx = 0; aggIdx < aggFuncTypesVector.size(); ++aggIdx) {
+            const auto i = aggFuncTypesVector[aggIdx];
+            const bool ignoreNull =
+                i == OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL || i == OMNI_AGGREGATION_TYPE_LAST_IGNORENULL;
+            const bool includeNull =
+                i == OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL || i == OMNI_AGGREGATION_TYPE_LAST_INCLUDENULL;
+            if (!ignoreNull && !includeNull) {
+                continue;
+            }
+            isStepPartials = false;
+            const bool filtered = aggIdx < hasAggFilters.size() && hasAggFilters[aggIdx] == 1;
+            if (!ignoreNull || !filtered) {
+                partialFlushEligible_ = false;
             }
         }
         for (auto hasFilter: hasAggFilters) {
@@ -139,17 +151,18 @@ public:
         return partialFull_;
     }
 
-    /// True once a flush found the partial aggregation not worth continuing
-    /// (reduction below kPartialMinFinalPct at the extended cap). The wrapper
-    /// turns this into pass-through the same way as its row-ratio rule.
-    bool PartialAggregationAbandonRequested() const
+    /// Whether this aggregation may flush mid-input at all (grouped partial step; a first/last
+    /// aggregation only in the count-distinct rewrite's shape, see the constructor).
+    bool PartialFlushEligible() const
     {
-        return abandonPartialRequested_;
+        return partialFlushEligible_;
     }
 
-    /// Called by the wrapper when it abandons partial aggregation: the pending
-    /// flush is dropped so the remaining table drains through the normal
-    /// finished-output path. Never called while a flush is being emitted.
+    /// Called by the wrapper when its row-ratio rule abandons partial
+    /// aggregation: the pending flush is dropped so the remaining table drains
+    /// through the normal finished-output path. Never called while a flush is
+    /// being emitted. The memory-driven flush itself never abandons; its cap
+    /// follows the reduction instead (CompletePartialFlush).
     void CancelPartialFlush()
     {
         partialFull_ = false;
@@ -319,10 +332,7 @@ private:
     bool partialFlushEligible_ = false;
     bool partialFull_ = false;
     bool partialFlushing_ = false;
-    // A partial whose last flush showed no reduction keeps a small table.
-    bool partialCapDegraded_ = false;
     uint64_t basePartialAggregationMemory_ = 0;
-    bool abandonPartialRequested_ = false;
     uint64_t partialInputRowsSinceFlush_ = 0;
     uint64_t flushedRows_ = 0;
     uint64_t spilledRows_ = 0;

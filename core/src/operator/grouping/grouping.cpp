@@ -180,12 +180,24 @@ bool GroupingOperator::needsInput()
 // end-of-input drain does; a flush of the last stage is this operator's own
 // output. Returns 1 with a batch, 0 without (the flush is complete or still
 // propagating).
+//
+// Stages are served from the last one backwards: a stage that is flushing has
+// refused input, so it is drained before the stage above it may feed it. Feeding
+// it anyway would grow its table past the cap with nothing to bound it.
 int32_t GroupingOperator::PumpPartialFlush(VectorBatch **outputVecBatch)
 {
     const auto size = aggOperators_.size();
-    for (size_t i = 0; i + 1 < size; ++i) {
+    if (!aggOperators_[size - 1]->needsInput()) {
+        aggOperators_[size - 1]->GetOutput(outputVecBatch);
+        return *outputVecBatch == nullptr ? 0 : 1;
+    }
+    for (size_t i = size - 1; i-- > 0;) {
         if (aggOperators_[i]->needsInput()) {
             continue;
+        }
+        if (!aggOperators_[i + 1]->needsInput()) {
+            // The stage below still has to drain; the next call serves it.
+            return 0;
         }
         VectorBatch *flushed = nullptr;
         aggOperators_[i]->GetOutput(&flushed);
@@ -195,10 +207,6 @@ int32_t GroupingOperator::PumpPartialFlush(VectorBatch **outputVecBatch)
         auto projectedVecBatch = this->expressionEvaluators_[i + 1]->Evaluate(flushed, executionContext.get());
         aggOperators_[i + 1]->AddInput(projectedVecBatch);
         return 0;
-    }
-    if (!aggOperators_[size - 1]->needsInput()) {
-        aggOperators_[size - 1]->GetOutput(outputVecBatch);
-        return *outputVecBatch == nullptr ? 0 : 1;
     }
     return 0;
 }

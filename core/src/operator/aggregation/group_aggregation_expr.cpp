@@ -243,10 +243,7 @@ int32_t HashAggregationWithExprOperator::AddInput(VectorBatch *inputVecBatch)
     hashAggOperator->AddInput(newInputVecBatch);
 
     if (adaptivePartialAgg && IsStepPartials()) {
-        if (hashAggOperator->PartialAggregationAbandonRequested()) {
-            // A memory-driven flush found the reduction not worth the table.
-            abandonedPartialAggregation = true;
-        } else if (numInputRows > adaptivePartialAggMinRows) {
+        if (numInputRows > adaptivePartialAggMinRows) {
             // Cumulative distinct groups (in memory + flushed + spilled) against
             // cumulative input rows.
             long keyNums = static_cast<long>(hashAggOperator->CumulativeDistinctKeys());

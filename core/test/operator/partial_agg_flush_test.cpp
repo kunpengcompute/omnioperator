@@ -8,6 +8,7 @@
  * has to be spilled to disk when the task's memory share runs out.
  */
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -31,7 +32,7 @@ using omniruntime::test::TestPoolFixture;
 namespace {
 // sum(long) group by one key column (long or varchar).
 std::unique_ptr<HashAggregationOperatorFactory> MakeSumFactory(const DataTypes &groupType, AggregationNode::Step step,
-    bool inputRaw, bool outputPartial)
+    bool inputRaw, bool outputPartial, const OperatorConfig &operatorConfig = OperatorConfig())
 {
     std::vector<uint32_t> groupByCols{0};
     std::vector<std::vector<uint32_t>> aggCols{{1}};
@@ -44,7 +45,7 @@ std::unique_ptr<HashAggregationOperatorFactory> MakeSumFactory(const DataTypes &
     std::vector<bool> outputPartials{outputPartial};
     std::vector<int8_t> hasAggFilters{0};
     auto factory = std::make_unique<HashAggregationOperatorFactory>(groupByCols, groupType, aggCols, aggInputTypes,
-        aggOutputTypes, aggFuncTypes, maskCols, inputRaws, outputPartials, hasAggFilters, OperatorConfig(), step);
+        aggOutputTypes, aggFuncTypes, maskCols, inputRaws, outputPartials, hasAggFilters, operatorConfig, step);
     factory->Init();
     return factory;
 }
@@ -176,7 +177,6 @@ TEST(PartialAggFlushTest, flush_keeps_result_long_keys)
     }
     EXPECT_GE(op->PartialFlushTimes(), 1u);
     EXPECT_GT(rowsBeforeEnd, 0u) << "a flush must emit rows before noMoreInput";
-    EXPECT_FALSE(op->PartialAggregationAbandonRequested()) << "25 % reduction is worth keeping";
     Drain(op, outs);
     EXPECT_GT(TotalRows(outs), static_cast<uint64_t>(kKeys)) << "flushed duplicates reach the final stage";
     op::Operator::DeleteOperator(op);
@@ -185,6 +185,65 @@ TEST(PartialAggFlushTest, flush_keeps_result_long_keys)
     ASSERT_EQ(sums.size(), static_cast<size_t>(kKeys));
     for (int32_t k = 0; k < kKeys; ++k) {
         EXPECT_EQ(sums[std::to_string(k)], static_cast<int64_t>(k) * kDupsPerBatch * kBatches) << "key " << k;
+    }
+}
+
+// A table larger than one output batch flushes over several GetOutput calls.
+// The operator must refuse input until the last batch of the flush is out:
+// input that resumed after the first batch would land in a table that is only
+// partly emitted, and the groups already emitted would lose it.
+TEST(PartialAggFlushTest, flush_spanning_several_output_batches_refuses_input_until_done)
+{
+    ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
+    constexpr int32_t kKeys = 300000;
+    constexpr int32_t kBatches = 3;
+    DataTypes groupType(std::vector<DataTypePtr>{LongType()});
+    DataTypes sourceTypes(std::vector<DataTypePtr>{LongType(), LongType()});
+
+    auto factory = MakeSumFactory(groupType, AggregationNode::Step::K_PARTIAL, true, true);
+    auto *op = static_cast<HashAggregationOperator *>(factory->CreateOperator(nullptr));
+    op->Init();
+    op->setNoMoreInput(false);
+    op->SetPartialFlushMemory(8 * 1024, 16 * 1024);
+
+    std::vector<VectorBatch *> outs;
+    std::vector<int64_t> keys(kKeys);
+    std::vector<int64_t> vals(kKeys);
+    for (int32_t i = 0; i < kKeys; ++i) {
+        keys[i] = i;
+        vals[i] = i + 1;
+    }
+    int32_t maxBatchesPerFlush = 0;
+    for (int32_t b = 0; b < kBatches; ++b) {
+        VectorBatch *in = CreateVectorBatch(sourceTypes, kKeys, keys.data(), vals.data());
+        ASSERT_TRUE(op->needsInput());
+        op->AddInput(in);
+        ASSERT_FALSE(op->needsInput()) << "the table is far above its cap";
+        uint64_t flushedRows = 0;
+        int32_t flushBatches = 0;
+        while (!op->needsInput()) {
+            VectorBatch *out = nullptr;
+            op->GetOutput(&out);
+            if (out == nullptr) {
+                break;
+            }
+            flushedRows += static_cast<uint64_t>(out->GetRowCount());
+            ++flushBatches;
+            outs.push_back(out);
+        }
+        EXPECT_EQ(flushedRows, static_cast<uint64_t>(kKeys)) << "input resumed before flush " << b << " finished";
+        maxBatchesPerFlush = std::max(maxBatchesPerFlush, flushBatches);
+    }
+    EXPECT_GT(maxBatchesPerFlush, 1) << "the flush must span several output batches for this test to mean anything";
+    EXPECT_EQ(op->PartialFlushTimes(), static_cast<uint64_t>(kBatches));
+    Drain(op, outs);
+    EXPECT_EQ(TotalRows(outs), static_cast<uint64_t>(kKeys) * kBatches);
+    op::Operator::DeleteOperator(op);
+
+    auto sums = FinalSums(groupType, outs, LongKey);
+    ASSERT_EQ(sums.size(), static_cast<size_t>(kKeys));
+    for (int32_t k = 0; k < kKeys; ++k) {
+        ASSERT_EQ(sums[std::to_string(k)], static_cast<int64_t>(k + 1) * kBatches) << "key " << k;
     }
 }
 
@@ -218,7 +277,6 @@ TEST(PartialAggFlushTest, flush_keeps_result_varchar_keys)
         Pump(op, outs);
     }
     EXPECT_GE(op->PartialFlushTimes(), 1u);
-    EXPECT_FALSE(op->PartialAggregationAbandonRequested());
     Drain(op, outs);
     op::Operator::DeleteOperator(op);
 
@@ -229,9 +287,9 @@ TEST(PartialAggFlushTest, flush_keeps_result_varchar_keys)
     }
 }
 
-// No reduction at all: the first flush extends the cap once, the second flush at
-// the extended cap gives up (Velox kPartialMinFinalPct); the distinct-key count
-// stays cumulative across flushes so the wrapper's ratio rule can see it.
+// No reduction at all: the cap stays at its base and every batch flushes (the
+// core never abandons; the wrapper's row-ratio rule is the one abandon path).
+// The distinct-key count stays cumulative across flushes so that rule can see it.
 TEST(PartialAggFlushTest, no_reduction_keeps_flushing_at_the_base_cap_and_counts_cumulative_keys)
 {
     ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
@@ -243,7 +301,7 @@ TEST(PartialAggFlushTest, no_reduction_keeps_flushing_at_the_base_cap_and_counts
     auto *op = static_cast<HashAggregationOperator *>(factory->CreateOperator(nullptr));
     op->Init();
     op->setNoMoreInput(false);
-    // 1 byte: every batch flushes until the operator gives up.
+    // 1 byte: every batch flushes.
     op->SetPartialFlushMemory(1, 2);
 
     std::vector<VectorBatch *> outs;
@@ -260,13 +318,11 @@ TEST(PartialAggFlushTest, no_reduction_keeps_flushing_at_the_base_cap_and_counts
 
     feed(0);
     EXPECT_EQ(op->PartialFlushTimes(), 1u);
-    EXPECT_FALSE(op->PartialAggregationAbandonRequested()) << "the core never asks to abandon; the wrapper's row ratio does";
     EXPECT_EQ(op->GetHashMapUniqueKeys(), 0u) << "table is empty after the flush";
     EXPECT_EQ(op->CumulativeDistinctKeys(), 100u) << "the abandon rule's count stays cumulative";
 
     feed(1);
     EXPECT_EQ(op->PartialFlushTimes(), 2u) << "no reduction: the cap stays at its base and the table keeps flushing";
-    EXPECT_FALSE(op->PartialAggregationAbandonRequested());
     EXPECT_EQ(op->CumulativeDistinctKeys(), 200u);
 
     feed(2);
@@ -286,7 +342,7 @@ TEST(PartialAggFlushTest, no_reduction_keeps_flushing_at_the_base_cap_and_counts
 // Through the expression wrapper the driver sees needsInput()/GetOutput() of the
 // wrapper: the flush is emitted mid-input, keeps going at the base cap, and
 // the final sum is still right.
-TEST(PartialAggFlushTest, wrapper_flushes_mid_input_and_abandons)
+TEST(PartialAggFlushTest, wrapper_flushes_mid_input_and_keeps_flushing)
 {
     ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
     constexpr int32_t kRows = 2000;
@@ -395,6 +451,99 @@ TEST_F(TestPoolFixture, flushable_partial_table_is_not_a_spill_donor)
     op::Operator::DeleteOperator(donor);
     for (auto *b : rest) {
         VectorHelper::FreeVecBatch(b);
+    }
+}
+
+// A flush lets the order in which partial states reach the final aggregation pick the value of
+// first/last, and the shuffle writer does not keep that order once it has spilled. Only the shape
+// of Spark's count-distinct rewrite, first/last(x, ignoreNulls) FILTER (gid = 0), is immune (one
+// non-null candidate per group), so only that shape stays eligible.
+TEST(PartialAggFlushTest, first_last_flush_only_in_the_count_distinct_rewrite_shape)
+{
+    ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
+    DataTypes groupType(std::vector<DataTypePtr>{LongType()});
+    auto eligible = [&](uint32_t funcType, int8_t hasFilter) {
+        std::vector<uint32_t> groupByCols{0};
+        std::vector<std::vector<uint32_t>> aggCols{{1}};
+        std::vector<DataTypes> aggInputTypes =
+            AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>{LongType()}));
+        std::vector<DataTypes> aggOutputTypes =
+            AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>{LongType(), BooleanType()}));
+        std::vector<uint32_t> aggFuncTypes{funcType};
+        std::vector<uint32_t> maskCols{static_cast<uint32_t>(-1)};
+        std::vector<bool> inputRaws{true};
+        std::vector<bool> outputPartials{true};
+        std::vector<int8_t> hasAggFilters{hasFilter};
+        HashAggregationOperatorFactory factory(groupByCols, groupType, aggCols, aggInputTypes, aggOutputTypes,
+            aggFuncTypes, maskCols, inputRaws, outputPartials, hasAggFilters, OperatorConfig(),
+            AggregationNode::Step::K_PARTIAL);
+        factory.Init();
+        auto *op = static_cast<HashAggregationOperator *>(factory.CreateOperator(nullptr));
+        const bool result = op->PartialFlushEligible();
+        EXPECT_FALSE(op->IsStepPartials()) << "first/last stays out of the row-ratio abandon rule";
+        op::Operator::DeleteOperator(op);
+        return result;
+    };
+    EXPECT_TRUE(eligible(OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL, 1)) << "the count-distinct rewrite";
+    EXPECT_TRUE(eligible(OMNI_AGGREGATION_TYPE_LAST_IGNORENULL, 1));
+    EXPECT_FALSE(eligible(OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL, 0)) << "no filter: several candidates per group";
+    EXPECT_FALSE(eligible(OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL, 1));
+    EXPECT_FALSE(eligible(OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL, 0));
+    EXPECT_FALSE(eligible(OMNI_AGGREGATION_TYPE_LAST_INCLUDENULL, 0));
+}
+
+// A table above its extended cap is a spill donor even while its flush is
+// pending. When a reclaim spills it between AddInput and the driver's next
+// GetOutput, the disk path owns the table and must wait for the end of input:
+// starting the merge mid-input finished the operator and silently dropped every
+// group added afterwards.
+TEST_F(TestPoolFixture, pending_flush_spilled_by_reclaim_keeps_later_groups)
+{
+    ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
+    constexpr int32_t kRows = 2000;
+    DataTypes groupType(std::vector<DataTypePtr>{LongType()});
+    DataTypes sourceTypes(std::vector<DataTypePtr>{LongType(), LongType()});
+    auto makeBatch = [&](int64_t firstKey) {
+        int64_t keys[kRows];
+        int64_t vals[kRows];
+        for (int32_t i = 0; i < kRows; ++i) {
+            keys[i] = firstKey + i;
+            vals[i] = 1;
+        }
+        return CreateVectorBatch(sourceTypes, kRows, keys, vals);
+    };
+
+    SparkSpillConfig spillConfig(TestUtil::GenerateSpillPath(), INT32_MAX, 0);
+    OperatorConfig operatorConfig(spillConfig);
+    auto factory = MakeSumFactory(groupType, AggregationNode::Step::K_PARTIAL, true, true, operatorConfig);
+    auto *op = static_cast<HashAggregationOperator *>(factory->CreateOperator(pool()));
+    op->Init();
+    op->setNoMoreInput(false);
+    // Cap equal to the extended cap: a table over the cap is over both.
+    op->SetPartialFlushMemory(4096, 4096);
+
+    op->AddInput(makeBatch(0));
+    ASSERT_TRUE(op->IsPartialFlushing()) << "the table passed its cap";
+    ASSERT_FALSE(op->needsInput());
+    ASSERT_GT(op->reclaimableBytes(), 0u) << "above the extended cap the table is a spill donor";
+    ASSERT_GT(op->reclaim(1), 0) << "the reclaim spills the table";
+
+    std::vector<VectorBatch *> outs;
+    Pump(op, outs);
+    EXPECT_TRUE(outs.empty()) << "nothing is emitted mid-input once the table is on disk";
+    EXPECT_FALSE(op->isFinished());
+    ASSERT_TRUE(op->needsInput()) << "input resumes after the spill";
+    EXPECT_EQ(op->PartialFlushTimes(), 0u);
+
+    op->AddInput(makeBatch(kRows));
+    Pump(op, outs);
+    Drain(op, outs);
+    op::Operator::DeleteOperator(op);
+
+    auto sums = FinalSums(groupType, outs, LongKey);
+    ASSERT_EQ(sums.size(), static_cast<size_t>(2 * kRows)) << "both key ranges reach the final aggregation";
+    for (auto &kv : sums) {
+        EXPECT_EQ(kv.second, 1) << "key " << kv.first;
     }
 }
 } // namespace omniruntime
