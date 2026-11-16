@@ -145,6 +145,36 @@ public:
         usedBytes = 0;
     }
 
+    /// A position in the arena. RollbackTo() releases everything allocated after it.
+    struct Mark {
+        size_t chunkCount;
+        uint8_t *availBuf;
+        uint64_t availBytes;
+        uint64_t usedBytes;
+        uint64_t totalBytes;
+    };
+
+    Mark GetMark() const
+    {
+        return Mark{chunks.size(), availBuf, availBytes, usedBytes, totalBytes};
+    }
+
+    /// Returns the arena to `mark`, freeing the chunks added since. The caller guarantees that
+    /// nothing allocated after the mark is still referenced.
+    void RollbackTo(const Mark &mark)
+    {
+        while (chunks.size() > mark.chunkCount) {
+            delete chunks.back();
+            chunks.pop_back();
+        }
+        availBuf = mark.availBuf;
+        availBytes = mark.availBytes;
+        usedBytes = mark.usedBytes;
+        totalBytes = mark.totalBytes;
+        continuousUsedMemoryBytes = 0;
+        continuousUsed = false;
+    }
+
     ALWAYS_INLINE void RollBackContinualMem()
     {
         if (continuousUsed) {

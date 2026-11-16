@@ -410,6 +410,10 @@ uint64_t HashBuilderOperator::reclaimableBytes() const
         for (auto *batch : arg.GetResidentInputVecBatches(0)) {
             if (batch != nullptr) bytes += batch->EstimateFlatSize();
         }
+        // A distinct build also holds its growing table and key arena; a spill frees both.
+        if (bytes != 0) {
+            bytes += arg.IncrementalTableBytes(0);
+        }
         return bytes;
     }, *hashTablesVariants);
 }
@@ -656,6 +660,10 @@ int32_t HashBuilderOperator::AddInput(omniruntime::vec::VectorBatch *vecBatch)
     VectorHelper::CompactSparseDictionaries(vecBatch, broadcastHashTableId_.empty() ? pool() : cachePool_);
     if (joinSpillEnabled_ && joinSpillState_ != nullptr) {
         // The target's single slot remains resident until pool reclaim or EOB admission.
+        if (!buildSpillTriggered_) {
+            // May spill this build: the latch below then takes the batch.
+            EnsureDistinctInputFits(0, vecBatch);
+        }
         if (buildSpillTriggered_) {
             AddLatchedInput(vecBatch);
             return 0;
@@ -663,8 +671,39 @@ int32_t HashBuilderOperator::AddInput(omniruntime::vec::VectorBatch *vecBatch)
         AddBuildBatch(0, vecBatch);
         return 0;
     }
+    EnsureDistinctInputFits(partitionIndex, vecBatch);
     AddBuildBatch(partitionIndex, vecBatch);
     return 0;
+}
+
+/// A distinct build inserts every batch into a growing table, so AddInput itself allocates: a
+/// rehash asks for the new table while the old one is live, on top of the keys and the kept
+/// rows. Inside the insertion the build cannot be reclaimed (the table is being written), so
+/// the memory is reserved first, while nothing of this batch has been added: a request the
+/// task's share cannot serve can then spill this build like any other donor instead of failing
+/// the allocation.
+void HashBuilderOperator::EnsureDistinctInputFits(int32_t slot, omniruntime::vec::VectorBatch *vecBatch)
+{
+    if (pool() == nullptr) {
+        return;
+    }
+    const uint64_t estimated = std::visit([&](auto &&arg) -> uint64_t {
+        return arg.EstimateDistinctInputGrowth(slot, vecBatch);
+    }, *hashTablesVariants);
+    if (estimated == 0) {
+        return;
+    }
+    const int64_t request = static_cast<int64_t>(std::min<uint64_t>(
+        estimated, static_cast<uint64_t>(std::numeric_limits<int64_t>::max())));
+    if (pool()->availableReservation() >= request) {
+        return;
+    }
+    ReservationRequestSection requestContext(
+        this, reclaimableName(), "HashBuilderOperator::EnsureDistinctInputFits", request);
+    ReclaimableReservationSection safeReservation(this);
+    // Best effort, like the other input pre-reservations: after a denial the allocation itself
+    // remains authoritative.
+    pool()->maybeReserve(request);
 }
 
 void HashBuilderOperator::AddBuildBatch(int32_t slot, omniruntime::vec::VectorBatch *vecBatch)

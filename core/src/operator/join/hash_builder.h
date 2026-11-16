@@ -297,6 +297,7 @@ private:
     void PrepareAndBuildSlot0Adaptive();
     void PrepareAndBuildSlot0ForRestore();
     bool TryReserveSlot0Table(const char *site);
+    void EnsureDistinctInputFits(int32_t slot, omniruntime::vec::VectorBatch *vecBatch);
     void ResetSlot0();
     uint32_t DistinctCountSlot0() const;
     uint32_t ResidentRowCountSlot0() const;

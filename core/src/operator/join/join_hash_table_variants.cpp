@@ -927,6 +927,51 @@ uint8_t JoinHashTableVariants<KeyType, RowRefListType>::AdaptiveInitDegree()
 }
 
 template <typename KeyType, typename RowRefListType>
+uint64_t JoinHashTableVariants<KeyType, RowRefListType>::EstimateDistinctInputGrowth(int32_t partitionIndex,
+    const omniruntime::vec::VectorBatch *vecBatch) const
+{
+    if (!IsDistinctBuild() || vecBatch == nullptr || partitionIndex < 0 ||
+        static_cast<uint32_t>(partitionIndex) >= hashTableCount || vecBatch->GetRowCount() <= 0) {
+        return 0;
+    }
+    const auto partition = static_cast<size_t>(partitionIndex);
+    const auto rows = static_cast<uint64_t>(vecBatch->GetRowCount());
+    const uint64_t batchBytes = vecBatch->EstimateFlatSize();
+    uint64_t bytes = 0;
+    // A rehash fills the new table while the old one is still live.
+    if (hashTables[partition] != nullptr) {
+        bytes += hashTables[partition]->hashmap.EstimateRehashAllocation(rows);
+    }
+    // String keys are serialized into the arena for every input row before the lookup.
+    if constexpr (std::is_same_v<KeyType, StringRef>) {
+        const uint64_t keyBytes = isFixedKeys ? static_cast<uint64_t>(fixedKeysSize) * rows : batchBytes;
+        const uint64_t arenaFree = executionContexts[partition] == nullptr
+            ? 0 : executionContexts[partition]->GetArena()->AvailBytes();
+        bytes += keyBytes > arenaFree ? keyBytes - arenaFree : 0;
+    }
+    // The kept rows are copied into a compact batch while the input batch is still alive.
+    bytes += batchBytes;
+    return bytes;
+}
+
+template <typename KeyType, typename RowRefListType>
+uint64_t JoinHashTableVariants<KeyType, RowRefListType>::IncrementalTableBytes(int32_t partitionIndex) const
+{
+    if (partitionIndex < 0 || static_cast<uint32_t>(partitionIndex) >= hashTableCount) {
+        return 0;
+    }
+    const auto partition = static_cast<size_t>(partitionIndex);
+    if (!incrementalTable_[partition] || hashTables[partition] == nullptr) {
+        return 0;
+    }
+    uint64_t bytes = hashTables[partition]->GetAllocatedBytes();
+    if (executionContexts[partition] != nullptr) {
+        bytes += executionContexts[partition]->GetArena()->TotalBytes();
+    }
+    return bytes;
+}
+
+template <typename KeyType, typename RowRefListType>
 void JoinHashTableVariants<KeyType, RowRefListType>::AddVecBatchDistinct(int32_t partitionIndex,
     omniruntime::vec::VectorBatch *vecBatch)
 {
@@ -946,6 +991,8 @@ void JoinHashTableVariants<KeyType, RowRefListType>::AddVecBatchDistinct(int32_t
     }
     auto &batches = inputVecBatches[partitionIndex];
     const auto vecBatchIdx = static_cast<int32_t>(batches.size());
+    auto *arena = executionContexts[partitionIndex]->GetArena();
+    const auto arenaMark = arena->GetMark();
     distinctRows_.clear();
     collectDistinct_ = true;
     try {
@@ -957,6 +1004,10 @@ void JoinHashTableVariants<KeyType, RowRefListType>::AddVecBatchDistinct(int32_t
     collectDistinct_ = false;
     const auto kept = static_cast<int32_t>(distinctRows_.size());
     if (kept == 0) {
+        // Every row repeated a key the table already holds. Its serialized keys were written to
+        // the arena for the lookup only (the table keeps the first occurrence's bytes), so give
+        // them back: otherwise the arena grows with the build's input, not with its distinct keys.
+        arena->RollbackTo(arenaMark);
         return;
     }
     if (kept < rowCount) {

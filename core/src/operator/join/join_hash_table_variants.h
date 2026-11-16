@@ -129,6 +129,15 @@ public:
     /// Does not include resident input batches (A). Used by EOB EnsureTableFits (R2).
     uint64_t EstimateBuildReservation(int32_t partitionIndex) const;
 
+    /// Task-pool bytes that adding `vecBatch` to a distinct build can allocate: a rehash's new
+    /// table, the serialized keys of every input row, and the compact copy of the kept rows.
+    /// 0 for a build that only appends its input.
+    uint64_t EstimateDistinctInputGrowth(int32_t partitionIndex, const omniruntime::vec::VectorBatch *vecBatch) const;
+
+    /// Bytes of a distinct build's growing table and its arena, which ReclaimBuildPartition frees
+    /// with the resident batches. 0 otherwise.
+    uint64_t IncrementalTableBytes(int32_t partitionIndex) const;
+
     /// Approximate bytes of hash-table / array-map buffers (reclaim estimate block B).
     ALWAYS_INLINE uint64_t EstimateHashTableBytes() const
     {

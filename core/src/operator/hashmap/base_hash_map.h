@@ -353,6 +353,11 @@ public:
         fixedStep = step;
     }
 
+    uint8_t GetFixedStep() const
+    {
+        return fixedStep;
+    }
+
     uint64_t GrowSize()
     {
         degree += fixedStep != 0 ? fixedStep : (degree >= enlargeThreshold ? expandFactoryOne : expandFactoryTwo);
@@ -622,9 +627,11 @@ public:
             }
             return 0;
         }
+        const uint8_t fixedStep = grower.GetFixedStep();
         do {
-            projectedDegree += projectedDegree >= Grower::enlargeThreshold ? Grower::expandFactoryOne
-                                                                           : Grower::expandFactoryTwo;
+            projectedDegree += fixedStep != 0 ? fixedStep
+                : (projectedDegree >= Grower::enlargeThreshold ? Grower::expandFactoryOne
+                                                               : Grower::expandFactoryTwo);
             projectedCapacity = 1ULL << projectedDegree;
             threshold = static_cast<uint64_t>(
                 std::ceil(static_cast<double>(projectedCapacity) * MAX_LOAD_FACTOR));
