@@ -247,6 +247,32 @@ private:
         return CompareRowKeys(streamedBatchId, streamedRowId, bufferedBatchId, bufferedRowId);
     }
 
+    ALWAYS_INLINE void CacheStreamedKeyColumns(uint32_t streamedBatchId)
+    {
+        for (int i = 0; i < keyColsCount; ++i) {
+            cachedStreamedKeyColumns[i] =
+                streamedPagesIndex->GetColumn(streamedBatchId, streamedTableKeysCols[i]);
+        }
+    }
+
+    ALWAYS_INLINE int32_t CompareCurrentBufferedRowWithCachedStreamed(uint32_t streamedRowId)
+    {
+        auto bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+        auto bufferedBatchId = DecodeSliceIndex(bufferedValueAddr);
+        auto bufferedRowId = DecodePosition(bufferedValueAddr);
+        for (int i = 0; i < keyColsCount; ++i) {
+            auto streamColId = streamedTableKeysCols[i];
+            auto bufferedColumn = bufferedPagesIndex->GetColumn(bufferedBatchId, bufferedTableKeysCols[i]);
+            auto com = keyCompareFuncs[streamColId](cachedStreamedKeyColumns[i], streamedRowId,
+                bufferedColumn, bufferedRowId);
+            if (com != 0) {
+                return com;
+            }
+        }
+
+        return 0;
+    }
+
     ALWAYS_INLINE int32_t CompareStreamedRowKeys(int64_t leftRowIndex, int64_t rightRowIndex)
     {
         auto leftBatchId = DecodeSliceIndex(leftRowIndex);
@@ -296,6 +322,7 @@ private:
     int32_t *streamedTableKeysCols;
     int32_t *bufferedTableKeysCols;
     int32_t keyColsCount;
+    std::vector<vec::BaseVector *> cachedStreamedKeyColumns;
 
     // for non-inner-join
     bool onlyBufferedFirstMatch = false;

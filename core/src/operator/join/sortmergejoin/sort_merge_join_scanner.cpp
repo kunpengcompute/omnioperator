@@ -48,6 +48,9 @@ SortMergeJoinScanner::SortMergeJoinScanner(const DataTypes &streamedTableKeysTyp
             scanFindNextRow = &SortMergeJoinScanner::ErrorJoin;
             break;
     }
+    if (joinType == JoinType::OMNI_JOIN_TYPE_LEFT || joinType == JoinType::OMNI_JOIN_TYPE_LEFT_ANTI) {
+        cachedStreamedKeyColumns.resize(keyColsCount);
+    }
 
     keyCompareFuncs.resize(streamedTableKeysTypes.GetSize());
     for (int i = 0; i < streamedTableKeysTypes.GetSize(); ++i) {
@@ -401,10 +404,20 @@ template <JoinType templateJoinType> bool SortMergeJoinScanner::LeftOuterFindJoi
         }
         return false;
     }
-    latestCompareStat = CompareCurRowKeys();
+    const auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
+    const auto streamedBatchId = DecodeSliceIndex(streamedValueAddr);
+    const auto streamedRowId = DecodePosition(streamedValueAddr);
+    const auto bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+    const auto bufferedBatchId = DecodeSliceIndex(bufferedValueAddr);
+    const auto bufferedRowId = DecodePosition(bufferedValueAddr);
+    latestCompareStat = CompareRowKeys(streamedBatchId, streamedRowId, bufferedBatchId, bufferedRowId);
+    if (latestCompareStat > 0) {
+        // The streamed row stays fixed while the buffered side catches up.
+        CacheStreamedKeyColumns(streamedBatchId);
+    }
     while (latestCompareStat > 0) { // skip buffered compare >0 value condition
         if (AdvancedBufferedJoinKey()) {
-            latestCompareStat = CompareCurRowKeys();
+            latestCompareStat = CompareCurrentBufferedRowWithCachedStreamed(streamedRowId);
         } else {
             if (bufferedPagesIndex->IsDataFinish(bufferedPagesIndexPosition)) {
                 BufferMissingRows<templateJoinType>();
