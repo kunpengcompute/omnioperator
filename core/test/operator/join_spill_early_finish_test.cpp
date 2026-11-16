@@ -145,6 +145,10 @@ static int64_t RunScenario(bool spillEnabled, bool withLimit, bool forceSpill = 
     }
     lk.unlock();
     worker.join();
+    task.reset();
+    // HashJoinNode does not own its key expressions.
+    Expr::DeleteExprs(leftKeys);
+    Expr::DeleteExprs(rightKeys);
     std::fprintf(stderr, "REVIEW_REPRO DONE spill=%d limit=%d rows=%lld spillFilesOnDisk=%lld\n", spillEnabled, withLimit,
         static_cast<long long>(rows.load()), CountSpillFiles());
     return rows.load();

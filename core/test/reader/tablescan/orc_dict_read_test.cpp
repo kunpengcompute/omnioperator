@@ -348,6 +348,8 @@ TEST_F(DictReadTest, DictionaryPayloadStaysAccountedAfterReaderDestruction)
         ASSERT_EQ(batch->size(), 1);
         // Move vector ownership out of the reader's returned batch.
         readBatch.swap(*batch);
+        delete batch;
+        batch = nullptr;
     }
     ASSERT_EQ(readBatch[0]->GetEncoding(), OMNI_DICTIONARY);
     auto *dict = dynamic_cast<DictionaryStringVector*>(readBatch[0]);

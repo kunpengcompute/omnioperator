@@ -411,6 +411,8 @@ TEST(JoinSpillPoolProbeTest, LeftSemiRestoreHonorsAdditionalFilter)
         omniruntime::expressions::Operator::NEQ,
         new omniruntime::expressions::FieldExpr(1, LongType()),
         new omniruntime::expressions::FieldExpr(3, LongType()), BooleanType());
+    // The join factory does not own the filter; release it after the join.
+    std::unique_ptr<omniruntime::expressions::Expr> filterOwner(filter);
     PoolProbeJoin h(OMNI_JOIN_TYPE_LEFT_SEMI, filter);
     h.build->AddInput(h.Batch(0, 64));
     ASSERT_GT(h.build->reclaim(std::numeric_limits<int64_t>::max()), 0);
