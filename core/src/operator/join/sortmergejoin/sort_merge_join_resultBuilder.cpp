@@ -654,7 +654,7 @@ int32_t JoinResultBuilder::ConstructLeftJoinOutput()
     // padded) rows carry JOIN_NULL_FLAG on the buffered side but a valid streamed batch —
     // skipping them would freeze the left watermark for joins whose output is dominated
     // by unmatched rows (q3_3 retains ~1000 batches that way).
-    int32_t streamedFreeLimit = INT32_MAX;
+    int32_t minConsumedInWindow = INT32_MAX;
     bool hasStreamedAddress = false;
     for (int32_t processedAddress = addressStart; processedAddress < addressOffset; processedAddress++) {
         const int32_t leftBatchId = static_cast<int32_t>(DecodeSliceIndex(streamedTableValueAddresses[processedAddress]));
@@ -664,12 +664,13 @@ int32_t JoinResultBuilder::ConstructLeftJoinOutput()
         }
         if (leftBatchId >= 0) {
             hasStreamedAddress = true;
-            if (leftBatchId < streamedFreeLimit) {
-                streamedFreeLimit = leftBatchId;
+            if (leftBatchId < minConsumedInWindow) {
+                minConsumedInWindow = leftBatchId;
             }
         }
     }
     if (hasStreamedAddress) {
+        int32_t streamedFreeLimit = minConsumedInWindow;
         // Matched-group lease: with duplicated buffered keys a matched group spans
         // several streamed batches and is consumed over multiple output windows; the
         // floor of every address consumed so far stays guarding those batches until
@@ -684,12 +685,10 @@ int32_t JoinResultBuilder::ConstructLeftJoinOutput()
             streamedFreeLimit = preStreamedBatchId;
         }
         leftTablePagesIndex->FreeBeforeVecBatch(streamedFreeLimit);
-    }
-    // Record the lease floor AFTER computing this window's release: addresses of THIS
-    // window were already walked into streamedFreeLimit above; from the next window on,
-    // those batches stay above minConsumedStreamedBatchId until Clear().
-    for (int32_t processedAddress = addressStart; processedAddress < addressOffset; processedAddress++) {
-        TrackConsumedStreamedBatch(static_cast<int32_t>(DecodeSliceIndex(streamedTableValueAddresses[processedAddress])));
+
+        // Publish this window's consumed floor only after the release. Do not track
+        // streamedFreeLimit: it may include a temporary scanner or pending-row pin.
+        TrackConsumedStreamedBatch(minConsumedInWindow);
     }
 
     buildRowCount = rowBase + numOutputRows;

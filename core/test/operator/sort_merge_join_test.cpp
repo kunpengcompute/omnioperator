@@ -1873,6 +1873,73 @@ TEST(NativeSortMergeJoinTest, TestLeftJoinPageReleaseHonorsStreamedPin)
     }
 }
 
+TEST(NativeSortMergeJoinTest, TestLeftJoinTracksWindowMinimumSeparatelyFromReleaseLimit)
+{
+    DataTypes leftTypes(std::vector<DataTypePtr>{IntType()});
+    DataTypes rightTypes(std::vector<DataTypePtr>{IntType()});
+    int32_t keyColumns[] = {0};
+    auto *leftPagesIndex = new DynamicPagesIndex(leftTypes, keyColumns, 1);
+    auto *rightPagesIndex = new DynamicPagesIndex(rightTypes, keyColumns, 1);
+    std::vector<int32_t> leftDestroyed(4, 0);
+    std::vector<int32_t> rightDestroyed(4, 0);
+    for (int32_t batch = 0; batch < 4; ++batch) {
+        leftPagesIndex->AddVecBatch(CreateSmjCountingBatch(batch, leftDestroyed[batch]));
+        rightPagesIndex->AddVecBatch(CreateSmjCountingBatch(batch, rightDestroyed[batch]));
+    }
+
+    std::vector<DataTypePtr> noOutputTypes;
+    int32_t unusedOutputColumns[] = {0};
+    std::string filter;
+    auto *resultBuilder = new JoinResultBuilder(noOutputTypes, unusedOutputColumns, 0,
+        leftTypes.GetSize(), leftPagesIndex, noOutputTypes, unusedOutputColumns, 0,
+        rightTypes.GetSize(), rightPagesIndex, filter, OMNI_JOIN_TYPE_LEFT, nullptr);
+
+    // Both addresses are consumed in one output window. The persistent lease must
+    // record the window minimum (2), while the temporary scanner pin (1) controls
+    // only this call's release limit.
+    AppendSmjTestAddresses(resultBuilder, {2, 3}, {0, 0}, {2, 3}, {0, 0});
+    resultBuilder->SetStreamedPinBatchId(1);
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 0);
+    EXPECT_EQ(resultBuilder->GetMinConsumedStreamedBatchId(), 2);
+    EXPECT_EQ(leftDestroyed[0], 1);
+    EXPECT_EQ(leftDestroyed[1], 0);
+    EXPECT_EQ(leftDestroyed[2], 0);
+    EXPECT_EQ(leftDestroyed[3], 0);
+
+    VectorBatch *firstOutput = nullptr;
+    resultBuilder->GetOutput(&firstOutput);
+    if (firstOutput != nullptr) {
+        VectorHelper::FreeVecBatch(firstOutput);
+    }
+
+    // Removing the temporary pin lets the old window lease advance the release
+    // limit to 2. A mistakenly persisted pin would keep batch 1 alive; tracking
+    // only the previous window's last address would incorrectly release batch 2.
+    resultBuilder->SetStreamedPinBatchId(INT32_MAX);
+    AppendSmjTestAddresses(resultBuilder, {3}, {0}, {3}, {0});
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 0);
+    EXPECT_EQ(resultBuilder->GetMinConsumedStreamedBatchId(), 2);
+    EXPECT_EQ(leftDestroyed[1], 1);
+    EXPECT_EQ(leftDestroyed[2], 0);
+    EXPECT_EQ(leftDestroyed[3], 0);
+
+    VectorBatch *secondOutput = nullptr;
+    resultBuilder->GetOutput(&secondOutput);
+    resultBuilder->Finish();
+    delete resultBuilder;
+    leftPagesIndex->FreeAllRemainingVecBatch();
+    rightPagesIndex->FreeAllRemainingVecBatch();
+    delete leftPagesIndex;
+    delete rightPagesIndex;
+    if (secondOutput != nullptr) {
+        VectorHelper::FreeVecBatch(secondOutput);
+    }
+    for (int32_t batch = 0; batch < 4; ++batch) {
+        EXPECT_EQ(leftDestroyed[batch], 1) << "left batch " << batch;
+        EXPECT_EQ(rightDestroyed[batch], 1) << "right batch " << batch;
+    }
+}
+
 TEST(NativeSortMergeJoinTest, TestLeftJoinConsumedLeaseAcrossOutputWindowsAndClear)
 {
     DataTypes leftTypes(std::vector<DataTypePtr>{IntType()});
