@@ -249,7 +249,21 @@ TEST(NativeSortMergeJoinTest, TestJoinScanner1)
     std::vector<int64_t> streamedAddr;
     std::vector<int64_t> bufferedAddr;
     std::vector<int8_t> isSameBufferedKeyMatched;
+    isMatchPre.reserve(8);
+    streamedAddr.reserve(8);
+    bufferedAddr.reserve(8);
+    isSameBufferedKeyMatched.reserve(8);
+    auto *oldIsMatchPreData = isMatchPre.data();
+    auto *oldStreamedAddrData = streamedAddr.data();
+    auto *oldBufferedAddrData = bufferedAddr.data();
     scan->GetMatchedValueAddresses(isMatchPre, streamedAddr, bufferedAddr, isSameBufferedKeyMatched);
+
+    // Empty destinations take ownership of the scanner buffers instead of copying
+    // into their reserved storage. Their old capacity is returned to the scanner.
+    EXPECT_NE(isMatchPre.data(), oldIsMatchPreData);
+    EXPECT_NE(streamedAddr.data(), oldStreamedAddrData);
+    EXPECT_NE(bufferedAddr.data(), oldBufferedAddrData);
+    EXPECT_EQ(isSameBufferedKeyMatched.capacity(), 0);
     ExpectVectorEqual(expectedStreamedAddr, streamedAddr);
     ExpectVectorEqual(expectedBufferedAddr, bufferedAddr);
 

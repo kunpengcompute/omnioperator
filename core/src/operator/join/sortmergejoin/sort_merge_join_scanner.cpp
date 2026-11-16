@@ -121,6 +121,17 @@ int32_t SortMergeJoinScanner::GetMatchedValueAddresses(std::vector<int8_t> &isMa
     std::vector<int64_t> &streamedTblValueAddresses, std::vector<int64_t> &bufferedTblValueAddresses,
     std::vector<int8_t> &isBufferedKeyMatched)
 {
+    if (isMatched.empty() && streamedTblValueAddresses.empty() && bufferedTblValueAddresses.empty() &&
+        isBufferedKeyMatched.empty()) {
+        // Transfer the result buffers without copying. swap also gives the scanner
+        // any capacity retained by the empty destination buffers for the next scan.
+        isMatched.swap(isPreKeyMatched);
+        streamedTblValueAddresses.swap(streamedValueAddress);
+        bufferedTblValueAddresses.swap(bufferedValueAddress);
+        isBufferedKeyMatched.swap(isSameBufferedKeyMatched);
+        return 0;
+    }
+
     isMatched.insert(isMatched.end(), isPreKeyMatched.begin(), isPreKeyMatched.end());
     streamedTblValueAddresses.insert(streamedTblValueAddresses.end(), streamedValueAddress.begin(),
         streamedValueAddress.end());
