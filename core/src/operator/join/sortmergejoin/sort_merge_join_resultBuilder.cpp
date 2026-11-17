@@ -3,6 +3,7 @@
  * @Description: join result builder implementations
  */
 #include "sort_merge_join_resultBuilder.h"
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include "expression/jsonparser/jsonparser.h"
@@ -419,13 +420,17 @@ int32_t JoinResultBuilder::ConstructInnerJoinOutput()
     }
     auto initialBuildRowCount = buildRowCount;
     auto initialAddressOffset = addressOffset;
+    // CollectRowsInfo stores only eligible rows and stops when the current output batch is full.
+    // A large pending candidate window therefore must not determine the scratch capacity.
+    const int32_t remainingOutputRows = maxRowCount - initialBuildRowCount;
+    const int32_t reserveRows = std::min(inputSize - initialAddressOffset, remainingOutputRows);
     std::vector<std::pair<int32_t, int32_t>> leftMeta;
-    leftMeta.reserve(inputSize - initialAddressOffset);
+    leftMeta.reserve(reserveRows);
     std::vector<std::pair<int32_t, int32_t>> rightMeta;
-    rightMeta.reserve(inputSize - initialAddressOffset);
+    rightMeta.reserve(reserveRows);
     int32_t counter = buildRowCount;
     std::vector<bool> canFreeRights;
-    canFreeRights.reserve(inputSize - initialAddressOffset);
+    canFreeRights.reserve(reserveRows);
     auto result = CollectRowsInfo(leftMeta, rightMeta, canFreeRights, inputSize, counter);
 
     // Group consecutive output positions that reference the same source batch.
@@ -635,7 +640,7 @@ bool JoinResultBuilder::TryBatchVarcharSegment(BaseVector *inputVector, BaseVect
     batchVarcharValues.resize(rowCount);
     batchVarcharNulls.resize(rowCount);
     std::string_view *values = batchVarcharValues.data();
-    uint8_t *nulls = batchVarcharNulls.data();
+    uint8_t *nullFlags = batchVarcharNulls.data();
     // Accumulate the exact payload size so SetValues can skip its per-value
     // validation scan. Sources come from PagesIndex pages and never alias this
     // independently allocated output container.
@@ -645,11 +650,11 @@ bool JoinResultBuilder::TryBatchVarcharSegment(BaseVector *inputVector, BaseVect
         // Nulls keep the per-row source semantics; a NULL row skips offset reads and
         // leaves an empty view that SetValues ignores.
         if (source->IsNull(row)) {
-            nulls[i] = 1;
+            nullFlags[i] = 1;
             values[i] = std::string_view{};
             continue;
         }
-        nulls[i] = 0;
+        nullFlags[i] = 0;
         // Rows of one source batch are gathered, not contiguous: build the view per
         // row instead of memcpy-ing a source string region. Empty strings may have
         // no allocated byte buffer, so avoid nullptr arithmetic.
@@ -658,7 +663,7 @@ bool JoinResultBuilder::TryBatchVarcharSegment(BaseVector *inputVector, BaseVect
         values[i] = size == 0 ? std::string_view{} : std::string_view(bytes + begin, size);
         totalBytes += size;
     }
-    target->SetValues(outputRowId, values, nulls, rowCount, totalBytes);
+    target->SetValues(outputRowId, values, nullFlags, rowCount, totalBytes);
     return true;
 }
 

@@ -152,9 +152,9 @@ TEST(NativeSortMergeJoinTest, TestDynamicPagesIndexPrefixAddressLookup)
     const int32_t expectedBatchIds[] = {0, 0, 1, 1, 2};
     const int32_t expectedRowIds[] = {0, 1, 0, 2, 0};
     for (int32_t i = 0; i < 5; ++i) {
-        const int64_t address = dynamicPagesIndex->GetValueAddresses(logicalRows[i]);
-        EXPECT_EQ(DecodeSliceIndex(address), expectedBatchIds[i]);
-        EXPECT_EQ(DecodePosition(address), expectedRowIds[i]);
+        const int64_t rowAddress = dynamicPagesIndex->GetValueAddresses(logicalRows[i]);
+        EXPECT_EQ(DecodeSliceIndex(rowAddress), expectedBatchIds[i]);
+        EXPECT_EQ(DecodePosition(rowAddress), expectedRowIds[i]);
     }
 
     DynamicPagesIndex::AddressCursor cursor;
@@ -162,9 +162,9 @@ TEST(NativeSortMergeJoinTest, TestDynamicPagesIndexPrefixAddressLookup)
     const int32_t cursorBatchIds[] = {0, 0, 1, 1, 2, 1, 0, 1};
     const int32_t cursorRowIds[] = {0, 1, 0, 2, 0, 2, 1, 0};
     for (int32_t i = 0; i < 8; ++i) {
-        const int64_t address = dynamicPagesIndex->GetValueAddresses(cursorRows[i], cursor);
-        EXPECT_EQ(DecodeSliceIndex(address), cursorBatchIds[i]);
-        EXPECT_EQ(DecodePosition(address), cursorRowIds[i]);
+        const int64_t cursorAddress = dynamicPagesIndex->GetValueAddresses(cursorRows[i], cursor);
+        EXPECT_EQ(DecodeSliceIndex(cursorAddress), cursorBatchIds[i]);
+        EXPECT_EQ(DecodePosition(cursorAddress), cursorRowIds[i]);
     }
 
     const int64_t lastAddress = dynamicPagesIndex->GetLastValueAddress();
@@ -1600,6 +1600,84 @@ TEST(NativeSortMergeJoinTest, TestSortMergeJoinResultBuilder)
     delete leftPagesIndex;
     delete rightPagesIndex;
     VectorHelper::FreeVecBatch(outputVecBatch);
+}
+
+TEST(NativeSortMergeJoinTest, TestInnerJoinMetadataReserveHonorsRemainingOutputCapacity)
+{
+    std::vector<DataTypePtr> types = {IntType()};
+    DataTypes sourceTypes(types);
+    int32_t computeCols[] = {0};
+    auto *leftPagesIndex = new DynamicPagesIndex(sourceTypes, computeCols, 1);
+    auto *rightPagesIndex = new DynamicPagesIndex(sourceTypes, computeCols, 1);
+
+    constexpr int32_t sourceRowCount = 8;
+    int32_t leftValues[sourceRowCount] = {10, 11, 12, 13, 14, 15, 16, 17};
+    int32_t rightValues[sourceRowCount] = {100, 101, 102, 103, 104, 105, 106, 107};
+    leftPagesIndex->AddVecBatch(CreateVectorBatch(sourceTypes, sourceRowCount, leftValues));
+    rightPagesIndex->AddVecBatch(CreateVectorBatch(sourceTypes, sourceRowCount, rightValues));
+
+    int32_t outputCols[] = {0};
+    std::string filter;
+    const omniruntime::config::QueryConfig threeRowConfig(
+        std::unordered_map<std::string, std::string>{
+            {omniruntime::config::QueryConfig::KMaxBatchRowCount, "3"}});
+    auto *resultBuilder = new JoinResultBuilder(types, outputCols, 1, sourceTypes.GetSize(), leftPagesIndex,
+        types, outputCols, 1, sourceTypes.GetSize(), rightPagesIndex, filter, OMNI_JOIN_TYPE_INNER, nullptr,
+        threeRowConfig);
+
+    // Leave one row in the current output batch, then append a candidate window much
+    // larger than its two remaining slots. ConstructInnerJoinOutput must reserve only
+    // those two slots while preserving the unconsumed candidate cursor.
+    AppendSmjTestAddresses(resultBuilder, {0}, {0}, {0}, {0});
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 0);
+    EXPECT_TRUE(resultBuilder->HasNext());
+
+    constexpr int32_t candidateCount = 4096;
+    std::vector<int32_t> batchIds(candidateCount, 0);
+    std::vector<int32_t> leftRows;
+    std::vector<int32_t> rightRows;
+    leftRows.reserve(candidateCount);
+    rightRows.reserve(candidateCount);
+    for (int32_t candidate = 0; candidate < candidateCount; ++candidate) {
+        const int32_t sourceRow = (candidate + 1) % sourceRowCount;
+        leftRows.push_back(sourceRow);
+        rightRows.push_back(sourceRow);
+    }
+    AppendSmjTestAddresses(resultBuilder, batchIds, leftRows, batchIds, rightRows);
+
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 1);
+    VectorBatch *firstOutput = nullptr;
+    resultBuilder->GetOutput(&firstOutput);
+    ASSERT_NE(firstOutput, nullptr);
+    ASSERT_EQ(firstOutput->GetRowCount(), 3);
+    auto *firstLeft = static_cast<Vector<int32_t> *>(firstOutput->Get(0));
+    auto *firstRight = static_cast<Vector<int32_t> *>(firstOutput->Get(1));
+    for (int32_t row = 0; row < 3; ++row) {
+        EXPECT_EQ(firstLeft->GetValue(row), 10 + row);
+        EXPECT_EQ(firstRight->GetValue(row), 100 + row);
+    }
+    VectorHelper::FreeVecBatch(firstOutput);
+
+    // The next call must resume after the two candidates consumed above rather than
+    // dropping or replaying rows when the bounded temporary vectors are destroyed.
+    EXPECT_EQ(resultBuilder->AddJoinValueAddresses(), 1);
+    VectorBatch *secondOutput = nullptr;
+    resultBuilder->GetOutput(&secondOutput);
+    ASSERT_NE(secondOutput, nullptr);
+    ASSERT_EQ(secondOutput->GetRowCount(), 3);
+    auto *secondLeft = static_cast<Vector<int32_t> *>(secondOutput->Get(0));
+    auto *secondRight = static_cast<Vector<int32_t> *>(secondOutput->Get(1));
+    for (int32_t row = 0; row < 3; ++row) {
+        EXPECT_EQ(secondLeft->GetValue(row), 13 + row);
+        EXPECT_EQ(secondRight->GetValue(row), 103 + row);
+    }
+    VectorHelper::FreeVecBatch(secondOutput);
+
+    resultBuilder->Clear();
+    resultBuilder->Finish();
+    delete resultBuilder;
+    delete leftPagesIndex;
+    delete rightPagesIndex;
 }
 
 TEST(NativeSortMergeJoinTest, TestSortMergeJoinResultBuilderBatchedVarcharGather)
