@@ -3,7 +3,10 @@
  * @Description: dynamic pages index implementations
  */
 #include "dynamic_pages_index.h"
+#include <algorithm>
+#include <climits>
 #include "operator/pages_index.h"
+#include "util/omni_exception.h"
 #include "vector/vector_helper.h"
 
 namespace omniruntime {
@@ -59,22 +62,63 @@ int32_t DynamicPagesIndex::AddVecBatch(omniruntime::vec::VectorBatch *vecBatch)
         return 0;
     }
 
-    this->positionCount += rowCount;
+    const int64_t newPositionCount = static_cast<int64_t>(this->positionCount) + rowCount;
+    if (UNLIKELY(newPositionCount > INT32_MAX)) {
+        throw omniruntime::exception::OmniException(
+            "OPERATOR_RUNTIME_ERROR", "SMJ DynamicPagesIndex row count exceeds int32 range");
+    }
+    this->positionCount = static_cast<int32_t>(newPositionCount);
+    this->batchRowOffsets.emplace_back(this->positionCount);
     this->vecBatchFreeFlagDeque.emplace_back(false);
     this->vectorBatchDeque.emplace_back(vecBatch);
-
-    // generate value address.
-    int32_t vecBatchLastIndex = this->columnsDeque.size();
-    for (int32_t rowIdx = 0; rowIdx < rowCount; rowIdx++) {
-        int64_t valueAddress = EncodeSyntheticAddress(vecBatchLastIndex, rowIdx);
-        this->valueAddressesDeque.emplace_back(valueAddress);
-    }
 
     std::vector<bool> nulls = CalculateNullsFromRawVectorBatch(vecBatch);
     this->nullsDeque.insert(this->nullsDeque.end(), nulls.begin(), nulls.end());
     this->columnsDeque.emplace_back(vecBatch->GetVectors());
 
     return 0;
+}
+
+int64_t DynamicPagesIndex::GetValueAddresses(int32_t rowIndex) const
+{
+    AddressCursor cursor;
+    UpdateAddressCursor(rowIndex, cursor);
+    return static_cast<int64_t>(EncodeSyntheticAddress(static_cast<uint32_t>(cursor.batchId),
+        static_cast<uint32_t>(rowIndex - cursor.batchStart)));
+}
+
+void DynamicPagesIndex::UpdateAddressCursor(int32_t rowIndex, AddressCursor &cursor) const
+{
+    if (UNLIKELY(rowIndex < 0 || rowIndex >= positionCount)) {
+        throw omniruntime::exception::OmniException(
+            "OPERATOR_RUNTIME_ERROR", "SMJ DynamicPagesIndex row index is out of range");
+    }
+
+    const int32_t batchCount = static_cast<int32_t>(batchRowOffsets.size()) - 1;
+    if (cursor.batchId >= 0 && cursor.batchId < batchCount) {
+        if (rowIndex >= cursor.batchEnd && cursor.batchId + 1 < batchCount) {
+            const int32_t nextBatchEnd = batchRowOffsets[cursor.batchId + 2];
+            if (rowIndex < nextBatchEnd) {
+                cursor.batchId++;
+                cursor.batchStart = cursor.batchEnd;
+                cursor.batchEnd = nextBatchEnd;
+                return;
+            }
+        } else if (rowIndex < cursor.batchStart && cursor.batchId > 0) {
+            const int32_t previousBatchStart = batchRowOffsets[cursor.batchId - 1];
+            if (rowIndex >= previousBatchStart) {
+                cursor.batchId--;
+                cursor.batchEnd = cursor.batchStart;
+                cursor.batchStart = previousBatchStart;
+                return;
+            }
+        }
+    }
+
+    const auto upper = std::upper_bound(batchRowOffsets.begin(), batchRowOffsets.end(), rowIndex);
+    cursor.batchId = static_cast<int32_t>(upper - batchRowOffsets.begin()) - 1;
+    cursor.batchStart = batchRowOffsets[cursor.batchId];
+    cursor.batchEnd = batchRowOffsets[cursor.batchId + 1];
 }
 
 void DynamicPagesIndex::FreeBeforeVecBatch(int32_t vecBatchIdx)

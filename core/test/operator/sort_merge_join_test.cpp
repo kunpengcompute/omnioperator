@@ -125,6 +125,67 @@ TEST(NativeSortMergeJoinTest, TestDataValue)
     delete dynamicPagesIndex;
 }
 
+TEST(NativeSortMergeJoinTest, TestDynamicPagesIndexPrefixAddressLookup)
+{
+    std::vector<DataTypePtr> types = { IntType() };
+    DataTypes sourceTypes(types);
+    int32_t computeCols[] = {0};
+    auto *dynamicPagesIndex = new DynamicPagesIndex(sourceTypes, computeCols, 1);
+    EXPECT_EQ(dynamicPagesIndex->GetLastValueAddress(), -1);
+
+    int32_t values1[] = {10, 11};
+    int32_t values2[] = {20, 21, 22};
+    int32_t values3[] = {30};
+    dynamicPagesIndex->AddVecBatch(CreateVectorBatch(sourceTypes, 2, values1));
+    dynamicPagesIndex->AddVecBatch(CreateVectorBatch(sourceTypes, 3, values2));
+
+    DynamicPagesIndex::AddressCursor appendCursor;
+    int64_t address = dynamicPagesIndex->GetValueAddresses(4, appendCursor);
+    EXPECT_EQ(DecodeSliceIndex(address), 1);
+    EXPECT_EQ(DecodePosition(address), 2);
+    dynamicPagesIndex->AddVecBatch(CreateVectorBatch(sourceTypes, 1, values3));
+    address = dynamicPagesIndex->GetValueAddresses(5, appendCursor);
+    EXPECT_EQ(DecodeSliceIndex(address), 2);
+    EXPECT_EQ(DecodePosition(address), 0);
+
+    const int32_t logicalRows[] = {0, 1, 2, 4, 5};
+    const int32_t expectedBatchIds[] = {0, 0, 1, 1, 2};
+    const int32_t expectedRowIds[] = {0, 1, 0, 2, 0};
+    for (int32_t i = 0; i < 5; ++i) {
+        const int64_t address = dynamicPagesIndex->GetValueAddresses(logicalRows[i]);
+        EXPECT_EQ(DecodeSliceIndex(address), expectedBatchIds[i]);
+        EXPECT_EQ(DecodePosition(address), expectedRowIds[i]);
+    }
+
+    DynamicPagesIndex::AddressCursor cursor;
+    const int32_t cursorRows[] = {0, 1, 2, 4, 5, 4, 1, 2};
+    const int32_t cursorBatchIds[] = {0, 0, 1, 1, 2, 1, 0, 1};
+    const int32_t cursorRowIds[] = {0, 1, 0, 2, 0, 2, 1, 0};
+    for (int32_t i = 0; i < 8; ++i) {
+        const int64_t address = dynamicPagesIndex->GetValueAddresses(cursorRows[i], cursor);
+        EXPECT_EQ(DecodeSliceIndex(address), cursorBatchIds[i]);
+        EXPECT_EQ(DecodePosition(address), cursorRowIds[i]);
+    }
+
+    const int64_t lastAddress = dynamicPagesIndex->GetLastValueAddress();
+    EXPECT_EQ(DecodeSliceIndex(lastAddress), 2);
+    EXPECT_EQ(DecodePosition(lastAddress), 0);
+    const int64_t row3Address = dynamicPagesIndex->GetValueAddresses(3, cursor);
+    EXPECT_EQ(DecodeSliceIndex(row3Address), 1);
+    EXPECT_EQ(DecodePosition(row3Address), 1);
+
+    dynamicPagesIndex->AddVecBatch(CreateEmptyVectorBatch(sourceTypes));
+    EXPECT_EQ(dynamicPagesIndex->GetPositionCount(), 6);
+    EXPECT_EQ(dynamicPagesIndex->GetLastValueAddress(), lastAddress);
+
+    dynamicPagesIndex->FreeBeforeVecBatch(1);
+    EXPECT_EQ(DecodeSliceIndex(dynamicPagesIndex->GetValueAddresses(2)), 1);
+    EXPECT_EQ(DecodeSliceIndex(dynamicPagesIndex->GetValueAddresses(5)), 2);
+
+    dynamicPagesIndex->FreeAllRemainingVecBatch();
+    delete dynamicPagesIndex;
+}
+
 TEST(NativeSortMergeJoinTest, TestSmjOneTimeEqualCondition)
 {
     // select t1.b, t2.c from t1, t2 where t1.a = t2.d

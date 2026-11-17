@@ -236,10 +236,20 @@ private:
         return !streamedValueAddress.empty() && !bufferedValueAddress.empty();
     }
 
+    ALWAYS_INLINE int64_t GetCurrentStreamedValueAddress()
+    {
+        return streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition, streamedAddressCursor);
+    }
+
+    ALWAYS_INLINE int64_t GetCurrentBufferedValueAddress()
+    {
+        return bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition, bufferedAddressCursor);
+    }
+
     ALWAYS_INLINE int32_t CompareCurRowKeys()
     {
-        auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
-        auto bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+        auto streamedValueAddr = GetCurrentStreamedValueAddress();
+        auto bufferedValueAddr = GetCurrentBufferedValueAddress();
         auto streamedBatchId = DecodeSliceIndex(streamedValueAddr);
         auto streamedRowId = DecodePosition(streamedValueAddr);
         auto bufferedBatchId = DecodeSliceIndex(bufferedValueAddr);
@@ -257,7 +267,7 @@ private:
 
     ALWAYS_INLINE int32_t CompareCurrentBufferedRowWithCachedStreamed(uint32_t streamedRowId)
     {
-        auto bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+        auto bufferedValueAddr = GetCurrentBufferedValueAddress();
         auto bufferedBatchId = DecodeSliceIndex(bufferedValueAddr);
         auto bufferedRowId = DecodePosition(bufferedValueAddr);
         for (int i = 0; i < keyColsCount; ++i) {
@@ -336,6 +346,8 @@ private:
     int32_t bufferedPagesIndexPosition;
     DynamicPagesIndex *streamedPagesIndex;
     DynamicPagesIndex *bufferedPagesIndex;
+    DynamicPagesIndex::AddressCursor streamedAddressCursor;
+    DynamicPagesIndex::AddressCursor bufferedAddressCursor;
     int64_t preStreamedValueAddress;
     int32_t preStreamedPagesIndexPosition;
     std::unique_ptr<JoinStatus> preStatus;
