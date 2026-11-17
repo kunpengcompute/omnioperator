@@ -1,0 +1,65 @@
+name: OmniOperator Version Build
+
+on:
+  workflow_call:
+    inputs:
+      docker_img:
+        required: true
+        type: string
+      module:
+        required: true
+        type: string
+      jdk_version:
+        required: true
+        type: string
+      OmniOperator_branch:
+        required: true
+        type: string
+      Product_Version:
+        required: true
+        type: string
+
+# oidc-auth 需要平台为本次运行签发 ID Token，必须显式申请该权限
+permissions:
+  repository: read
+  id-token: write
+
+jobs:
+  JOB_Compile:
+    name: OmniOperator Build
+    select: selected_by_default
+    # CodeArts 侧 OmniOperator 组合独占 pool_arm_16u_01，这里按本体编译的量申请 cpu=32
+    runs-on: [self-hosted, openeuler, arm, cpu=32]
+    container:
+      image: ${{ inputs.docker_img }}
+    env:
+      Product_Version: ${{ inputs.Product_Version }}
+      module: ${{ inputs.module }}
+      jdk_version: ${{ inputs.jdk_version }}
+      OmniOperator_branch: ${{ inputs.OmniOperator_branch }}
+    steps:
+      - name: checkout_build_scripts
+        uses: checkout
+        with:
+          ref: ${{ inputs.OmniOperator_branch }}
+          path: OmniOperatorJIT       # 脚本以 ${WORKSPACE}/OmniOperatorJIT 引用源码，目录名需固定
+      - name: build
+        run: |-
+          bash OmniOperatorJIT/.gitcode/scripts/OmniOperator_build.sh package
+      # OIDC 三要素来自仓库变量（项目设置 → 流水线 → 变量）：BOOSTKIT_OBS_IAM_ACCOUNT / BOOSTKIT_OBS_OIDC_TRUST / OBS_REGION。
+      # `iam::` 是 URN 的服务段、恒为字面量；issuer 必须是 GitCode Actions 签发 ID Token 的地址。
+      - name: oidc-auth
+        uses: huaweicloud-oidc-auth
+        with:
+          audience: ${{ vars.BOOSTKIT_OBS_OIDC_TRUST }}
+          region: cn-north-4
+          agency_urn: iam::${{ vars.BOOSTKIT_OBS_IAM_ACCOUNT }}:agency:${{ vars.BOOSTKIT_OBS_OIDC_TRUST }}
+          provider_urn: iam::${{ vars.BOOSTKIT_OBS_IAM_ACCOUNT }}:oidcProvider:${{ vars.BOOSTKIT_OBS_OIDC_TRUST }}
+      - name: upload OmniOperator artifact
+        id: upload_obs
+        uses: obs-upload
+        with:
+          endpoint: obs.cn-north-4.myhuaweicloud.com
+          bucket: boostkit-bigdata-public
+          artifact-path: output/${{ inputs.module }}/*.zip*
+          object-prefix: buildcache/OmniOperator/${{ inputs.OmniOperator_branch }}/${{ inputs.Product_Version }}/${{ inputs.module }}/
