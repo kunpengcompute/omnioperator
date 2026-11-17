@@ -202,6 +202,13 @@ private:
         DynamicPagesIndex *pagesIndex, const std::vector<DataTypePtr> &outputTypes, const int32_t *outputCols,
         int32_t outputColsCount, int32_t columnOffset, int32_t rowBase);
 
+    // Build a LEFT JOIN output batch without copying the streamed payload when the
+    // whole output window is one consecutive, right-null-padded run from a single
+    // flat source batch. All other shapes retain the materializing path.
+    bool TryBuildLeftUnmatchedSliceOutput(int32_t rowBase, bool batchFull);
+
+    static bool CanSliceLeftOutputVector(BaseVector *vector, const DataTypePtr &dataType);
+
     void UpdateLeftAntiJoinHandler(int32_t addressPosition, std::vector<int8_t> &isSameBufferedKeyMatched,
         int32_t inputSize);
 

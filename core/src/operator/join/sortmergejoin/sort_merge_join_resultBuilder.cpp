@@ -521,6 +521,98 @@ void JoinResultBuilder::CopyOutputSelection(const std::vector<int32_t> &batchIds
     }
 }
 
+bool JoinResultBuilder::CanSliceLeftOutputVector(BaseVector *vector, const DataTypePtr &dataType)
+{
+    if (vector == nullptr || dataType == nullptr || vector->GetEncoding() != OMNI_FLAT ||
+        vector->GetTypeId() != dataType->GetId()) {
+        return false;
+    }
+
+    // Keep the fast path on the same flat scalar/string encodings that
+    // VectorHelper::SliceVector handles without changing the output encoding.
+    // Dictionary/const and complex vectors continue through CopyOutputSelection.
+    switch (dataType->GetId()) {
+        case type::OMNI_INT:
+        case type::OMNI_DATE32:
+        case type::OMNI_SHORT:
+        case type::OMNI_BYTE:
+        case type::OMNI_LONG:
+        case type::OMNI_TIMESTAMP:
+        case type::OMNI_DATE64:
+        case type::OMNI_DECIMAL64:
+        case type::OMNI_DECIMAL128:
+        case type::OMNI_DOUBLE:
+        case type::OMNI_FLOAT:
+        case type::OMNI_BOOLEAN:
+        case type::OMNI_VARBINARY:
+        case type::OMNI_VARCHAR:
+        case type::OMNI_CHAR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool JoinResultBuilder::TryBuildLeftUnmatchedSliceOutput(int32_t rowBase, bool batchFull)
+{
+    const int32_t rowCount = static_cast<int32_t>(leftOutputBatchIds.size());
+    // A sliced source batch is read-only and cannot be expanded on a later AddJoinValueAddresses call.
+    // Restrict the fast path to a full window, which the operator immediately hands to GetOutput.
+    if (!batchFull || rowBase != 0 || buildVectorBatch != nullptr || rowCount == 0 ||
+        leftTableOutputColsCount == 0 ||
+        leftOutputRowIds.size() != leftOutputBatchIds.size() ||
+        rightOutputBatchIds.size() != leftOutputBatchIds.size() ||
+        rightOutputRowIds.size() != leftOutputBatchIds.size()) {
+        return false;
+    }
+
+    const int32_t sourceBatchId = leftOutputBatchIds[0];
+    const int32_t sourceStartRow = leftOutputRowIds[0];
+    if (sourceBatchId < 0 || sourceStartRow < 0) {
+        return false;
+    }
+
+    for (int32_t row = 0; row < rowCount; ++row) {
+        if (rightOutputBatchIds[row] != JOIN_NULL_FLAG || leftOutputBatchIds[row] != sourceBatchId ||
+            static_cast<int64_t>(leftOutputRowIds[row]) != static_cast<int64_t>(sourceStartRow) + row) {
+            return false;
+        }
+    }
+
+    // Validate every source vector before allocating or publishing any output so
+    // an unsupported column leaves the original materializing path untouched.
+    for (int32_t column = 0; column < leftTableOutputColsCount; ++column) {
+        auto *source = leftTablePagesIndex->GetColumn(sourceBatchId, leftTableOutputCols[column]);
+        if (!CanSliceLeftOutputVector(source, leftTableOutputTypes[column]) || rowCount > source->GetSize() ||
+            sourceStartRow > source->GetSize() - rowCount) {
+            return false;
+        }
+    }
+
+    auto output = std::make_unique<VectorBatch>(rowCount);
+    for (int32_t column = 0; column < leftTableOutputColsCount; ++column) {
+        auto *source = leftTablePagesIndex->GetColumn(sourceBatchId, leftTableOutputCols[column]);
+        auto slice = std::unique_ptr<BaseVector>(VectorHelper::SliceVector(source, sourceStartRow, rowCount));
+        VectorHelper::SetVectorDataType(slice.get(), leftTableOutputTypes[column].get());
+        output->Append(slice.get());
+        slice.release();
+    }
+
+    // Keep the buffered side on the existing writable flat/complex encoding.
+    // In particular, do not share a BaseVector pointer across output batches.
+    for (int32_t column = 0; column < rightTableOutputColsCount; ++column) {
+        auto nullVector = std::unique_ptr<BaseVector>(
+            VectorHelper::CreateComplexVector(rightTableOutputTypes[column].get(), rowCount));
+        output->Append(nullVector.get());
+        nullVector.release();
+        SetRightNullRangeForColumn(output->Get(leftTableOutputColsCount + column),
+            rightTableOutputTypes[column], 0, rowCount);
+    }
+
+    buildVectorBatch = output.release();
+    return true;
+}
+
 bool JoinResultBuilder::TryBatchVarcharSegment(BaseVector *inputVector, BaseVector *outputVector, const int32_t *rows,
     int32_t rowCount, int32_t outputRowId)
 {
@@ -637,16 +729,18 @@ int32_t JoinResultBuilder::ConstructLeftJoinOutput()
         return 0;
     }
 
-    EnsureBuildVectorBatchCapacity(rowBase + numOutputRows);
+    if (!TryBuildLeftUnmatchedSliceOutput(rowBase, batchFull)) {
+        EnsureBuildVectorBatchCapacity(rowBase + numOutputRows);
 
-    CopyOutputSelection(leftOutputBatchIds, leftOutputRowIds, leftTablePagesIndex, leftTableOutputTypes,
-        leftTableOutputCols, leftTableOutputColsCount, 0, rowBase);
-    CopyOutputSelection(rightOutputBatchIds, rightOutputRowIds, rightTablePagesIndex, rightTableOutputTypes,
-        rightTableOutputCols, rightTableOutputColsCount, leftTableOutputColsCount, rowBase);
+        CopyOutputSelection(leftOutputBatchIds, leftOutputRowIds, leftTablePagesIndex, leftTableOutputTypes,
+            leftTableOutputCols, leftTableOutputColsCount, 0, rowBase);
+        CopyOutputSelection(rightOutputBatchIds, rightOutputRowIds, rightTablePagesIndex, rightTableOutputTypes,
+            rightTableOutputCols, rightTableOutputColsCount, leftTableOutputColsCount, rowBase);
+    }
 
-    // Input vectors are still needed while the output columns are copied. Release only
-    // after materialization, and only for addresses consumed by this output batch.
-    // Streamed side: every address of this window is materialized above, so the surviving
+    // Input vectors are still needed while the output columns are copied or sliced. Release only
+    // after the output batch is complete, and only for addresses consumed by this output batch.
+    // Streamed side: every address of this window is represented above, so the surviving
     // streamed readers are the scanner's pending pre-row key comparison (streamedPinBatchId,
     // wired by the operator) and this builder's pending unmatched row (preStreamedBatchId,
     // always the last processed row here). Free everything strictly below the lowest pin;
