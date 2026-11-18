@@ -90,7 +90,7 @@ BinaryExpr* MakeChain(const std::vector<Expr*>& operands, exprs::Operator op)
 /// Lazy conjunct evaluation (the interpreter default) over the full batch.
 BaseVector* EvalConjunctExpr(const Expr* expr, VectorBatch* batch, int32_t n)
 {
-    std::unique_ptr<ExecutionContext> context = std::make_unique<ExecutionContext>();
+    std::unique_ptr<ExecutionContext> context = std::make_unique<ExecutionContext>(4096, nullptr);
     context->SetResultRowSize(n);
     context->SetThrowOnError(false);
     ExprEval e(batch, context.get());
@@ -138,7 +138,7 @@ BaseVector* EvalManualConjunctRec(const Expr* expr, VectorBatch* batch, int32_t 
 /// lazy path must reproduce bit-for-bit (NULL literals included).
 BaseVector* EvalManualConjunct(const Expr* expr, VectorBatch* batch, int32_t n)
 {
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(n);
     context.SetThrowOnError(false);
     return EvalManualConjunctRec(expr, batch, n, &context);
@@ -477,7 +477,7 @@ TEST(ConjunctTest, ThrowOnErrorGateDisablesLazyPath)
         std::vector<Expr*> {new FieldExpr(0, BoolType())}, BoolType());
     auto* expr = MakeChain({new LiteralExpr(false, BoolType()), throwingFunc}, exprs::Operator::AND);
 
-    auto* context = new ExecutionContext();
+    auto* context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(n);
     context->SetThrowOnError(true);
     // try/catch so the cleanup below always runs.
@@ -652,7 +652,7 @@ TEST(ConjunctTest, AndUnderOuterFilterProjectsSelectedRows)
     batch->Append(CreateTriBoolVector({1, 1, 1, 0, 0, -1}));
     auto* expr = MakeChain({new FieldExpr(0, BoolType()), new FieldExpr(1, BoolType())}, exprs::Operator::AND);
 
-    auto* context = new ExecutionContext();
+    auto* context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(n);
     context->SetThrowOnError(false);
     context->hasFilter = true;
@@ -828,7 +828,7 @@ TEST(ConjunctTest, CheapComparisonChainUnderOuterFilterProjectsSelectedRows)
             new BinaryExpr(exprs::Operator::GT, new FieldExpr(1, intT), new LiteralExpr(4, intT), BoolType())},
         exprs::Operator::AND);
 
-    auto* context = new ExecutionContext();
+    auto* context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(n);
     context->SetThrowOnError(false);
     context->hasFilter = true;

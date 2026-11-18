@@ -34,7 +34,7 @@ OmniStatus SortAggregationOperatorFactory::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-Operator *SortAggregationOperatorFactory::CreateOperator()
+Operator *SortAggregationOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     std::vector<ColumnIndex> groupByIndex(groupByColIndices.size(), ColumnIndex());
     std::vector<std::unique_ptr<Aggregator>> aggs;
@@ -77,7 +77,7 @@ Operator *SortAggregationOperatorFactory::CreateOperator()
         aggs.push_back(std::move(aggregator));
     }
 
-    auto sortAggOperator = new SortAggregationOperator(groupByIndex, aggsInputCols, aggInputColsSize, aggInputTypes,
+    auto sortAggOperator = new SortAggregationOperator(pool, groupByIndex, aggsInputCols, aggInputColsSize, aggInputTypes,
         aggOutputTypes, std::move(aggs), inputRaws, outputPartials, hasAggFilters, operatorConfig, aggFuncTypesVector,
         step);
     sortAggOperator->Init();
@@ -313,45 +313,45 @@ int32_t SortAggregationOperator::GetOutput(VectorBatch **outputVecBatch)
     for (auto &dt : outputTypes) {
         auto typeId = dt->GetId();
         if (typeId == OMNI_ARRAY || typeId == OMNI_MAP || typeId == OMNI_ROW) {
-            output->Append(VectorHelper::CreateComplexVector(dt.get(), outputRowCount));
+            output->Append(VectorHelper::CreateComplexVector(pool(), dt.get(), outputRowCount));
             continue;
         }
         if (typeId == OMNI_VARCHAR || typeId == OMNI_CHAR || typeId == OMNI_VARBINARY) {
-            output->Append(new Vector<LargeStringContainer<std::string_view>>(outputRowCount));
+            output->Append(new Vector<LargeStringContainer<std::string_view>>(outputRowCount, pool()));
         } else {
             switch (typeId) {
                 case OMNI_INT:
                 case OMNI_DATE32:
                 case OMNI_TIME32:
-                    output->Append(new Vector<int32_t>(outputRowCount));
+                    output->Append(new Vector<int32_t>(outputRowCount, pool()));
                     break;
                 case OMNI_LONG:
                 case OMNI_DATE64:
                 case OMNI_TIME64:
                 case OMNI_TIMESTAMP:
                 case OMNI_DECIMAL64:
-                    output->Append(new Vector<int64_t>(outputRowCount));
+                    output->Append(new Vector<int64_t>(outputRowCount, pool()));
                     break;
                 case OMNI_DOUBLE:
-                    output->Append(new Vector<double>(outputRowCount));
+                    output->Append(new Vector<double>(outputRowCount, pool()));
                     break;
                 case OMNI_FLOAT:
-                    output->Append(new Vector<float>(outputRowCount));
+                    output->Append(new Vector<float>(outputRowCount, pool()));
                     break;
                 case OMNI_BOOLEAN:
-                    output->Append(new Vector<bool>(outputRowCount));
+                    output->Append(new Vector<bool>(outputRowCount, pool()));
                     break;
                 case OMNI_SHORT:
-                    output->Append(new Vector<int16_t>(outputRowCount));
+                    output->Append(new Vector<int16_t>(outputRowCount, pool()));
                     break;
                 case OMNI_BYTE:
-                    output->Append(new Vector<int8_t>(outputRowCount));
+                    output->Append(new Vector<int8_t>(outputRowCount, pool()));
                     break;
                 case OMNI_DECIMAL128:
-                    output->Append(new Vector<Decimal128>(outputRowCount));
+                    output->Append(new Vector<Decimal128>(outputRowCount, pool()));
                     break;
                 default:
-                    output->Append(new Vector<int64_t>(outputRowCount));
+                    output->Append(new Vector<int64_t>(outputRowCount, pool()));
                     break;
             }
         }

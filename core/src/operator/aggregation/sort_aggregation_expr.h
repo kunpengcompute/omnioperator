@@ -28,7 +28,8 @@ public:
     static SortAggregationWithExprOperatorFactory *CreateSortAggregationWithExprOperatorFactory(
         const std::shared_ptr<const AggregationNode> &planNode, const config::QueryConfig &queryConfig);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::unique_ptr<DataTypes> originSourceTypes;
@@ -45,7 +46,8 @@ private:
 
 class SortAggregationWithExprOperator : public Operator {
 public:
-    SortAggregationWithExprOperator(const DataTypes &originSourceTypes, const type::DataTypes &sourceTypes,
+    SortAggregationWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const DataTypes &originSourceTypes,
+        const type::DataTypes &sourceTypes,
         std::vector<std::unique_ptr<Projection>> &projections, std::vector<SimpleFilter *> &aggSimpleFilters,
         SortAggregationOperator *sortAggOperator, config::QueryConfig queryConfig = config::QueryConfig());
 

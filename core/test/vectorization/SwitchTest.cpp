@@ -42,7 +42,7 @@ public:
 namespace {
 BaseVector* RunSwitchExpr(SwitchExpr* switchExpr, VectorBatch* batch, int32_t rowSize)
 {
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     ExprEval e(batch, &context);
     e.VisitExpr(*switchExpr);
@@ -353,7 +353,7 @@ TEST(SwitchTest, LazySwitchExprUnderFilter)
     VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, cond, a, b, c);
 
     bool mask[rowSize] = {true, true, false, false};
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     context.hasFilter = true;
     context.SetIsSelectRow(mask);
@@ -566,7 +566,7 @@ TEST(SwitchTest, LazySwitchExprInsideLambda)
             new LambdaExpr(switchBody, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     ExprEval e(input, &context);
     e.VisitExpr(*expr);
@@ -616,7 +616,7 @@ TEST(SwitchTest, LazySwitchExprInsideLambdaUnderFilter)
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
     bool mask[rowSize] = {true, false, false};
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     context.hasFilter = true;
     context.SetIsSelectRow(mask);

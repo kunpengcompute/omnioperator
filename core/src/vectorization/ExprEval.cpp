@@ -1578,7 +1578,7 @@ void ExprEval::VisitLazyLogical(const BinaryExpr &e)
     // cost 1-5) regressed +15.3s vs the eager switch build
     // (tpcds_dip_investigation.md).
     if (AllConjunctsCheap(operands)) {
-        BaseVector *eagerResult = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, n);
+        BaseVector *eagerResult = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, n);
         auto *eagerVec = static_cast<Vector<bool> *>(eagerResult);
         std::vector<uint64_t> decided(BitUtil::Nwords(n), 0);
         std::vector<uint64_t> taint(BitUtil::Nwords(n), 0);
@@ -1644,7 +1644,7 @@ void ExprEval::VisitLazyLogical(const BinaryExpr &e)
     // for AND, all FALSE for OR. Rows only change when a conjunct decides
     // them or taints them (Act 4). The values buffer is not zero-initialized,
     // so the identity must be filled explicitly.
-    BaseVector *result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, n);
+    BaseVector *result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, n);
     auto *resVec = static_cast<Vector<bool> *>(result);
     if (n > 0) {
         memset(unsafe::UnsafeVector::GetRawValues(resVec), isAnd ? 1 : 0, static_cast<size_t>(n));

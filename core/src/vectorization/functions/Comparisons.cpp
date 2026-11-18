@@ -423,7 +423,7 @@ public:
         args.pop();
         const int32_t size = static_cast<int32_t>(context->GetResultRowSize());
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, size);
         }
         auto *out = static_cast<Vector<bool> *>(result);
         out->SetNulls(0, false, size);

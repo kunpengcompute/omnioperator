@@ -47,7 +47,8 @@ public:
         }
         const bool isConst = input->GetEncoding() == vec::OMNI_ENCODING_CONST;
 
-        result = vec::VectorHelper::CreateFlatVector(id == type::OMNI_LONG ? type::OMNI_DECIMAL64 : id, size);
+        result = vec::VectorHelper::CreateFlatVector(context == nullptr ? nullptr : context->GetPool(),
+            id == type::OMNI_LONG ? type::OMNI_DECIMAL64 : id, size);
         if (id == type::OMNI_DECIMAL64 || id == type::OMNI_LONG) {
             type::Decimal64DataType outType(precision, 0);
             vec::VectorHelper::SetVectorDataType(result, &outType);

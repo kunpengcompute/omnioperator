@@ -112,7 +112,7 @@ DataTypePtr TestDate64Type()
 /// Evaluates the coalesce expression through ExprEval (lazy path).
 BaseVector* EvalLazyCoalesce(const CoalesceExpr* expr, VectorBatch* batch, int32_t n)
 {
-    auto* context = new ExecutionContext();
+    auto* context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(n);
     context->SetThrowOnError(false);
     ExprEval e(batch, context);
@@ -126,7 +126,7 @@ BaseVector* EvalLazyCoalesce(const CoalesceExpr* expr, VectorBatch* batch, int32
 /// per row — exactly the eager semantics the lazy path replaces. Int-typed.
 BaseVector* EvalManualCoalesce(CoalesceExpr* expr, VectorBatch* batch, int32_t n)
 {
-    auto* context = new ExecutionContext();
+    auto* context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(n);
     context->SetThrowOnError(false);
 
@@ -357,7 +357,7 @@ TEST(CoalesceLazyTest, UnderOuterFilterProjectsSelectedRows)
     batch->Append(CreateTriIntVector({9, 0, 3, 9, 0, 6}));
     auto* expr = new CoalesceExpr(new FieldExpr(0, TestIntType()), new FieldExpr(1, TestIntType()));
 
-    auto* context = new ExecutionContext();
+    auto* context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(n);
     context->SetThrowOnError(false);
     context->hasFilter = true;
@@ -385,7 +385,7 @@ TEST(CoalesceLazyTest, ThrowOnErrorGateStillCorrect)
     batch->Append(CreateTriIntVector({9, 2, 9, 4}));
     auto* expr = new CoalesceExpr(new FieldExpr(0, TestIntType()), new FieldExpr(1, TestIntType()));
 
-    auto* context = new ExecutionContext();
+    auto* context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(n);
     context->SetThrowOnError(true);
     ExprEval e(batch, context);
