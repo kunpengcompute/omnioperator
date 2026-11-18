@@ -22,6 +22,8 @@
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
+void RegisterSplitIndexAndCountChar(const std::string &prefix);
+
 void RegisterStringFunctions(const std::string &prefix)
 {
     RegisterFunction<InstrFunction, int32_t, std::string_view, std::string_view>(prefix + "instr", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT);
@@ -325,5 +327,6 @@ void RegisterStringFunctions(const std::string &prefix)
     RegisterFunction<StaticInvokeVarcharTypeWriteSideCheckFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeVarcharTypeWriteSideCheck", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
     RegisterFunction<StaticInvokeCharTypeWriteSideCheckFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeCharTypeWriteSideCheck", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
     RegisterFunction<StaticInvokeCharReadPaddingFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeCharReadPadding", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
+    RegisterSplitIndexAndCountChar(prefix);
 }
 }

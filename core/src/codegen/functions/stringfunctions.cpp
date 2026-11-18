@@ -122,53 +122,17 @@ extern "C" DLLEXPORT int32_t StrCompare(const char *ap, int32_t apLen, const cha
     }
 }
 
-namespace {
-// SQL LIKE: '%' any sequence, '_' one byte. Backslash escapes the next byte.
-// Byte-wise, matching Flink on the ASCII patterns used by the CSV cases.
-bool SqlLikeMatch(const char *str, int32_t strLen, const char *pat, int32_t patLen)
-{
-    int32_t i = 0;
-    int32_t j = 0;
-    int32_t star = -1;
-    int32_t match = 0;
-    while (i < strLen) {
-        if (j < patLen && pat[j] == '\\' && j + 1 < patLen) {
-            if (str[i] == pat[j + 1]) {
-                ++i;
-                j += 2;
-                continue;
-            }
-        } else if (j < patLen && (pat[j] == '_' || pat[j] == str[i])) {
-            ++i;
-            ++j;
-            continue;
-        }
-        if (j < patLen && pat[j] == '%') {
-            star = j++;
-            match = i;
-            continue;
-        }
-        if (star >= 0) {
-            j = star + 1;
-            i = ++match;
-            continue;
-        }
-        return false;
-    }
-    while (j < patLen && pat[j] == '%') {
-        ++j;
-    }
-    return j == patLen;
-}
-}  // namespace
-
 extern "C" DLLEXPORT bool LikeStr(const char *str, int32_t strLen, const char *regexToMatch, int32_t regexLen,
     bool isNull)
 {
     if (isNull) {
         return false;
     }
-    return SqlLikeMatch(str, strLen, regexToMatch, regexLen);
+    std::string s = std::string(str, strLen);
+    std::string r = std::string(regexToMatch, regexLen);
+
+    std::wregex re(StringUtil::ToWideString(r));
+    return regex_match(StringUtil::ToWideString(s), re);
 }
 
 extern "C" DLLEXPORT bool LikeChar(const char *str, int32_t strWidth, int32_t strLen, const char *regexToMatch,
@@ -181,7 +145,9 @@ extern "C" DLLEXPORT bool LikeChar(const char *str, int32_t strWidth, int32_t st
     for (int i = 0; i < paddingCount; i++) {
         originalStr.append(" ");
     }
-    return SqlLikeMatch(originalStr.data(), static_cast<int32_t>(originalStr.size()), regexToMatch, regexLen);
+    std::string r = std::string(regexToMatch, regexLen);
+    std::wregex re(StringUtil::ToWideString(r));
+    return regex_match(StringUtil::ToWideString(originalStr), re);
 }
 
 extern "C" DLLEXPORT const char *ConcatStrStr(int64_t contextPtr, const char *ap, int32_t apLen, const char *bp,
