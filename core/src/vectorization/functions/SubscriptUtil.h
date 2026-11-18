@@ -116,74 +116,15 @@ public:
     }
 };
 
+/// Spark get(array, index) / GetArrayItem(failOnError = false).
+/// 0-based. NULL array, NULL index, negative index and out-of-bounds index return NULL.
+/// Integral index is truncated to int32, matching Spark's `(int) index`.
 class GetArrayItemFunction : public VectorFunction {
 public:
     explicit GetArrayItemFunction() {}
 
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
-        ExecutionContext *context) const override
-    {
-        std::vector<BaseVector *> inputs;
-        inputs.push_back(args.top());
-        args.pop();
-        inputs.push_back(args.top());
-        args.pop();
-
-        auto size = inputs[1]->GetSize();
-        auto nullBits = reinterpret_cast<uint64_t *>(unsafe::UnsafeBaseVector::GetNulls(inputs[1]));
-        auto rows = SelectivityVector(size);
-        rows.setFromBitsNegate(nullBits, size);
-
-        result = applyArray(rows, inputs, context);
-        for (auto input : inputs) {
-            if (input != nullptr) {
-                delete input;
-            }
-        }
-    }
-
-    BaseVector *applyArray(const SelectivityVector &rows, std::vector<BaseVector *> &args,
-        ExecutionContext *context) const
-    {
-        auto arrayArg = args[1];
-        auto indexArg = args[0];
-
-        switch (indexArg->GetTypeId()) {
-            case OMNI_INT:
-                return applyArrayTyped<int32_t>(rows, arrayArg, indexArg, context);
-            default: OMNI_THROW("Unsupported type for element_at index {}", std::to_string(indexArg->GetTypeId()));
-        }
-    }
-
-    template <typename I>
-    BaseVector *applyArrayTyped(const SelectivityVector &rows, BaseVector *arrayArg, BaseVector *indexArg,
-        ExecutionContext *context) const
-    {
-        auto rowSize = arrayArg->GetSize();
-        int32_t dicIndex[rowSize];
-        memset(dicIndex, -1, sizeof(dicIndex));
-        auto arrayVector = dynamic_cast<ArrayVector *>(arrayArg);
-
-        auto offset = arrayVector->GetOffsets();
-        rows.applyToSelected([&](auto row) {
-            I index = VectorHelper::GetValueFromVector<I>(indexArg, row);
-            auto rowArraySize = offset[row+1] - offset[row];
-            if (rowArraySize <= 0 || index < 0) {
-                dicIndex[row] = -1;
-            } else {
-                dicIndex[row] = rowArraySize <= index ? -1 : offset[row] + index;
-            }
-        });
-
-        auto elementVector = arrayVector->GetElementVector();
-        auto result = VectorHelper::CreateDictionaryVector(dicIndex, rowSize, elementVector.get(),
-            elementVector->GetTypeId());
-        for (auto i = 0; i < rowSize; i++) {
-            if (dicIndex[i] == -1) {
-                result->SetNull(i);
-            }
-        }
-        return result;
-    }
+        ExecutionContext *context) const override;
 };
 }
+

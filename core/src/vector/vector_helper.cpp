@@ -252,6 +252,17 @@ void VectorHelper::CopyValue(vec::BaseVector *srcVector, int32_t srcIndex, vec::
         dstVector->SetNull(dstIndex);
         return;
     }
+    // ConstVector keeps a single null bit. Flat and dictionary vectors keep one bit per row.
+    bool srcNull = false;
+    if (srcVector->GetEncoding() == OMNI_ENCODING_CONST) {
+        srcNull = srcVector->IsNull(0);
+    } else if (srcIndex >= 0 && srcIndex < srcVector->GetSize()) {
+        srcNull = srcVector->IsNull(srcIndex);
+    }
+    if (srcNull) {
+        SetNull(dstVector, dstIndex);
+        return;
+    }
     if (typeId == OMNI_ROW) {
         auto *srcRow = static_cast<RowVector *>(srcVector);
         auto *dstRow = static_cast<RowVector *>(dstVector);
