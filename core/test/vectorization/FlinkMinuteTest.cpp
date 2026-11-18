@@ -53,7 +53,7 @@ public:
 class FlinkMinuteTestHelper {
 public:
     static void ValidateResult(BaseVector* result, const std::vector<int32_t>& expected, int rowSize) {
-        auto* resultVec = dynamic_cast<Vector<int32_t>*>(result);
+        auto* resultVec = dynamic_cast<Vector<int64_t>*>(result);
         ASSERT_NE(resultVec, nullptr) << "Result vector type mismatch";
 
         for (int i = 0; i < rowSize; ++i) {
@@ -79,11 +79,11 @@ public:
 
     static void ExecuteFlinkMinute(BaseVector* inputVec, BaseVector*& result) {
         auto signature = std::make_shared<FunctionSignature>("flink_minute",
-            std::vector<DataTypeId>{OMNI_LONG}, OMNI_INT);
+            std::vector<DataTypeId>{OMNI_LONG}, OMNI_LONG);
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "flink_minute function not found for signature";
 
-        auto outputType = std::make_shared<DataType>(OMNI_INT);
+        auto outputType = std::make_shared<DataType>(OMNI_LONG);
         ExecutionContext context;
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
@@ -109,11 +109,11 @@ public:
     // TIMESTAMP_WITH_LOCAL_TIME_ZONE input on the Java side).
     static void ExecuteFlinkMinuteWithTz(BaseVector* inputVec, BaseVector* tzVec, BaseVector*& result) {
         auto signature = std::make_shared<FunctionSignature>("flink_minute_with_tz",
-            std::vector<DataTypeId>{OMNI_LONG, OMNI_VARCHAR}, OMNI_INT);
+            std::vector<DataTypeId>{OMNI_LONG, OMNI_VARCHAR}, OMNI_LONG);
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "flink_minute_with_tz function not found for signature";
 
-        auto outputType = std::make_shared<DataType>(OMNI_INT);
+        auto outputType = std::make_shared<DataType>(OMNI_LONG);
         ExecutionContext context;
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
@@ -240,7 +240,7 @@ TEST(FlinkMinuteTest, LongWithNull) {
     EXPECT_TRUE(resultVec->IsNull(1)) << "Row 1 should be NULL";
     EXPECT_FALSE(resultVec->IsNull(2)) << "Row 2 should not be NULL";
 
-    auto* resultVecTyped = dynamic_cast<Vector<int32_t>*>(resultVec);
+    auto* resultVecTyped = dynamic_cast<Vector<int64_t>*>(resultVec);
     EXPECT_EQ(resultVecTyped->GetValue(0), 30) << "Row 0 minute should be 30 (08:30:00)";
     EXPECT_EQ(resultVecTyped->GetValue(2), 59) << "Row 2 minute should be 59 (23:59:00)";
 
@@ -311,7 +311,7 @@ TEST(FlinkMinuteTest, LongMillisSemanticsVsMicros) {
 
     ASSERT_NE(resultVec, nullptr);
     EXPECT_FALSE(resultVec->IsNull(0));
-    auto* resultVecTyped = dynamic_cast<Vector<int32_t>*>(resultVec);
+    auto* resultVecTyped = dynamic_cast<Vector<int64_t>*>(resultVec);
     // Must be 30 (2024-06-01 12:30, millis semantics). A buggy fromMicros path would give ~0/1.
     EXPECT_EQ(resultVecTyped->GetValue(0), 30);
 

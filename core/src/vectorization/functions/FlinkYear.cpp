@@ -100,7 +100,7 @@ public:
             result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
         }
 
-        auto *resultVector = reinterpret_cast<Vector<int32_t> *>(result);
+        auto *resultVector = reinterpret_cast<Vector<int64_t> *>(result);
         auto *resultRaw = unsafe::UnsafeVector::GetRawValues(resultVector);
 
         const auto inputTypeId = inputArg->GetTypeId();
@@ -177,8 +177,8 @@ void RegisterFlinkYearFunction(const std::string &name)
     // millis since epoch) are supported, per the Flink YEAR semantics this
     // function mirrors. OMNI_LONG uses millisecond (not microsecond) units.
     auto func = std::make_shared<FlinkYearFunction>(false);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_INT}, OMNI_INT, func);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG}, OMNI_INT, func);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_INT}, OMNI_LONG, func);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG}, OMNI_LONG, func);
 }
 
 void RegisterFlinkYearWithTzFunction(const std::string &name)
@@ -188,7 +188,7 @@ void RegisterFlinkYearWithTzFunction(const std::string &name)
     // is only applied on the OMNI_LONG path; OMNI_INT (date) stays in UTC.
     // Reuses the same FlinkYearFunction class; arity is encoded in hasTz_.
     auto func = std::make_shared<FlinkYearFunction>(true);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_INT, OMNI_VARCHAR}, OMNI_INT, func);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG, OMNI_VARCHAR}, OMNI_INT, func);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_INT, OMNI_VARCHAR}, OMNI_LONG, func);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG, OMNI_VARCHAR}, OMNI_LONG, func);
 }
 }

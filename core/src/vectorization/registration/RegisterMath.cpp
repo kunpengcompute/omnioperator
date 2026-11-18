@@ -108,6 +108,20 @@ void RegisterMathFunctions(const std::string &prefix)
     RegisterUnaryIntegralNumeric<TruncateFunction>(prefix + "truncate");
     RegisterUnaryFloatingPoint<TruncateFunction>(prefix + "truncate");
     RegisterRoundNumericWithScale<TruncateFunction>(prefix + "truncate");
+    {
+        // Gate so JSON parsing accepts truncate(DECIMAL, INT). FuncExpr rebinds a
+        // scale-aware TruncateDecimalFunction from the operand DataType.
+        auto gate = std::make_shared<TruncateDecimalFunction>(type::DataTypePtr(nullptr), type::DataTypePtr(nullptr));
+        VectorFunction::RegisterVectorFunction(prefix + "truncate", {OMNI_DECIMAL64, OMNI_INT}, OMNI_DECIMAL64, gate);
+        VectorFunction::RegisterVectorFunction(prefix + "truncate", {OMNI_DECIMAL128, OMNI_INT}, OMNI_DECIMAL128, gate);
+    }
+    {
+        auto gate = std::make_shared<ToTimestampLtzDecimalFunction>(type::DataTypePtr(nullptr));
+        VectorFunction::RegisterVectorFunction(
+            prefix + "to_timestamp_ltz", {OMNI_DECIMAL64, OMNI_INT}, OMNI_LONG, gate);
+        VectorFunction::RegisterVectorFunction(
+            prefix + "to_timestamp_ltz", {OMNI_DECIMAL128, OMNI_INT}, OMNI_LONG, gate);
+    }
 
     // bin function: converts integer to its binary string (Flink BIN, Long.toBinaryString).
     // INT is sign-extended to 64 bits to match Flink's int->long widening.

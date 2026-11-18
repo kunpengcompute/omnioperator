@@ -218,6 +218,8 @@ std::vector<Function> StringFunctionRegistry::GetFunctions()
     std::vector<Function> stringFnRegistry = { // concat functions
         Function(reinterpret_cast<void *>(SplitIndexRetNull), SplitIndexFnStr(), {}, { OMNI_VARCHAR, OMNI_CHAR, OMNI_INT },
                  OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL),
+        Function(reinterpret_cast<void *>(SplitIndexCharRetNull), SplitIndexFnStr(), {}, { OMNI_CHAR, OMNI_CHAR, OMNI_INT },
+                 OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL),
         Function(reinterpret_cast<void *>(ConcatStrStr), ConcatFnStr(), {}, { OMNI_VARCHAR, OMNI_VARCHAR },
             OMNI_VARCHAR, INPUT_DATA, true),
         Function(reinterpret_cast<void *>(ConcatCharChar), ConcatFnStr(), {}, { OMNI_CHAR, OMNI_CHAR }, OMNI_CHAR,
@@ -302,6 +304,7 @@ std::vector<Function> StringFunctionRegistry::GetFunctions()
 
         // length functions
         Function(reinterpret_cast<void *>(CountChar), CountCharFnStr(), {}, { OMNI_VARCHAR, OMNI_CHAR }, OMNI_LONG),
+        Function(reinterpret_cast<void *>(CountCharChar), CountCharFnStr(), {}, { OMNI_CHAR, OMNI_CHAR }, OMNI_LONG),
         Function(reinterpret_cast<void *>(LengthChar), LengthFnStr(), {}, { OMNI_CHAR }, OMNI_LONG, INPUT_DATA),
         Function(reinterpret_cast<void *>(LengthStr), LengthFnStr(), {}, { OMNI_VARCHAR }, OMNI_LONG, INPUT_DATA),
 

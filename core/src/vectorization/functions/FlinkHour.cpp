@@ -96,7 +96,7 @@ public:
             result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
         }
 
-        auto *resultVector = reinterpret_cast<Vector<int32_t> *>(result);
+        auto *resultVector = reinterpret_cast<Vector<int64_t> *>(result);
         auto *resultRaw = unsafe::UnsafeVector::GetRawValues(resultVector);
 
         const auto inputTypeId = inputArg->GetTypeId();
@@ -151,7 +151,7 @@ private:
 
 void RegisterFlinkHourFunction(const std::string &name)
 {
-    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG}, OMNI_INT,
+    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG}, OMNI_LONG,
         std::make_shared<FlinkHourFunction>(false));
 }
 
@@ -160,7 +160,7 @@ void RegisterFlinkHourWithTzFunction(const std::string &name)
     // _with_tz variant: OMNI_LONG plus an explicit VARCHAR timezone arg
     // (appended by the OmniAdaptor for TIMESTAMP_WITH_LOCAL_TIME_ZONE).
     // Reuses the same class; arity is encoded in hasTz_.
-    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG, OMNI_VARCHAR}, OMNI_INT,
+    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG, OMNI_VARCHAR}, OMNI_LONG,
         std::make_shared<FlinkHourFunction>(true));
 }
 }
