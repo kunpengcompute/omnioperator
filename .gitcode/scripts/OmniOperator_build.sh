@@ -134,9 +134,10 @@ function clone_sourcecode_rely(){
 function do_package(){
     os_version=$(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | sed -E 's/"([A-Za-z0-9]+) ([0-9]+\.[0-9]+).*/\1\2/')
     OS_type=${os_version}
-    cp -rf boostkit-omniop-operator-${OmniOperatorJIT_Version}-aarch64.tar.gz boostkit-omniop-operator-${OmniOperatorJIT_Version}-aarch64-${OS_type}.tar.gz
-    BoostKit_OmniOperatorJIT_Version_info
-    zip -r BoostKit-omniruntime-omnioperator-${OmniOperatorJIT_Version}.zip boostkit-omniop-operator-${OmniOperatorJIT_Version}-aarch64-${OS_type}.tar.gz version.txt
+    if [ -d "${module}" ];then rm -rf ${module}; fi && mkdir -p ${module}
+    cp -rf boostkit-omniop-operator-${OmniOperatorJIT_Version}-aarch64.tar.gz ${module}/boostkit-omniop-operator-${OmniOperatorJIT_Version}-aarch64-${OS_type}.tar.gz
+    if [ -f "version.txt" ];then rm -rf version.txt; fi && BoostKit_OmniOperatorJIT_Version_info
+    zip -r BoostKit-omniruntime-omnioperator-${OmniOperatorJIT_Version}.zip ${module} version.txt
     cp BoostKit-omniruntime-omnioperator-${OmniOperatorJIT_Version}.zip ${agentpath}/
     pushd ${agentpath}/
     sha256sum BoostKit-omniruntime-omnioperator-${OmniOperatorJIT_Version}.zip > BoostKit-omniruntime-omnioperator-${OmniOperatorJIT_Version}.zip.sha256sum

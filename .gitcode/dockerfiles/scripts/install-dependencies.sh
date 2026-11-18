@@ -309,10 +309,18 @@ install_orc_1_7_4() {
         https://codehub.devcloud.cn-north-4.huaweicloud.com/b40eab964ee243e1a43336403eba828f/OpenSourceCenter/Adaptor/orc.git
     cd orc && mkdir -p build && cd build
     export ZSTD_HOME=/usr/local LZ4_HOME=/usr/local ZLIB_HOME=/usr/local \
-        ZLIB_NG_HOME=/usr/local SNAPPY_HOME=/usr/local
+        ZLIB_NG_HOME=/usr/local SNAPPY_HOME=/usr/local \
+        PROTOBUF_HOME="${OPERATOR_PROTOBUF_HOME}"
     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:/usr/local/lib:${OPERATOR_PROTOBUF_HOME}/lib"
+    # PROTOBUF_HOME 为空时 ORC 会自建 protobuf 3.5.1，生成的 orc_proto.pb.h 与 3.21.9 头不兼容
     cmake ../ -DBUILD_JAVA=OFF -DANALYZE_JAVA=OFF -DBUILD_LIBHDFSPP=OFF -DBUILD_CPP_TESTS=OFF \
-        -DBUILD_TOOLS=ON -DBUILD_POSITION_INDEPENDENT_LIB=ON
+        -DBUILD_TOOLS=ON -DBUILD_POSITION_INDEPENDENT_LIB=ON -DORC_PREFER_STATIC_PROTOBUF=OFF \
+        -DCMAKE_PREFIX_PATH="${OPERATOR_PROTOBUF_HOME}" \
+        -DPROTOBUF_HOME="${OPERATOR_PROTOBUF_HOME}" \
+        -DPROTOBUF_INCLUDE_DIR="${OPERATOR_PROTOBUF_HOME}/include" \
+        -DPROTOBUF_LIBRARY="${OPERATOR_PROTOBUF_HOME}/lib/libprotobuf.so" \
+        -DPROTOC_LIBRARY="${OPERATOR_PROTOBUF_HOME}/lib/libprotoc.so" \
+        -DPROTOBUF_EXECUTABLE="${OPERATOR_PROTOBUF_HOME}/bin/protoc"
     make -j"$BUILD_PARALLELISM" && make install
     gcc -shared -fPIC -o liborc.so -Wl,--whole-archive /usr/local/lib/liborc.a -Wl,--no-whole-archive \
         -L"${OPERATOR_PROTOBUF_HOME}/lib" -L/usr/local/lib -L/usr/local/lib64 \

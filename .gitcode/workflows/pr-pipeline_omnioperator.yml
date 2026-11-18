@@ -41,25 +41,25 @@ permissions:
   pr: read
 
 stages: #阶段，不超过16个阶段，不超过256个job
-  stage0: # 流水线状态管理（非项目逻辑）—— 待下方 job 放开后再取消注释启用
-    name: 初始化阶段
-    select: selected_by_default
-    jobs:
-      associate_pr_comment:    # 阶段一暂注释，验证通过后放开
-       name: associate_pr_comment
-       runs-on: ["ubuntu-latest", "x64", "slim"]
-       steps:
-         - name: associate_pr_comment
-           uses: associate-pr-comment
-      init_pipeline_status:
-        name: init_pipeline_status
-        runs-on: ["ubuntu-latest", "x64", "slim"]
-        steps:
-          - name: Set running label
-            uses: openlibing/pr-label-action@v1.0.0
-            with:
-              add_labels: ci_processing
-              remove_labels: ci_successful,ci_failed
+  # stage0: # 流水线状态管理（非项目逻辑）—— 待下方 job 放开后再取消注释启用
+  #   name: 初始化阶段
+  #   select: selected_by_default
+  #   jobs:
+  #     associate_pr_comment:    # 阶段一暂注释，验证通过后放开
+  #      name: associate_pr_comment
+  #      runs-on: ["ubuntu-latest", "x64", "slim"]
+  #      steps:
+  #        - name: associate_pr_comment
+  #          uses: associate-pr-comment
+  #     init_pipeline_status:
+  #       name: init_pipeline_status
+  #       runs-on: ["ubuntu-latest", "x64", "slim"]
+  #       steps:
+  #         - name: Set running label
+  #           uses: openlibing/pr-label-action@v1.0.0
+  #           with:
+  #             add_labels: ci_processing
+  #             remove_labels: ci_successful,ci_failed
   stage1: # 校验阶段
     name: 校验阶段
     select: selected_by_default
@@ -114,6 +114,7 @@ stages: #阶段，不超过16个阶段，不超过256个job
         runs-on: ["ubuntu-latest", "x64", "slim"]
         permissions:
           id-token: write
+          repository: read
         steps:
           - name: sca-pr
             uses: openlibing/sca-action/sca-pr-action@v1.0.0
@@ -124,6 +125,7 @@ stages: #阶段，不超过16个阶段，不超过256个job
         runs-on: ["ubuntu-latest", "x64", "slim"]
         permissions:
           id-token: write
+          repository: read
         steps:
           - name: malicious-scan
             uses: openlibing/malicious-code-scan-action/malicious-code-pr-scan-action@v1.0.0
