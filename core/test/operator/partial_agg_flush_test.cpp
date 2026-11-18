@@ -388,6 +388,8 @@ TEST(PartialAggFlushTest, wrapper_flushes_mid_input_and_keeps_flushing)
     EXPECT_EQ(TotalRows(outs), static_cast<uint64_t>(kRows) * kBatches);
     op::Operator::DeleteOperator(op);
     delete factory;
+    Expr::DeleteExprs(groupByKeys);
+    Expr::DeleteExprs(aggKeys);
 
     DataTypes groupType(std::vector<DataTypePtr>{LongType()});
     auto sums = FinalSums(groupType, outs, LongKey);
