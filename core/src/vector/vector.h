@@ -284,6 +284,10 @@ public:
         return value;
     }
 
+    // ArrayVector::CopyPositions / Slice call these. The base implementations return nullptr.
+    BaseVector *CopyPositions(const int *positions, int positionOffset, int length) override;
+    BaseVector *Slice(int positionOffset, int length, bool isCopy = false) override;
+
     // Prevent copy/move to avoid dangling string_view after copy
     ConstVector(const ConstVector&) = delete;
     ConstVector& operator=(const ConstVector&) = delete;
@@ -291,6 +295,14 @@ public:
     ConstVector& operator=(ConstVector&&) = delete;
 
 private:
+    bool ConstPositionIsNull(int position)
+    {
+        if (position >= 0 && position < this->GetSize()) {
+            return this->IsNull(position);
+        }
+        return this->IsNull(0);
+    }
+
     /**
      * For string_view types: copy the referenced string data into ownedData_ so that
      * the ConstVector owns its data and does not depend on external memory lifetime
@@ -897,6 +909,73 @@ private:
     friend class unsafe::UnsafeStringVector;
     std::shared_ptr<LargeStringContainer<std::string_view>> container;
 };
+
+template <typename RAW_DATA_TYPE>
+BaseVector *ConstVector<RAW_DATA_TYPE>::CopyPositions(const int *positions, int positionOffset, int length)
+{
+    if (UNLIKELY((positions == nullptr) || (length < 0))) {
+        std::string message("positions is null or the input length is incorrect: %d.", length);
+        throw OmniException("OPERATOR_RUNTIME_ERROR", message);
+    }
+    auto *startPositions = positions + positionOffset;
+    if constexpr (std::is_same_v<RAW_DATA_TYPE, std::string_view>) {
+        auto *vector = new Vector<LargeStringContainer<std::string_view>>(length, INITIAL_STRING_SIZE, this->dataTypeId);
+        for (int32_t i = 0; i < length; ++i) {
+            int position = startPositions[i];
+            if (UNLIKELY(position == -1) || ConstPositionIsNull(position)) {
+                vector->SetNull(i);
+                continue;
+            }
+            vector->SetValue(i, value);
+        }
+        return vector;
+    } else {
+        auto *vector = new Vector<RAW_DATA_TYPE>(length, this->dataTypeId);
+        for (int32_t i = 0; i < length; ++i) {
+            int position = startPositions[i];
+            if (UNLIKELY(position == -1) || ConstPositionIsNull(position)) {
+                vector->SetNull(i);
+                continue;
+            }
+            vector->SetValue(i, value);
+        }
+        return vector;
+    }
+}
+
+template <typename RAW_DATA_TYPE>
+BaseVector *ConstVector<RAW_DATA_TYPE>::Slice(int positionOffset, int length, bool /*isCopy*/)
+{
+    if (UNLIKELY(positionOffset < 0 || length < 0 ||
+        (this->GetSize() > 0 && positionOffset + length > this->GetSize()))) {
+        std::string message("slice vector out of range(needed size:%d, real size:%d).", positionOffset + length,
+            this->GetSize());
+        throw OmniException("OPERATOR_RUNTIME_ERROR", message);
+    }
+    if constexpr (std::is_same_v<RAW_DATA_TYPE, std::string_view>) {
+        auto *vector = new Vector<LargeStringContainer<std::string_view>>(length, INITIAL_STRING_SIZE, this->dataTypeId);
+        for (int32_t i = 0; i < length; ++i) {
+            int position = positionOffset + i;
+            if (ConstPositionIsNull(position)) {
+                vector->SetNull(i);
+                continue;
+            }
+            vector->SetValue(i, value);
+        }
+        return vector;
+    } else {
+        auto *vector = new Vector<RAW_DATA_TYPE>(length, this->dataTypeId);
+        for (int32_t i = 0; i < length; ++i) {
+            int position = positionOffset + i;
+            if (ConstPositionIsNull(position)) {
+                vector->SetNull(i);
+                continue;
+            }
+            vector->SetValue(i, value);
+        }
+        return vector;
+    }
+}
 }
 
 #endif // OMNI_RUNTIME_VECTOR_H
