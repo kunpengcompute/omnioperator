@@ -13,8 +13,9 @@
  *                 No session timezone is applied — Flink's codegen for a plain
  *                 TIMESTAMP inlines extractFromDate(DOW, millis / 86400000).
  *                 The division is toward zero, so a negative timestamp that is
- *                 not exactly midnight lands on the next civil day. The
- *                 _with_tz path still decomposes the instant in the session zone.
+ *                 not exactly midnight lands on the next civil day.
+ *                 TIMESTAMP_LTZ adds the session-zone offset first, then uses
+ *                 the same day index.
  *
  * DOW formula: Flink julianExtract DOW = floorMod((julian + 1), 7) + 1,
  * yielding Sunday=1, Monday=2, ..., Saturday=7 (Spark/Hive convention).
@@ -59,6 +60,27 @@ static const tz::TimeZone *ResolveSessionTimeZone(const std::string_view &tzView
         return zone;
     }
     return tz::locateZone("UTC", /*failOnError=*/false);
+}
+
+/// Flink TIMESTAMP_LTZ shifts the instant by the session-zone offset, then
+/// extracts with the same toward-zero day index as a plain TIMESTAMP. A null
+/// zone is UTC (offset 0).
+static int64_t SessionWallMillis(int64_t millis, bool hasTz, bool tzIsConst, const tz::TimeZone *constZone,
+    BaseVector *tzArg, vector_size_t row)
+{
+    if (!hasTz) {
+        return millis;
+    }
+    const tz::TimeZone *zone = constZone;
+    if (!tzIsConst) {
+        zone = (tzArg == nullptr || tzArg->IsNull(row))
+            ? nullptr
+            : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, row));
+    }
+    if (zone == nullptr) {
+        return millis;
+    }
+    return zone->to_local(tz::TimeZone::milliseconds{millis}).count();
 }
 
 static constexpr int64_t kSecondsPerDay = 86400LL;
@@ -143,28 +165,16 @@ public:
             const auto *inputRaw = unsafe::UnsafeVector::GetRawValues(inputVector);
 
             rows.applyToSelected([&](vector_size_t i) {
-                int64_t millis = inputRaw[i];
-                if (!hasTz_) {
-                    int64_t days = millis / kMillisPerDay;
-                    int64_t seconds = days * kSecondsPerDay;
-                    std::tm tmValue;
-                    if (Timestamp::epochToCalendarUtc(seconds, tmValue)) {
-                        resultRaw[i] = static_cast<int32_t>(tmValue.tm_wday + 1);
-                        result->SetNotNull(i);
-                    } else {
-                        result->SetNull(i);
-                    }
-                    return;
+                int64_t millis = SessionWallMillis(inputRaw[i], hasTz_, tzIsConst, constZone, tzArg, i);
+                int64_t days = millis / kMillisPerDay;
+                int64_t seconds = days * kSecondsPerDay;
+                std::tm tmValue;
+                if (Timestamp::epochToCalendarUtc(seconds, tmValue)) {
+                    resultRaw[i] = static_cast<int32_t>(tmValue.tm_wday + 1);
+                    result->SetNotNull(i);
+                } else {
+                    result->SetNull(i);
                 }
-                Timestamp ts = Timestamp::fromMillis(millis);
-                const tz::TimeZone *zone = constZone;
-                if (!tzIsConst) {
-                    zone = tzArg->IsNull(i) ? nullptr
-                        : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, i));
-                }
-                std::tm tmValue = util::GetDateTime(ts, zone);
-                resultRaw[i] = static_cast<int32_t>(tmValue.tm_wday + 1);
-                result->SetNotNull(i);
             });
         }
         delete inputArg;

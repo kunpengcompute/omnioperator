@@ -20,9 +20,9 @@
  *
  * HOUR formula for a plain TIMESTAMP (ExtractCallGen): 
  * (millis % 86400000) / 3600000, both operations toward zero, the same as
- * Java. For millis < 0 the remainder is negative, so the hour can be negative
- * and is not std::tm.tm_hour. The _with_tz path still decomposes the instant
- * in the session zone (TIMESTAMP_LTZ).
+ * Java. For millis < 0 the remainder is negative, so the hour can be negative.
+ * TIMESTAMP_LTZ first adds the session-zone offset (TimeZone::to_local, the
+ * same as millis + TimeZone.getOffset), then uses this formula.
  *
  * Only OMNI_LONG is registered (HOUR is meaningless on a DATE; Flink's
  * julianExtract throws AssertionError for HOUR on a date-only Julian day).
@@ -36,10 +36,8 @@
 #include "vector/vector.h"
 #include "../VectorFunction.h"
 #include "vectorization/SelectivityVector.h"
-#include "type/Timestamp.h"
 #include "vector/vector_helper.h"
 #include "util/bit_util.h"
-#include <ctime>
 #include <cstring>
 
 namespace omniruntime::vectorization {
@@ -65,6 +63,27 @@ static const tz::TimeZone *ResolveSessionTimeZone(const std::string_view &tzView
         return zone;
     }
     return tz::locateZone("UTC", /*failOnError=*/false);
+}
+
+/// Flink TIMESTAMP_LTZ shifts the instant by the session-zone offset, then
+/// extracts with the same toward-zero formula as a plain TIMESTAMP. A null
+/// zone is UTC (offset 0).
+static int64_t SessionWallMillis(int64_t millis, bool hasTz, bool tzIsConst, const tz::TimeZone *constZone,
+    BaseVector *tzArg, vector_size_t row)
+{
+    if (!hasTz) {
+        return millis;
+    }
+    const tz::TimeZone *zone = constZone;
+    if (!tzIsConst) {
+        zone = (tzArg == nullptr || tzArg->IsNull(row))
+            ? nullptr
+            : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, row));
+    }
+    if (zone == nullptr) {
+        return millis;
+    }
+    return zone->to_local(tz::TimeZone::milliseconds{millis}).count();
 }
 
 /// flink_hour function
@@ -126,21 +145,8 @@ public:
             const auto *inputRaw = unsafe::UnsafeVector::GetRawValues(inputVector);
 
             rows.applyToSelected([&](vector_size_t i) {
-                int64_t millis = inputRaw[i];
-                if (!hasTz_) {
-                    // Plain TIMESTAMP: Java toward-zero modular hour.
-                    resultRaw[i] = (millis % kMillisPerDay) / kMillisPerHour;
-                    result->SetNotNull(i);
-                    return;
-                }
-                Timestamp ts = Timestamp::fromMillis(millis);
-                const tz::TimeZone *zone = constZone;
-                if (!tzIsConst) {
-                    zone = tzArg->IsNull(i) ? nullptr
-                        : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, i));
-                }
-                std::tm tmValue = util::GetDateTime(ts, zone);
-                resultRaw[i] = static_cast<int32_t>(tmValue.tm_hour);
+                int64_t millis = SessionWallMillis(inputRaw[i], hasTz_, tzIsConst, constZone, tzArg, i);
+                resultRaw[i] = (millis % kMillisPerDay) / kMillisPerHour;
                 result->SetNotNull(i);
             });
         }

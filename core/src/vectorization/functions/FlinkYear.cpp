@@ -13,8 +13,9 @@
  *                 No session timezone is applied — Flink's codegen for a plain
  *                 TIMESTAMP inlines extractFromDate(YEAR, millis / 86400000).
  *                 The division is toward zero, so a negative timestamp that is
- *                 not exactly midnight lands on the next civil day. The
- *                 _with_tz path still decomposes the instant in the session zone.
+ *                 not exactly midnight lands on the next civil day.
+ *                 TIMESTAMP_LTZ adds the session-zone offset first, then uses
+ *                 the same day index.
  *
  * Returns NULL if the input is NULL, or (for OMNI_INT) when the date is so far
  * out of range that epochToCalendarUtc cannot decompose it.
@@ -54,6 +55,27 @@ static const tz::TimeZone *ResolveSessionTimeZone(const std::string_view &tzView
     return tz::locateZone("UTC", /*failOnError=*/false);
 }
 
+/// Flink TIMESTAMP_LTZ shifts the instant by the session-zone offset, then
+/// extracts with the same toward-zero day index as a plain TIMESTAMP. A null
+/// zone is UTC (offset 0).
+static int64_t SessionWallMillis(int64_t millis, bool hasTz, bool tzIsConst, const tz::TimeZone *constZone,
+    BaseVector *tzArg, vector_size_t row)
+{
+    if (!hasTz) {
+        return millis;
+    }
+    const tz::TimeZone *zone = constZone;
+    if (!tzIsConst) {
+        zone = (tzArg == nullptr || tzArg->IsNull(row))
+            ? nullptr
+            : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, row));
+    }
+    if (zone == nullptr) {
+        return millis;
+    }
+    return zone->to_local(tz::TimeZone::milliseconds{millis}).count();
+}
+
 static constexpr int64_t kSecondsPerDay = 86400LL;
 static constexpr int64_t kMillisPerDay = 86400000LL;
 
@@ -67,8 +89,8 @@ static constexpr int64_t kMillisPerDay = 86400000LL;
 ///             in UTC by default (no session timezone — wall-clock semantics,
 ///             matching Flink EXTRACT(YEAR FROM <TIMESTAMP>)). When an
 ///             explicit VARCHAR timezone arg is present (the _with_tz form,
-///             used for TIMESTAMP_WITH_LOCAL_TIME_ZONE), it is applied via
-///             GetDateTime(ts, zone) instead of GetDateTime(ts, nullptr).
+///             used for TIMESTAMP_WITH_LOCAL_TIME_ZONE), the instant is first
+///             shifted by that zone's offset, then the same day index is used.
 ///
 /// A single class serves both the non-tz and _with_tz registrations: arity is
 /// encoded in hasTz_ at construction (from the registered signature), not by
@@ -147,28 +169,16 @@ public:
             const auto *inputRaw = unsafe::UnsafeVector::GetRawValues(inputVector);
 
             rows.applyToSelected([&](vector_size_t i) {
-                int64_t millis = inputRaw[i];
-                if (!hasTz_) {
-                    int64_t days = millis / kMillisPerDay;
-                    int64_t seconds = days * kSecondsPerDay;
-                    std::tm tmValue;
-                    if (Timestamp::epochToCalendarUtc(seconds, tmValue)) {
-                        resultRaw[i] = static_cast<int32_t>(tmValue.tm_year + 1900);
-                        result->SetNotNull(i);
-                    } else {
-                        result->SetNull(i);
-                    }
-                    return;
+                int64_t millis = SessionWallMillis(inputRaw[i], hasTz_, tzIsConst, constZone, tzArg, i);
+                int64_t days = millis / kMillisPerDay;
+                int64_t seconds = days * kSecondsPerDay;
+                std::tm tmValue;
+                if (Timestamp::epochToCalendarUtc(seconds, tmValue)) {
+                    resultRaw[i] = static_cast<int32_t>(tmValue.tm_year + 1900);
+                    result->SetNotNull(i);
+                } else {
+                    result->SetNull(i);
                 }
-                Timestamp ts = Timestamp::fromMillis(millis);
-                const tz::TimeZone *zone = constZone;
-                if (!tzIsConst) {
-                    zone = tzArg->IsNull(i) ? nullptr
-                        : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, i));
-                }
-                std::tm tmValue = util::GetDateTime(ts, zone);
-                resultRaw[i] = static_cast<int32_t>(tmValue.tm_year + 1900);
-                result->SetNotNull(i);
             });
         }
         delete inputArg;
