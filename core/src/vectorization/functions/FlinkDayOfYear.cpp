@@ -90,7 +90,7 @@ public:
             result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
         }
 
-        auto *resultVector = reinterpret_cast<Vector<int32_t> *>(result);
+        auto *resultVector = reinterpret_cast<Vector<int64_t> *>(result);
         auto *resultRaw = unsafe::UnsafeVector::GetRawValues(resultVector);
 
         const auto inputTypeId = inputArg->GetTypeId();
@@ -166,8 +166,8 @@ private:
 void RegisterFlinkDayOfYearFunction(const std::string &name)
 {
     auto func = std::make_shared<FlinkDayOfYearFunction>(false);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_INT}, OMNI_INT, func);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG}, OMNI_INT, func);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_INT}, OMNI_LONG, func);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG}, OMNI_LONG, func);
 }
 
 void RegisterFlinkDayOfYearWithTzFunction(const std::string &name)
@@ -177,7 +177,7 @@ void RegisterFlinkDayOfYearWithTzFunction(const std::string &name)
     // The tz is only applied on the OMNI_LONG path; OMNI_INT (date) stays
     // in UTC. Reuses the same class; arity is encoded in hasTz_.
     auto func = std::make_shared<FlinkDayOfYearFunction>(true);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_INT, OMNI_VARCHAR}, OMNI_INT, func);
-    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG, OMNI_VARCHAR}, OMNI_INT, func);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_INT, OMNI_VARCHAR}, OMNI_LONG, func);
+    VectorFunction::RegisterVectorFunction(name, {OMNI_LONG, OMNI_VARCHAR}, OMNI_LONG, func);
 }
 }

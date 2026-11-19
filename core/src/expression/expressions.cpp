@@ -1215,6 +1215,10 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
         } else if (auto decToDecFn = vectorization::TryCreateDecimalToDecimalFunction(funcName, decArgTypes)) {
             // Scale-preserving DECIMAL -> DECIMAL (sign): output type equals the operand type.
             vectorFunction = decToDecFn;
+        } else if (auto truncFn = vectorization::TryCreateTruncateDecimalFunction(funcName, decArgTypes, dataType)) {
+            vectorFunction = truncFn;
+        } else if (auto ltzFn = vectorization::TryCreateToTimestampLtzDecimalFunction(funcName, decArgTypes)) {
+            vectorFunction = ltzFn;
         }
     }
 }
@@ -1269,6 +1273,10 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
         } else if (auto decToDecFn = vectorization::TryCreateDecimalToDecimalFunction(funcName, decArgTypes)) {
             // Scale-preserving DECIMAL -> DECIMAL (sign): output type equals the operand type.
             vectorFunction = decToDecFn;
+        } else if (auto truncFn = vectorization::TryCreateTruncateDecimalFunction(funcName, decArgTypes, dataType)) {
+            vectorFunction = truncFn;
+        } else if (auto ltzFn = vectorization::TryCreateToTimestampLtzDecimalFunction(funcName, decArgTypes)) {
+            vectorFunction = ltzFn;
         }
     }
 }
@@ -1321,6 +1329,10 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
         } else if (auto decToDecFn = vectorization::TryCreateDecimalToDecimalFunction(funcName, decArgTypes)) {
             // Scale-preserving DECIMAL -> DECIMAL (sign): output type equals the operand type.
             vectorFunction = decToDecFn;
+        } else if (auto truncFn = vectorization::TryCreateTruncateDecimalFunction(funcName, decArgTypes, dataType)) {
+            vectorFunction = truncFn;
+        } else if (auto ltzFn = vectorization::TryCreateToTimestampLtzDecimalFunction(funcName, decArgTypes)) {
+            vectorFunction = ltzFn;
         }
     }
 }

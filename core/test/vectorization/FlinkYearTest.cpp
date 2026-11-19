@@ -49,7 +49,7 @@ public:
 class FlinkYearTestHelper {
 public:
     static void ValidateResult(BaseVector* result, const std::vector<int32_t>& expected, int rowSize) {
-        auto* resultVec = dynamic_cast<Vector<int32_t>*>(result);
+        auto* resultVec = dynamic_cast<Vector<int64_t>*>(result);
         ASSERT_NE(resultVec, nullptr) << "Result vector type mismatch";
 
         for (int i = 0; i < rowSize; ++i) {
@@ -84,11 +84,11 @@ public:
 
     static void ExecuteFlinkYear(BaseVector* inputVec, DataTypeId inputTypeId, BaseVector*& result) {
         auto signature = std::make_shared<FunctionSignature>("flink_year",
-            std::vector<DataTypeId>{inputTypeId}, OMNI_INT);
+            std::vector<DataTypeId>{inputTypeId}, OMNI_LONG);
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "flink_year function not found for signature";
 
-        auto outputType = std::make_shared<DataType>(OMNI_INT);
+        auto outputType = std::make_shared<DataType>(OMNI_LONG);
         ExecutionContext context;
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
@@ -114,11 +114,11 @@ public:
     // TIMESTAMP_WITH_LOCAL_TIME_ZONE input on the Java side).
     static void ExecuteFlinkYearWithTz(BaseVector* inputVec, BaseVector* tzVec, BaseVector*& result) {
         auto signature = std::make_shared<FunctionSignature>("flink_year_with_tz",
-            std::vector<DataTypeId>{OMNI_LONG, OMNI_VARCHAR}, OMNI_INT);
+            std::vector<DataTypeId>{OMNI_LONG, OMNI_VARCHAR}, OMNI_LONG);
         auto function = VectorFunction::Find(signature);
         ASSERT_NE(function, nullptr) << "flink_year_with_tz function not found for signature";
 
-        auto outputType = std::make_shared<DataType>(OMNI_INT);
+        auto outputType = std::make_shared<DataType>(OMNI_LONG);
         ExecutionContext context;
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
@@ -197,7 +197,7 @@ TEST(FlinkYearTest, IntWithNull) {
     EXPECT_TRUE(resultVec->IsNull(1)) << "Row 1 should be NULL";
     EXPECT_FALSE(resultVec->IsNull(2)) << "Row 2 should not be NULL";
 
-    auto* resultVecTyped = dynamic_cast<Vector<int32_t>*>(resultVec);
+    auto* resultVecTyped = dynamic_cast<Vector<int64_t>*>(resultVec);
     EXPECT_EQ(resultVecTyped->GetValue(0), 2024) << "Row 0 year should be 2024";
     EXPECT_EQ(resultVecTyped->GetValue(2), 2025) << "Row 2 year should be 2025";
 
@@ -317,7 +317,7 @@ TEST(FlinkYearTest, LongWithNull) {
     EXPECT_TRUE(resultVec->IsNull(1)) << "Row 1 should be NULL";
     EXPECT_FALSE(resultVec->IsNull(2)) << "Row 2 should not be NULL";
 
-    auto* resultVecTyped = dynamic_cast<Vector<int32_t>*>(resultVec);
+    auto* resultVecTyped = dynamic_cast<Vector<int64_t>*>(resultVec);
     EXPECT_EQ(resultVecTyped->GetValue(0), 2024) << "Row 0 year should be 2024";
     EXPECT_EQ(resultVecTyped->GetValue(2), 2025) << "Row 2 year should be 2025";
 
@@ -355,7 +355,7 @@ TEST(FlinkYearTest, LongMillisSemanticsVsMicros) {
 
     ASSERT_NE(resultVec, nullptr);
     EXPECT_FALSE(resultVec->IsNull(0));
-    auto* resultVecTyped = dynamic_cast<Vector<int32_t>*>(resultVec);
+    auto* resultVecTyped = dynamic_cast<Vector<int64_t>*>(resultVec);
     // Must be 2024 (millis semantics). A buggy fromMicros path would give 1970.
     EXPECT_EQ(resultVecTyped->GetValue(0), 2024);
 

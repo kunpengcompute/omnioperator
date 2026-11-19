@@ -49,6 +49,13 @@ extern "C" DLLEXPORT int64_t CountChar(const char *str, int32_t strLen, const ch
     return count;
 }
 
+extern "C" DLLEXPORT int64_t CountCharChar(const char *str, int32_t strWidth, int32_t strLen, const char *target,
+    int32_t targetWidth, int32_t targetLen, bool isNull)
+{
+    (void)strWidth;
+    return CountChar(str, strLen, target, targetWidth, targetLen, isNull);
+}
+
 extern "C" DLLEXPORT const char* SplitIndexRetNull(const char *str, int32_t strLen, bool strIsNull, const char *target,
                                                    int32_t targetWidth, int32_t targetLen, bool targetIsNull, int32_t index,
                                                    bool indexIsNull, bool *outIsNull, int32_t *outLen)
@@ -75,6 +82,15 @@ extern "C" DLLEXPORT const char* SplitIndexRetNull(const char *str, int32_t strL
     *outIsNull = true;
     *outLen = 0;
     return nullptr;
+}
+
+extern "C" DLLEXPORT const char *SplitIndexCharRetNull(const char *str, int32_t strWidth, int32_t strLen, bool strIsNull,
+    const char *target, int32_t targetWidth, int32_t targetLen, bool targetIsNull, int32_t index, bool indexIsNull,
+    bool *outIsNull, int32_t *outLen)
+{
+    (void)strWidth;
+    return SplitIndexRetNull(str, strLen, strIsNull, target, targetWidth, targetLen, targetIsNull, index, indexIsNull,
+        outIsNull, outLen);
 }
 
 /**
@@ -2100,7 +2116,8 @@ extern "C" DLLEXPORT int32_t CharLengthStr(const char *str, int32_t strLen, bool
 
 extern "C" DLLEXPORT int32_t CharLengthChar(const char *str, int32_t strWidth, int32_t strLen, bool isNull)
 {
-    return isNull ? 0 : strWidth;
+    (void)strWidth;
+    return isNull ? 0 : omniruntime::Utf8Util::CountCodePoints(str, strLen);
 }
 
 extern "C" DLLEXPORT const char *ReplaceStrStrStrWithRepNotReplace(int64_t contextPtr, const char *str, int32_t strLen,

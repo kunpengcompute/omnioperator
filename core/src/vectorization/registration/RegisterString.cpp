@@ -22,6 +22,8 @@
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
+void RegisterSplitIndexAndCountChar(const std::string &prefix);
+
 void RegisterStringFunctions(const std::string &prefix)
 {
     RegisterFunction<InstrFunction, int32_t, std::string_view, std::string_view>(prefix + "instr", {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_INT);
@@ -70,9 +72,15 @@ void RegisterStringFunctions(const std::string &prefix)
     RegisterFunction<UpperFunction, std::string, std::string_view>(prefix + "upper", {OMNI_CHAR}, OMNI_VARCHAR);
     RegisterFunction<SoundexFunction, std::string, std::string_view>(prefix + "soundex", {OMNI_VARCHAR}, OMNI_VARCHAR);
 
-    // char_length / character_length / length(string) -> integer (character count, Unicode-aware)
+    // char_length / character_length / length(string) -> integer (character count, Unicode-aware).
+    // The planner emits "char_length"; register that name so the vectorized path is selected
+    // ahead of the codegen CharLengthChar fallback.
     RegisterFunction<CharLengthFunction, int32_t, std::string_view>(prefix + "length", {OMNI_VARCHAR}, OMNI_INT);
     RegisterFunction<CharLengthFunction, int32_t, std::string_view>(prefix + "length", {OMNI_CHAR}, OMNI_INT);
+    RegisterFunction<CharLengthFunction, int32_t, std::string_view>(prefix + "char_length", {OMNI_VARCHAR}, OMNI_INT);
+    RegisterFunction<CharLengthFunction, int32_t, std::string_view>(prefix + "char_length", {OMNI_CHAR}, OMNI_INT);
+    RegisterFunction<CharLengthFunction, int32_t, std::string_view>(prefix + "character_length", {OMNI_VARCHAR}, OMNI_INT);
+    RegisterFunction<CharLengthFunction, int32_t, std::string_view>(prefix + "character_length", {OMNI_CHAR}, OMNI_INT);
     // length(binary) -> integer (byte count)
     RegisterFunction<BinaryLengthFunction, int32_t, std::string_view>(prefix + "length", {OMNI_VARBINARY}, OMNI_INT);
     // ascii(string) -> int32; align with velox (Varchar), add CHAR for upstream compatibility
@@ -319,5 +327,6 @@ void RegisterStringFunctions(const std::string &prefix)
     RegisterFunction<StaticInvokeVarcharTypeWriteSideCheckFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeVarcharTypeWriteSideCheck", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
     RegisterFunction<StaticInvokeCharTypeWriteSideCheckFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeCharTypeWriteSideCheck", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
     RegisterFunction<StaticInvokeCharReadPaddingFunction, std::string, std::string_view, int32_t>(prefix + "StaticInvokeCharReadPadding", {OMNI_VARCHAR, OMNI_INT}, OMNI_VARCHAR);
+    RegisterSplitIndexAndCountChar(prefix);
 }
 }

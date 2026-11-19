@@ -513,6 +513,188 @@ private:
     type::DataTypePtr inputType_;
 };
 
+/// truncate(DECIMAL, INT) -> DECIMAL. Toward zero (RoundingMode.DOWN) from the input scale
+/// to the result scale carried on the expression return type.
+class TruncateDecimalFunction : public VectorFunction {
+public:
+    TruncateDecimalFunction(const type::DataTypePtr &inputType, const type::DataTypePtr &outputType)
+        : inputType_(inputType), outputType_(outputType) {}
+
+    void Apply(std::stack<vec::BaseVector *> &args, const type::DataTypePtr &outputType,
+        vec::BaseVector *&result, op::ExecutionContext *context) const override
+    {
+        (void)context;
+        (void)outputType;
+        auto *scaleVec = args.top();
+        args.pop();
+        auto *input = args.top();
+        args.pop();
+
+        const int32_t size = input->GetSize();
+        const auto *inDec = static_cast<const type::DecimalDataType *>(inputType_.get());
+        const int32_t inScale = inDec->GetScale();
+        int32_t outScale = inScale;
+        int32_t precision = inDec->GetPrecision();
+        if (outputType_ != nullptr && IsDecimalTypeId(outputType_->GetId())) {
+            const auto *outDec = static_cast<const type::DecimalDataType *>(outputType_.get());
+            outScale = outDec->GetScale();
+            precision = outDec->GetPrecision();
+        }
+        const type::DataTypeId id = inputType_->GetId();
+        const bool isConst = input->GetEncoding() == vec::OMNI_ENCODING_CONST;
+        const bool scaleConst = scaleVec->GetEncoding() == vec::OMNI_ENCODING_CONST;
+        const int32_t diff = inScale - outScale;
+
+        std::shared_ptr<type::DecimalDataType> outDt = id == type::OMNI_DECIMAL64
+            ? std::static_pointer_cast<type::DecimalDataType>(std::make_shared<type::Decimal64DataType>(precision, outScale))
+            : std::static_pointer_cast<type::DecimalDataType>(std::make_shared<type::Decimal128DataType>(precision, outScale));
+        result = vec::VectorHelper::CreateFlatVector(id, size);
+        vec::VectorHelper::SetVectorDataType(result, outDt.get());
+
+        auto rescale64 = [diff](int64_t unscaled) -> int64_t {
+            if (diff == 0) {
+                return unscaled;
+            }
+            if (diff > 0) {
+                return static_cast<int64_t>(static_cast<__int128>(unscaled) / DecimalPowerOfTen(diff));
+            }
+            return static_cast<int64_t>(static_cast<__int128>(unscaled) * DecimalPowerOfTen(-diff));
+        };
+
+        if (id == type::OMNI_DECIMAL64) {
+            auto *resultVec = static_cast<vec::Vector<int64_t> *>(result);
+            for (int32_t row = 0; row < size; ++row) {
+                if (input->IsNull(isConst ? 0 : row) || scaleVec->IsNull(scaleConst ? 0 : row)) {
+                    result->SetNull(row);
+                    continue;
+                }
+                resultVec->SetValue(row, rescale64(vec::VectorHelper::GetValueFromVector<int64_t>(input, row)));
+            }
+        } else {
+            auto *resultVec = static_cast<vec::Vector<type::Decimal128> *>(result);
+            for (int32_t row = 0; row < size; ++row) {
+                if (input->IsNull(isConst ? 0 : row) || scaleVec->IsNull(scaleConst ? 0 : row)) {
+                    result->SetNull(row);
+                    continue;
+                }
+                __int128 v = vec::VectorHelper::GetValueFromVector<type::Decimal128>(input, row).ToInt128();
+                if (diff > 0) {
+                    v /= DecimalPowerOfTen(diff);
+                } else if (diff < 0) {
+                    v *= DecimalPowerOfTen(-diff);
+                }
+                resultVec->SetValue(row, type::Decimal128(v));
+            }
+        }
+        delete scaleVec;
+        delete input;
+    }
+
+private:
+    type::DataTypePtr inputType_;
+    type::DataTypePtr outputType_;
+};
+
+/// to_timestamp_ltz(DECIMAL, precision) -> BIGINT millis.
+/// precision 0: truncate toward zero to a whole second, then * 1000.
+/// precision 3: truncate toward zero to a whole millisecond.
+class ToTimestampLtzDecimalFunction : public VectorFunction {
+public:
+    explicit ToTimestampLtzDecimalFunction(const type::DataTypePtr &inputType) : inputType_(inputType) {}
+
+    void Apply(std::stack<vec::BaseVector *> &args, const type::DataTypePtr &outputType,
+        vec::BaseVector *&result, op::ExecutionContext *context) const override
+    {
+        (void)context;
+        (void)outputType;
+        auto *precisionVec = args.top();
+        args.pop();
+        auto *input = args.top();
+        args.pop();
+
+        constexpr int64_t kMillisPerSecond = 1000LL;
+        constexpr int64_t kMinEpochMillis = -62167219200000LL;
+        constexpr int64_t kMaxEpochMillis = 253402300799999LL;
+
+        const int32_t size = input->GetSize();
+        const int32_t scale = static_cast<const type::DecimalDataType *>(inputType_.get())->GetScale();
+        const type::DataTypeId id = inputType_->GetId();
+        const bool isConst = input->GetEncoding() == vec::OMNI_ENCODING_CONST;
+        const bool precisionConst = precisionVec->GetEncoding() == vec::OMNI_ENCODING_CONST;
+        result = vec::VectorHelper::CreateFlatVector(type::OMNI_LONG, size);
+        auto *resultVec = static_cast<vec::Vector<int64_t> *>(result);
+
+        auto wholeFrom64 = [scale](int64_t unscaled) -> int64_t {
+            if (scale <= 0) {
+                return static_cast<int64_t>(static_cast<__int128>(unscaled) * DecimalPowerOfTen(-scale));
+            }
+            return static_cast<int64_t>(static_cast<__int128>(unscaled) / DecimalPowerOfTen(scale));
+        };
+
+        for (int32_t row = 0; row < size; ++row) {
+            if (input->IsNull(isConst ? 0 : row) || precisionVec->IsNull(precisionConst ? 0 : row)) {
+                result->SetNull(row);
+                continue;
+            }
+            int64_t whole;
+            if (id == type::OMNI_DECIMAL64) {
+                whole = wholeFrom64(vec::VectorHelper::GetValueFromVector<int64_t>(input, row));
+            } else {
+                __int128 unscaled = vec::VectorHelper::GetValueFromVector<type::Decimal128>(input, row).ToInt128();
+                if (scale > 0) {
+                    unscaled /= DecimalPowerOfTen(scale);
+                } else if (scale < 0) {
+                    unscaled *= DecimalPowerOfTen(-scale);
+                }
+                whole = static_cast<int64_t>(unscaled);
+            }
+            const int32_t precision = vec::VectorHelper::GetValueFromVector<int32_t>(precisionVec, row);
+            int64_t epochMillis = 0;
+            bool ok = false;
+            if (precision == 0) {
+                if (whole > kMaxEpochMillis / kMillisPerSecond || whole < kMinEpochMillis / kMillisPerSecond) {
+                    ok = false;
+                } else {
+                    epochMillis = whole * kMillisPerSecond;
+                    ok = epochMillis >= kMinEpochMillis && epochMillis <= kMaxEpochMillis;
+                }
+            } else if (precision == 3) {
+                epochMillis = whole;
+                ok = epochMillis >= kMinEpochMillis && epochMillis <= kMaxEpochMillis;
+            }
+            if (!ok) {
+                result->SetNull(row);
+            } else {
+                resultVec->SetValue(row, epochMillis);
+            }
+        }
+        delete precisionVec;
+        delete input;
+    }
+
+private:
+    type::DataTypePtr inputType_;
+};
+
+inline std::shared_ptr<VectorFunction> TryCreateTruncateDecimalFunction(
+    const std::string &name, const std::vector<type::DataTypePtr> &argTypes, const type::DataTypePtr &outputType)
+{
+    if (name != "truncate" || argTypes.size() != 2 || argTypes[0] == nullptr || !IsDecimalTypeId(argTypes[0]->GetId())) {
+        return nullptr;
+    }
+    return std::make_shared<TruncateDecimalFunction>(argTypes[0], outputType);
+}
+
+inline std::shared_ptr<VectorFunction> TryCreateToTimestampLtzDecimalFunction(
+    const std::string &name, const std::vector<type::DataTypePtr> &argTypes)
+{
+    if (name != "to_timestamp_ltz" || argTypes.size() != 2 || argTypes[0] == nullptr
+        || !IsDecimalTypeId(argTypes[0]->GetId())) {
+        return nullptr;
+    }
+    return std::make_shared<ToTimestampLtzDecimalFunction>(argTypes[0]);
+}
+
 /// Returns a scale-preserving DECIMAL->DECIMAL VectorFunction if `name`+arity is supported and
 /// every operand is DECIMAL64/DECIMAL128, else nullptr. Currently: sign, floor, ceil, abs.
 inline std::shared_ptr<VectorFunction> TryCreateDecimalToDecimalFunction(
