@@ -282,13 +282,14 @@ TEST(FlinkYearTest, LongYearBoundary) {
 }
 
 TEST(FlinkYearTest, LongPreEpochNegativeMillis) {
-    // Negative millis (before 1970): 1969-12-31 23:59:59 -> 1969.
-    // Timestamp::fromMillis handles negative millis via floor division.
+    // Flink YEAR(TIMESTAMP) uses the toward-zero day index millis/86400000.
+    // 1969-12-31 23:59:59 is -1000 ms -> day 0 -> 1970.
+    // 1900-01-01 00:00:00 is an exact day boundary -> 1900.
     std::vector<int64_t> millisValues = {
         FlinkYearTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 59, 59),
         FlinkYearTestHelper::TimestampToMillisUtc(1900, 1, 1, 0, 0, 0)
     };
-    std::vector<int32_t> expected = {1969, 1900};
+    std::vector<int32_t> expected = {1970, 1900};
 
     BaseVector* inputVec = FlinkYearTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;

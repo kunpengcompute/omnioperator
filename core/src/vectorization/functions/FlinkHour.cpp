@@ -18,12 +18,11 @@
  * TIMESTAMP_WITH_LOCAL_TIME_ZONE, via a different codegen path.) Tests confirm
  * this: EXTRACT(HOUR FROM f18)=6 for TIMESTAMP '1996-11-10 06:55:44.333'.
  *
- * HOUR formula: Flink codegen = (millis % 86400000) / 3600000, range 0-23.
- * This is mathematically equal to std::tm.tm_hour obtained from
- * Timestamp::fromMillis(millis) -> getSeconds() -> epochToCalendarUtc (UTC):
- * the sub-millisecond part does not affect integer division by 3600000, and
- * seconds%86400/3600 == (millis%86400000)/3600000. We use tm_hour here for
- * consistency with the other flink_* extractors (same fromMillis + UTC path).
+ * HOUR formula for a plain TIMESTAMP (ExtractCallGen): 
+ * (millis % 86400000) / 3600000, both operations toward zero, the same as
+ * Java. For millis < 0 the remainder is negative, so the hour can be negative.
+ * TIMESTAMP_LTZ first adds the session-zone offset (TimeZone::to_local, the
+ * same as millis + TimeZone.getOffset), then uses this formula.
  *
  * Only OMNI_LONG is registered (HOUR is meaningless on a DATE; Flink's
  * julianExtract throws AssertionError for HOUR on a date-only Julian day).
@@ -37,10 +36,8 @@
 #include "vector/vector.h"
 #include "../VectorFunction.h"
 #include "vectorization/SelectivityVector.h"
-#include "type/Timestamp.h"
 #include "vector/vector_helper.h"
 #include "util/bit_util.h"
-#include <ctime>
 #include <cstring>
 
 namespace omniruntime::vectorization {
@@ -54,6 +51,9 @@ namespace {
 /// back to UTC for an unknown/empty string rather than returning nullptr,
 /// matching the lenient resolution used by the rest of the vectorized
 /// datetime layer.
+static constexpr int64_t kMillisPerHour = 3600000LL;
+static constexpr int64_t kMillisPerDay = 86400000LL;
+
 static const tz::TimeZone *ResolveSessionTimeZone(const std::string_view &tzView)
 {
     if (tzView.empty()) {
@@ -63,6 +63,27 @@ static const tz::TimeZone *ResolveSessionTimeZone(const std::string_view &tzView
         return zone;
     }
     return tz::locateZone("UTC", /*failOnError=*/false);
+}
+
+/// Flink TIMESTAMP_LTZ shifts the instant by the session-zone offset, then
+/// extracts with the same toward-zero formula as a plain TIMESTAMP. A null
+/// zone is UTC (offset 0).
+static int64_t SessionWallMillis(int64_t millis, bool hasTz, bool tzIsConst, const tz::TimeZone *constZone,
+    BaseVector *tzArg, vector_size_t row)
+{
+    if (!hasTz) {
+        return millis;
+    }
+    const tz::TimeZone *zone = constZone;
+    if (!tzIsConst) {
+        zone = (tzArg == nullptr || tzArg->IsNull(row))
+            ? nullptr
+            : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, row));
+    }
+    if (zone == nullptr) {
+        return millis;
+    }
+    return zone->to_local(tz::TimeZone::milliseconds{millis}).count();
 }
 
 /// flink_hour function
@@ -124,17 +145,8 @@ public:
             const auto *inputRaw = unsafe::UnsafeVector::GetRawValues(inputVector);
 
             rows.applyToSelected([&](vector_size_t i) {
-                int64_t millis = inputRaw[i];
-                Timestamp ts = Timestamp::fromMillis(millis);
-                // nullptr zone => UTC wall-clock; non-null zone => session-local
-                // wall-clock (for TIMESTAMP_WITH_LOCAL_TIME_ZONE input).
-                const tz::TimeZone *zone = constZone;
-                if (hasTz_ && !tzIsConst) {
-                    zone = tzArg->IsNull(i) ? nullptr
-                        : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, i));
-                }
-                std::tm tmValue = util::GetDateTime(ts, zone);
-                resultRaw[i] = static_cast<int32_t>(tmValue.tm_hour);
+                int64_t millis = SessionWallMillis(inputRaw[i], hasTz_, tzIsConst, constZone, tzArg, i);
+                resultRaw[i] = (millis % kMillisPerDay) / kMillisPerHour;
                 result->SetNotNull(i);
             });
         }
