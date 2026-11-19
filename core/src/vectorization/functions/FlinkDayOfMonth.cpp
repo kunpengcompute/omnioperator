@@ -11,10 +11,10 @@
  *   - OMNI_LONG : Flink TIMESTAMP, represented as TimestampData = milliseconds
  *                 since epoch (NOT microseconds like the existing `year`).
  *                 No session timezone is applied — Flink's codegen for a plain
- *                 TIMESTAMP inlines extractFromDate(DAY, millis / 86400000),
- *                 which treats the stored millis as a wall-clock value. We
- *                 achieve the same via Timestamp::fromMillis(millis) ->
- *                 getSeconds() and UTC calendar decomposition.
+ *                 TIMESTAMP inlines extractFromDate(DAY, millis / 86400000).
+ *                 The division is toward zero, so a negative timestamp that is
+ *                 not exactly midnight lands on the next civil day. The
+ *                 _with_tz path still decomposes the instant in the session zone.
  *
  * DAY formula: Flink julianExtract returns `day` directly (day in [1..31]).
  * With std::tm.tm_mday in [1..31] this is exactly `tm_mday`, the form used
@@ -58,6 +58,7 @@ static const tz::TimeZone *ResolveSessionTimeZone(const std::string_view &tzView
 }
 
 static constexpr int64_t kSecondsPerDay = 86400LL;
+static constexpr int64_t kMillisPerDay = 86400000LL;
 
 /// flink_dayofmonth function
 /// flink_dayofmonth(date) -> int32, flink_dayofmonth(timestamp_millis) -> int32
@@ -137,11 +138,21 @@ public:
 
             rows.applyToSelected([&](vector_size_t i) {
                 int64_t millis = inputRaw[i];
+                if (!hasTz_) {
+                    int64_t days = millis / kMillisPerDay;
+                    int64_t seconds = days * kSecondsPerDay;
+                    std::tm tmValue;
+                    if (Timestamp::epochToCalendarUtc(seconds, tmValue)) {
+                        resultRaw[i] = static_cast<int32_t>(tmValue.tm_mday);
+                        result->SetNotNull(i);
+                    } else {
+                        result->SetNull(i);
+                    }
+                    return;
+                }
                 Timestamp ts = Timestamp::fromMillis(millis);
-                // nullptr zone => UTC wall-clock; non-null zone => session-local
-                // wall-clock (for TIMESTAMP_WITH_LOCAL_TIME_ZONE input).
                 const tz::TimeZone *zone = constZone;
-                if (hasTz_ && !tzIsConst) {
+                if (!tzIsConst) {
                     zone = tzArg->IsNull(i) ? nullptr
                         : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, i));
                 }

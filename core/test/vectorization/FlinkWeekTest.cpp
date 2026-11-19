@@ -302,14 +302,15 @@ TEST(FlinkWeekTest, LongIsoBoundary) {
 }
 
 TEST(FlinkWeekTest, LongPreEpochNegativeMillis) {
-    // Negative millis (before 1970): 1969-12-31 23:59:59 (Wed). ISO rule: the
-    // week belongs to the year of its Thursday; 1970-01-01 is a Thursday, so
-    // this belongs to ISO week 1 of 1970 -> 1. Timestamp::fromMillis handles
-    // negative millis via floor division.
+    // Flink WEEK(TIMESTAMP) uses the toward-zero day index millis/86400000,
+    // then the ISO week of that date. 1969-12-31 23:59:59 -> 1970-01-01,
+    // which is ISO week 1. 1969-06-15 12:00:00 -> 1969-06-16, ISO week 25
+    // (the Sunday 1969-06-15 itself is week 24).
     std::vector<int64_t> millisValues = {
-        FlinkWeekTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 59, 59)
+        FlinkWeekTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 59, 59),
+        FlinkWeekTestHelper::TimestampToMillisUtc(1969, 6, 15, 12, 0, 0)
     };
-    std::vector<int32_t> expected = {1};
+    std::vector<int32_t> expected = {1, 25};
 
     BaseVector* inputVec = FlinkWeekTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;

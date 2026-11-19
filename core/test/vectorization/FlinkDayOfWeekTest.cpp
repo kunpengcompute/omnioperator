@@ -290,12 +290,14 @@ TEST(FlinkDayOfWeekTest, LongWeekBoundary) {
 }
 
 TEST(FlinkDayOfWeekTest, LongPreEpochNegativeMillis) {
-    // Negative millis (before 1970): 1969-12-31 23:59:59 (Wed) -> DOW 4.
-    // Timestamp::fromMillis handles negative millis via floor division.
+    // Flink DAYOFWEEK(TIMESTAMP) uses the toward-zero day index millis/86400000.
+    // Sunday=1. 1969-12-31 23:59:59 -> 1970-01-01 Thursday -> 5.
+    // 1969-06-15 12:00:00 -> 1969-06-16 Monday -> 2.
     std::vector<int64_t> millisValues = {
-        FlinkDayOfWeekTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 59, 59)
+        FlinkDayOfWeekTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 59, 59),
+        FlinkDayOfWeekTestHelper::TimestampToMillisUtc(1969, 6, 15, 12, 0, 0)
     };
-    std::vector<int32_t> expected = {4};
+    std::vector<int32_t> expected = {5, 2};
 
     BaseVector* inputVec = FlinkDayOfWeekTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;

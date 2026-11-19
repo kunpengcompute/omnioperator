@@ -18,12 +18,11 @@
  * different codegen path.) Tests confirm this: EXTRACT(MINUTE FROM f18)=55
  * for TIMESTAMP '1996-11-10 06:55:44.333'.
  *
- * MINUTE formula: Flink codegen = (millis % 3600000) / 60000, range 0-59.
- * This is mathematically equal to std::tm.tm_min obtained from
- * Timestamp::fromMillis(millis) -> getSeconds() -> epochToCalendarUtc (UTC):
- * the sub-millisecond part does not affect integer division by 60000, and
- * seconds%3600/60 == (millis%3600000)/60000. We use tm_min here for
- * consistency with the other flink_* extractors (same fromMillis + UTC path).
+ * MINUTE formula for a plain TIMESTAMP (ExtractCallGen):
+ * (millis % 3600000) / 60000, both operations toward zero, the same as Java.
+ * For millis < 0 the remainder is negative, so the minute can be negative
+ * and is not std::tm.tm_min. The _with_tz path still decomposes the instant
+ * in the session zone (TIMESTAMP_LTZ).
  *
  * Only OMNI_LONG is registered (MINUTE is meaningless on a DATE; Flink's
  * julianExtract throws AssertionError for MINUTE on a date-only Julian day).
@@ -54,6 +53,9 @@ namespace {
 /// back to UTC for an unknown/empty string rather than returning nullptr,
 /// matching the lenient resolution used by the rest of the vectorized
 /// datetime layer.
+static constexpr int64_t kMillisPerMinute = 60000LL;
+static constexpr int64_t kMillisPerHour = 3600000LL;
+
 static const tz::TimeZone *ResolveSessionTimeZone(const std::string_view &tzView)
 {
     if (tzView.empty()) {
@@ -125,11 +127,14 @@ public:
 
             rows.applyToSelected([&](vector_size_t i) {
                 int64_t millis = inputRaw[i];
+                if (!hasTz_) {
+                    resultRaw[i] = (millis % kMillisPerHour) / kMillisPerMinute;
+                    result->SetNotNull(i);
+                    return;
+                }
                 Timestamp ts = Timestamp::fromMillis(millis);
-                // nullptr zone => UTC wall-clock; non-null zone => session-local
-                // wall-clock (for TIMESTAMP_WITH_LOCAL_TIME_ZONE input).
                 const tz::TimeZone *zone = constZone;
-                if (hasTz_ && !tzIsConst) {
+                if (!tzIsConst) {
                     zone = tzArg->IsNull(i) ? nullptr
                         : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, i));
                 }

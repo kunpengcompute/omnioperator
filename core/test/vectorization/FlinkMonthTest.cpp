@@ -304,13 +304,14 @@ TEST(FlinkMonthTest, LongMonthBoundary) {
 }
 
 TEST(FlinkMonthTest, LongPreEpochNegativeMillis) {
-    // Negative millis (before 1970): 1969-12-31 23:59:59 -> Dec -> 12.
-    // Timestamp::fromMillis handles negative millis via floor division.
+    // Flink MONTH(TIMESTAMP) uses the toward-zero day index millis/86400000.
+    // 1969-12-31 23:59:59 -> 1970-01-01 -> 1.
+    // 1969-01-01 00:00:00 is an exact day boundary -> 1.
     std::vector<int64_t> millisValues = {
         FlinkMonthTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 59, 59),
         FlinkMonthTestHelper::TimestampToMillisUtc(1969, 1, 1, 0, 0, 0)
     };
-    std::vector<int32_t> expected = {12, 1};
+    std::vector<int32_t> expected = {1, 1};
 
     BaseVector* inputVec = FlinkMonthTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;

@@ -12,10 +12,10 @@
  *                 since epoch (NOT microseconds like the existing
  *                 `week_of_year`). No session timezone is applied — Flink's
  *                 codegen for a plain TIMESTAMP inlines
- *                 extractFromDate(WEEK, millis / 86400000), which treats the
- *                 stored millis as a wall-clock value. We achieve the same via
- *                 Timestamp::fromMillis(millis) -> getSeconds() and UTC
- *                 calendar decomposition.
+ *                 extractFromDate(WEEK, millis / 86400000). The division is
+ *                 toward zero, so a negative timestamp that is not exactly
+ *                 midnight lands on the next civil day. The _with_tz path
+ *                 still decomposes the instant in the session zone.
  *
  * Week numbering: ISO 8601 (Monday-start, week 1 = the week containing the
  * year's first Thursday), range 1-53. This is NOT MySQL WEEK(date, 0).
@@ -65,6 +65,7 @@ static const tz::TimeZone *ResolveSessionTimeZone(const std::string_view &tzView
 }
 
 static constexpr int64_t kSecondsPerDay = 86400LL;
+static constexpr int64_t kMillisPerDay = 86400000LL;
 
 /// Compute ISO 8601 week number (1-53) from epoch seconds (UTC).
 /// Ported from WeekOfYear.cpp::getIsoWeekFromEpochSeconds (same algorithm,
@@ -201,12 +202,21 @@ public:
 
             rows.applyToSelected([&](vector_size_t i) {
                 int64_t millis = inputRaw[i];
+                if (!hasTz_) {
+                    int64_t days = millis / kMillisPerDay;
+                    int64_t seconds = days * kSecondsPerDay;
+                    int32_t w;
+                    if (getIsoWeekFromEpochSeconds(seconds, w)) {
+                        resultRaw[i] = w;
+                        result->SetNotNull(i);
+                    } else {
+                        result->SetNull(i);
+                    }
+                    return;
+                }
                 Timestamp ts = Timestamp::fromMillis(millis);
-                // nullptr zone => UTC seconds; non-null zone => session-local
-                // seconds (for TIMESTAMP_WITH_LOCAL_TIME_ZONE input). The ISO
-                // week is then derived from those wall-clock seconds.
                 const tz::TimeZone *zone = constZone;
-                if (hasTz_ && !tzIsConst) {
+                if (!tzIsConst) {
                     zone = tzArg->IsNull(i) ? nullptr
                         : ResolveSessionTimeZone(VectorHelper::GetStringValueFromVector(tzArg, i));
                 }

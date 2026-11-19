@@ -291,13 +291,16 @@ TEST(FlinkDayOfMonthTest, LongMonthAndYearBoundary) {
 }
 
 TEST(FlinkDayOfMonthTest, LongPreEpochNegativeMillis) {
-    // Negative millis (before 1970): 1969-12-31 23:59:59 -> day 31.
-    // Timestamp::fromMillis handles negative millis via floor division.
+    // Flink DAYOFMONTH(TIMESTAMP) uses the toward-zero day index millis/86400000.
+    // 1969-12-31 23:59:59 -> 1970-01-01 -> 1.
+    // 1969-06-15 12:00:00 is not midnight, so the day index is 1969-06-16 -> 16.
+    // 1969-01-01 00:00:00 is an exact day boundary -> 1.
     std::vector<int64_t> millisValues = {
         FlinkDayOfMonthTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 59, 59),
+        FlinkDayOfMonthTestHelper::TimestampToMillisUtc(1969, 6, 15, 12, 0, 0),
         FlinkDayOfMonthTestHelper::TimestampToMillisUtc(1969, 1, 1, 0, 0, 0)
     };
-    std::vector<int32_t> expected = {31, 1};
+    std::vector<int32_t> expected = {1, 16, 1};
 
     BaseVector* inputVec = FlinkDayOfMonthTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;

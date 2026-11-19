@@ -304,13 +304,14 @@ TEST(FlinkQuarterTest, LongQuarterBoundary) {
 }
 
 TEST(FlinkQuarterTest, LongPreEpochNegativeMillis) {
-    // Negative millis (before 1970): 1969-12-31 23:59:59 -> Dec -> Q4.
-    // Timestamp::fromMillis handles negative millis via floor division.
+    // Flink QUARTER(TIMESTAMP) uses the toward-zero day index millis/86400000.
+    // 1969-12-31 23:59:59 -> 1970-01-01 -> Q1.
+    // 1969-01-01 00:00:00 is an exact day boundary -> Q1.
     std::vector<int64_t> millisValues = {
         FlinkQuarterTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 59, 59),
         FlinkQuarterTestHelper::TimestampToMillisUtc(1969, 1, 1, 0, 0, 0)
     };
-    std::vector<int32_t> expected = {4, 1};
+    std::vector<int32_t> expected = {1, 1};
 
     BaseVector* inputVec = FlinkQuarterTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;

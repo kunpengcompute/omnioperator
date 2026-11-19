@@ -205,13 +205,16 @@ TEST(FlinkMinuteTest, LongHourBoundary) {
 }
 
 TEST(FlinkMinuteTest, LongPreEpochNegativeMillis) {
-    // Negative millis (before 1970): 1969-12-31 23:59:59 -> 59; 1969-12-31 00:00:00 -> 0.
-    // Timestamp::fromMillis handles negative millis via floor division.
+    // Flink MINUTE(TIMESTAMP) is (millis % 3600000) / 60000, toward zero.
+    // 1969-12-31 23:59:59 is -1000 ms -> 0.
+    // 1969-12-31 23:40:00 is -1200000 ms -> -20, not the wall-clock minute 40.
+    // 1969-12-31 00:00:00 is an exact day boundary -> 0.
     std::vector<int64_t> millisValues = {
         FlinkMinuteTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 59, 59),
+        FlinkMinuteTestHelper::TimestampToMillisUtc(1969, 12, 31, 23, 40, 0),
         FlinkMinuteTestHelper::TimestampToMillisUtc(1969, 12, 31, 0, 0, 0)
     };
-    std::vector<int32_t> expected = {59, 0};
+    std::vector<int32_t> expected = {0, -20, 0};
 
     BaseVector* inputVec = FlinkMinuteTestHelper::CreateLongVector(millisValues);
     BaseVector* resultVec = nullptr;
