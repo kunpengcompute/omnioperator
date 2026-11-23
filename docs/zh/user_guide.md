@@ -2070,6 +2070,157 @@ SQL执行、执行计划查看及结果对比等操作，[执行Spark引擎业�
         --conf spark.executor.extraClassPath='${PWD}/omni/omni-operator/lib/boostkit-omniop-spark-3.5.2-2.0.0-aarch64.jar':'${PWD}/omni/omni-operator/lib/boostkit-omniop-bindings-2.0.0-aarch64.jar':'${PWD}/omni/omni-operator/lib/boostkit-omniop-udf-2.0.0-aarch64.jar':'${PWD}/omni/omni-operator/lib/dependencies/protobuf-java-3.15.8.jar':'${PWD}/omni/omni-operator/lib/dependencies/boostkit-omniop-native-reader-3.5.2-2.0.0.jar'
         ```
 
+#### TPC-DS性能测试<a name="tpcds-spark-perf"></a>
+
+本节以TPC-DS 3TB数据集为例，介绍OmniOperator算子加速特性的性能测试方法，对比Spark引擎在原生执行和使能OmniOperator后的执行耗时。测试环境为鲲鹏920服务器、openEuler操作系统。
+
+**编译和安装hive-testbench**
+
+1. 在集群管理节点下载并解压hive-testbench源码。下文命令中的`<hive-testbench-hdp3解压目录>`指该源码的实际解压路径。
+
+    ```bash
+    wget -O hive-testbench-hdp3.zip https://github.com/hortonworks/hive-testbench/archive/hdp3.zip
+    unzip hive-testbench-hdp3.zip
+    ```
+
+2. 修改`tpcds-gen/pom.xml`中的hadoop版本号为实际使用的版本。
+
+    ```bash
+    cd <hive-testbench-hdp3解压目录>/tpcds-gen
+    vim pom.xml
+    ```
+
+    ```xml
+    <groupId>org.apache.hadoop</groupId>
+    <artifactId>hadoop-client</artifactId>
+    <version>3.1.1</version>
+    ```
+
+    >![](public_sys-resources/icon-note.gif) **说明：** `<version>`的取值需与集群实际hadoop版本一致。
+
+3. 修改`tpcds-gen/Makefile`，为下载TPCDS_Tools.zip的命令增加`-k`参数以跳过证书校验。
+
+    ```bash
+    vim Makefile
+    ```
+
+    ```makefile
+    tpcds_kit.zip:
+        curl -k https://public-repo-1.hortonworks.com/hive-testbench/tpcds/README
+        curl -k --output tpcds_kit.zip https://public-repo-1.hortonworks.com/hive-testbench/tpcds/TPCDS_Tools.zip
+    ```
+
+    >![](public_sys-resources/icon-note.gif) **说明：** 若该下载地址不可用导致`tpcds_kit.zip`下载失败，可从`https://gitee.com/helloxteen/hive-testbench/releases`（tag为`hive-testbench-hdp3`）下载`hive-testbench-hdp3.zip`、`hive-testbench-hdp3.z01`、`hive-testbench-hdp3.z02`三个分卷，合并解压（如`cat hive-testbench-hdp3.z01 hive-testbench-hdp3.z02 hive-testbench-hdp3.zip > all.zip`后解压）取出其中的`tpcds-gen/tpcds_kit.zip`，放置到`tpcds-gen`目录，编译时将直接使用该文件。
+
+4. 修改`tpcds-setup.sh`，适配Apache Hive环境。
+
+    ```bash
+    cd <hive-testbench-hdp3解压目录>
+    vim tpcds-setup.sh
+    ```
+
+    - 注释第124行和第125行，hive作为数据仓库无需该约束。
+    - 注释第73行，并在第74行新增`HIVE="hive"`，指定使用hive命令而非beeline。
+    - 在`#!/bin/bash`之后新增`export DEBUG_SCRIPT=true`，打开调试日志。
+
+5. 注释`settings`目录下HDP版本专有的Hive参数（Apache Hive不支持），每修改一个文件后按`Esc`键，输入`:wq!`保存并退出。
+
+    ```bash
+    cd <hive-testbench-hdp3解压目录>/settings
+    vim init.sql
+    ```
+
+    注释`init.sql`第24行，按`Esc`键，输入`:wq!`保存并退出。
+
+    ```bash
+    vim load-flat.sql
+    ```
+
+    注释`load-flat.sql`第17行，按`Esc`键，输入`:wq!`保存并退出。
+
+    ```bash
+    vim load-partitioned.sql
+    ```
+
+    注释`load-partitioned.sql`第31行，按`Esc`键，输入`:wq!`保存并退出。
+
+6. 修正`spark-queries-tpcds`目录中不符合规范的测试SQL。
+
+    ```bash
+    cd <hive-testbench-hdp3解压目录>/spark-queries-tpcds
+    vim q32.sql
+    vim q30.sql
+    ```
+
+    - `q32.sql`中如果存在`'2000-01-27]'`，则修改为`'2000-01-27'`。
+    - `q30.sql`中如果存在`c_last_review_date`，则修改为`c_last_review_date_sk`。
+
+7. 编译hive-testbench。
+
+    ```bash
+    cd <hive-testbench-hdp3解压目录>
+    ./tpcds-build.sh
+    ```
+
+    如果编译机的gcc版本为10及以上（例如openEuler 22.03默认的gcc 10.3），链接`dsdgen`时会报`multiple definition of ...`错误，需要关闭gcc的重复定义检查后重新编译。
+
+    ```bash
+    cd <hive-testbench-hdp3解压目录>/tpcds-gen/target/tools
+    vim makefile
+    ```
+
+    将`LINUX_CC = gcc`修改为`LINUX_CC = gcc -fcommon`，按`Esc`键，输入`:wq!`保存并退出，然后重新编译。
+
+    ```bash
+    make clean && make dsdgen
+    cd <hive-testbench-hdp3解压目录>/tpcds-gen
+    make
+    ```
+
+    >![](public_sys-resources/icon-note.gif) **说明：** `tpcds-build.sh`在编译失败时仍会输出成功提示，以`tpcds-gen/target/lib/dsdgen.jar`和`tpcds-gen/target/tpcds-gen-1.0-SNAPSHOT.jar`是否生成判断编译结果。
+
+**生成测试数据**
+
+1. 生成3TB测试数据。Spark与Hive共用同一份数据集，二者数据量和格式一致时只需生成一次。
+
+    ```bash
+    cd <hive-testbench-hdp3解压目录>
+    FORMAT=orc nohup sh tpcds-setup.sh 3000 > gendata_tpcds_3000_orc.log &
+    ```
+
+    >![](public_sys-resources/icon-note.gif) **说明：** 
+    >- `3000`为数据量，单位GB（即3TB）；`FORMAT`用于指定数据格式，不指定时默认为orc。
+    >- 日志末尾输出`Data loaded into database ...`即表示生成完成。
+    >- 生成失败需重新执行时，先删除临时目录：`hdfs dfs -rmr /tmp/tpcds-generate/3000`，再重新执行上述生成命令。
+
+**获取测试SQL**
+
+测试SQL存放于hive-testbench解压目录下的`spark-queries-tpcds`目录，共103个SQL文件，对应TPC-DS的99条查询（q14、q23、q24、q39各包含a、b两个变体）。
+
+**执行测试**
+
+1. 每轮测试前清理集群各节点缓存，保证每轮测试的起始状态一致（节点间需已配置SSH免密登录）。
+
+    ```bash
+    ssh <节点名> "sync;echo 3 > /proc/sys/vm/drop_caches"
+    ```
+
+2. 使用原生Spark逐条执行测试SQL。
+
+    ```bash
+    spark-sql --database tpcds_bin_partitioned_orc_3000 --name <用例名>_<SQL名称> -f <SQL文件>
+    ```
+
+    单条SQL的执行耗时从执行日志的`Time taken`字段获取，逐条累加得到本轮测试的总耗时。
+
+3. 使能OmniOperator后，按相同的数据集、SQL和轮次重复步骤1~2。使能方法及启动参数参见“配置Spark配置文件”和“执行Spark引擎任务”。
+
+**测试结果**
+
+OmniOperator算子加速基于大数据联盟TPCDS 99条基准测试用例实现Spark引擎计算性能平均提升30%+。OmniOperator在典型查询上的性能提升倍数如下图所示。
+
+![](figures/tpcds-3tb-typical-query-speedup-vs-spark.drawio.svg)
+
 ### 在Hive引擎上的应用<a name="ZH-CN_TOPIC_0000002515902960"></a>
 
 #### 简介<a name="ZH-CN_TOPIC_0000002547382883"></a>
@@ -2331,6 +2482,38 @@ Hive使用交互式页面命令行来执行SQL任务。在Hive侧查看HiveExten
         ![](figures/omni-no.png)
 
     - 结果对比：Hive-SQL开源版本和HiveExtension的SQL输出数据一致。
+
+#### TPC-DS性能测试<a name="tpcds-hive-perf"></a>
+
+本节以TPC-DS 3TB数据集为例，对比Hive引擎在原生执行和使能HiveExtension后的执行耗时。
+
+**获取测试数据和测试SQL**
+
+测试数据和测试SQL的获取方法参见[在Spark引擎上的应用](#在spark引擎上的应用)中的“TPC-DS性能测试”。Hive与Spark共用同一份TPC-DS数据集和同一组查询SQL，无需重复生成。
+
+**执行测试**
+
+1. 每轮测试前清理集群各节点缓存，保证每轮测试的起始状态一致。
+
+    ```bash
+    ssh <节点名> "sync;echo 3 > /proc/sys/vm/drop_caches"
+    ```
+
+2. 使用原生Hive逐条执行测试SQL。
+
+    ```bash
+    hive -v --database tpcds_bin_partitioned_orc_3000 -f <SQL文件>
+    ```
+
+    `-v`用于开启详细输出，从回显的`Time taken`字段获取单条SQL耗时，逐条累加得到本轮测试的总耗时。
+
+3. 使能HiveExtension后，按相同的数据集、SQL和轮次重复步骤1~2，启动命令参见“执行Hive引擎业务”。
+
+**测试结果**
+
+OmniOperator算子加速基于大数据联盟TPCDS 99条基准测试用例实现Hive引擎计算性能平均提升20%+。OmniOperator在典型查询上的性能提升倍数如下图所示。
+
+![](figures/tpcds-3tb-typical-query-speedup-vs-hive.drawio.svg)
 
 ## 维护特性<a name="ZH-CN_TOPIC_0000002547382877"></a>
 
