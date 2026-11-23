@@ -5,6 +5,10 @@
 
 #include <cstdint>
 #include <limits>
+#include <list>
+#include <memory>
+#include <string_view>
+#include <unordered_map>
 #include <re2/re2.h>
 #include <shared_mutex>
 #include "stringfunctions.h"
@@ -14,6 +18,161 @@
 #include "type/TimestampConversion.h"
 
 namespace omniruntime::codegen::function {
+
+namespace {
+
+// Recognize common LIKE shapes and cache the compiled fallback per thread.
+enum class FastLikeKind : uint8_t {
+    EXACT,
+    PREFIX,
+    SUFFIX,
+    CONTAINS,
+    REGEX
+};
+
+constexpr size_t CODEGEN_LIKE_CACHE_SIZE = 8;
+
+bool StartsWith(std::string_view value, std::string_view prefix)
+{
+    return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+}
+
+bool EndsWith(std::string_view value, std::string_view suffix)
+{
+    return value.size() >= suffix.size() &&
+        value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool IsRegexMeta(char c)
+{
+    switch (c) {
+        case '\\':
+        case '.':
+        case '^':
+        case '$':
+        case '[':
+        case ']':
+        case '(':
+        case ')':
+        case '*':
+        case '+':
+        case '?':
+        case '{':
+        case '}':
+        case '|':
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool TryBuildFastLike(std::string_view pattern, FastLikeKind &kind, std::string &literal)
+{
+    // regex_match anchors both ends; remove any explicit unescaped anchor pair.
+    if (!pattern.empty() && pattern.front() == '^') {
+        pattern.remove_prefix(1);
+    }
+    if (!pattern.empty() && pattern.back() == '$' &&
+        (pattern.size() < 2 || pattern[pattern.size() - 2] != '\\')) {
+        pattern.remove_suffix(1);
+    }
+
+    bool leadingMany = false;
+    bool trailingMany = false;
+    while (StartsWith(pattern, ".*")) {
+        leadingMany = true;
+        pattern.remove_prefix(2);
+    }
+    while (EndsWith(pattern, ".*")) {
+        trailingMany = true;
+        pattern.remove_suffix(2);
+    }
+
+    literal.clear();
+    literal.reserve(pattern.size());
+    for (size_t i = 0; i < pattern.size(); ++i) {
+        const char c = pattern[i];
+        if (c == '\\') {
+            if (i + 1 >= pattern.size() || !IsRegexMeta(pattern[i + 1])) {
+                // Keep regex escapes such as \d on the generic path.
+                return false;
+            }
+            literal.push_back(pattern[++i]);
+            continue;
+        }
+        if (IsRegexMeta(c)) {
+            return false;
+        }
+        literal.push_back(c);
+    }
+
+    if (leadingMany && trailingMany) {
+        kind = FastLikeKind::CONTAINS;
+    } else if (leadingMany) {
+        kind = FastLikeKind::SUFFIX;
+    } else if (trailingMany) {
+        kind = FastLikeKind::PREFIX;
+    } else {
+        kind = FastLikeKind::EXACT;
+    }
+    return true;
+}
+
+struct CachedLikeMatcher {
+    explicit CachedLikeMatcher(std::string_view regexPattern) : pattern(regexPattern)
+    {
+        if (!TryBuildFastLike(pattern, kind, literal)) {
+            kind = FastLikeKind::REGEX;
+            regex = std::make_unique<std::wregex>(StringUtil::ToWideString(pattern));
+        }
+    }
+
+    bool Match(std::string_view value) const
+    {
+        switch (kind) {
+            case FastLikeKind::EXACT:
+                return value == literal;
+            case FastLikeKind::PREFIX:
+                return StartsWith(value, literal);
+            case FastLikeKind::SUFFIX:
+                return EndsWith(value, literal);
+            case FastLikeKind::CONTAINS:
+                return value.find(literal) != std::string_view::npos;
+            case FastLikeKind::REGEX:
+                return std::regex_match(StringUtil::ToWideString(std::string(value)), *regex);
+        }
+        return false;
+    }
+
+    std::string pattern;
+    std::string literal;
+    FastLikeKind kind = FastLikeKind::REGEX;
+    std::unique_ptr<std::wregex> regex;
+};
+
+thread_local std::vector<CachedLikeMatcher> tls_like_cache;
+
+const CachedLikeMatcher &GetLikeMatcher(std::string_view pattern)
+{
+    for (const auto &entry : tls_like_cache) {
+        if (entry.pattern.size() == pattern.size() &&
+            memcmp(entry.pattern.data(), pattern.data(), pattern.size()) == 0) {
+            return entry;
+        }
+    }
+    if (tls_like_cache.size() >= CODEGEN_LIKE_CACHE_SIZE) {
+        tls_like_cache.erase(tls_like_cache.begin());
+    }
+    tls_like_cache.emplace_back(pattern);
+    return tls_like_cache.back();
+}
+
+bool MatchCodegenLike(std::string_view value, std::string_view pattern)
+{
+    return GetLikeMatcher(pattern).Match(value);
+}
+
+} // namespace
 
 const char *INT64_MIN_STR = "-9223372036854775808";
 
@@ -92,11 +251,8 @@ extern "C" DLLEXPORT bool LikeStr(const char *str, int32_t strLen, const char *r
     if (isNull) {
         return false;
     }
-    std::string s = std::string(str, strLen);
-    std::string r = std::string(regexToMatch, regexLen);
-
-    std::wregex re(StringUtil::ToWideString(r));
-    return regex_match(StringUtil::ToWideString(s), re);
+    return MatchCodegenLike(std::string_view(str, static_cast<size_t>(strLen)),
+        std::string_view(regexToMatch, static_cast<size_t>(regexLen)));
 }
 
 extern "C" DLLEXPORT bool LikeChar(const char *str, int32_t strWidth, int32_t strLen, const char *regexToMatch,
@@ -109,9 +265,8 @@ extern "C" DLLEXPORT bool LikeChar(const char *str, int32_t strWidth, int32_t st
     for (int i = 0; i < paddingCount; i++) {
         originalStr.append(" ");
     }
-    std::string r = std::string(regexToMatch, regexLen);
-    std::wregex re(StringUtil::ToWideString(r));
-    return regex_match(StringUtil::ToWideString(originalStr), re);
+    return MatchCodegenLike(originalStr,
+        std::string_view(regexToMatch, static_cast<size_t>(regexLen)));
 }
 
 extern "C" DLLEXPORT const char *ConcatStrStr(int64_t contextPtr, const char *ap, int32_t apLen, const char *bp,
@@ -1500,9 +1655,105 @@ extern "C" DLLEXPORT const char *SubstringIndex(int64_t contextPtr, const char *
 }
 
 static const re2::RE2 kRegex_FixNameGroup("[(][?]<([^>]*)>", re2::RE2::Quiet);
-static std::unordered_map<std::string, std::shared_ptr<re2::RE2>> re2_cache;
+
+// Byte-accounting constants for compiled regexes. RE2::ProgramSize() returns an approximate
+// instruction count, not a byte count, and it covers neither the reverse program, the lazily
+// built DFA cache, the RE2 object itself, nor our own container nodes. Give every entry a
+// conservative estimate on top of an explicitly bounded DFA budget so MAX_CACHE_BYTES is a
+// genuine ceiling instead of an entry-count heuristic.
+static constexpr size_t RE2_BYTES_PER_PROGRAM_INST = 32;
+static constexpr int64_t RE2_MAX_MEM_PER_REGEX = 256 * 1024;
+static constexpr size_t RE2_ENTRY_FIXED_BYTES = 2048;
+
+// Bounded LRU cache for compiled regexes used by regexp_extract.
+// The old implementation called clear() once the map filled up, so a single cold pattern wiped
+// every hot entry and triggered a recompile storm. A real LRU keeps the frequently used patterns
+// resident and only evicts the least recently used entry.
+class Re2LruCache {
+    struct Entry {
+        std::shared_ptr<const re2::RE2> re;
+        size_t bytes;
+        std::list<std::string>::iterator pos;
+    };
+
+public:
+    // Read-only probe for the shared-lock fast path. It intentionally does not refresh the
+    // recency order, so concurrent readers never need the exclusive lock; the eviction order is
+    // therefore approximate, which is the right trade-off for a compile cache.
+    std::shared_ptr<const re2::RE2> Peek(const std::string &key) const
+    {
+        auto iter = index_.find(key);
+        return iter == index_.end() ? nullptr : iter->second.re;
+    }
+
+    std::shared_ptr<const re2::RE2> Get(const std::string &key)
+    {
+        auto iter = index_.find(key);
+        if (iter == index_.end()) {
+            return nullptr;
+        }
+        order_.splice(order_.begin(), order_, iter->second.pos);
+        return iter->second.re;
+    }
+
+    void Put(const std::string &key, std::shared_ptr<const re2::RE2> re)
+    {
+        const size_t entryBytes = EstimateEntryBytes(*re, key.size());
+        // A single regex whose estimate exceeds the whole budget must not be pinned: caching it
+        // would either break the ceiling or evict everything else and guarantee thrashing.
+        if (entryBytes > MAX_CACHE_BYTES) {
+            return;
+        }
+        auto iter = index_.find(key);
+        if (iter != index_.end()) {
+            bytes_ -= iter->second.bytes;
+            iter->second.re = std::move(re);
+            iter->second.bytes = entryBytes;
+            bytes_ += entryBytes;
+            order_.splice(order_.begin(), order_, iter->second.pos);
+            return;
+        }
+        while (!order_.empty() &&
+               (index_.size() >= MAX_CACHE_SIZE || bytes_ + entryBytes > MAX_CACHE_BYTES)) {
+            EvictLeastRecent();
+        }
+        order_.push_front(key);
+        bytes_ += entryBytes;
+        index_.emplace(key, Entry{std::move(re), entryBytes, order_.begin()});
+    }
+
+private:
+    static size_t EstimateEntryBytes(const re2::RE2 &re, size_t keyBytes)
+    {
+        const int progSize = re.ProgramSize();
+        const size_t instCount = progSize > 0 ? static_cast<size_t>(progSize) : 0;
+        // Forward + reverse program, the DFA budget, the object and our own nodes.
+        return keyBytes + sizeof(Entry) + RE2_ENTRY_FIXED_BYTES +
+            2 * instCount * RE2_BYTES_PER_PROGRAM_INST + static_cast<size_t>(RE2_MAX_MEM_PER_REGEX);
+    }
+
+    // Sized so a whole analytic batch of distinct patterns stays resident; the memory cost is a
+    // few MB in the worst case, far below what a recompile storm costs in CPU time.
+    static constexpr size_t MAX_CACHE_SIZE = 1024;
+    // Hard ceiling on resident compiled-regex memory: every entry accounts for its program
+    // estimate plus the per-regex DFA budget, so this bound is enforceable rather than nominal.
+    static constexpr size_t MAX_CACHE_BYTES = 64ULL * 1024 * 1024;
+
+    void EvictLeastRecent()
+    {
+        auto victim = index_.find(order_.back());
+        bytes_ -= victim->second.bytes;
+        index_.erase(victim);
+        order_.pop_back();
+    }
+
+    std::list<std::string> order_; // front = most recently used
+    std::unordered_map<std::string, Entry> index_;
+    size_t bytes_ = 0;
+};
+
+static Re2LruCache re2_cache;
 static std::shared_mutex re2_mutex;
-static constexpr size_t MAX_CACHE_SIZE = 128;
 
 static constexpr std::array<bool, 128> GetMetaCharTable() {
     std::array<bool, 128> arr{};
@@ -1514,56 +1765,168 @@ static constexpr std::array<bool, 128> GetMetaCharTable() {
 }
 static constexpr std::array<bool, 128> g_re_meta_chars = GetMetaCharTable();
 
+namespace {
+
+// Per-thread hot cache for compiled regexes. The common analytic case applies the same
+// handful of patterns to every row, so a tiny thread-local cache lets us skip the global
+// shared_mutex and the per-row std::string construction entirely on the hot path.
+constexpr size_t TLS_RE2_CACHE_SIZE = 8;
+
+struct TlsRe2Entry {
+    std::string key;
+    // weak_ptr so the thread-local cache never keeps a regex alive that the global LRU has
+    // already evicted; otherwise 8 stale entries per thread could pin memory outside the budget.
+    std::weak_ptr<const re2::RE2> re;
+};
+
+static thread_local std::vector<TlsRe2Entry> tls_re2_cache;
+
+// Reused across rows to avoid a heap allocation per call. regexp_extract is a leaf call,
+// so re-entrancy on the same thread cannot happen.
+static thread_local std::vector<re2::StringPiece> tls_submatch;
+
+std::shared_ptr<const re2::RE2> CompileRe2(const std::string &key)
+{
+    // Options are spelled out instead of RE2::Quiet so the per-regex DFA budget matches what
+    // Re2LruCache accounts for.
+    re2::RE2::Options options;
+    options.set_log_errors(false);
+    options.set_max_mem(RE2_MAX_MEM_PER_REGEX);
+    return std::make_shared<re2::RE2>(stringImpl::toStringPiece(key), options);
+}
+
+std::shared_ptr<const re2::RE2> GetOrCompileRe2(int64_t contextPtr, const char *pattern, int32_t patternLen)
+{
+    for (auto iter = tls_re2_cache.begin(); iter != tls_re2_cache.end(); ++iter) {
+        if (iter->key.size() == static_cast<size_t>(patternLen) &&
+            memcmp(iter->key.data(), pattern, patternLen) == 0) {
+            if (auto re = iter->re.lock()) {
+                return re;
+            }
+            // The global LRU evicted it; drop the dead entry and fall through to re-resolve.
+            tls_re2_cache.erase(iter);
+            break;
+        }
+    }
+
+    std::string key(pattern, patternLen);
+    std::shared_ptr<const re2::RE2> re_sp;
+    {
+        // Read-only probe under a shared lock: threads with distinct patterns can resolve cache
+        // hits in parallel instead of serialising on the exclusive lock.
+        std::shared_lock<std::shared_mutex> lock(re2_mutex);
+        re_sp = re2_cache.Peek(key);
+    }
+    if (!re_sp) {
+        std::unique_lock<std::shared_mutex> lock(re2_mutex);
+        // Re-check under the exclusive lock: another thread may have compiled it meanwhile.
+        re_sp = re2_cache.Get(key);
+        if (!re_sp) {
+            auto re_uptr = CompileRe2(key);
+            if (!re_uptr->ok()) {
+                SetError(contextPtr, "Regex compile failed: " + key);
+                return nullptr;
+            }
+            re_sp = re_uptr;
+            re2_cache.Put(key, std::move(re_uptr));
+        }
+    }
+
+    if (tls_re2_cache.size() >= TLS_RE2_CACHE_SIZE) {
+        tls_re2_cache.erase(tls_re2_cache.begin());
+    }
+    tls_re2_cache.push_back(TlsRe2Entry{key, re_sp});
+    return re_sp;
+}
+
+} // namespace
+
 extern "C" DLLEXPORT const char *Re2SearchAndExtract(int64_t contextPtr, const char *str, int32_t strLen,
     const char *pattern, int32_t patternLen, int32_t idx, bool isNull, int32_t *outLen)
 {
-    std::string newPattern(pattern, patternLen);
-    std::shared_ptr<const re2::RE2> re_sp;
-    {
-        std::shared_lock<std::shared_mutex> read_lock(re2_mutex);
-        auto cache_iter = re2_cache.find(newPattern);
-        if (cache_iter != re2_cache.end()) {
-            re_sp = cache_iter->second;
-        }
-    }
-
-    if (!re_sp) {
-        std::unique_lock<std::shared_mutex> write_lock(re2_mutex);
-        auto cache_iter = re2_cache.find(newPattern);
-        if (cache_iter != re2_cache.end()) {
-            re_sp = cache_iter->second;
-        } else {
-            if (re2_cache.size() >= MAX_CACHE_SIZE) {
-                re2_cache.clear();
-            }
-            if (newPattern.empty()) {
-                SetError(contextPtr, "Regex compile failed: empty pattern");
-                return nullptr;
-            }
-            auto re_uptr = std::make_shared<re2::RE2>(stringImpl::toStringPiece(newPattern), re2::RE2::Quiet);
-            if (!re_uptr->ok()) {
-                SetError(contextPtr, ("Regex compile failed: " + newPattern).c_str());
-                return nullptr;
-            }
-            re2_cache.emplace(newPattern, re_uptr);
-            re_sp = std::move(re_uptr);
-        }
-    }
-
-    const re2::RE2& re = *re_sp;
-    std::vector<re2::StringPiece> groups(idx + 1);
-    auto input = re2::StringPiece(str, strLen);
-    if (!re.Match(input, 0, strLen, RE2::UNANCHORED, groups.data(), idx + 1)) {
+    // Null input or an out-of-range group index yields an empty result without touching the
+    // possibly-invalid data pointers.
+    if (isNull) {
         *outLen = 0;
-        auto result = ArenaAllocatorMalloc(contextPtr, 1);
-        return result;
-    } else {
-        const re2::StringPiece extracted = groups[idx];
-        auto result = ArenaAllocatorMalloc(contextPtr, extracted.size());
-        memcpy(result, extracted.data(), extracted.size());
-        *outLen = extracted.size();
-        return result;
+        return nullptr;
     }
+    if (idx < 0) {
+        *outLen = 0;
+        return reinterpret_cast<const char *>(EMPTY);
+    }
+    if (patternLen <= 0) {
+        SetError(contextPtr, "Regex compile failed: empty pattern");
+        *outLen = 0;
+        return nullptr;
+    }
+
+    // Fast path: a pure literal pattern needs no regex engine. The match of a literal is
+    // exactly the pattern bytes, and a literal owns no capture groups.
+    bool isLiteral = true;
+    for (int32_t i = 0; i < patternLen; ++i) {
+        auto uc = static_cast<uint8_t>(pattern[i]);
+        // Only ASCII may take the literal fast path: a non-ASCII byte can be part of an invalid
+        // UTF-8 pattern that RE2 would reject, while find() would happily match it.
+        if (uc >= 128 || g_re_meta_chars[uc]) {
+            isLiteral = false;
+            break;
+        }
+    }
+    if (isLiteral) {
+        if (idx == 0 && str != nullptr && strLen > 0) {
+            const auto position = std::string_view(str, static_cast<size_t>(strLen))
+                .find(std::string_view(pattern, static_cast<size_t>(patternLen)));
+            if (position != std::string_view::npos) {
+                // The input vector remains alive while the expression result is
+                // consumed.  Return its matching slice just like substr() does,
+                // instead of allocating and copying every result into the arena.
+                *outLen = patternLen;
+                return str + position;
+            }
+        }
+        *outLen = 0;
+        return reinterpret_cast<const char *>(EMPTY);
+    }
+
+    auto re_sp = GetOrCompileRe2(contextPtr, pattern, patternLen);
+    if (!re_sp) {
+        *outLen = 0;
+        return nullptr;
+    }
+    const re2::RE2 &re = *re_sp;
+
+    // Bound the group index before touching the reusable buffer. idx is caller supplied, so
+    // idx == INT_MAX would make resize(INT_MAX + 1) attempt a tens-of-gigabyte allocation.
+    if (idx > re.NumberOfCapturingGroups()) {
+        *outLen = 0;
+        return reinterpret_cast<const char *>(EMPTY);
+    }
+    const size_t groupCount = static_cast<size_t>(idx) + 1;
+    if (tls_submatch.size() < groupCount) {
+        tls_submatch.resize(groupCount);
+    }
+    re2::StringPiece *groups = tls_submatch.data();
+    // Reset reused slots so a non-participating group never carries a stale value forward.
+    for (size_t i = 0; i < groupCount; ++i) {
+        groups[i] = re2::StringPiece();
+    }
+
+    auto input = re2::StringPiece(str, strLen);
+    if (!re.Match(input, 0, strLen, RE2::UNANCHORED, groups, static_cast<int>(groupCount))) {
+        *outLen = 0;
+        return reinterpret_cast<const char *>(EMPTY);
+    }
+    const re2::StringPiece extracted = groups[idx];
+    // A non-participating optional group yields an empty piece whose data() may be null.
+    if (extracted.empty()) {
+        *outLen = 0;
+        return reinterpret_cast<const char *>(EMPTY);
+    }
+    *outLen = static_cast<int32_t>(extracted.size());
+    // RE2's StringPiece points into `str`; avoid an arena allocation and a
+    // redundant copy.  Downstream string expressions consume this view before
+    // the input vector is released, the same lifetime contract used by substr.
+    return extracted.data();
 }
 
 extern "C" DLLEXPORT const char *RegexpReplace(int64_t contextPtr, const char *stringInput, int32_t stringInputLen,
@@ -1625,23 +1988,26 @@ extern "C" DLLEXPORT const char *RegexpReplace(int64_t contextPtr, const char *s
 
         buf.append(suffix_sv.data() + last_pos, suffix_sv.size() - last_pos);
     } else {
+        static std::unordered_map<std::string, std::shared_ptr<re2::RE2>> replace_re2_cache;
+        static std::shared_mutex replace_re2_mutex;
+        static constexpr size_t REPLACE_MAX_CACHE_SIZE = 128;
         std::shared_ptr<const re2::RE2> re_sp;
         {
-            std::shared_lock<std::shared_mutex> read_lock(re2_mutex);
-            auto cache_iter = re2_cache.find(newPattern);
-            if (cache_iter != re2_cache.end()) {
+            std::shared_lock<std::shared_mutex> read_lock(replace_re2_mutex);
+            auto cache_iter = replace_re2_cache.find(newPattern);
+            if (cache_iter != replace_re2_cache.end()) {
                 re_sp = cache_iter->second;
             }
         }
 
         if (!re_sp) {
-            std::unique_lock<std::shared_mutex> write_lock(re2_mutex);
-            auto cache_iter = re2_cache.find(newPattern);
-            if (cache_iter != re2_cache.end()) {
+            std::unique_lock<std::shared_mutex> write_lock(replace_re2_mutex);
+            auto cache_iter = replace_re2_cache.find(newPattern);
+            if (cache_iter != replace_re2_cache.end()) {
                 re_sp = cache_iter->second;
             } else {
-                if (re2_cache.size() >= MAX_CACHE_SIZE) {
-                    re2_cache.clear();
+                if (replace_re2_cache.size() >= REPLACE_MAX_CACHE_SIZE) {
+                    replace_re2_cache.clear();
                 }
                 if (newPattern.empty()) {
                     SetError(contextPtr, "Regex compile failed: empty pattern");
@@ -1652,7 +2018,7 @@ extern "C" DLLEXPORT const char *RegexpReplace(int64_t contextPtr, const char *s
                     SetError(contextPtr, ("Regex compile failed: " + newPattern).c_str());
                     return nullptr;
                 }
-                re2_cache.emplace(newPattern, re_uptr);
+                replace_re2_cache.emplace(newPattern, re_uptr);
                 re_sp = std::move(re_uptr);
             }
         }

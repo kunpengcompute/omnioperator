@@ -2,6 +2,7 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
  * Description: batch function test
  */
+#include <memory>
 #include <string>
 #include <vector>
 #include "gtest/gtest.h"
@@ -1812,6 +1813,45 @@ TEST(BatchFunctionTest, LikeStrZh)
 
     std::vector<bool> expected { true, false, true, false };
     AssertBoolEquals(expected, output);
+}
+
+TEST(BatchFunctionTest, LikeStrCallerContextPatterns)
+{
+    std::vector<std::string> inputStr {
+        "prefix/application_99_1_JId_2_SId_3_4/suffix",
+        "prefix/no-request-id/suffix",
+        "prefix/mr_attempt_99_1_m_2_3/suffix",
+        "prefix/mrXattempt_99_1_m_2_3/suffix"
+    };
+    // Codegen receives full-match regexes after LIKE has been lowered.
+    std::vector<std::string> patternStr {
+        ".*application_.*",
+        ".*application_.*",
+        ".*mr.attempt_.*",
+        ".*mr.attempt_.*"
+    };
+    const int32_t rowCnt = static_cast<int32_t>(inputStr.size());
+    std::vector<int32_t> inputLen(rowCnt);
+    std::vector<int32_t> patternLen(rowCnt);
+    std::vector<uint8_t *> strAddr(rowCnt);
+    std::vector<uint8_t *> patternAddr(rowCnt);
+    std::unique_ptr<bool[]> output(new bool[rowCnt]);
+    std::unique_ptr<bool[]> isAnyNull(new bool[rowCnt]);
+    for (int32_t i = 0; i < rowCnt; ++i) {
+        inputLen[i] = static_cast<int32_t>(inputStr[i].size());
+        patternLen[i] = static_cast<int32_t>(patternStr[i].size());
+        strAddr[i] = reinterpret_cast<uint8_t *>(inputStr[i].data());
+        patternAddr[i] = reinterpret_cast<uint8_t *>(patternStr[i].data());
+        isAnyNull[i] = false;
+    }
+
+    BatchLikeStr(strAddr.data(), inputLen.data(), patternAddr.data(), patternLen.data(),
+        isAnyNull.get(), output.get(), rowCnt);
+
+    EXPECT_TRUE(output[0]);
+    EXPECT_FALSE(output[1]);
+    EXPECT_TRUE(output[2]);
+    EXPECT_TRUE(output[3]);
 }
 
 TEST(BatchFunctionTest, LikeCharZh)

@@ -161,6 +161,82 @@ TEST(RegexpExtractTest, RegexpExtractCaptureGroups) {
     delete resultVec;
 }
 
+TEST(RegexpExtractTest, ConstCallerContextPatternAndGroup) {
+    std::vector<std::string> strValues = {
+        "prefix/mr_attempt_1700000000000_42_m_7_8/suffix",
+        "prefix/mr_attempt_99_1_r_2_3/suffix",
+        "prefix/application_99_1_JId_2_SId_3_4/suffix"
+    };
+    const std::string pattern = R"((mr_attempt_\d+_\d+_[a-z]_\d+_\d+))";
+    std::vector<std::string> expected = {
+        "mr_attempt_1700000000000_42_m_7_8",
+        "mr_attempt_99_1_r_2_3",
+        ""
+    };
+
+    BaseVector* strVec = RegexpExtractFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* groupIdxVec = new ConstVector<int32_t>(1, OMNI_INT, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec);
+    RegexpExtractFunctionTestHelper::ValidateStringResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// The literal-prefix pre-location loop must not stop at a prefix occurrence that fails to match:
+// here "mr_attempt_" appears once with a non-numeric tail (no match) before the real match.
+TEST(RegexpExtractTest, ConstPatternPrefixPreLocation) {
+    std::vector<std::string> strValues = {
+        "noise mr_attempt_abc then mr_attempt_1700000000000_42_m_7_8 tail",
+        "mr_attempt_1_2_x_3_4",
+        "nothing relevant here"
+    };
+    const std::string pattern = R"((mr_attempt_\d+_\d+_[a-z]_\d+_\d+))";
+    std::vector<std::string> expected = {
+        "mr_attempt_1700000000000_42_m_7_8",
+        "mr_attempt_1_2_x_3_4",
+        ""
+    };
+
+    BaseVector* strVec = RegexpExtractFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* groupIdxVec = new ConstVector<int32_t>(1, OMNI_INT, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec);
+    RegexpExtractFunctionTestHelper::ValidateStringResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// Same pre-location behavior for the second production pattern, including an early false prefix.
+TEST(RegexpExtractTest, ConstApplicationPatternPrefixPreLocation) {
+    std::vector<std::string> strValues = {
+        "application_nope then application_1700000000000_42_JId_7_SId_8_9 done",
+        "prefix/application_99_1_JId_2_SId_3_4/suffix"
+    };
+    const std::string pattern = R"((application_\d+_\d+_JId_\d+_SId_\d+_\d+))";
+    std::vector<std::string> expected = {
+        "application_1700000000000_42_JId_7_SId_8_9",
+        "application_99_1_JId_2_SId_3_4"
+    };
+
+    BaseVector* strVec = RegexpExtractFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* groupIdxVec = new ConstVector<int32_t>(1, OMNI_INT, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec);
+    RegexpExtractFunctionTestHelper::ValidateStringResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
 // Test: RegexpExtract with no match
 TEST(RegexpExtractTest, RegexpExtractNoMatch) {
     std::cout << "=== Test: RegexpExtract with no match ===" << std::endl;
@@ -232,6 +308,29 @@ TEST(RegexpExtractTest, RegexpExtractWithNullPattern) {
     delete resultVec;
 }
 
+TEST(RegexpExtractTest, RegexpExtractWithNullGroupIndex) {
+    std::vector<std::string> strValues = {"a1", "b2", "c3"};
+    std::vector<std::string> patterns = {"(\\d+)", "(\\d+)", "(\\d+)"};
+    std::vector<int32_t> groupIndices = {1, 1, 1};
+
+    BaseVector* strVec = RegexpExtractFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = RegexpExtractFunctionTestHelper::CreateStringVector(patterns);
+    BaseVector* groupIdxVec = RegexpExtractFunctionTestHelper::CreateNumericVector(groupIndices, OMNI_INT);
+    groupIdxVec->SetNull(1);
+
+    BaseVector* resultVec = nullptr;
+    RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec);
+
+    auto* typedResult = dynamic_cast<Vector<LargeStringContainer<std::string_view>>*>(resultVec);
+    ASSERT_NE(typedResult, nullptr);
+    EXPECT_FALSE(resultVec->IsNull(0));
+    EXPECT_TRUE(resultVec->IsNull(1));
+    EXPECT_FALSE(resultVec->IsNull(2));
+    EXPECT_EQ(typedResult->GetValue(0), "1");
+    EXPECT_EQ(typedResult->GetValue(2), "3");
+    delete resultVec;
+}
+
 // Test: RegexpExtract with email pattern
 TEST(RegexpExtractTest, RegexpExtractEmailPattern) {
     std::cout << "=== Test: RegexpExtract with email pattern ===" << std::endl;
@@ -287,11 +386,8 @@ TEST(RegexpExtractTest, RegexpExtractInvalidPattern) {
     ASSERT_THROW({RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec);}, omniruntime::exception::OmniException)
          << "RegexpExtract should handle invalid regex through throw exception";
 
-    // Apply threw before reaching its delete statements, so args are leaked - clean up here
-    delete strVec;
-    delete patternVec;
-    delete groupIdxVec;
-    delete resultVec;
+    // Apply releases the inputs and the partially built result through RAII on the exception
+    // path, so no manual cleanup is required here.
 }
 
 // Test: RegexpExtract with date pattern
@@ -310,6 +406,105 @@ TEST(RegexpExtractTest, RegexpExtractDatePattern) {
 
     RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec);
     RegexpExtractFunctionTestHelper::ValidateStringResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// `\Q...\E` quoting keeps the leading literal run literal even when it contains RE2
+// metacharacters such as '.', so the derived prefix ("mr.attempt_") must still drive
+// pre-location correctly: the first occurrence with a non-numeric tail must be skipped and the
+// real match found afterwards.
+TEST(RegexpExtractTest, RegexpExtractQuotedLiteralPrefix) {
+    std::vector<std::string> strValues = {
+        "noise mr.attempt_abc then mr.attempt_1700000000000 tail",
+        "mr.attempt_abc",
+        "nothing relevant here"
+    };
+    const std::string pattern = R"(\Qmr.attempt_\E\d+)";
+    std::vector<std::string> expected = {
+        "mr.attempt_1700000000000",
+        "",
+        ""
+    };
+
+    BaseVector* strVec = RegexpExtractFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* groupIdxVec = new ConstVector<int32_t>(0, OMNI_INT, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec);
+    RegexpExtractFunctionTestHelper::ValidateStringResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// An input with more than MAX_ANCHORED_CANDIDATES (64) occurrences of the literal prefix that
+// never complete a match must fall back to a single unanchored RE2 search and still return the
+// real match that follows, instead of degenerating into quadratic anchored scanning.
+TEST(RegexpExtractTest, RegexpExtractOver64AnchoredCandidates) {
+    std::string noisy;
+    for (int32_t i = 0; i < 70; ++i) {
+        noisy += "mr_attempt_x ";
+    }
+    noisy += "mr_attempt_1_2_a_3_4";
+
+    std::vector<std::string> strValues = {
+        noisy,
+        "mr_attempt_5_6_b_7_8"
+    };
+    const std::string pattern = R"((mr_attempt_\d+_\d+_[a-z]_\d+_\d+))";
+    std::vector<std::string> expected = {
+        "mr_attempt_1_2_a_3_4",
+        "mr_attempt_5_6_b_7_8"
+    };
+
+    BaseVector* strVec = RegexpExtractFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* groupIdxVec = new ConstVector<int32_t>(1, OMNI_INT, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec);
+    RegexpExtractFunctionTestHelper::ValidateStringResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// The 64th anchored attempt can fail because there is not enough input remaining, even though
+// the pattern matches starting at that candidate. The unanchored fallback must include that
+// candidate instead of starting one byte later.
+TEST(RegexpExtractTest, RegexpExtractFallbackRetriesLastAnchoredCandidate) {
+    const std::string input = std::string(64, 'a') + "b";
+    const std::string pattern = R"(a{1,100}b)";
+    const std::vector<std::string> expected = {input};
+
+    BaseVector* strVec = RegexpExtractFunctionTestHelper::CreateStringVector({input});
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, 1);
+    BaseVector* groupIdxVec = new ConstVector<int32_t>(0, OMNI_INT, 1);
+    BaseVector* resultVec = nullptr;
+
+    RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec);
+    RegexpExtractFunctionTestHelper::ValidateStringResult(resultVec, expected, 1);
+
+    delete resultVec;
+}
+
+// An empty batch (size == 0) must return an empty result before touching row 0 of the pattern /
+// group vectors, compiling the regex or rejecting the (deliberately empty) pattern.
+TEST(RegexpExtractTest, RegexpExtractEmptyBatchEarlyReturn) {
+    BaseVector* strVec = RegexpExtractFunctionTestHelper::CreateStringVector({});
+    // Empty pattern would throw ("patternStr must not empty") if the row loop were entered.
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(""), OMNI_VARCHAR, 0);
+    BaseVector* groupIdxVec = new ConstVector<int32_t>(0, OMNI_INT, 0);
+    BaseVector* resultVec = nullptr;
+
+    ASSERT_NO_THROW(
+        RegexpExtractFunctionTestHelper::ExecuteRegexpExtract(strVec, patternVec, groupIdxVec, resultVec));
+    ASSERT_NE(resultVec, nullptr);
+    EXPECT_EQ(resultVec->GetSize(), 0);
 
     delete resultVec;
 }

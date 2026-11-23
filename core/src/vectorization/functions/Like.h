@@ -44,7 +44,7 @@ private:
     void ApplyLikeWithEscape(BaseVector* strVec, BaseVector* patternVec, BaseVector* escapeVec, BaseVector*& result,
                              const DataTypePtr& outputType) const;
 
-    /// Convert LIKE pattern to regex string; then match str (full match) via std::regex
+    /// Convert LIKE pattern to an RE2 regex body; match str full-string via RE2::ANCHOR_BOTH
     bool MatchLike(const std::string_view& str, const std::string_view& pattern) const;
     bool MatchLike(const std::string_view& str, const std::string_view& pattern,
                    const std::string_view& escapeSeq) const;

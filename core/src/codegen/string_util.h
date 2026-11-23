@@ -65,7 +65,7 @@ static uint8_t digits[] = {
 
 class StringUtil {
 public:
-    static inline std::wstring ToWideString(std::string &s)
+    static inline std::wstring ToWideString(const std::string &s)
     {
         std::wstring_convert<std::codecvt_utf8<wchar_t>> convert;
         return convert.from_bytes(s);

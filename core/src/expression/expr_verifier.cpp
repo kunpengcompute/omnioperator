@@ -336,15 +336,15 @@ void ExprVerifier::Visit(const FuncExpr &funcExpr)
         }
     }
 
-    if (funcExpr.funcName == "regexp_replace") {
-        auto *literalArg = dynamic_cast<LiteralExpr *>(funcExpr.arguments[1]);
-        if (literalArg != nullptr && literalArg->stringVal != nullptr) {
-            if (!IsRe2SupportedRegexpPattern(*literalArg->stringVal)) {
-                this->isSupportCodegen_ = false;
-                this->isSupportVectorization_ = false;
-                return;
-            }
-        } else {
+    // The documented contract only accepts constant regex patterns for the RE2-backed regex
+    // functions. A non-literal pattern cannot be validated ahead of execution, so both the
+    // codegen and the vectorized path must fall back instead of silently diverging from RE2.
+    if (funcExpr.funcName == "regexp_replace" || funcExpr.funcName == "regexp_extract") {
+        auto *literalArg = funcExpr.arguments.size() > 1
+            ? dynamic_cast<LiteralExpr *>(funcExpr.arguments[1])
+            : nullptr;
+        if (literalArg == nullptr || literalArg->stringVal == nullptr ||
+            !IsRe2SupportedRegexpPattern(*literalArg->stringVal)) {
             this->isSupportCodegen_ = false;
             this->isSupportVectorization_ = false;
             return;
