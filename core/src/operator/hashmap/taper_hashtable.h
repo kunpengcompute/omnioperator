@@ -445,7 +445,7 @@ class TaperHashTableBase : public TaperContainer {
     // 9*capacity/10 = 0.9 load factor
     auto capacity = chunkCapacity * elemNumInChunk_;
     expandThreshold_ = capacity - capacity / 10;
-    LogInfo("Init hashTable chunkCapacity=%u bytesNum=%lu chunkSize=%u",
+    LogDebug("Init hashTable chunkCapacity=%u bytesNum=%lu chunkSize=%u",
             chunkCapacity, static_cast<unsigned long>(bytesNum), static_cast<unsigned>(sizeof(TaperHashTableChunk)));
   }
 
