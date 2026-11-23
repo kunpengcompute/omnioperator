@@ -2154,14 +2154,16 @@ template <bool hasNull, bool hasDictionary>
 static ALWAYS_INLINE void SetValueRow(BaseVector *inputVector, int32_t inputIndex, BaseVector *outputVector,
     int32_t outputIndex)
 {
+    auto *outputRow = static_cast<RowVector *>(outputVector);
     if constexpr (hasNull) {
         if (UNLIKELY(inputVector->IsNull(inputIndex))) {
-            outputVector->SetNull(outputIndex);
+            // Set the null state on the ROW and its children. Calling BaseVector::SetNull
+            // through outputVector leaves nested ARRAY offsets at their zero-initialized values.
+            outputRow->SetNull(outputIndex);
             return;
         }
     }
     auto *inputRow = static_cast<RowVector *>(inputVector);
-    auto *outputRow = static_cast<RowVector *>(outputVector);
     auto *slice = inputRow->Slice(inputIndex, 1, false);
     outputRow->Append(slice, outputIndex, 1);
     delete slice;
