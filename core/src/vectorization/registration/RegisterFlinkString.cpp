@@ -5,6 +5,7 @@
  * Kept apart from RegisterString.cpp so that adapting a Flink expression never touches the
  * Spark registrations. Names are prefixed with "flink_" and are emitted by RexNodeUtil's
  * simpleFunctionNameMap; overloads that only differ in their return type reuse the Spark name.
+ * Flink-only functions that Spark does not provide keep their original names.
  */
 
 #include <string>
@@ -12,6 +13,9 @@
 #include "RegistrationHelpers.h"
 
 namespace omniruntime::vectorization {
+void RegisterSplitIndex(const std::string &prefix);
+void RegisterCountChar(const std::string &prefix);
+
 void RegisterFlinkStringFunctions(const std::string &prefix)
 {
     // Flink FROM_BASE64(string) -> STRING: decoded bytes are interpreted as a UTF-8 string.
@@ -100,5 +104,9 @@ void RegisterFlinkStringFunctions(const std::string &prefix)
         prefix + "flink_rpad", {OMNI_CHAR, OMNI_LONG, OMNI_VARCHAR}, OMNI_VARCHAR);
     RegisterFunction<FlinkRPadFunction, std::string, std::string_view, int32_t, std::string_view>(
         prefix + "flink_rpad", {OMNI_CHAR, OMNI_INT, OMNI_VARCHAR}, OMNI_VARCHAR);
+
+    // Spark has neither function. Keep the names RexNodeUtil already emits.
+    RegisterSplitIndex(prefix);
+    RegisterCountChar(prefix);
 }
 }
