@@ -22,7 +22,7 @@ target_include_directories(codegen_benchmark PRIVATE
         # src
         ${PROJECT_SOURCE_DIR}/src
 
-        # huawei secure c
+        # secure c
         ${PROJECT_SOURCE_DIR}/../open_source
         )
 
