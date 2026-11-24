@@ -13,6 +13,8 @@ on:
         required: false
         default: '26.3.RC1'
         type: string
+  schedule:
+    - cron: '0 8 25 11 *'    # UTC+8，11 月 25 日 08:00 触发一次，校验 YAML 配置是否合规
 env:
   docker_img_openeuler2203: swr.cn-north-4.myhuaweicloud.com/cloud_boostkit/openeuler_22.03_lts_sp3:omnioperator_arm_02
   docker_img_openeuler2403: swr.cn-north-4.myhuaweicloud.com/cloud_boostkit/openeuler_24.03_lts_sp3:omnioperator_arm_02
@@ -29,8 +31,8 @@ stages: # 阶段，不超过16个阶段，不超过256个job
           docker_img: ${{ env.docker_img_openeuler2203 }}
           module: openEuler22.03_JDK8
           jdk_version: '8'
-          OmniOperator_branch: ${{ inputs.OmniOperator_branch }}
-          Product_Version: ${{ inputs.Product_Version }}
+          OmniOperator_branch: ${{ inputs.OmniOperator_branch || 'master' }}
+          Product_Version: ${{ inputs.Product_Version || '26.3.RC1' }}
       OmniOperator_openEuler2203_JDK17:
         name: OmniOperator openEuler22.03 JDK17
         uses: .gitcode/workflows/version_build_omnioperator.yaml
@@ -38,5 +40,5 @@ stages: # 阶段，不超过16个阶段，不超过256个job
           docker_img: ${{ env.docker_img_openeuler2203 }}
           module: openEuler22.03_JDK17
           jdk_version: '17'
-          OmniOperator_branch: ${{ inputs.OmniOperator_branch }}
-          Product_Version: ${{ inputs.Product_Version }}
+          OmniOperator_branch: ${{ inputs.OmniOperator_branch || 'master' }}
+          Product_Version: ${{ inputs.Product_Version || '26.3.RC1' }}

@@ -19,7 +19,7 @@ jobs:
   JOB_Compile:
     name: Compile
     select: selected_by_default
-    runs-on: [self-hosted, openeuler, arm, cpu=32]
+    runs-on: ["self-hosted", "openeuler", "arm", "flavor=2xlarge" ]
     container:
       image: ${{ inputs.docker_img }}
     env:
