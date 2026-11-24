@@ -317,8 +317,6 @@ OmniOperator docs目录下的文档适用CC-BY 4.0许可证，具体请参见[LI
 
 ## 致谢<a name="ZH-CN_TOPIC_0000002515658382"></a>
 
-OmniOperator由华为公司的下列部门联合贡献：
-
-鲲鹏计算Boostkit开发部
+OmniOperator由 openEuler 社区共同贡献。
 
 感谢来自社区的每一个PR，欢迎贡献OmniOperator！
