@@ -6,7 +6,6 @@
 - \[2025-12-30\]: Released OmniOperator 2.0.0. Added the adaptation layer Gluten 1.3 for Spark, and added the **concat\_ws**, **regexp**, **regexp\_replace**, **trim**, and **floor** expressions for SparkExtension.
 - \[2025-06-30\]: Released OmniOperator 1.9.0. Added the Parquet format and columnar write support for Spark 3.3.1, and added support for CentOS 7.9.
 
-
 ## Project Introduction<a name="EN-US_TOPIC_0000002547258199"></a>
 
 ### Overview<a name="EN-US_TOPIC_0000002515658378"></a>
@@ -29,7 +28,6 @@ Compatible open-source components and versions:
 - openLooKeng 1.6.1
 - Gluten 1.3
 
-
 ### Architecture<a name="EN-US_TOPIC_0000002547298205"></a>
 
 OmniOperator provides unified interfaces for distributed tasks. You can submit an SQL task to a Spark cluster. The cluster management node schedules the task, that is, distributes subtasks to multiple compute nodes for execution.
@@ -47,6 +45,7 @@ OmniOperator is invoked by user code only in a single task and does not interact
 ![](docs/en/figures/software-architecture-of-omnioperator.png "software-architecture-of-omnioperator")
 
 OmniOperator provides unified interfaces for distributed tasks. You can submit an SQL task to a Spark cluster. The cluster management node schedules the task, that is, distributes subtasks to multiple compute nodes for execution.
+
 ### Application Scenarios<a name="EN-US_TOPIC_0000002515818282"></a>
 
 The OmniOperator feature is mainly used in data analytics engines. It optimizes the execution process to improve data analytics performance.
@@ -65,12 +64,11 @@ OmniOperator supports the following analytics engines:
     - HiveExtension: Hive 3.1.0
 
 The OmniOperator feature is mainly used in data analytics engines. It optimizes the execution process to improve data analytics performance.
+
 ### Related Concepts<a name="EN-US_TOPIC_0000002547299019"></a>
 
 - OmniVec: An efficient off-heap memory data organization method. It supports zero-copy data read and has no serialization overhead.
 - Omni operators: High-performance operators, which use native code \(C/C++\) to replace physical operators at the bottom layer of big data, increasing the computing speed.
-
-
 
 ## Constraints<a name="EN-US_TOPIC_0000002515665484"></a>
 
@@ -82,7 +80,6 @@ To effectively plan and utilize the OmniOperator feature, it is recommended to b
 - Floating-point precision of the Double type: When using the Double type for operations such as SUM or AVG, the OmniOperator feature may produce inconsistent results due to differences in computation order. If high precision is required, use a data type with higher precision, such as Decimal.
 - Currently, operators like Sort, Window, and HashAgg support the spill function, while operators such as BroadcastHashJoin, ShuffledHashJoin, and SortMergeJoin do not. Select operators based on your data characteristics and processing requirements.
 
-
 ### Hive Engine Constraints<a name="EN-US_TOPIC_0000002515825400"></a>
 
 - The user-defined function \(UDF\) plugin supports only simple UDFs. It is used to execute UDFs written based on the Hive UDF framework.
@@ -93,27 +90,27 @@ To effectively plan and utilize the OmniOperator feature, it is recommended to b
 - If SQL statements contain the **Alter** field attribute or use **LOAD DATA** to import parquet data, the open-source TableScan operator is recommended for the Hive engine.
 
     >![](docs/en/public_sys-resources/icon-note.gif) **NOTE:** 
-    >-   When the data storage structure declared by Hive OmniOperator in the table does not match the actual storage structure and the GroupBy operator is consistent with bucketing parameters, the GroupBy operator may encounter a grouping exception in open-source Hive. Therefore, to ensure that the declared storage structure matches the actual storage structure, use no bucketing policy when creating the table or run **load data local inpath** to import data.
-    >-   When the sum result overflows, Hive OmniOperator may generate a result different from open-source behaviors of the engine. OmniOperator returns null for users to perceive the overflow, whereas open-source Hive returns an error value, which may cause misunderstanding.
-
+    >- When the data storage structure declared by Hive OmniOperator in the table does not match the actual storage structure and the GroupBy operator is consistent with bucketing parameters, the GroupBy operator may encounter a grouping exception in open-source Hive. Therefore, to ensure that the declared storage structure matches the actual storage structure, use no bucketing policy when creating the table or run **load data local inpath** to import data.
+    >- When the sum result overflows, Hive OmniOperator may generate a result different from open-source behaviors of the engine. OmniOperator returns null for users to perceive the overflow, whereas open-source Hive returns an error value, which may cause misunderstanding.
 
 ### Spark Engine Constraints<a name="EN-US_TOPIC_0000002547265317"></a>
 
 The adaptation layer frameworks that enable Spark to interoperate with OmniOperator are SparkExtension and Gluten.
 
 >![](docs/en/public_sys-resources/icon-notice.gif) **NOTICE:** 
->-   Supported Spark versions:
->    -   Spark 3.1.1, 3.3.1, 3.4.3, and 3.5.2
->    -   Gluten supports only Spark 3.3.1.
->-   OS differences:
->    -   SparkExtension supports CentOS 7.9, openEuler 20.03, and openEuler 22.03.
->    -   Gluten supports openEuler 22.03.
+>
+> - Supported Spark versions:
+>   - Spark 3.1.1, 3.3.1, 3.4.3, and 3.5.2
+>   - Gluten supports only Spark 3.3.1.
+> - OS differences:
+>   - SparkExtension supports CentOS 7.9, openEuler 20.03, and openEuler 22.03.
+>   - Gluten supports openEuler 22.03.
 
 - Different loads require different memory configurations. For example, for a 3 TB TPC-DS dataset, the recommended SparkExtension configuration requires that off-heap memory be greater than or equal to 20 GB so that all the 99 SQL statements can be successfully executed. During the execution, "MEM\_CAP\_EXCEEDED" may be reported in logs, but the execution result is not affected. If the off-heap memory configuration is too low, the SQL statement execution result may be incorrect.
 - Spark OmniOperator supports the from\_unixtime and unix\_timestamp expressions.
     1. The time parsing policy **spark.sql.legacy.timeParserPolicy** must be **EXCEPTION** or **CORRECTED**, and cannot be **LEGACY**.
     2. For some improper parameter values \(such as non-existent dates and invalid ultra-large timestamp values\), the processing results of OmniRuntime are different from those of open-source Spark.
-    3. In the SparkExtension scenario, you can set **spark.omni.sql.columnar.unixTimeFunc.enabled=false** to roll back the two functions. In the Gluten scenario, you can set **spark.gluten.sql.columnar.backend.omni.unixTimeFunc.enabled** to roll back the two functions. That is, use the functions corresponding to the open-source Spark version to avoid the difference in [2](#li23961023256).
+    3. In the SparkExtension scenario, you can set **spark.omni.sql.columnar.unixTimeFunc.enabled=false** to roll back the two functions. In the Gluten scenario, you can set **spark.gluten.sql.columnar.backend.omni.unixTimeFunc.enabled** to roll back the two functions. That is, use the functions corresponding to the open-source Spark version to avoid the difference in item 2.
 
 - When Spark OmniOperator performs expression codegen on a large number of columns \(for example 500 columns\) at the same time, the compilation overhead is greater than the OmniOperator acceleration effect. In this scenario, you are advised to use open-source Spark.
 - OmniOperator does not support decimal128 CHAR or AVG function data or of Spark 3.4.3 or Spark 3.5.2. Such data may cause operation rollback during operation acceleration.
@@ -121,13 +118,11 @@ The adaptation layer frameworks that enable Spark to interoperate with OmniOpera
 - OmniOperator supports the **ROW\_NUMBER** and **rank** functions in Spark 3.5.2. In the **dense\_rank** scenario, operators are rolled back.
 - Spark OmniOperator does not support comparison operators \(<, <=, \>, \>=, !=, <\>, =, ==, <=\>\) for Boolean data, and does not support <=\> for any data type. If an incompatible operation exists during the execution, it is normal that the operator is rolled back. If a rollback occurs during the join operation of a large table, performance may deteriorate due to the high overhead of row-to-column conversion. In practice, it is recommended to avoid such scenarios to minimize the impact of rollback on performance.
 
-
-
 ## Directory Structure<a name="EN-US_TOPIC_0000002547258197"></a>
 
 The full project directory structure is as follows:
 
-```
+```text
 ├── docs                                                     # Project document directory
 │   └── en                                                   # English document directory
 │       ├── figures                                          # Directory of images in documents
@@ -159,18 +154,13 @@ The full project directory structure is as follows:
 ├── README_en.md                                                # Project description
 ```
 
-
 ## Release Notes<a name="EN-US_TOPIC_0000002515658372"></a>
 
-For details about feature changes in each version, see [Release Notes](./docs/en/quick_start.md).
-
+For details about feature changes in each version, see [Release Notes](./docs/en/release_notes.md).
 
 ## Environment Deployment<a name="EN-US_TOPIC_0000002515658370"></a>
 
 For details about the environment dependencies and installation methods of OmniOperator, see [Installation Guide](./docs/en/installation_guide.md).
-
-
-
 
 ## Helpful Links<a name="EN-US_TOPIC_0000002515818286"></a>
 
@@ -181,20 +171,16 @@ For details about the environment dependencies and installation methods of OmniO
 |[User Guide](./docs/en/user_guide.md)|Provides details about how to use OmniOperator.|
 |[FAQs](./docs/en/faq.md)|Provides answers to frequently asked questions (FAQs) about installing and using OmniOperator.|
 
-
-
 ## Security Statement<a name="EN-US_TOPIC_0000002547265321"></a>
 
 ### Routine Antivirus Software Check<a name="EN-US_TOPIC_0000002547269013"></a>
 
 Periodically scan clusters and Spark components for viruses. This protects clusters from viruses, malicious code, spyware, and malicious programs, reducing risks such as system breakdown and information leakage. Mainstream antivirus software can be recommended for antivirus check.
 
-
 ### Log Control<a name="EN-US_TOPIC_0000002515669178"></a>
 
 - Check whether the system can limit the size of a single log file.
 - Check whether there is a mechanism for clearing logs when the log space is used up.
-
 
 ### Vulnerability Fixing<a name="EN-US_TOPIC_0000002515829100"></a>
 
@@ -224,7 +210,6 @@ To ensure the security of the production environment and reduce the risk of atta
 
     Currently, the vendor has released an upgrade patch to fix the vulnerability. For details, visit [GitHub](https://github.com/netty/netty/security/advisories/GHSA-9vjp-v76f-g363).
 
-
 ### SSH Hardening<a name="EN-US_TOPIC_0000002547309011"></a>
 
 During the installation and deployment, you need to connect to the server through SSH. The **root** user has all the operation permissions. Logging in to the server as the **root** user may pose security risks. You are advised to log in to the server as a common user for installation and deployment and disable **root** user login using SSH to improve system security. 
@@ -233,7 +218,6 @@ Check the **PermitRootLogin** configuration item in **/etc/ssh/sshd\_config**.
 
 - If the value is **no**, **root** user login using SSH is disabled.
 - If the value is **yes**, change it to **no**.
-
 
 ### Public Network Address Statement<a name="EN-US_TOPIC_0000002547269015"></a>
 
@@ -279,8 +263,6 @@ Check the **PermitRootLogin** configuration item in **/etc/ssh/sshd\_config**.
 </tbody>
 </table>
 
-
-
 ## Disclaimer<a name="EN-US_TOPIC_0000002515818292"></a>
 
 **To OminiOperator users**
@@ -297,13 +279,11 @@ Check the **PermitRootLogin** configuration item in **/etc/ssh/sshd\_config**.
 
 If you do not want your model or dataset to be mentioned in OminiOperator, or if you wish to update its description, please submit an issue on GitCode. We will delete or update your description according to your request. Thank you for your understanding and contribution to OminiOperator.
 
-
 ## License<a name="EN-US_TOPIC_0000002547298197"></a>
 
-For details, see the [License](license.md) file.
+For details, see the [License](LICENSE) file.
 
-The documents in the **_xxxdocs_** directory are licensed under CC BY 4.0. For details, see the [License](license.md) file.
-
+The documents in the **_xxxdocs_** directory are licensed under CC BY 4.0. For details, see the [License](LICENSE) file.
 
 ## Contribution Statement<a name="EN-US_TOPIC_0000002547298203"></a>
 
@@ -322,16 +302,12 @@ The documents in the **_xxxdocs_** directory are licensed under CC BY 4.0. For d
     8. After your PR is approved by the required number of reviewers, the committer will conduct the final review.
     9. After your PR is approved and all tests pass, the CI system will merge it into the project's main branch.
 
-
 ## Suggestions and Feedback<a name="EN-US_TOPIC_0000002547258203"></a>
 
 You are welcome to contribute to the community. If you have any questions or suggestions, please submit an [issue](https://gitcode.com/openeuler/OmniAdaptor). We will respond as soon as possible. Thank you for your support.
 
-
 ## Acknowledgments<a name="EN-US_TOPIC_0000002515658382"></a>
 
-OminiOperator is jointly developed by the following Huawei departments:
-
-Kunpeng Computing BoostKit Development Dept
+OmniOperator is jointly developed by the openEuler community.
 
 Thank you to everyone in the community for your PRs. We warmly welcome contributions to OminiOperator!

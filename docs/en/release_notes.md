@@ -23,7 +23,6 @@
 </tbody>
 </table>
 
-
 ### Software Version Mapping<a name="EN-US_TOPIC_0000002547210787"></a>
 
 |Item| Version                                                                                           |
@@ -36,8 +35,6 @@
 |Python| 3.10.2 or later                                                                                    |
 |File system| HDFS                                                                                          |
 |Data format| ORC, PARQUET                                                                                  |
-
-
 
 ### Hardware Version Mapping<a name="EN-US_TOPIC_0000002547210819"></a>
 
@@ -54,7 +51,6 @@
 </tr>
 </tbody>
 </table>
-
 
 ### Virus Scan Result<a name="EN-US_TOPIC_0000002515450916"></a>
 
@@ -147,8 +143,6 @@ The software packages, release documents, and product documents have been scanne
 </tbody>
 </table>
 
-
-
 ## V2.1.0<a name="EN-US_TOPIC_0000002517208390"></a>
 
 ### Change Description<a name="EN-US_TOPIC_0000002548808279"></a>
@@ -168,17 +162,13 @@ None
 
 None
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002548688267"></a>
 
 None
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002517048478"></a>
 
 None
-
-
 
 ## V2.0.0<a name="EN-US_TOPIC_0000002517048478"></a>
 
@@ -199,17 +189,13 @@ None
 
 None
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002515610898"></a>
 
 None
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002515610880"></a>
 
 None
-
-
 
 ## V1.9.0<a name="EN-US_TOPIC_0000002547130825"></a>
 
@@ -230,17 +216,13 @@ None
 
 None
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002515450930"></a>
 
 None
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002547210785"></a>
 
 None
-
-
 
 ## V1.8.0<a name="EN-US_TOPIC_0000002547210809"></a>
 
@@ -264,17 +246,13 @@ None
 
 This version does not adapt to CentOS 7.9.
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002547130777"></a>
 
 None
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002547210795"></a>
 
 None
-
-
 
 ## V1.7.0<a name="EN-US_TOPIC_0000002515450928"></a>
 
@@ -302,17 +280,13 @@ None
 
 None
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002515450942"></a>
 
 None
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002515450960"></a>
 
 None
-
-
 
 ## V1.6.0<a name="EN-US_TOPIC_0000002515610908"></a>
 
@@ -335,15 +309,10 @@ None
 
 None
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002547210769"></a>
 
 <a name="EN-US_topic_0000001498002964_table1077520124617"></a>
-<table><tbody><tr id="EN-US_topic_0000001498002964_row07751817464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.1.1"><p id="EN-US_topic_0000001498002964_p177751174618"><a name="EN-US_topic_0000001498002964_p177751174618"></a><a name="EN-US_topic_0000001498002964_p177751174618"></a>Trouble Ticket No.</p>
-</th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.1.1 "><p id="EN-US_topic_0000001498002964_p377511134615"><a name="EN-US_topic_0000001498002964_p377511134615"></a><a name="EN-US_topic_0000001498002964_p377511134615"></a>DTS2024060329127</p>
-</td>
-</tr>
+<table><tbody>
 <tr id="EN-US_topic_0000001498002964_row157751511464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.2.1"><p id="EN-US_topic_0000001498002964_p167751810462"><a name="EN-US_topic_0000001498002964_p167751810462"></a><a name="EN-US_topic_0000001498002964_p167751810462"></a>Severity</p>
 </th>
 <td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.2.1 "><p id="EN-US_topic_0000001498002964_p87750114611"><a name="EN-US_topic_0000001498002964_p87750114611"></a><a name="EN-US_topic_0000001498002964_p87750114611"></a>Minor</p>
@@ -357,12 +326,9 @@ None
 </tbody>
 </table>
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002547210813"></a>
 
 None
-
-
 
 ## V1.5.0<a name="EN-US_TOPIC_0000002547130781"></a>
 
@@ -386,20 +352,14 @@ None
 
 None
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002547130817"></a>
 
 None
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002547130753"></a>
 
 <a name="EN-US_topic_0000001498002964_table1077520124617"></a>
-<table><tbody><tr id="EN-US_topic_0000001498002964_row07751817464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.1.1"><p id="EN-US_topic_0000001498002964_p177751174618"><a name="EN-US_topic_0000001498002964_p177751174618"></a><a name="EN-US_topic_0000001498002964_p177751174618"></a>Trouble Ticket No.</p>
-</th>
-<td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.1.1 "><p id="EN-US_topic_0000001498002964_p377511134615"><a name="EN-US_topic_0000001498002964_p377511134615"></a><a name="EN-US_topic_0000001498002964_p377511134615"></a>DTS2024060329127</p>
-</td>
-</tr>
+<table><tbody>
 <tr id="EN-US_topic_0000001498002964_row157751511464"><th class="firstcol" valign="top" width="20.830000000000002%" id="mcps1.1.3.2.1"><p id="EN-US_topic_0000001498002964_p167751810462"><a name="EN-US_topic_0000001498002964_p167751810462"></a><a name="EN-US_topic_0000001498002964_p167751810462"></a>Severity</p>
 </th>
 <td class="cellrowborder" valign="top" width="79.17%" headers="mcps1.1.3.2.1 "><p id="EN-US_topic_0000001498002964_p87750114611"><a name="EN-US_topic_0000001498002964_p87750114611"></a><a name="EN-US_topic_0000001498002964_p87750114611"></a>Minor</p>
@@ -433,8 +393,6 @@ None
 </tbody>
 </table>
 
-
-
 ## V1.4.0<a name="EN-US_TOPIC_0000002515450946"></a>
 
 ### Change Description<a name="EN-US_TOPIC_0000002515610850"></a>
@@ -460,17 +418,13 @@ None
 
 None
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002547130743"></a>
 
 None
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002515610890"></a>
 
 None
-
-
 
 ## V1.3.0<a name="EN-US_TOPIC_0000002547130771"></a>
 
@@ -492,17 +446,13 @@ None
 
 None
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002547210777"></a>
 
 None
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002515610852"></a>
 
 None
-
-
 
 ## V1.2.0<a name="EN-US_TOPIC_0000002515610910"></a>
 
@@ -527,17 +477,13 @@ None
 
 None
 
-
 ### Resolved Issues<a name="EN-US_TOPIC_0000002515450958"></a>
 
 None
 
-
 ### Known Issues<a name="EN-US_TOPIC_0000002547210745"></a>
 
 None
-
-
 
 ## Related Documentation<a name="EN-US_TOPIC_0000002547130797"></a>
 
@@ -550,7 +496,6 @@ None
 |Installation Guide|Provides guidance on how to install and deploy OmniStateStore.|Open-source repository|
 |User Guide|Provides guidance on how to use OmniStateStore.|Open-source repository|
 |FAQs|Records the issues that may occur during the installation, deployment, and use and their solutions.|Open-source repository|
-
 
 ### Obtaining Documentation<a name="EN-US_TOPIC_0000002547210757"></a>
 
