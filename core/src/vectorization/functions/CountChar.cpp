@@ -2,10 +2,8 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
  * Description: vectorized CountChar.
  *
- * Nexmark CountChar.eval(StringData, StringData) returns primitive long.
- * A NULL string is not propagated: the method returns 0. An empty string
- * also returns 0. A NULL search character cannot be dereferenced by the UDF;
- * native returns NULL for that input instead of throwing.
+ * Matches codegen CountChar: a NULL string or a NULL search character returns 0.
+ * An empty search character counts '\0', the same byte target[0] yields for "".
  */
 
 #include "vectorization/VectorFunction.h"
@@ -17,11 +15,6 @@ using namespace omniruntime::type;
 using namespace omniruntime::vec;
 
 namespace {
-
-std::string_view FirstChar(std::string_view value)
-{
-    return value.empty() ? std::string_view{} : std::string_view(value.data(), 1);
-}
 
 class CountCharFunction : public VectorFunction {
 public:
@@ -43,24 +36,14 @@ public:
         };
 
         for (int32_t row = 0; row < size; ++row) {
-            // UDF: if (str == null) return 0. This runs before the search character is read.
-            if (isNullAt(strVec, row)) {
+            if (isNullAt(strVec, row) || isNullAt(needleVec, row)) {
                 out->SetValue(row, 0);
                 result->SetNotNull(row);
-                continue;
-            }
-            if (isNullAt(needleVec, row)) {
-                result->SetNull(row);
                 continue;
             }
             std::string_view text = VectorHelper::GetStringValueFromVector(strVec, row);
-            std::string_view needle = FirstChar(VectorHelper::GetStringValueFromVector(needleVec, row));
-            if (needle.empty()) {
-                out->SetValue(row, 0);
-                result->SetNotNull(row);
-                continue;
-            }
-            const char target = needle[0];
+            std::string_view needle = VectorHelper::GetStringValueFromVector(needleVec, row);
+            const char target = needle.empty() ? '\0' : needle[0];
             int64_t count = 0;
             for (char ch : text) {
                 if (ch == target) {

@@ -15,11 +15,6 @@ using namespace omniruntime::vec;
 
 namespace {
 
-std::string_view FirstChar(std::string_view value)
-{
-    return value.empty() ? std::string_view{} : std::string_view(value.data(), 1);
-}
-
 class SplitIndexFunction : public VectorFunction {
 public:
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
@@ -47,17 +42,15 @@ public:
                 continue;
             }
             std::string_view text = VectorHelper::GetStringValueFromVector(strVec, row);
-            std::string_view delim = FirstChar(VectorHelper::GetStringValueFromVector(delimVec, row));
+            std::string_view delim = VectorHelper::GetStringValueFromVector(delimVec, row);
             int32_t index = VectorHelper::GetValueFromVector<int32_t>(indexVec, row);
-            if (delim.empty() || index < 0) {
-                result->SetNull(row);
-                continue;
-            }
+            // codegen reads *target. An empty delimiter is a C string whose first byte is '\0'.
+            // A negative index never matches currentIndex, which starts at 0.
+            const char sep = delim.empty() ? '\0' : delim[0];
             size_t start = 0;
             int32_t current = 0;
             bool found = false;
             std::string_view piece;
-            const char sep = delim[0];
             for (size_t i = 0; i <= text.size(); ++i) {
                 if (i == text.size() || text[i] == sep) {
                     if (current == index) {
