@@ -1,4 +1,17 @@
 #!/bin/bash
+# Project license notice for OmniOperator
+# Existing file-specific copyright and license terms continue to apply.
+#
+# OmniOperator is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan
+# PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#     http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+# EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+# See the Mulan PSL v2 for more details.
+
 # 统一配置加载器：供门禁 / 版本构建两类场景共用。
 # 取值优先级：CI 显式入参(环境变量) > [build] 默认值 > 脚本内置兜底。
 # 门禁(PR)无法手动入参，因此环境变量为空时自然回落到 build.ini 默认值。

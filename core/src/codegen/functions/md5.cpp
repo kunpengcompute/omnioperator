@@ -1,16 +1,30 @@
 /*
  * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ *
+ * Project license notice for OmniOperator
+ * Existing file-specific copyright and license terms continue to apply.
+ *
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
+ * Third-party license and source notices
+ *
  * @Description: md5 function implementations
  *  This code is taken from duckdb/common/crypto/md5.hpp with following changes:
  *  1. removed other duckdb dependencies.
  *  2. Add the DigestToBase10 method which produce the md5 in decimal
- */
-/*
-** This code taken from the SQLite test library.  Originally found on
-** the internet.  The original header comment follows this comment.
-** The code is largerly unchanged, but there have been some modifications.
-*/
-/*
+ *
+ * This code taken from the SQLite test library.  Originally found on
+ * the internet.  The original header comment follows this comment.
+ * The code is largerly unchanged, but there have been some modifications.
+ *
  * This code implements the MD5 message-digest algorithm.
  * The algorithm is due to Ron Rivest.  This code was
  * written by Colin Plumb in 1993, no copyright is claimed.
