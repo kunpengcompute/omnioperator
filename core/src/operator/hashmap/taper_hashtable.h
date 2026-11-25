@@ -187,6 +187,19 @@ class TaperHashTableBase : public TaperContainer {
     return chunks_ == nullptr ? 0 : GetChunksCapacity() * elemNumInChunk_;
   }
 
+  // Slots that can still take a new key without an expansion.
+  size_t FreeSlots() const {
+    const size_t capacity = Capacity();
+    return capacity > size_ ? capacity - size_ : 0;
+  }
+
+  // While held, the table takes new keys into its free slots and does not
+  // expand. The owner holds it for a batch after which the table is emitted
+  // and released anyway, and only when FreeSlots() covers the batch.
+  void SetExpansionHeld(bool held) {
+    expansionHeld_ = held;
+  }
+
   void Clear() override {
     FreeChunks();
     Init(0);
@@ -297,7 +310,7 @@ class TaperHashTableBase : public TaperContainer {
   }
 
   bool ShouldExpand() {
-    return size_ >= expandThreshold_;
+    return !expansionHeld_ && size_ >= expandThreshold_;
   }
 
   void ALWAYS_INLINE prefetch(ChunkPos pos) {
@@ -437,6 +450,7 @@ class TaperHashTableBase : public TaperContainer {
   uint8_t elemNumInChunk_ = 0;
 
   bool rehashing_ = false;
+  bool expansionHeld_ = false;
 
  protected:
   ChunkPtr Chunks() const {

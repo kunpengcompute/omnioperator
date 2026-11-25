@@ -9,6 +9,7 @@
  */
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <limits>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -159,6 +160,7 @@ TEST(PartialAggFlushTest, flush_keeps_result_long_keys)
     op->setNoMoreInput(false);
     ASSERT_TRUE(op->IsStepPartials());
     op->SetPartialFlushMemory(8 * 1024, 16 * 1024);
+    op->SetPartialGrowLimit(0); // the 1000 keys would fit a grown first table; this test is about the flush
 
     std::vector<VectorBatch *> outs;
     uint64_t rowsBeforeEnd = 0;
@@ -244,6 +246,84 @@ TEST(PartialAggFlushTest, flush_spanning_several_output_batches_refuses_input_un
     ASSERT_EQ(sums.size(), static_cast<size_t>(kKeys));
     for (int32_t k = 0; k < kKeys; ++k) {
         ASSERT_EQ(sums[std::to_string(k)], static_cast<int64_t>(k + 1) * kBatches) << "key " << k;
+    }
+}
+
+// Keys that repeat only after more rows than the base cap holds look like new
+// keys when the table reaches the cap (Trip.com q1_2). The first table grows
+// anyway and its flush decides: the cycle is absorbed and the grown cap stays,
+// while a table of new keys flushes at the limit and returns to the base cap
+// for good (Meituan q3).
+TEST(PartialAggFlushTest, first_table_absorbs_a_long_key_cycle_and_gives_up_on_new_keys)
+{
+    ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
+    constexpr int32_t kRows = 40000;
+    constexpr int32_t kBatches = 6;
+    DataTypes groupType(std::vector<DataTypePtr>{LongType()});
+    DataTypes sourceTypes(std::vector<DataTypePtr>{LongType(), LongType()});
+
+    {
+        auto factory = MakeSumFactory(groupType, AggregationNode::Step::K_PARTIAL, true, true);
+        auto *op = static_cast<HashAggregationOperator *>(factory->CreateOperator(nullptr));
+        op->Init();
+        op->setNoMoreInput(false);
+        op->SetPartialFlushMemory(64 * 1024, 96 * 1024);
+        op->SetPartialGrowLimit(64UL * 1024 * 1024);
+        std::vector<VectorBatch *> outs;
+        for (int32_t b = 0; b < kBatches; ++b) {
+            std::vector<int64_t> keys(kRows);
+            std::vector<int64_t> vals(kRows, 1);
+            for (int32_t i = 0; i < kRows; ++i) {
+                keys[i] = static_cast<int64_t>(i) * 1000003;   // the same kRows keys in every batch
+            }
+            VectorBatch *in = CreateVectorBatch(sourceTypes, kRows, keys.data(), vals.data());
+            Pump(op, outs);
+            ASSERT_TRUE(op->needsInput());
+            op->AddInput(in);
+        }
+        EXPECT_EQ(op->PartialFlushTimes(), 0U);
+        EXPECT_GE(op->PartialGrowTimes(), 1U);
+        Drain(op, outs);
+        EXPECT_EQ(TotalRows(outs), static_cast<uint64_t>(kRows)) << "every batch after the first merged into the table";
+        op::Operator::DeleteOperator(op);
+        auto sums = FinalSums(groupType, outs, LongKey);
+        ASSERT_EQ(sums.size(), static_cast<size_t>(kRows));
+        for (auto &kv : sums) {
+            ASSERT_EQ(kv.second, kBatches) << "key " << kv.first;
+        }
+    }
+
+    // every key new: the first table flushes at the limit, then the base cap is back
+    {
+        auto factory = MakeSumFactory(groupType, AggregationNode::Step::K_PARTIAL, true, true);
+        auto *op = static_cast<HashAggregationOperator *>(factory->CreateOperator(nullptr));
+        op->Init();
+        op->setNoMoreInput(false);
+        op->SetPartialFlushMemory(64 * 1024, 96 * 1024);
+        op->SetPartialGrowLimit(2UL * 1024 * 1024);
+        std::vector<VectorBatch *> outs;
+        constexpr int32_t kNewBatches = 12;
+        for (int32_t b = 0; b < kNewBatches; ++b) {
+            std::vector<int64_t> keys(kRows);
+            std::vector<int64_t> vals(kRows, 1);
+            for (int32_t i = 0; i < kRows; ++i) {
+                keys[i] = (static_cast<int64_t>(b) * kRows + i) * 1000003;
+            }
+            VectorBatch *in = CreateVectorBatch(sourceTypes, kRows, keys.data(), vals.data());
+            Pump(op, outs);
+            ASSERT_TRUE(op->needsInput());
+            op->AddInput(in);
+            if (op->PartialFlushTimes() >= 1) {
+                EXPECT_EQ(op->PartialFlushCap(), 64UL * 1024) << "after the verdict of the first flush, batch " << b;
+            }
+        }
+        EXPECT_GE(op->PartialFlushTimes(), 1U);
+        const uint64_t growsAfterVerdict = op->PartialGrowTimes();
+        Drain(op, outs);
+        EXPECT_EQ(op->PartialGrowTimes(), growsAfterVerdict);
+        EXPECT_EQ(TotalRows(outs), static_cast<uint64_t>(kNewBatches) * kRows);
+        VectorHelper::FreeVecBatches(outs);
+        op::Operator::DeleteOperator(op);
     }
 }
 
@@ -453,6 +533,235 @@ TEST_F(TestPoolFixture, flushable_partial_table_is_not_a_spill_donor)
     op::Operator::DeleteOperator(donor);
     for (auto *b : rest) {
         VectorHelper::FreeVecBatch(b);
+    }
+}
+
+namespace {
+// Plays Spark for one task with a fixed share: a request above the share first
+// asks the task to give memory back (spill), then is denied.
+class TaskShareListener : public omniruntime::mem::PoolListener {
+public:
+    void allocationChanged(int64_t diff) override
+    {
+        if (diff > 0 && billed + diff > share) {
+            if (pool != nullptr && !reclaiming) {
+                reclaiming = true;
+                pool->reclaim(diff);
+                reclaiming = false;
+            }
+            if (billed + diff > share) {
+                ++denied;
+                throw omniruntime::mem::ReservationDenied("over the task share");
+            }
+        }
+        billed += diff;
+    }
+    omniruntime::mem::OmniTaskMemoryPool *pool = nullptr;
+    int64_t share = std::numeric_limits<int64_t>::max();
+    int64_t billed = 0;
+    int denied = 0;
+    bool reclaiming = false;
+};
+} // namespace
+
+// Meituan q3 at the 10 GB point, stage 16: a partial table within its cap needs
+// to expand, the task share cannot hold the old and the new chunk array at
+// once, and nothing in the task can give memory back (the table is not a spill
+// donor, the operator next to it is emitting). The reservation for the
+// expansion is denied before the batch; the batch must not expand the table
+// anyway (that allocation fails the task), the table has to flush first.
+TEST(PartialAggFlushTest, expansion_the_task_cannot_reserve_flushes_instead_of_failing)
+{
+    ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
+    // The table asks for room as soon as a batch could take it past 90 % of its
+    // capacity, and expands at the first full chunk after that. With keys that
+    // spread unevenly over the chunks that comes within the same batch.
+    constexpr int32_t kRows = 20000;
+    constexpr int32_t kBatches = 100;
+    DataTypes groupType(std::vector<DataTypePtr>{LongType()});
+    DataTypes sourceTypes(std::vector<DataTypePtr>{LongType(), LongType()});
+    auto makeBatch = [&](int32_t batch) {
+        std::vector<int64_t> keys(kRows);
+        std::vector<int64_t> vals(kRows, 1);
+        for (int32_t i = 0; i < kRows; ++i) {
+            // every key new (the mixer is a bijection), scattered like hashed data
+            uint64_t z = static_cast<uint64_t>(batch) * kRows + i + 0x9e3779b97f4a7c15ULL;
+            z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+            z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+            keys[i] = static_cast<int64_t>((z ^ (z >> 31)) >> 1);
+        }
+        return CreateVectorBatch(sourceTypes, kRows, keys.data(), vals.data());
+    };
+
+    // Pass 0 has no limit and finds the largest expansion; pass 1 gives the task
+    // a share that holds the table before that expansion but not both arrays.
+    int64_t share = std::numeric_limits<int64_t>::max();
+    for (int pass = 0; pass < 2; ++pass) {
+        TaskShareListener listener;
+        omniruntime::mem::OmniTaskMemoryPool pool(&listener);
+        listener.pool = &pool;
+        listener.share = share;
+        SparkSpillConfig spillConfig(TestUtil::GenerateSpillPath(), INT32_MAX, 0);
+        OperatorConfig operatorConfig(spillConfig);
+        auto factory = MakeSumFactory(groupType, AggregationNode::Step::K_PARTIAL, true, true, operatorConfig);
+        auto *op = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+        op->Init();
+        op->setNoMoreInput(false);
+        op->SetPartialFlushMemory(1UL << 30, 1UL << 30); // the cap never binds: the table stays "within its cap"
+
+        // The downstream operator takes every flushed batch and frees it, as the
+        // shuffle writer does once it has serialized the rows.
+        std::unordered_map<int64_t, int64_t> sums;
+        uint64_t flushedRows = 0;
+        auto consume = [&](std::vector<VectorBatch *> &outs) {
+            for (auto *b : outs) {
+                auto *keyVec = static_cast<Vector<int64_t> *>(b->Get(0));
+                auto *sumVec = static_cast<Vector<int64_t> *>(b->Get(1));
+                for (int32_t r = 0; r < b->GetRowCount(); ++r) {
+                    sums[keyVec->GetValue(r)] += sumVec->GetValue(r);
+                }
+                flushedRows += static_cast<uint64_t>(b->GetRowCount());
+                VectorHelper::FreeVecBatch(b);
+            }
+            outs.clear();
+        };
+        auto pump = [&]() {
+            std::vector<VectorBatch *> outs;
+            while (!op->needsInput() && !op->isFinished()) {
+                VectorBatch *out = nullptr;
+                op->GetOutput(&out);
+                if (out == nullptr) {
+                    break;
+                }
+                outs.push_back(out);
+                consume(outs);
+            }
+        };
+
+        int64_t largestStep = 0;
+        int64_t shareForLargestStep = 0;
+        bool failed = false;
+        for (int32_t b = 0; b < kBatches && !failed; ++b) {
+            const int64_t peakBefore = pool.peakBytes();
+            const char *where = "GetOutput";
+            try {
+                pump();
+                ASSERT_TRUE(op->needsInput());
+                VectorBatch *in = makeBatch(b);
+                where = "AddInput";
+                op->AddInput(in);
+            } catch (const std::exception &e) {
+                failed = true;
+                ADD_FAILURE() << "pass " << pass << " batch " << b << ": the task failed in " << where << ": " << e.what()
+                              << " (share " << share << ", billed " << listener.billed << ", flushes "
+                              << op->PartialFlushTimes() << ", rows flushed " << flushedRows << ")";
+            }
+            const int64_t step = pool.peakBytes() - peakBefore;
+            if (step > largestStep) {
+                largestStep = step;
+                shareForLargestStep = peakBefore + step / 2;
+            }
+        }
+        if (failed) {
+            // The operator is in an undefined state after the failed call.
+            op::Operator::DeleteOperator(op);
+            return;
+        }
+        if (pass == 0) {
+            ASSERT_GT(largestStep, 16L * 1024 * 1024) << "the table must expand by more than the reservation quantum";
+            EXPECT_EQ(op->PartialFlushTimes(), 0U);
+            share = shareForLargestStep;
+        } else {
+            EXPECT_GE(op->PartialFlushTimes(), 1U) << "the expansion that does not fit must turn into a flush";
+            EXPECT_GE(op->PartialExpansionHeldBatches(), 1U) << "the denied batch went into the free slots";
+            EXPECT_LE(pool.peakBytes(), share);
+        }
+        op->noMoreInput();
+        while (!op->isFinished()) {
+            std::vector<VectorBatch *> outs;
+            VectorBatch *out = nullptr;
+            op->GetOutput(&out);
+            if (out == nullptr) {
+                break;
+            }
+            outs.push_back(out);
+            consume(outs);
+        }
+        op::Operator::DeleteOperator(op);
+        ASSERT_EQ(sums.size(), static_cast<size_t>(kRows) * kBatches) << "pass " << pass;
+        for (auto &kv : sums) {
+            ASSERT_EQ(kv.second, 1) << "key " << kv.first;
+        }
+    }
+}
+
+namespace {
+int64_t MixedKey(uint64_t n)
+{
+    uint64_t z = n + 0x9e3779b97f4a7c15ULL;
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+    return static_cast<int64_t>((z ^ (z >> 31)) >> 1);
+}
+} // namespace
+
+// Meituan q3 stage 9: the task can reserve the growth of the table but not the
+// room its flush needs downstream. That growth is refused and the table flushes
+// at the smaller cap; without the drain room (0 %) the cap would grow.
+TEST(PartialAggFlushTest, growth_that_leaves_no_room_for_the_flush_is_refused)
+{
+    ConfigUtil::SetSupportContainerVecRule(SupportContainerVecRule::NOT_SUPPORT);
+    constexpr int32_t kRows = 200000;
+    DataTypes groupType(std::vector<DataTypePtr>{LongType()});
+    DataTypes sourceTypes(std::vector<DataTypePtr>{LongType(), LongType()});
+
+    // passes 0 and 1 measure what the task is billed after the growth without
+    // and with the drain room; passes 2 and 3 run with a share between the two.
+    int64_t billed[2] = {0, 0};
+    for (int pass = 0; pass < 4; ++pass) {
+        const uint32_t drainPct = (pass % 2 == 1) ? 100 : 0;
+        TaskShareListener listener;
+        omniruntime::mem::OmniTaskMemoryPool pool(&listener);
+        listener.pool = &pool;
+        if (pass >= 2) {
+            listener.share = (billed[0] + billed[1]) / 2;
+        }
+        SparkSpillConfig spillConfig(TestUtil::GenerateSpillPath(), INT32_MAX, 0);
+        OperatorConfig operatorConfig(spillConfig);
+        auto factory = MakeSumFactory(groupType, AggregationNode::Step::K_PARTIAL, true, true, operatorConfig);
+        auto *op = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+        op->Init();
+        op->setNoMoreInput(false);
+        op->SetPartialFlushMemory(1024 * 1024, 1536 * 1024);
+        op->SetPartialGrowLimit(256UL * 1024 * 1024);
+        op->SetPartialDrainPct(drainPct);
+
+        std::vector<int64_t> keys(kRows);
+        std::vector<int64_t> vals(kRows, 1);
+        for (int32_t i = 0; i < kRows; ++i) {
+            keys[i] = MixedKey(static_cast<uint64_t>(i));
+        }
+        op->AddInput(CreateVectorBatch(sourceTypes, kRows, keys.data(), vals.data()));
+        if (pass < 2) {
+            billed[pass] = listener.billed;
+            EXPECT_EQ(op->PartialGrowTimes(), 1U) << "pass " << pass;
+        } else if (drainPct == 0) {
+            EXPECT_EQ(op->PartialGrowTimes(), 1U) << "the growth alone fits the share";
+            EXPECT_TRUE(op->needsInput());
+        } else {
+            EXPECT_EQ(op->PartialGrowTimes(), 0U) << "growth plus drain room does not fit the share";
+            EXPECT_GE(op->PartialGrowDenied(), 1U);
+            EXPECT_FALSE(op->needsInput()) << "the table flushes at the cap it has";
+        }
+        if (pass == 1) {
+            ASSERT_GE(billed[1] - billed[0], 8L * 1024 * 1024) << "the drain room must be at least one reservation quantum";
+        }
+        std::vector<VectorBatch *> outs;
+        Pump(op, outs);
+        Drain(op, outs);
+        EXPECT_EQ(TotalRows(outs), static_cast<uint64_t>(kRows)) << "pass " << pass;
+        VectorHelper::FreeVecBatches(outs);
+        op::Operator::DeleteOperator(op);
     }
 }
 

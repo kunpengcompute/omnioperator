@@ -173,6 +173,45 @@ public:
         return flushTimes_;
     }
 
+    /// Growth of the flush cap: the first table of the operator may grow past
+    /// the cap up to limitBytes instead of being flushed, when the task can
+    /// reserve the growth plus the room its flush needs (TryGrowPartialCap).
+    /// SetPartialFlushMemory sets both values; these two override them.
+    void SetPartialGrowLimit(uint64_t limitBytes)
+    {
+        partialGrowLimit_ = limitBytes;
+    }
+
+    /// Room for the flush: a cap may grow only when the task can also reserve
+    /// drainPct percent of the new cap on top of the growth. The table stays
+    /// resident while its groups are copied into the operator downstream, so a
+    /// table that took all the free memory leaves none for that copy.
+    void SetPartialDrainPct(uint32_t drainPct)
+    {
+        partialDrainPct_ = drainPct;
+    }
+
+    uint64_t PartialGrowDenied() const
+    {
+        return growDenied_;
+    }
+
+    uint64_t PartialGrowTimes() const
+    {
+        return growTimes_;
+    }
+
+    /// Batches a table marked for its flush took without expanding.
+    uint64_t PartialExpansionHeldBatches() const
+    {
+        return expansionHeldBatches_;
+    }
+
+    uint64_t PartialFlushCap() const
+    {
+        return maxPartialAggregationMemory_;
+    }
+
     /// Distinct groups seen so far: in the table + flushed + spilled.
     uint64_t CumulativeDistinctKeys();
 
@@ -186,6 +225,10 @@ private:
     ErrorCode SpillHashMap();
 
     uint64_t EstimateRehashReservation(uint64_t incomingRows) const;
+
+    uint64_t HashmapFreeSlots() const;
+
+    void HoldHashmapExpansion(bool held);
 
     void EnsureReservationPctsCached();
 
@@ -261,6 +304,7 @@ private:
     bool PartialFlushActive() const;
 
     void MaybeMarkPartialFull();
+    bool TryGrowPartialCap(uint64_t tableBytes);
 
     void FinishOutput(int32_t outputRows);
 
@@ -337,6 +381,15 @@ private:
     uint64_t flushedRows_ = 0;
     uint64_t spilledRows_ = 0;
     uint64_t flushTimes_ = 0;
+    // Growth of the first table past the cap (TryGrowPartialCap): the limit, the
+    // room a growth leaves for the flush, and whether the first flush has given
+    // its verdict.
+    uint64_t partialGrowLimit_ = 0;
+    uint32_t partialDrainPct_ = 0;
+    bool partialGrowthDecided_ = false;
+    uint64_t growTimes_ = 0;
+    uint64_t expansionHeldBatches_ = 0;
+    uint64_t growDenied_ = 0;
 
     // QueryConfig is immutable for a query's lifetime (QueryConfig.h). Cache the
     // clamped reservation percentages once instead of copying QueryConfig and

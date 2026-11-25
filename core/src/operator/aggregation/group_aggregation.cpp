@@ -269,6 +269,71 @@ uint64_t HashAggregationOperator::EstimateRehashReservation(uint64_t incomingRow
     }
 }
 
+uint64_t HashAggregationOperator::HashmapFreeSlots() const
+{
+    switch (groupByColumnsHandleType) {
+        case HandleType::serialize:
+            return serialize == nullptr ? 0 : serialize->table->FreeSlots();
+        case HandleType::fixedInt16:
+            return fixedInt16 == nullptr ? 0 : fixedInt16->table->FreeSlots();
+        case HandleType::fixedInt32:
+            return fixedInt32 == nullptr ? 0 : fixedInt32->table->FreeSlots();
+        case HandleType::fixedInt64:
+            return fixedInt64 == nullptr ? 0 : fixedInt64->table->FreeSlots();
+        case HandleType::packedInt32:
+            return packedInt32 == nullptr ? 0 : packedInt32->table->FreeSlots();
+        case HandleType::packedInt64:
+            return packedInt64 == nullptr ? 0 : packedInt64->table->FreeSlots();
+        case HandleType::packedInt128:
+            return packedInt128 == nullptr ? 0 : packedInt128->table->FreeSlots();
+        default:
+            return 0;
+    }
+}
+
+void HashAggregationOperator::HoldHashmapExpansion(bool held)
+{
+    switch (groupByColumnsHandleType) {
+        case HandleType::serialize:
+            if (serialize != nullptr) {
+                serialize->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::fixedInt16:
+            if (fixedInt16 != nullptr) {
+                fixedInt16->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::fixedInt32:
+            if (fixedInt32 != nullptr) {
+                fixedInt32->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::fixedInt64:
+            if (fixedInt64 != nullptr) {
+                fixedInt64->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::packedInt32:
+            if (packedInt32 != nullptr) {
+                packedInt32->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::packedInt64:
+            if (packedInt64 != nullptr) {
+                packedInt64->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::packedInt128:
+            if (packedInt128 != nullptr) {
+                packedInt128->table->SetExpansionHeld(held);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
 void HashAggregationOperator::EnsureReservationPctsCached()
 {
     if (reservationPctsCached_) {
@@ -516,7 +581,7 @@ bool HashAggregationOperator::PartialFlushPreferredOverSpill()
     // (the driver has not drained a pending flush yet) the table stays a
     // donor, so a request that nothing else can serve is still honoured.
     return PartialFlushActive() && !outputStarted_ && !partialFlushing_ &&
-        PartialTableBytes() <= maxExtendedPartialAggregationMemory_;
+        PartialTableBytes() <= std::max(maxExtendedPartialAggregationMemory_, maxPartialAggregationMemory_);
 }
 
 int64_t HashAggregationOperator::reclaim(int64_t targetBytes)
@@ -829,6 +894,28 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
         groupVectors[i] = curVector;
     }
 
+    // A partial table that is already marked for its flush (the reservation
+    // for this batch was denied, or a reclaim asked for its memory) is emitted
+    // and released right after this batch. It must not expand for it: the new
+    // chunk array is allocated inside the insert, where nothing can be flushed
+    // or spilled, so a task without room for it fails (Meituan q3 at the 10 GB
+    // point, stage 16: 128 MB denied in the insert that followed a denied
+    // reservation). The batch goes into the free slots instead.
+    struct ExpansionHold {
+        HashAggregationOperator *op;
+        ~ExpansionHold()
+        {
+            if (op != nullptr) {
+                op->HoldHashmapExpansion(false);
+            }
+        }
+    } expansionHold{nullptr};
+    if (partialFull_ && PartialFlushActive() && HashmapFreeSlots() >= static_cast<uint64_t>(rowCount)) {
+        HoldHashmapExpansion(true);
+        expansionHold.op = this;
+        expansionHeldBatches_++;
+    }
+
     if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
         // Decode all group-by columns upfront to eliminate encoding branches in hot path
         serialize->DecodeGroupByColumns(groupVectors, groupColNum, rowCount);
@@ -868,6 +955,77 @@ void HashAggregationOperator::SetPartialFlushMemory(uint64_t maxBytes, uint64_t 
     maxPartialAggregationMemory_ = maxBytes;
     basePartialAggregationMemory_ = maxBytes;
     maxExtendedPartialAggregationMemory_ = std::max(maxBytes, maxExtendedBytes);
+    // The first table may grow to three times the extended cap (45 % of the
+    // task's share with the default 10 % / 15 % caps), and a growth has to find
+    // half of the new cap as free room for the flush (TryGrowPartialCap).
+    constexpr uint64_t kPartialGrowLimitPct = 300;
+    constexpr uint32_t kPartialDrainPct = 50;
+    partialGrowLimit_ = maxExtendedPartialAggregationMemory_ / 100 * kPartialGrowLimitPct;
+    partialDrainPct_ = kPartialDrainPct;
+}
+
+bool HashAggregationOperator::TryGrowPartialCap(uint64_t tableBytes)
+{
+    // Whether a partial table is worth more memory than its cap shows only in
+    // its flush: keys that repeat after more rows than the cap holds look like
+    // new keys while the table is small (Trip.com q1_2: a 70 MB cap passed
+    // 4.4 G of 4.5 G rows on, 84 GB of shuffle for 4 GB). So the first table of
+    // the operator may grow past the cap, up to the growth limit, and its flush
+    // gives the verdict (CompletePartialFlush): a good reduction keeps the
+    // grown cap, a poor one returns to the base cap for good (Meituan q3).
+    // Memory pressure still flushes a grown table: a denied reservation or a
+    // reclaim request marks it full.
+    bool grown = false;
+    uint64_t drainRoom = 0;
+    if (!partialGrowthDecided_) {
+        uint64_t cap = maxPartialAggregationMemory_;
+        while (cap < partialGrowLimit_ && cap < tableBytes) {
+            cap = std::min(cap > partialGrowLimit_ / 2 ? partialGrowLimit_ : cap * 2, partialGrowLimit_);
+        }
+        if (cap >= tableBytes && cap > maxPartialAggregationMemory_) {
+            // Velox maybeIncreasePartialAggregationMemoryUsage: the cap grows only
+            // when the task can reserve the growth now. A table that grew on
+            // memory it does not have meets the denial inside a rehash, where
+            // nothing can flush (Meituan q3 with a 30 % cap: 134 MB denied in the
+            // insert, 471 failed attempts). The operator is not a donor for its
+            // own request.
+            // The flush of the grown table copies its groups into the operator
+            // downstream while the table is still resident (it is released when
+            // the last batch is out). A growth that takes all the free memory
+            // leaves none for that copy (Meituan q3 stage 9: a 335 MB table next
+            // to 225 MB of a final aggregation, 10 MB left for the shuffle writer,
+            // 45 writer spills per task). So the growth also has to find the
+            // drain room, as headroom of the task pool.
+            drainRoom = cap / 100 * partialDrainPct_;
+            const int64_t wanted = static_cast<int64_t>(cap - tableBytes + drainRoom);
+            bool reserved = true;
+            if (pool_ != nullptr) {
+                ReservationRequestSection request(
+                    this, reclaimableName(), "HashAggregationOperator::TryGrowPartialCap", wanted);
+                NonReclaimableSection ownRequest(this, true);
+                reserved = pool_->maybeReserve(wanted);
+            }
+            if (reserved) {
+                maxPartialAggregationMemory_ = cap;
+                growTimes_++;
+                grown = true;
+            } else {
+                growDenied_++;
+            }
+        }
+    }
+    if (omniruntime::telemetry::IsReclaimSuccessTelemetryEnabled()) {
+        std::fprintf(stderr,
+            "[OMNI-HASHAGG] event=partial_cap operator=%p action=%s table_bytes=%lu cap=%lu limit=%lu groups=%lu "
+            "window_rows=%lu flush_times=%lu grow_times=%lu grow_denied=%lu drain_room=%lu flushed_rows=%lu\n",
+            static_cast<void *>(this), grown ? "grow" : "flush", static_cast<unsigned long>(tableBytes),
+            static_cast<unsigned long>(maxPartialAggregationMemory_), static_cast<unsigned long>(partialGrowLimit_),
+            static_cast<unsigned long>(GetElementsSize()), static_cast<unsigned long>(partialInputRowsSinceFlush_),
+            static_cast<unsigned long>(flushTimes_), static_cast<unsigned long>(growTimes_),
+            static_cast<unsigned long>(growDenied_), static_cast<unsigned long>(drainRoom),
+            static_cast<unsigned long>(flushedRows_));
+    }
+    return grown;
 }
 
 uint64_t HashAggregationOperator::PartialTableBytes()
@@ -904,7 +1062,8 @@ void HashAggregationOperator::MaybeMarkPartialFull()
         GetElementsSize() == 0) {
         return;
     }
-    if (PartialTableBytes() > maxPartialAggregationMemory_) {
+    const uint64_t tableBytes = PartialTableBytes();
+    if (tableBytes > maxPartialAggregationMemory_ && !TryGrowPartialCap(tableBytes)) {
         partialFull_ = true;
     }
 }
@@ -961,9 +1120,13 @@ void HashAggregationOperator::CompletePartialFlush(int32_t outputRows)
             ? std::max<uint64_t>(1, basePartialAggregationMemory_)
             : std::max<uint64_t>(1, maxExtendedPartialAggregationMemory_ / kFirstLastDegradedCapDivisor);
     } else {
-        maxPartialAggregationMemory_ =
-            std::min(maxPartialAggregationMemory_ * 2, maxExtendedPartialAggregationMemory_);
+        // A cap the first table grew past the extended cap stays.
+        if (maxPartialAggregationMemory_ < maxExtendedPartialAggregationMemory_) {
+            maxPartialAggregationMemory_ =
+                std::min(maxPartialAggregationMemory_ * 2, maxExtendedPartialAggregationMemory_);
+        }
     }
+    partialGrowthDecided_ = true;
 
     if (pool_ != nullptr && omniruntime::telemetry::IsReclaimSuccessTelemetryEnabled()) {
         const int64_t usedAfter = pool_->currentBytes();
