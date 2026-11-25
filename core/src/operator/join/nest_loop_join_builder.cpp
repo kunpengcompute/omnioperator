@@ -1,5 +1,15 @@
 /*
  * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * @Description: nested loop join builder implementations
  */
 #include <memory>
@@ -10,10 +20,11 @@
 namespace omniruntime {
 namespace op {
 NestedLoopJoinBuildOperatorFactory::NestedLoopJoinBuildOperatorFactory(DataTypes buildTypes, int32_t *buildOutputCols,
-    int32_t buildOutputColsCount)
+                                                                       int32_t buildOutputColsCount)
     : buildTypes(buildTypes),
       buildOutputCols(std::vector<int32_t>(buildOutputCols, buildOutputCols + buildOutputColsCount))
-{}
+{
+}
 
 NestedLoopJoinBuildOperatorFactory *NestedLoopJoinBuildOperatorFactory::CreateNestedLoopJoinBuildOperatorFactory(
     std::shared_ptr<const NestedLoopJoinNode> planNode)
@@ -27,20 +38,11 @@ NestedLoopJoinBuildOperatorFactory *NestedLoopJoinBuildOperatorFactory::CreateNe
     return new NestedLoopJoinBuildOperatorFactory(*buildOutputTypes, buildOutputCols.data(), buildOutputColsCount);
 }
 
-VectorBatch *NestedLoopJoinBuildOperatorFactory::GetBuildVectorBatch()
-{
-    return this->vectorBatch.get();
-}
+VectorBatch *NestedLoopJoinBuildOperatorFactory::GetBuildVectorBatch() { return this->vectorBatch.get(); }
 
-DataTypes &NestedLoopJoinBuildOperatorFactory::GetBuildDataTypes()
-{
-    return this->buildTypes;
-}
+DataTypes &NestedLoopJoinBuildOperatorFactory::GetBuildDataTypes() { return this->buildTypes; }
 
-std::vector<int32_t> &NestedLoopJoinBuildOperatorFactory::GetbuildOutputCols()
-{
-    return this->buildOutputCols;
-}
+std::vector<int32_t> &NestedLoopJoinBuildOperatorFactory::GetbuildOutputCols() { return this->buildOutputCols; }
 
 Operator *NestedLoopJoinBuildOperatorFactory::CreateOperator()
 {
@@ -48,7 +50,7 @@ Operator *NestedLoopJoinBuildOperatorFactory::CreateOperator()
 }
 
 NestedLoopJoinBuildOperator::NestedLoopJoinBuildOperator(std::unique_ptr<VectorBatch> &vectorBatch,
-    DataTypes &buildTypes)
+                                                         DataTypes &buildTypes)
     : inputVectorBatch(vectorBatch), buildTypes(buildTypes)
 {
     SetOperatorName(metricsNameNestedLoopJoinBuilder);
@@ -67,7 +69,6 @@ int32_t NestedLoopJoinBuildOperator::AddInput(omniruntime::vec::VectorBatch *vec
     inputRowCnt += vecBatch->GetRowCount();
     return 0;
 }
-
 
 template <type::DataTypeId typeId>
 void CopyVectorToVector(BaseVector *destVector, int32_t index, BaseVector *sourceVector)

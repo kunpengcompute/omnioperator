@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: spill merger implementation
  */
 
@@ -65,37 +75,19 @@ ErrorCode SpillReader::ReadVecBatch(std::unique_ptr<vec::VectorBatch> &vectorBat
         BaseVector *vector = vectorBatchPtr->Get(vecIndex);
         int32_t typeId = vecTypeIds[vecIndex];
         switch (typeId) {
-            case OMNI_BOOLEAN:
-                result = ReadVector<bool>(vector, rowCount);
-                break;
+            case OMNI_BOOLEAN: result = ReadVector<bool>(vector, rowCount); break;
             case OMNI_INT:
-            case OMNI_DATE32:
-                result = ReadVector<int32_t>(vector, rowCount);
-                break;
-            case OMNI_SHORT:
-                result = ReadVector<int16_t>(vector, rowCount);
-                break;
+            case OMNI_DATE32: result = ReadVector<int32_t>(vector, rowCount); break;
+            case OMNI_SHORT: result = ReadVector<int16_t>(vector, rowCount); break;
             case OMNI_LONG:
             case OMNI_DECIMAL64:
-            case OMNI_TIMESTAMP:
-                result = ReadVector<int64_t>(vector, rowCount);
-                break;
-            case OMNI_DOUBLE:
-                result = ReadVector<double>(vector, rowCount);
-                break;
+            case OMNI_TIMESTAMP: result = ReadVector<int64_t>(vector, rowCount); break;
+            case OMNI_DOUBLE: result = ReadVector<double>(vector, rowCount); break;
             case OMNI_VARCHAR:
-            case OMNI_CHAR:
-                result = ReadVector<std::string_view>(vector, rowCount);
-                break;
-            case OMNI_DECIMAL128:
-                result = ReadVector<Decimal128>(vector, rowCount);
-                break;
-            case OMNI_BYTE:
-                result = ReadVector<int8_t>(vector, rowCount);
-                break;
-            default:
-                result = ErrorCode::READ_FAILED;
-                break;
+            case OMNI_CHAR: result = ReadVector<std::string_view>(vector, rowCount); break;
+            case OMNI_DECIMAL128: result = ReadVector<Decimal128>(vector, rowCount); break;
+            case OMNI_BYTE: result = ReadVector<int8_t>(vector, rowCount); break;
+            default: result = ErrorCode::READ_FAILED; break;
         }
         if (result != ErrorCode::SUCCESS) {
             isEnd = true;
@@ -205,7 +197,8 @@ int32_t SpillMergeStream::CompareTo(const SpillMergeStream &other)
 }
 
 void SpillMerger::SetCompareFunctions(const type::DataTypes &dataTypes, const std::vector<int32_t> &sortCols,
-    const std::vector<SortOrder> &sortOrders, std::vector<OperatorUtil::CompareFunc> &sortCompareFuncs)
+                                      const std::vector<SortOrder> &sortOrders,
+                                      std::vector<OperatorUtil::CompareFunc> &sortCompareFuncs)
 {
     auto dataTypeIds = dataTypes.GetIds();
     auto sortColSize = sortCols.size();
@@ -215,42 +208,25 @@ void SpillMerger::SetCompareFunctions(const type::DataTypes &dataTypes, const st
         bool isNullsFirst = sortOrders[i].IsNullsFirst();
         switch (typeId) {
             case OMNI_INT:
-            case OMNI_DATE32:
-                SetCompareFunction<int32_t>(isAscending, isNullsFirst, sortCompareFuncs);
-                break;
-            case OMNI_SHORT:
-                SetCompareFunction<int16_t>(isAscending, isNullsFirst, sortCompareFuncs);
-                break;
+            case OMNI_DATE32: SetCompareFunction<int32_t>(isAscending, isNullsFirst, sortCompareFuncs); break;
+            case OMNI_SHORT: SetCompareFunction<int16_t>(isAscending, isNullsFirst, sortCompareFuncs); break;
             case OMNI_DECIMAL64:
             case OMNI_LONG:
-            case OMNI_TIMESTAMP:
-                SetCompareFunction<int64_t>(isAscending, isNullsFirst, sortCompareFuncs);
-                break;
-            case OMNI_BOOLEAN:
-                SetCompareFunction<bool>(isAscending, isNullsFirst, sortCompareFuncs);
-                break;
-            case OMNI_DOUBLE:
-                SetCompareFunction<double>(isAscending, isNullsFirst, sortCompareFuncs);
-                break;
+            case OMNI_TIMESTAMP: SetCompareFunction<int64_t>(isAscending, isNullsFirst, sortCompareFuncs); break;
+            case OMNI_BOOLEAN: SetCompareFunction<bool>(isAscending, isNullsFirst, sortCompareFuncs); break;
+            case OMNI_DOUBLE: SetCompareFunction<double>(isAscending, isNullsFirst, sortCompareFuncs); break;
             case OMNI_CHAR:
-            case OMNI_VARCHAR:
-                SetCompareFunction<std::string_view>(isAscending, isNullsFirst, sortCompareFuncs);
-                break;
-            case OMNI_DECIMAL128:
-                SetCompareFunction<Decimal128>(isAscending, isNullsFirst, sortCompareFuncs);
-                break;
-            case OMNI_BYTE:
-                SetCompareFunction<int8_t>(isAscending, isNullsFirst, sortCompareFuncs);
-                break;
-            default:
-                break;
+            case OMNI_VARCHAR: SetCompareFunction<std::string_view>(isAscending, isNullsFirst, sortCompareFuncs); break;
+            case OMNI_DECIMAL128: SetCompareFunction<Decimal128>(isAscending, isNullsFirst, sortCompareFuncs); break;
+            case OMNI_BYTE: SetCompareFunction<int8_t>(isAscending, isNullsFirst, sortCompareFuncs); break;
+            default: break;
         }
     }
 }
 
 template <typename T>
 void SpillMerger::SetCompareFunction(bool isAscending, bool isNullsFirst,
-    std::vector<OperatorUtil::CompareFunc> &sortCompareFuncs)
+                                     std::vector<OperatorUtil::CompareFunc> &sortCompareFuncs)
 {
     if (isAscending && isNullsFirst) {
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplate<T, true, true, true>);
@@ -262,5 +238,5 @@ void SpillMerger::SetCompareFunction(bool isAscending, bool isNullsFirst,
         sortCompareFuncs.emplace_back(OperatorUtil::CompareFlatTemplate<T, false, true, false>);
     }
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

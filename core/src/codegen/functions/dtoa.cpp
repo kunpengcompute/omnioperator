@@ -1,7 +1,23 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
- * Description: registry  function  implementation
  * Copyright (C) 2018 The C++ Component Model(COMO) Open Source Project
+ *
+ * Project license notice for OmniOperator
+ * Existing file-specific copyright and license terms continue to apply.
+ *
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
+ * Third-party license and source notices
+ *
+ * Description: registry  function  implementation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +36,7 @@
 #include "dtoa.h"
 
 namespace omniruntime::codegen::function {
-template<class Dest, class Source>
-static ALWAYS_INLINE Dest BitCast(const Source &source)
+template <class Dest, class Source> static ALWAYS_INLINE Dest BitCast(const Source &source)
 {
     Dest dest;
     memmove_s(&dest, sizeof(dest), &source, sizeof(dest));
@@ -38,8 +53,7 @@ static ALWAYS_INLINE int32_t Unsigned32RightShift(int32_t input, int32_t shift)
     return static_cast<int32_t>(static_cast<uint32_t>(input) >> shift);
 }
 
-template<class T>
-static ALWAYS_INLINE int32_t NumberOfLeadingZeros(T input)
+template <class T> static ALWAYS_INLINE int32_t NumberOfLeadingZeros(T input)
 {
     if constexpr (std::is_same_v<T, int64_t>) {
         return __builtin_clzl(input);
@@ -48,8 +62,7 @@ static ALWAYS_INLINE int32_t NumberOfLeadingZeros(T input)
     }
 }
 
-template<class T>
-static ALWAYS_INLINE int32_t NumberOfTrailingZeros(T input)
+template <class T> static ALWAYS_INLINE int32_t NumberOfTrailingZeros(T input)
 {
     if constexpr (std::is_same_v<T, int64_t>) {
         return __builtin_ctzl(input);
@@ -133,10 +146,7 @@ void FDBigInteger::TrimLeadingZeros()
     }
 }
 
-void FDBigInteger::MakeImmutable()
-{
-    isImmutable = true;
-}
+void FDBigInteger::MakeImmutable() { isImmutable = true; }
 
 int FDBigInteger::Cmp(const FDBigInteger &other) const
 {
@@ -616,8 +626,8 @@ FDBigInteger FDBigInteger::Add(const FDBigInteger &other)
     int i = 0;
     long carry = 0L;
     for (; i < smallLen; i++) {
-        carry += (i < big.offset ? 0L : (big.data[i - big.offset] & LONG_MASK))
-            + ((i < small.offset ? 0L : (small.data[i - small.offset] & LONG_MASK)));
+        carry += (i < big.offset ? 0L : (big.data[i - big.offset] & LONG_MASK)) +
+                 ((i < small.offset ? 0L : (small.data[i - small.offset] & LONG_MASK)));
         r[i] = static_cast<int>(carry);
         carry >>= 32; // signed shift.
     }
@@ -1154,16 +1164,15 @@ int DoubleToString::EstimateDecExp(long fractBits, int binExp)
 {
     auto d2 = BitCast<double>(EXP_ONE | (fractBits & DoubleConsts::SIGNIF_BIT_MASK));
     double d = (d2 - 1.5) * 0.289529654 + 0.176091259 + static_cast<double>(binExp) * 0.301029995663981;
-    long dBits = BitCast<long>(d);  //can't be NaN here so use raw
+    long dBits = BitCast<long>(d); // can't be NaN here so use raw
     int exponent = static_cast<int>((dBits & DoubleConsts::EXP_BIT_MASK) >> EXP_SHIFT) - DoubleConsts::EXP_BIAS;
     bool isNeg = (dBits & DoubleConsts::SIGN_BIT_MASK) != 0; // discover sign
-    if (exponent >= 0 && exponent < 52) { // hot path
+    if (exponent >= 0 && exponent < 52) {                    // hot path
         long mask = DoubleConsts::SIGNIF_BIT_MASK >> exponent;
         int r = static_cast<int>(((dBits & DoubleConsts::SIGNIF_BIT_MASK) | FRACT_HOB) >> (EXP_SHIFT - exponent));
         return isNeg ? (((mask & dBits) == 0L) ? -r : -r - 1) : r;
     } else if (exponent < 0) {
-        return (((dBits & ~DoubleConsts::SIGN_BIT_MASK) == 0) ? 0 :
-            ((isNeg) ? -1 : 0));
+        return (((dBits & ~DoubleConsts::SIGN_BIT_MASK) == 0) ? 0 : ((isNeg) ? -1 : 0));
     } else {
         return static_cast<int>(d);
     }
@@ -1228,4 +1237,4 @@ std::string DoubleToString::DoubleToStringConverter(double d)
     auto length = DoubleToStringConverter(d, result);
     return std::string{result, length};
 }
-}
+} // namespace omniruntime::codegen::function

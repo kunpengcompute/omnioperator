@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: print expression tree methods
  */
 #include "expr_printer.h"
@@ -26,34 +36,20 @@ string ExprPrinter::BinaryExprPrinterHelper(const Operator &op, const DataType &
     }
 
     switch (op) {
-        case Operator::EQ:
-            return "Cmp:" + typeStr + "(EQ ";
-        case Operator::NEQ:
-            return "Cmp:" + typeStr + "(NEQ ";
-        case Operator::LT:
-            return "Cmp:" + typeStr + "(LT ";
-        case Operator::LTE:
-            return "Cmp:" + typeStr + "(LTE ";
-        case Operator::GT:
-            return "Cmp:" + typeStr + "(GT ";
-        case Operator::GTE:
-            return "Cmp:" + typeStr + "(GTE ";
-        case Operator::AND:
-            return "Bin:" + typeStr + "(AND ";
-        case Operator::OR:
-            return "Bin:" + typeStr + "(OR ";
-        case Operator::ADD:
-            return "Arith:" + typeStr + "(ADD ";
-        case Operator::SUB:
-            return "Arith:" + typeStr + "(SUB ";
-        case Operator::MUL:
-            return "Arith:" + typeStr + "(MUL ";
-        case Operator::DIV:
-            return "Arith:" + typeStr + "(DIV ";
-        case Operator::MOD:
-            return "Arith:" + typeStr + "(MOD ";
-        default:
-            return "Invalid";
+        case Operator::EQ: return "Cmp:" + typeStr + "(EQ ";
+        case Operator::NEQ: return "Cmp:" + typeStr + "(NEQ ";
+        case Operator::LT: return "Cmp:" + typeStr + "(LT ";
+        case Operator::LTE: return "Cmp:" + typeStr + "(LTE ";
+        case Operator::GT: return "Cmp:" + typeStr + "(GT ";
+        case Operator::GTE: return "Cmp:" + typeStr + "(GTE ";
+        case Operator::AND: return "Bin:" + typeStr + "(AND ";
+        case Operator::OR: return "Bin:" + typeStr + "(OR ";
+        case Operator::ADD: return "Arith:" + typeStr + "(ADD ";
+        case Operator::SUB: return "Arith:" + typeStr + "(SUB ";
+        case Operator::MUL: return "Arith:" + typeStr + "(MUL ";
+        case Operator::DIV: return "Arith:" + typeStr + "(DIV ";
+        case Operator::MOD: return "Arith:" + typeStr + "(MOD ";
+        default: return "Invalid";
     }
 }
 
@@ -65,7 +61,6 @@ string ExprPrinter::GenerateIndentation() const
     }
     return indent;
 }
-
 
 std::string GetBoolValOutput(const LiteralExpr &e)
 {
@@ -110,7 +105,8 @@ std::string GetCharValOutput(const LiteralExpr &e)
     if (e.GetReturnTypeId() == OMNI_CHAR) {
         // meant to look like "%s[%d]:'%s'"
         output += TypeUtil::TypeToString(e.GetReturnTypeId()) + +"[" +
-            to_string(static_cast<CharDataType *>(e.dataType.get())->GetWidth()) + "]" + ":'" + *(e.stringVal) + "'";
+                  to_string(static_cast<CharDataType *>(e.dataType.get())->GetWidth()) + "]" + ":'" + *(e.stringVal) +
+                  "'";
     } else {
         std::string tmp = e.stringVal == nullptr ? "null" : *e.stringVal;
         // meant to look like "%s:'%s'"
@@ -198,12 +194,8 @@ void ExprPrinter::Visit(const UnaryExpr &e)
     string indent = GenerateIndentation();
     string output = indent;
     switch (e.op) {
-        case Operator::NOT:
-            output += "Unary:" + TypeUtil::TypeToString(e.GetReturnTypeId()) + "(NOT ";
-            break;
-        default:
-            output += "InvalidUnaryOperator:" + to_string(static_cast<int32_t>(e.op)) + "(";
-            break;
+        case Operator::NOT: output += "Unary:" + TypeUtil::TypeToString(e.GetReturnTypeId()) + "(NOT "; break;
+        default: output += "InvalidUnaryOperator:" + to_string(static_cast<int32_t>(e.op)) + "("; break;
     }
     printf("%s\n", output.c_str());
     this->indentationDepth++;
@@ -217,40 +209,19 @@ void ExprPrinter::Visit(const LiteralExpr &e)
 {
     string output = GenerateIndentation();
     switch (e.GetReturnTypeId()) {
-        case OMNI_BOOLEAN:
-            output += GetBoolValOutput(e);
-            break;
-        case OMNI_BYTE:
-            output += GetByteValOutput(e);
-            break;
-        case OMNI_SHORT:
-            output += GetShortValOutput(e);
-            break;
+        case OMNI_BOOLEAN: output += GetBoolValOutput(e); break;
+        case OMNI_BYTE: output += GetByteValOutput(e); break;
+        case OMNI_SHORT: output += GetShortValOutput(e); break;
         case OMNI_INT:
-        case OMNI_DATE32:
-            output += GetIntValOutput(e);
-            break;
+        case OMNI_DATE32: output += GetIntValOutput(e); break;
         case OMNI_TIMESTAMP:
-        case OMNI_LONG:
-            output += GetLongValOutput(e);
-            break;
-        case OMNI_DOUBLE:
-            output += GetDoubleValOutput(e);
-            break;
-        case OMNI_CHAR:
-            output += GetCharValOutput(e);
-            break;
-        case OMNI_VARCHAR:
-            output += GetCharValOutput(e);
-            break;
-        case OMNI_DECIMAL64:
-            output += GetDecimal64ValOutput(e);
-            break;
-        case OMNI_DECIMAL128:
-            output += GetDecimal128ValOutput(e);
-            break;
-        default:
-            output += "Literal:invalid DataType " + to_string(e.GetReturnTypeId());
+        case OMNI_LONG: output += GetLongValOutput(e); break;
+        case OMNI_DOUBLE: output += GetDoubleValOutput(e); break;
+        case OMNI_CHAR: output += GetCharValOutput(e); break;
+        case OMNI_VARCHAR: output += GetCharValOutput(e); break;
+        case OMNI_DECIMAL64: output += GetDecimal64ValOutput(e); break;
+        case OMNI_DECIMAL128: output += GetDecimal128ValOutput(e); break;
+        default: output += "Literal:invalid DataType " + to_string(e.GetReturnTypeId());
     }
     printf("%s\n", output.c_str());
 }

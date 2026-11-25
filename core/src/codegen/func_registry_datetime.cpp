@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2023-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Date Time Function Registry
  */
 
@@ -13,43 +23,37 @@ using namespace omniruntime::codegen::function;
 std::vector<Function> DateTimeFunctionRegistry::GetFunctions()
 {
     std::vector<Function> dateTimeFnRegistry = {
-        Function(reinterpret_cast<void *>(GetHourFromTimestamp), "get_hour", {},
-                 {OMNI_LONG}, OMNI_INT, INPUT_DATA),
+        Function(reinterpret_cast<void *>(GetHourFromTimestamp), "get_hour", {}, {OMNI_LONG}, OMNI_INT, INPUT_DATA),
         Function(reinterpret_cast<void *>(GetHourFromTimestampWithTz), "get_hour_with_tz", {},
                  {OMNI_LONG, OMNI_VARCHAR}, OMNI_INT, INPUT_DATA),
         Function(reinterpret_cast<void *>(UnixTimestampFromStr), "unix_timestamp", {},
-            { OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR }, OMNI_LONG, INPUT_DATA_AND_NULL_AND_RETURN_NULL),
+                 {OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_LONG,
+                 INPUT_DATA_AND_NULL_AND_RETURN_NULL),
         Function(reinterpret_cast<void *>(UnixTimestampFromDate), "unix_timestamp", {},
-            { OMNI_DATE32, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR }, OMNI_LONG, INPUT_DATA),
+                 {OMNI_DATE32, OMNI_VARCHAR, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_LONG, INPUT_DATA),
         Function(Function(reinterpret_cast<void *>(FromUnixTime), "from_unixtime", {},
-            { OMNI_LONG, OMNI_VARCHAR, OMNI_VARCHAR }, OMNI_VARCHAR, INPUT_DATA, true)),
+                          {OMNI_LONG, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, INPUT_DATA, true)),
         Function(reinterpret_cast<void *>(FromUnixTimeRetNull), "from_unixtime_null", {},
-            { OMNI_LONG, OMNI_VARCHAR, OMNI_VARCHAR }, OMNI_VARCHAR, INPUT_DATA_AND_OVERFLOW_NULL, true),
+                 {OMNI_LONG, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, INPUT_DATA_AND_OVERFLOW_NULL, true),
         Function(reinterpret_cast<void *>(FromUnixTimeWithoutTz), "from_unixtime_without_tz", {},
-                 { OMNI_LONG, OMNI_VARCHAR }, OMNI_VARCHAR, INPUT_DATA, true),
+                 {OMNI_LONG, OMNI_VARCHAR}, OMNI_VARCHAR, INPUT_DATA, true),
         Function(reinterpret_cast<void *>(FromUnixTimeWithTz), "from_unixtime_with_tz", {},
-                 { OMNI_LONG, OMNI_VARCHAR, OMNI_VARCHAR }, OMNI_VARCHAR, INPUT_DATA, true),
-        Function(reinterpret_cast<void *>(DateTrunc), "trunc_date", {}, { OMNI_DATE32, OMNI_VARCHAR },
-            OMNI_DATE32, INPUT_DATA, true),
-        Function(reinterpret_cast<void *>(DateTruncRetNull), "trunc_date_null", {}, { OMNI_DATE32, OMNI_VARCHAR },
-            OMNI_DATE32, INPUT_DATA_AND_OVERFLOW_NULL),
+                 {OMNI_LONG, OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR, INPUT_DATA, true),
+        Function(reinterpret_cast<void *>(DateTrunc), "trunc_date", {}, {OMNI_DATE32, OMNI_VARCHAR}, OMNI_DATE32,
+                 INPUT_DATA, true),
+        Function(reinterpret_cast<void *>(DateTruncRetNull), "trunc_date_null", {}, {OMNI_DATE32, OMNI_VARCHAR},
+                 OMNI_DATE32, INPUT_DATA_AND_OVERFLOW_NULL),
         Function(reinterpret_cast<void *>(DateAdd), "date_add", {}, {OMNI_DATE32, OMNI_INT}, OMNI_DATE32, INPUT_DATA),
-        Function(reinterpret_cast<void *>(DateDiff), "date_diff", {}, { OMNI_DATE32, OMNI_DATE32 },
-            OMNI_INT, INPUT_DATA_AND_NULL_AND_RETURN_NULL),
-        Function(reinterpret_cast<void*>(ToTimestampLtz), "to_timestamp_ltz", {},
-            {OMNI_LONG, OMNI_INT}, OMNI_LONG,
-            INPUT_DATA_AND_NULL_AND_RETURN_NULL),
-        Function(reinterpret_cast<void*>(ToTimestampLtzInt), "to_timestamp_ltz", {},
-            {OMNI_INT, OMNI_INT}, OMNI_LONG,
-            INPUT_DATA_AND_NULL_AND_RETURN_NULL),
-        Function(reinterpret_cast<void*>(CurrentTimestamp), "current_timestamp", {},
-            {}, OMNI_LONG,
-            INPUT_DATA),
-        Function(reinterpret_cast<void*>(DateAddDays), "date_add_days", {},
-            {OMNI_LONG, OMNI_INT}, OMNI_LONG,
-            INPUT_DATA_AND_NULL_AND_RETURN_NULL)
-    };
+        Function(reinterpret_cast<void *>(DateDiff), "date_diff", {}, {OMNI_DATE32, OMNI_DATE32}, OMNI_INT,
+                 INPUT_DATA_AND_NULL_AND_RETURN_NULL),
+        Function(reinterpret_cast<void *>(ToTimestampLtz), "to_timestamp_ltz", {}, {OMNI_LONG, OMNI_INT}, OMNI_LONG,
+                 INPUT_DATA_AND_NULL_AND_RETURN_NULL),
+        Function(reinterpret_cast<void *>(ToTimestampLtzInt), "to_timestamp_ltz", {}, {OMNI_INT, OMNI_INT}, OMNI_LONG,
+                 INPUT_DATA_AND_NULL_AND_RETURN_NULL),
+        Function(reinterpret_cast<void *>(CurrentTimestamp), "current_timestamp", {}, {}, OMNI_LONG, INPUT_DATA),
+        Function(reinterpret_cast<void *>(DateAddDays), "date_add_days", {}, {OMNI_LONG, OMNI_INT}, OMNI_LONG,
+                 INPUT_DATA_AND_NULL_AND_RETURN_NULL)};
 
     return dateTimeFnRegistry;
 }
-}
+} // namespace omniruntime::codegen

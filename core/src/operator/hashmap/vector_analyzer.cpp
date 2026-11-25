@@ -1,5 +1,14 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "vector_analyzer.h"
@@ -8,10 +17,10 @@ namespace omniruntime {
 namespace op {
 
 // 2M entries, i.e. 16MB is the largest array based hash table.
-static constexpr uint32_t RANGE_UPPER_BOUND = 2 << 20;;
+static constexpr uint32_t RANGE_UPPER_BOUND = 2 << 20;
+;
 
-template<typename T>
-bool VectorAnalyzer::CheckArrayMap(Vector<T> *vector, size_t length)
+template <typename T> bool VectorAnalyzer::CheckArrayMap(Vector<T> *vector, size_t length)
 {
     int64_t min = groupbyColsRange.min;
     int64_t max = groupbyColsRange.max;
@@ -50,7 +59,7 @@ bool VectorAnalyzer::CheckArrayMap(Vector<T> *vector, size_t length)
     }
 
     auto reserveSize = std::max(50L, max - min);
-    // upate range and exppand size
+    // Update range and expand size
     if (!groupbyColsRange.init || groupbyColsRange.max < max) {
         if (groupbyColsRange.max == std::numeric_limits<T>::max()) {
             return false;
@@ -104,20 +113,12 @@ bool VectorAnalyzer::DecideHashMode(omniruntime::vec::VectorBatch *&vectorBatch)
     int32_t idx = groupByCols[0].idx;
     switch (omniId) {
         case OMNI_INT:
-        case OMNI_DATE32:
-            blChangeMap = HandleInputValues<OMNI_INT>(vectorBatch, idx);
-            break;
-        case OMNI_BYTE:
-            blChangeMap = HandleInputValues<OMNI_BYTE>(vectorBatch, idx);
-            break;
-        case OMNI_SHORT:
-            blChangeMap = HandleInputValues<OMNI_SHORT>(vectorBatch, idx);
-            break;
+        case OMNI_DATE32: blChangeMap = HandleInputValues<OMNI_INT>(vectorBatch, idx); break;
+        case OMNI_BYTE: blChangeMap = HandleInputValues<OMNI_BYTE>(vectorBatch, idx); break;
+        case OMNI_SHORT: blChangeMap = HandleInputValues<OMNI_SHORT>(vectorBatch, idx); break;
         case OMNI_LONG:
         case OMNI_TIMESTAMP:
-        case OMNI_DECIMAL64:
-            blChangeMap = HandleInputValues<OMNI_LONG>(vectorBatch, idx);
-            break;
+        case OMNI_DECIMAL64: blChangeMap = HandleInputValues<OMNI_LONG>(vectorBatch, idx); break;
         default:
             hashMode = HashTableType::NORMAL_HASH_TABLE;
             blChangeMap = false;
@@ -126,7 +127,7 @@ bool VectorAnalyzer::DecideHashMode(omniruntime::vec::VectorBatch *&vectorBatch)
     return blChangeMap;
 }
 
-template<type::DataTypeId typeId>
+template <type::DataTypeId typeId>
 bool VectorAnalyzer::HandleInputValues(omniruntime::vec::VectorBatch *&vectorBatch, int32_t idx)
 {
     using RawDataType = typename NativeAndVectorType<typeId>::type;
@@ -145,10 +146,7 @@ bool VectorAnalyzer::HandleInputValues(omniruntime::vec::VectorBatch *&vectorBat
     }
 }
 
-bool VectorAnalyzer::IsArrayHashTableType()
-{
-    return hashMode == HashTableType::ARRAY_HASH_TABLE;
-}
+bool VectorAnalyzer::IsArrayHashTableType() { return hashMode == HashTableType::ARRAY_HASH_TABLE; }
 
-}
-}
+} // namespace op
+} // namespace omniruntime

@@ -1,5 +1,15 @@
 /*
  * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * @Description: Integer256 implementations
  */
 
@@ -31,12 +41,12 @@ void Integer256::Multiply(const Integer256 &x, const Integer256 &y, Integer256 &
         return;
     }
 
-    if ((void *) &result == (void *) &x) {
+    if ((void *)&result == (void *)&x) {
         Integer256 t(x);
         Multiply(t, y, result);
         return;
     }
-    if ((void *) &result == (void *) &y) {
+    if ((void *)&result == (void *)&y) {
         Integer256 t(y);
         Multiply(x, t, result);
         return;
@@ -115,8 +125,8 @@ void Integer256::DivideUnsigned(const Integer256 &x, const Integer256 &y, Intege
             guess = prem[0] / py[yOrder];
         } else {
             uint128_t a = (static_cast<uint128_t>(prem[xOrder]) << BITS_64) | prem[xOrder - 1];
-            uint128_t b = (yOrder > 0) ? (static_cast<uint128_t>(py[yOrder]) << BITS_64) | py[yOrder - 1] : (
-                static_cast<uint128_t>(py[yOrder]) << BITS_64);
+            uint128_t b = (yOrder > 0) ? (static_cast<uint128_t>(py[yOrder]) << BITS_64) | py[yOrder - 1]
+                                       : (static_cast<uint128_t>(py[yOrder]) << BITS_64);
             uint128_t v = a / b;
             guess = static_cast<uint64_t>(v);
         }
@@ -234,28 +244,13 @@ Integer256 operator%(const Integer256 &x, const Integer256 &y)
     return r;
 }
 
-bool operator>(const Integer256 &x, const Integer256 &y)
-{
-    return x.Compare(y) == 1;
-}
+bool operator>(const Integer256 &x, const Integer256 &y) { return x.Compare(y) == 1; }
 
-bool operator<(const Integer256 &x, const Integer256 &y)
-{
-    return x.Compare(y) == -1;
-}
+bool operator<(const Integer256 &x, const Integer256 &y) { return x.Compare(y) == -1; }
 
-bool operator==(const Integer256 &x, const Integer256 &y)
-{
-    return x.Compare(y) == 0;
-}
+bool operator==(const Integer256 &x, const Integer256 &y) { return x.Compare(y) == 0; }
 
-bool operator>=(const Integer256 &x, const Integer256 &y)
-{
-    return x.Compare(y) == 0 || x.Compare(y) == 1;
-}
+bool operator>=(const Integer256 &x, const Integer256 &y) { return x.Compare(y) == 0 || x.Compare(y) == 1; }
 
-bool operator<=(const Integer256 &x, const Integer256 &y)
-{
-    return x.Compare(y) == 0 || x.Compare(y) == -1;
-}
-}
+bool operator<=(const Integer256 &x, const Integer256 &y) { return x.Compare(y) == 0 || x.Compare(y) == -1; }
+} // namespace omniruntime::type

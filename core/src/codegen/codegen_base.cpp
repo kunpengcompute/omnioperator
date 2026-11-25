@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2022-2023. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Base codegen generator
  */
 
@@ -7,9 +17,10 @@
 
 namespace omniruntime::codegen {
 CodegenBase::CodegenBase(std::string name, const omniruntime::expressions::Expr &cpExpr,
-    omniruntime::op::OverflowConfig *overflowConfig)
+                         omniruntime::op::OverflowConfig *overflowConfig)
     : funcName(std::move(name)), expr(&cpExpr), overflowConfig(overflowConfig)
-{}
+{
+}
 
 /**
  * Usage example: std::vector<Value *> values;
@@ -44,34 +55,18 @@ Value *CodegenBase::GetPtrTypeFromInt(omniruntime::type::DataTypeId dataTypeId, 
     Value *elementPtr = nullptr;
     // Convert the column address to array of proper datatype.
     switch (dataTypeId) {
-        case OMNI_BOOLEAN:
-            elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I1PtrType());
-            break;
-        case OMNI_BYTE:
-            elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I8PtrType());
-            break;
-        case OMNI_SHORT:
-            elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I16PtrType());
-            break;
+        case OMNI_BOOLEAN: elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I1PtrType()); break;
+        case OMNI_BYTE: elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I8PtrType()); break;
+        case OMNI_SHORT: elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I16PtrType()); break;
         case OMNI_INT:
-        case OMNI_DATE32:
-            elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I32PtrType());
-            break;
+        case OMNI_DATE32: elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I32PtrType()); break;
         case OMNI_LONG:
         case OMNI_TIMESTAMP:
-        case OMNI_DECIMAL64:
-            elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I64PtrType());
-            break;
-        case OMNI_DOUBLE:
-            elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->DoublePtrType());
-            break;
+        case OMNI_DECIMAL64: elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I64PtrType()); break;
+        case OMNI_DOUBLE: elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->DoublePtrType()); break;
         case OMNI_CHAR:
-        case OMNI_VARCHAR:
-            elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I8PtrType());
-            break;
-        case OMNI_DECIMAL128:
-            elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I128PtrType());
-            break;
+        case OMNI_VARCHAR: elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I8PtrType()); break;
+        case OMNI_DECIMAL128: elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I128PtrType()); break;
         default:
             LLVM_DEBUG_LOG("Unsupported column data type %d", dataTypeId);
             elementPtr = builder->CreateIntToPtr(elementAddr, llvmTypes->I64PtrType());
@@ -101,4 +96,4 @@ llvm::Constant *CodegenBase::CreateConstantString(std::string s)
     auto stringPtr = llvm::ConstantExpr::getBitCast(globalDeclaration, charType->getPointerTo());
     return stringPtr;
 }
-}
+} // namespace omniruntime::codegen

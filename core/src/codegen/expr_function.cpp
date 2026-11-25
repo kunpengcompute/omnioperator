@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2022-2023. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Generated Expression Function
  */
 
@@ -9,23 +19,15 @@
 
 namespace omniruntime::codegen {
 ExprFunction::ExprFunction(std::string funcName, const Expr &e, CodegenBase &codegen, const DataTypes &inputDataTypes)
-    : funcName(std::move(funcName)),
-      expr(const_cast<Expr &>(e)),
-      codegen(codegen),
+    : funcName(std::move(funcName)), expr(const_cast<Expr &>(e)), codegen(codegen),
       columnTypes(const_cast<DataTypes &>(inputDataTypes))
 {
     CreateFunction();
 }
 
-Argument *ExprFunction::GetColumnArgument(int i)
-{
-    return llvmFunc->getArg(arguments.size() + i);
-}
+Argument *ExprFunction::GetColumnArgument(int i) { return llvmFunc->getArg(arguments.size() + i); }
 
-Argument *ExprFunction::GetDicArgument(int i)
-{
-    return llvmFunc->getArg(arguments.size() + columnTypes.GetSize() + i);
-}
+Argument *ExprFunction::GetDicArgument(int i) { return llvmFunc->getArg(arguments.size() + columnTypes.GetSize() + i); }
 
 Argument *ExprFunction::GetNullArgument(int i)
 {
@@ -37,15 +39,9 @@ Argument *ExprFunction::GetOffsetArgument(int i)
     return llvmFunc->getArg(arguments.size() + columnTypes.GetSize() * 3 + i);
 }
 
-int32_t ExprFunction::GetInputColumnCount()
-{
-    return columnTypes.GetSize();
-}
+int32_t ExprFunction::GetInputColumnCount() { return columnTypes.GetSize(); }
 
-size_t ExprFunction::GetArgumentCount()
-{
-    return arguments.size();
-}
+size_t ExprFunction::GetArgumentCount() { return arguments.size(); }
 
 std::vector<Type *> ExprFunction::GetArguments()
 {
@@ -73,22 +69,16 @@ std::vector<Type *> ExprFunction::GetArguments()
     return args;
 }
 
-Type *ExprFunction::GetReturnType()
-{
-    return codegen.GetTypes()->GetFunctionReturnType(expr.GetReturnTypeId());
-}
+Type *ExprFunction::GetReturnType() { return codegen.GetTypes()->GetFunctionReturnType(expr.GetReturnTypeId()); }
 
-llvm::Function *ExprFunction::GetFunction()
-{
-    return llvmFunc;
-}
+llvm::Function *ExprFunction::GetFunction() { return llvmFunc; }
 
 std::vector<Value *> ExprFunction::ToColumnArgs(Value *data)
 {
     std::vector<Value *> result;
     for (int32_t i = 0; i < columnTypes.GetSize(); i++) {
-        auto colAddr = codegen.GetIRBuilder()->CreateGEP(codegen.GetTypes()->I64Type(), data,
-            codegen.GetTypes()->CreateConstantInt(i), "column_addr_" + itostr(i));
+        auto colAddr = codegen.GetIRBuilder()->CreateGEP(
+            codegen.GetTypes()->I64Type(), data, codegen.GetTypes()->CreateConstantInt(i), "column_addr_" + itostr(i));
         std::string colName = "column_";
         auto col =
             codegen.GetIRBuilder()->CreateLoad(codegen.GetTypes()->I64Type(), colAddr, colName.append(itostr(i)));
@@ -102,8 +92,9 @@ std::vector<Value *> ExprFunction::ToDicArgs(Value *dictionary)
 {
     std::vector<Value *> result;
     for (int32_t i = 0; i < columnTypes.GetSize(); i++) {
-        auto dicAddr = codegen.GetIRBuilder()->CreateGEP(codegen.GetTypes()->I64Type(), dictionary,
-            codegen.GetTypes()->CreateConstantInt(i), "dic_addr_" + itostr(i));
+        auto dicAddr =
+            codegen.GetIRBuilder()->CreateGEP(codegen.GetTypes()->I64Type(), dictionary,
+                                              codegen.GetTypes()->CreateConstantInt(i), "dic_addr_" + itostr(i));
         std::string dicName = "dic_";
         auto dic =
             codegen.GetIRBuilder()->CreateLoad(codegen.GetTypes()->I64Type(), dicAddr, dicName.append(itostr(i)));
@@ -117,8 +108,9 @@ std::vector<Value *> ExprFunction::ToNullArgs(Value *bitmap)
 {
     std::vector<Value *> result;
     for (int32_t i = 0; i < columnTypes.GetSize(); i++) {
-        auto bitmapAddr = codegen.GetIRBuilder()->CreateGEP(codegen.GetTypes()->I64Type(), bitmap,
-            codegen.GetTypes()->CreateConstantInt(i), "bitmap_addr_" + itostr(i));
+        auto bitmapAddr =
+            codegen.GetIRBuilder()->CreateGEP(codegen.GetTypes()->I64Type(), bitmap,
+                                              codegen.GetTypes()->CreateConstantInt(i), "bitmap_addr_" + itostr(i));
         std::string bitmapName = "bitmap_";
         auto bitmapValue =
             codegen.GetIRBuilder()->CreateLoad(codegen.GetTypes()->I64Type(), bitmapAddr, bitmapName.append(itostr(i)));
@@ -132,8 +124,9 @@ std::vector<Value *> ExprFunction::ToOffsetArgs(Value *offset)
 {
     std::vector<Value *> result;
     for (int32_t i = 0; i < columnTypes.GetSize(); i++) {
-        auto offsetAddr = codegen.GetIRBuilder()->CreateGEP(codegen.GetTypes()->I64Type(), offset,
-            codegen.GetTypes()->CreateConstantInt(i), "offset_addr_" + itostr(i));
+        auto offsetAddr =
+            codegen.GetIRBuilder()->CreateGEP(codegen.GetTypes()->I64Type(), offset,
+                                              codegen.GetTypes()->CreateConstantInt(i), "offset_addr_" + itostr(i));
         std::string offsetName = "offset_";
         auto offsetValue =
             codegen.GetIRBuilder()->CreateLoad(codegen.GetTypes()->I64Type(), offsetAddr, offsetName.append(itostr(i)));
@@ -182,4 +175,4 @@ void ExprFunction::CreateFunction()
         arg->setName(offsetName.append(itostr(i)));
     }
 }
-}
+} // namespace omniruntime::codegen

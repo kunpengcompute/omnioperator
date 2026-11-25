@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: FilterAndProject operator source file
  */
 #include "filter_and_project.h"
@@ -85,8 +95,8 @@ Operator *FilterAndProjectOperatorFactory::CreateOperator()
     return new FilterAndProjectOperator(this->exprEvaluator);
 }
 
-OperatorFactory *CreateFilterOperatorFactory(
-    const std::shared_ptr<const FilterNode> filterNode, const config::QueryConfig &queryConfig)
+OperatorFactory *CreateFilterOperatorFactory(const std::shared_ptr<const FilterNode> filterNode,
+                                             const config::QueryConfig &queryConfig)
 {
     auto filterExpr = filterNode->GetFilterExpr();
     std::vector<Expr *> projections;
@@ -150,8 +160,8 @@ OmniStatus FilterAndProjectOperator::Close()
  * @param outLens contains null or length of each projection.
  * @return true(filter pass) or false(filter fail).
  */
-bool FilterAndProjectOperator::ProcessRow(
-    int64_t valueAddrs[], const int32_t inputLens[], int64_t outValueAddrs[], int32_t outLens[])
+bool FilterAndProjectOperator::ProcessRow(int64_t valueAddrs[], const int32_t inputLens[], int64_t outValueAddrs[],
+                                          int32_t outLens[])
 {
     auto vecCount = exprEvaluator->GetInputDataTypes().GetSize();
     auto dictsAddrs = new int64_t[vecCount];
@@ -180,8 +190,9 @@ bool FilterAndProjectOperator::ProcessRow(
 
     const int rowCount = 1;
     int32_t selectedRows[rowCount];
-    int32_t numSelectedRows = exprEvaluator->GetFilterFunc()(valueAddrs, rowCount, selectedRows, nullsAddrs,
-        offsetsAddrs, reinterpret_cast<int64_t>(executionContext.get()), dictsAddrs);
+    int32_t numSelectedRows =
+        exprEvaluator->GetFilterFunc()(valueAddrs, rowCount, selectedRows, nullsAddrs, offsetsAddrs,
+                                       reinterpret_cast<int64_t>(executionContext.get()), dictsAddrs);
 
     if (executionContext->HasError()) {
         executionContext->GetArena()->Reset();

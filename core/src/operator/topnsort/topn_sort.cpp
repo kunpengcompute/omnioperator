@@ -1,5 +1,14 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include "topn_sort.h"
 #include "operator/util/operator_util.h"
@@ -411,17 +420,12 @@ static std::vector<SetValueFunc> setValueFromDictionaryFuncs = {
 };
 
 TopNSortOperator::TopNSortOperator(const type::DataTypes &sourceTypes, int32_t n, bool isStrictTopN,
-    const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
-    const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts)
-    : sourceTypes(sourceTypes),
-      n(n),
-      isStrictTopN(isStrictTopN),
-      partitionCols(partitionCols),
-      partitionColNum(static_cast<int32_t>(partitionCols.size())),
-      sortCols(sortCols),
-      sortAscendings(sortAscendings),
-      sortNullFirsts(sortNullFirsts),
-      sortColNum(static_cast<int32_t>(sortCols.size()))
+                                   const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
+                                   const std::vector<int32_t> &sortAscendings,
+                                   const std::vector<int32_t> &sortNullFirsts)
+    : sourceTypes(sourceTypes), n(n), isStrictTopN(isStrictTopN), partitionCols(partitionCols),
+      partitionColNum(static_cast<int32_t>(partitionCols.size())), sortCols(sortCols), sortAscendings(sortAscendings),
+      sortNullFirsts(sortNullFirsts), sortColNum(static_cast<int32_t>(sortCols.size()))
 {
     auto sourceTypeIds = sourceTypes.GetIds();
     for (int32_t i = 0; i < sortColNum; i++) {
@@ -449,7 +453,7 @@ TopNSortOperator::TopNSortOperator(const type::DataTypes &sourceTypes, int32_t n
 }
 
 type::StringRef TopNSortOperator::GeneratePartitionKey(BaseVector **partitionVectors, int32_t partitionColNum,
-    int32_t rowIdx, mem::SimpleArenaAllocator &arenaAllocator)
+                                                       int32_t rowIdx, mem::SimpleArenaAllocator &arenaAllocator)
 {
     type::StringRef key;
     for (int32_t colIdx = 0; colIdx < partitionColNum; colIdx++) {
@@ -461,7 +465,7 @@ type::StringRef TopNSortOperator::GeneratePartitionKey(BaseVector **partitionVec
 }
 
 int32_t TopNSortOperator::FindInsertPositionOptimize(void *ptr, int32_t length, std::vector<VectorBatch *> &vecBatches,
-    std::vector<int32_t> &rowIndexes, int32_t position)
+                                                     std::vector<int32_t> &rowIndexes, int32_t position)
 {
     while (position >= 0) {
         auto left = vecBatches[position];
@@ -478,7 +482,8 @@ int32_t TopNSortOperator::FindInsertPositionOptimize(void *ptr, int32_t length, 
 }
 
 int32_t TopNSortOperator::FindInsertPosition(BaseVector **insertSortVectors, int32_t insertRowIdx,
-    std::vector<VectorBatch *> &vecBatches, std::vector<int32_t> &rowIndexes, int32_t position)
+                                             std::vector<VectorBatch *> &vecBatches, std::vector<int32_t> &rowIndexes,
+                                             int32_t position)
 {
     while (position >= 0) {
         auto left = vecBatches[position];
@@ -530,14 +535,14 @@ void TopNSortOperator::InsertNewPartition(StringRef &key, VectorBatch *inputVecB
 }
 
 void TopNSortOperator::InsertNewValueOptimize(PartitionValue &value, vec::VectorBatch *inputVecBatch,
-    vec::BaseVector **sortVectors, int32_t inputRowIdx)
+                                              vec::BaseVector **sortVectors, int32_t inputRowIdx)
 {
     auto sortVector = sortVectors[0];
     int32_t length;
     auto valuePtr = sortGetValueFuncs[0](sortVector, inputRowIdx, length);
 
-    auto& vecBatches = value.vecBatches;
-    auto& rowIndexes = value.rowIndexes;
+    auto &vecBatches = value.vecBatches;
+    auto &rowIndexes = value.rowIndexes;
     auto vecBatchSize = value.nextIndex;
     auto lastPosition = vecBatchSize - 1;
 
@@ -553,10 +558,10 @@ void TopNSortOperator::InsertNewValueOptimize(PartitionValue &value, vec::Vector
 }
 
 void TopNSortOperator::InsertNewValue(PartitionValue &value, VectorBatch *inputVecBatch, BaseVector **sortVectors,
-    int32_t inputRowIdx)
+                                      int32_t inputRowIdx)
 {
-    auto& vecBatches = value.vecBatches;
-    auto& rowIndexes = value.rowIndexes;
+    auto &vecBatches = value.vecBatches;
+    auto &rowIndexes = value.rowIndexes;
     auto vecBatchSize = value.nextIndex;
     auto lastPosition = vecBatchSize - 1;
 
@@ -573,14 +578,14 @@ void TopNSortOperator::InsertNewValue(PartitionValue &value, VectorBatch *inputV
 }
 
 void TopNSortOperator::UpdatePartitionValueOptimize(PartitionValue &value, VectorBatch *inputVecBatch,
-    BaseVector **sortVectors, int32_t inputRowIdx)
+                                                    BaseVector **sortVectors, int32_t inputRowIdx)
 {
     auto sortVector = sortVectors[0];
     int32_t length;
     auto valuePtr = sortGetValueFuncs[0](sortVector, inputRowIdx, length);
 
-    auto& vecBatches = value.vecBatches;
-    auto& rowIndexes = value.rowIndexes;
+    auto &vecBatches = value.vecBatches;
+    auto &rowIndexes = value.rowIndexes;
     auto lastPosition = n - 1;
 
     // compare the last value
@@ -620,10 +625,10 @@ void TopNSortOperator::UpdatePartitionValueOptimize(PartitionValue &value, Vecto
 }
 
 void TopNSortOperator::UpdatePartitionValue(PartitionValue &value, VectorBatch *inputVecBatch, BaseVector **sortVectors,
-    int32_t inputRowIdx)
+                                            int32_t inputRowIdx)
 {
-    auto& vecBatches = value.vecBatches;
-    auto& rowIndexes = value.rowIndexes;
+    auto &vecBatches = value.vecBatches;
+    auto &rowIndexes = value.rowIndexes;
     auto lastPosition = n - 1;
 
     // compare the last value

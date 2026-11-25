@@ -1,5 +1,14 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include "limit.h"
 #include "util/type_util.h"
@@ -23,13 +32,12 @@ LimitOperatorFactory *LimitOperatorFactory::CreateLimitOperatorFactory(std::shar
     return new LimitOperatorFactory(planNode->Count(), planNode->Offset());
 }
 
-Operator *LimitOperatorFactory::CreateOperator()
-{
-    return new LimitOperator(limit, offset);
-}
+Operator *LimitOperatorFactory::CreateOperator() { return new LimitOperator(limit, offset); }
 
 LimitOperator::LimitOperator(int32_t limit, int32_t offset)
-    : remainingLimit(limit), remainingOffset(offset), outputVecBatch(nullptr) {}
+    : remainingLimit(limit), remainingOffset(offset), outputVecBatch(nullptr)
+{
+}
 
 LimitOperator::~LimitOperator() {}
 
@@ -60,7 +68,7 @@ int32_t LimitOperator::AddInput(VectorBatch *vecBatch)
     // 3. the maximum number of rows that can be output this time
     int32_t take;
     if (remainingLimit < 0) {
-        take = rowsAfterOffset;  // unlimited
+        take = rowsAfterOffset; // unlimited
     } else {
         take = rowsAfterOffset < remainingLimit ? rowsAfterOffset : remainingLimit;
         remainingLimit -= take;
@@ -114,5 +122,5 @@ OmniStatus LimitOperator::Close()
 
     return OMNI_STATUS_NORMAL;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

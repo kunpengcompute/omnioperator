@@ -1,5 +1,15 @@
 /*
  * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * @Description: lookup join implementations
  */
 #include <iostream>
@@ -16,15 +26,15 @@ using namespace omniruntime::vec;
 
 namespace omniruntime::op {
 NestLoopJoinLookupOperatorFactory::NestLoopJoinLookupOperatorFactory(JoinType joinType, DataTypes probeTypes,
-    int32_t *probeOutputCols, int32_t probeOutputColsCount, Filter *filter, DataTypes joinedTypes,
-    int64_t buildOpFactoryAddr, OverflowConfig *overflowConfig)
-    : probeTypes(probeTypes),
-      joinType(joinType),
-      probeOutputCols(std::vector<int32_t>(probeOutputCols, probeOutputCols + probeOutputColsCount)),
-      filter(filter),
-      joinedTypes(joinedTypes),
-      buildOpFactoryAddr(buildOpFactoryAddr)
-{}
+                                                                     int32_t *probeOutputCols,
+                                                                     int32_t probeOutputColsCount, Filter *filter,
+                                                                     DataTypes joinedTypes, int64_t buildOpFactoryAddr,
+                                                                     OverflowConfig *overflowConfig)
+    : probeTypes(probeTypes), joinType(joinType),
+      probeOutputCols(std::vector<int32_t>(probeOutputCols, probeOutputCols + probeOutputColsCount)), filter(filter),
+      joinedTypes(joinedTypes), buildOpFactoryAddr(buildOpFactoryAddr)
+{
+}
 
 NestLoopJoinLookupOperatorFactory *NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
     JoinType &joinTypePtr, DataTypes &probeTypesPtr, int32_t *probeOutputColsPtr, int32_t probeOutputColsCount,
@@ -46,20 +56,19 @@ NestLoopJoinLookupOperatorFactory *NestLoopJoinLookupOperatorFactory::CreateNest
             delete filterPtr;
             filterPtr = nullptr;
             throw OmniException("FILTER IS NOT SUPPORTED", "the filter in this function is not support,please "
-                "change another filter");
+                                                           "change another filter");
         }
     }
     return new NestLoopJoinLookupOperatorFactory(joinTypePtr, probeTypesPtr, probeOutputColsPtr, probeOutputColsCount,
-        filterPtr, joinedDataTypes, buildOperatorFactoryAddr, overflowConfig);
+                                                 filterPtr, joinedDataTypes, buildOperatorFactoryAddr, overflowConfig);
 }
 
 NestLoopJoinLookupOperatorFactory *NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
-    std::shared_ptr<const NestedLoopJoinNode> planNode, NestedLoopJoinBuildOperatorFactory* builderOperatorFactory,
+    std::shared_ptr<const NestedLoopJoinNode> planNode, NestedLoopJoinBuildOperatorFactory *builderOperatorFactory,
     const config::QueryConfig &queryConfig)
 {
-    auto overflowConfig = queryConfig.IsOverFlowASNull()
-                          ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
-                          : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
+    auto overflowConfig = queryConfig.IsOverFlowASNull() ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
+                                                         : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
 
     auto joinType = planNode->GetJoinType();
     auto outputTypes = planNode->OutputType();
@@ -78,15 +87,17 @@ NestLoopJoinLookupOperatorFactory *NestLoopJoinLookupOperatorFactory::CreateNest
     }
 
     return new NestLoopJoinLookupOperatorFactory(joinType, *probeOutputTypes, probeOutputCols.data(),
-        probeOutputColsCount, filterPtr, *outputTypes, (int64_t)builderOperatorFactory, overflowConfig);
+                                                 probeOutputColsCount, filterPtr, *outputTypes,
+                                                 (int64_t)builderOperatorFactory, overflowConfig);
 }
 
 Operator *NestLoopJoinLookupOperatorFactory::CreateOperator()
 {
     auto nestedLoopJoinBuilderFactory = reinterpret_cast<NestedLoopJoinBuildOperatorFactory *>(buildOpFactoryAddr);
-    auto pNestLoopLookupJoinOperator = new NestLoopJoinLookupOperator(joinType, probeOutputCols, filter, probeTypes,
-        nestedLoopJoinBuilderFactory->GetBuildVectorBatch(), nestedLoopJoinBuilderFactory->GetBuildDataTypes(),
-        nestedLoopJoinBuilderFactory->GetbuildOutputCols(), joinedTypes);
+    auto pNestLoopLookupJoinOperator = new NestLoopJoinLookupOperator(
+        joinType, probeOutputCols, filter, probeTypes, nestedLoopJoinBuilderFactory->GetBuildVectorBatch(),
+        nestedLoopJoinBuilderFactory->GetBuildDataTypes(), nestedLoopJoinBuilderFactory->GetbuildOutputCols(),
+        joinedTypes);
     return pNestLoopLookupJoinOperator;
 }
 
@@ -97,15 +108,11 @@ NestLoopJoinLookupOperatorFactory::~NestLoopJoinLookupOperatorFactory()
 }
 
 NestLoopJoinLookupOperator::NestLoopJoinLookupOperator(JoinType joinType, std::vector<int32_t> &probeOutputCols,
-    Filter *filter, DataTypes probeTypes, VectorBatch *buildVectorBatch, DataTypes buildTypes,
-    std::vector<int32_t> &buildOutputCols, DataTypes joinedTypes)
-    : buildVectorBatch(buildVectorBatch),
-      buildOutputCols(buildOutputCols),
-      joinType(joinType),
-      probeOutputCols(probeOutputCols),
-      filter(filter),
-      curProbePosition(curProbePosition),
-      joinedTypes(joinedTypes)
+                                                       Filter *filter, DataTypes probeTypes,
+                                                       VectorBatch *buildVectorBatch, DataTypes buildTypes,
+                                                       std::vector<int32_t> &buildOutputCols, DataTypes joinedTypes)
+    : buildVectorBatch(buildVectorBatch), buildOutputCols(buildOutputCols), joinType(joinType),
+      probeOutputCols(probeOutputCols), filter(filter), curProbePosition(curProbePosition), joinedTypes(joinedTypes)
 {
     SetOperatorName(metricsNameNestedLoopJoinLookup);
     int32_t leftRowSize =
@@ -143,8 +150,8 @@ void NestLoopJoinLookupOperator::UpdateJoinedVectorBatch(int32_t probeRow)
     for (int32_t j = 0; j < probeVectorCount; j++) {
         BaseVector *preProbeVector = joinedVectorBatchPtr->Get(j);
         delete preProbeVector;
-        joinedVectorBatchPtr->SetVector(j,
-            VectorHelper::CopyPositionsVector(curInputBatch->Get(j), probeRows, 0, buildRowCount));
+        joinedVectorBatchPtr->SetVector(
+            j, VectorHelper::CopyPositionsVector(curInputBatch->Get(j), probeRows, 0, buildRowCount));
     }
 }
 
@@ -160,7 +167,7 @@ int32_t NestLoopJoinLookupOperator::GetNumSelectedRows()
     GetAddr(*joinedVectorBatchPtr, valueAddrs, nullAddrs, offsetAddrs, dictionaryVectors, joinedTypes);
     ExecutionContext *context = executionContext.get();
     int32_t numSelectedRows = filter->GetFilterFunc()(valueAddrs, rowCount, selectedRows, nullAddrs, offsetAddrs,
-        reinterpret_cast<int64_t>(context), dictionaryVectors);
+                                                      reinterpret_cast<int64_t>(context), dictionaryVectors);
 
     if (context->HasError()) {
         context->GetArena()->Reset();
@@ -272,13 +279,9 @@ void NestLoopJoinLookupOperator::PrepareCurrentProbe()
     buildResultOutputRows.clear();
     if (this->filter != nullptr) {
         switch (joinType) {
-            case OMNI_JOIN_TYPE_INNER:
-                ProbeInnerJoin(probeRowCount, resultOutputRows);
-                break;
+            case OMNI_JOIN_TYPE_INNER: ProbeInnerJoin(probeRowCount, resultOutputRows); break;
             case OMNI_JOIN_TYPE_LEFT:
-            case OMNI_JOIN_TYPE_RIGHT:
-                ProbeOuterJoin(probeRowCount, resultOutputRows);
-                break;
+            case OMNI_JOIN_TYPE_RIGHT: ProbeOuterJoin(probeRowCount, resultOutputRows); break;
             default:
                 std::string omniExceptionInfo = "Error in ProcessProbe, no such join type " + std::to_string(joinType);
                 throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
@@ -331,7 +334,7 @@ void NestLoopJoinLookupOperator::BuildOutput(VectorBatch **outputVecBatch)
     if (buildNullPositionSize <= 0) {
         for (int32_t j = 0; j < buildOutputColsSize; j++) {
             BaseVector *outputVector = VectorHelper::CopyPositionsVector(buildVectorBatch->Get(buildOutputCols[j]),
-                buildDataPtr, 0, outputRows);
+                                                                         buildDataPtr, 0, outputRows);
             outputPtr->Append(outputVector);
         }
     } else if (buildRowCount == 0) {
@@ -347,7 +350,7 @@ void NestLoopJoinLookupOperator::BuildOutput(VectorBatch **outputVecBatch)
     } else {
         for (int32_t j = 0; j < buildOutputColsSize; j++) {
             BaseVector *outputVector = VectorHelper::CopyPositionsVector(buildVectorBatch->Get(buildOutputCols[j]),
-                buildDataPtr, 0, outputRows);
+                                                                         buildDataPtr, 0, outputRows);
             for (int32_t i = 0; i < buildNullPositionSize; ++i) {
                 outputVector->SetNull(buildNullPosition[i]);
             }

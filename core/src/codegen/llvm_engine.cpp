@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Expression code generation utilities
  */
 
@@ -20,7 +30,7 @@ std::once_flag g_codegenTargetInitFlag;
 constexpr unsigned SMALL_VECTOR_DEFAULT_INLINED_ELEMENTS_COUNT = 20;
 static llvm::StringRef CPU_NAME;
 static llvm::SmallVector<std::string, SMALL_VECTOR_DEFAULT_INLINED_ELEMENTS_COUNT> CPU_ATTRS;
-}
+} // namespace
 
 LLVMEngine::LLVMEngine()
 {
@@ -41,32 +51,20 @@ LLVMEngine::LLVMEngine()
     engine_builder.setEngineKind(llvm::EngineKind::JIT).setOptLevel(optLevel).setErrorStr(&builderError);
     engine_builder.setMCPU(CPU_NAME);
     engine_builder.setMAttrs(CPU_ATTRS);
-    std::unique_ptr<llvm::ExecutionEngine> exec_engine { engine_builder.create() };
+    std::unique_ptr<llvm::ExecutionEngine> exec_engine{engine_builder.create()};
     execution_engine = std::move(exec_engine);
     // Although ConfigUtil::IsEnableBatchExprEvaluate() = true, RowProjection also need row functions.
     RegisterFunctions(FunctionRegistry::GetBatchFunctions());
     RegisterFunctions(FunctionRegistry::GetRowFunctions());
 }
 
-llvm::IRBuilder<> *LLVMEngine::GetIRBuilder()
-{
-    return builder.get();
-}
+llvm::IRBuilder<> *LLVMEngine::GetIRBuilder() { return builder.get(); }
 
-Module *LLVMEngine::GetModule()
-{
-    return modulePtr;
-}
+Module *LLVMEngine::GetModule() { return modulePtr; }
 
-LLVMContext *LLVMEngine::GetContext()
-{
-    return context.get();
-}
+LLVMContext *LLVMEngine::GetContext() { return context.get(); }
 
-LLVMTypes *LLVMEngine::GetTypes()
-{
-    return llvmTypes.get();
-}
+LLVMTypes *LLVMEngine::GetTypes() { return llvmTypes.get(); }
 
 int64_t LLVMEngine::Compile()
 {
@@ -114,8 +112,9 @@ void LLVMEngine::RegisterFunctions(const std::vector<Function> &functions)
         std::vector<DataTypeId> params = func.GetParamTypes();
         DataTypeId retType = func.GetReturnType();
         std::vector<Type *> args = this->GetFunctionArgTypeVector(params, retType, func.IsExecutionContextSet());
-        auto s = llvm::orc::absoluteSymbols({ { mangle(func.GetId()),
-            JITEvaluatedSymbol(pointerToJITTargetAddress(func.GetAddress()), JITSymbolFlags::Exported) } });
+        auto s = llvm::orc::absoluteSymbols(
+            {{mangle(func.GetId()),
+              JITEvaluatedSymbol(pointerToJITTargetAddress(func.GetAddress()), JITSymbolFlags::Exported)}});
         auto ign = jd.define(s);
         if (ign) {
             LogError("Error while defining absolute symbol in jd");
@@ -129,7 +128,7 @@ void LLVMEngine::RegisterFunctions(const std::vector<Function> &functions)
 }
 
 std::vector<Type *> LLVMEngine::GetFunctionArgTypeVector(std::vector<DataTypeId> &params, DataTypeId &retTypeId,
-    bool needsContext)
+                                                         bool needsContext)
 {
     std::vector<Type *> args;
     if (needsContext) {
@@ -204,14 +203,15 @@ void LLVMEngine::OptimizeModule()
 }
 
 CallInst *LLVMEngine::CreateCall(llvm::Function *func, const std::vector<llvm::Value *> &argsVals,
-    const std::string &name)
+                                 const std::string &name)
 {
     return builder->CreateCall(func, argsVals, name);
 }
 
 llvm::Value *LLVMEngine::CallExternFunction(const std::string &fn_name, const std::vector<DataTypeId> &params,
-    const DataTypeId returnType, const std::vector<Value *> &args, llvm::Value *executionContextPtr,
-    const std::string &msg, omniruntime::op::OverflowConfig *overflowConfig, llvm::Value *overflowNull)
+                                            const DataTypeId returnType, const std::vector<Value *> &args,
+                                            llvm::Value *executionContextPtr, const std::string &msg,
+                                            omniruntime::op::OverflowConfig *overflowConfig, llvm::Value *overflowNull)
 {
     std::vector<Value *> funcArgs;
     funcArgs.insert(funcArgs.begin(), args.begin(), args.end());
@@ -230,10 +230,7 @@ llvm::Value *LLVMEngine::CallExternFunction(const std::string &fn_name, const st
     return ret;
 }
 
-void LLVMEngine::RecordMainFunction(llvm::Function *func)
-{
-    this->function = func;
-}
+void LLVMEngine::RecordMainFunction(llvm::Function *func) { this->function = func; }
 
 void LLVMEngine::RemoveUnusedFunctions()
 {
@@ -264,7 +261,7 @@ llvm::Value *LLVMEngine::ToInt128(llvm::Value *high, llvm::Value *low) const
 }
 
 std::shared_ptr<DecimalValue> LLVMEngine::BuildDecimalValue(llvm::Value *data, omniruntime::type::DataType &retType,
-    llvm::Value *isNull)
+                                                            llvm::Value *isNull)
 {
     LLVMTypes llvmTypes(*context);
     llvm::Value *precision;
@@ -280,8 +277,8 @@ std::shared_ptr<DecimalValue> LLVMEngine::BuildDecimalValue(llvm::Value *data, o
 }
 
 llvm::Value *LLVMEngine::CallDecimalFunction(const std::string &fnName, llvm::Type *retType,
-    const std::vector<llvm::Value *> &args, llvm::Value *executionContextPtr,
-    omniruntime::op::OverflowConfig *overflowConfig, llvm::Value *overflowNull)
+                                             const std::vector<llvm::Value *> &args, llvm::Value *executionContextPtr,
+                                             omniruntime::op::OverflowConfig *overflowConfig, llvm::Value *overflowNull)
 {
     LLVMTypes llvmTypes(*context);
     std::vector<llvm::Value *> disassembledArgs;
@@ -315,8 +312,8 @@ llvm::Value *LLVMEngine::CallDecimalFunction(const std::string &fnName, llvm::Ty
             CreateCall(f, disassembledArgs, const_cast<std::string &>(fnName));
 
             auto outHigh = builder->CreateLoad(llvmTypes.I64Type(), outHighPtr);
-            auto outLow = builder->CreateLoad(llvmTypes.I64Type(), outLowPtr);
-            result = ToInt128(outHigh, outLow);
+            auto lowOutput = builder->CreateLoad(llvmTypes.I64Type(), outLowPtr);
+            result = ToInt128(outHigh, lowOutput);
         } else {
             result = CreateCall(f, disassembledArgs, const_cast<std::string &>(fnName));
         }
@@ -327,5 +324,5 @@ llvm::Value *LLVMEngine::CallDecimalFunction(const std::string &fnName, llvm::Ty
     }
     return result;
 }
-}
-}
+} // namespace codegen
+} // namespace omniruntime

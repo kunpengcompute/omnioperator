@@ -1,5 +1,14 @@
 /*
-* Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <algorithm>
 #include <cfloat>
@@ -74,7 +83,7 @@ template <class D, class Traits, class RawType> static VFromD<D> inline GetSmall
 
 template <class D, class Traits, class V, typename RawType>
 int32_t PartitionToMultipleOfUnroll(D d, Traits st, RawType *values, AddrType *addresses, int32_t &num, V pivotVec,
-    RawType *valueBuf, AddrType *addrBuf, V &smallestVec, V &largestVec)
+                                    RawType *valueBuf, AddrType *addrBuf, V &smallestVec, V &largestVec)
 {
     const int32_t numRem =
         (num < 2 * UNROLL_SIZE * OMNI_LANES(TFromD<D>)) ? num : (num & (UNROLL_SIZE * OMNI_LANES(TFromD<D>) - 1));
@@ -128,7 +137,7 @@ int32_t PartitionToMultipleOfUnroll(D d, Traits st, RawType *values, AddrType *a
 }
 template <class D, class Traits, typename T>
 inline void StoreLeftRight(D d, Traits st, const Vec<D> v, AddrVec a, const Vec<D> pivot, T *__restrict__ keys,
-    AddrType *addresses, int32_t &writeL, int32_t &remaining)
+                           AddrType *addresses, int32_t &writeL, int32_t &remaining)
 {
     const size_t N = Lanes(d);
     const Mask<D> comp = st.QuickSortCompare(d, pivot, v);
@@ -151,7 +160,8 @@ inline void StoreLeftRight(D d, Traits st, const Vec<D> v, AddrVec a, const Vec<
 }
 template <class D, class Traits, typename RawType, class V>
 static void inline StoreLeftRight4(D d, Traits st, RawType *keys, V pivot, V v0, V v1, V v2, V v3, AddrType *addresses,
-    AddrVec a0, AddrVec a1, AddrVec a2, AddrVec a3, int32_t &writeL, int32_t &remaining, V &smallestVec, V &largestVec)
+                                   AddrVec a0, AddrVec a1, AddrVec a2, AddrVec a3, int32_t &writeL, int32_t &remaining,
+                                   V &smallestVec, V &largestVec)
 {
     StoreLeftRight(d, st, v0, a0, pivot, keys, addresses, writeL, remaining);
     StoreLeftRight(d, st, v1, a1, pivot, keys, addresses, writeL, remaining);
@@ -163,10 +173,9 @@ static void inline StoreLeftRight4(D d, Traits st, RawType *keys, V pivot, V v0,
     st.UpdateMinMax(d, v3, smallestVec, largestVec);
 }
 
-
 template <class D, class Traits, class V, typename RawType>
 int32_t PartitionWithSIMD(D d, Traits st, RawType *values, AddrType *addresses, int32_t from, int32_t to, V pivotVec,
-    RawType *valueBuf, AddrType *addrBuf, V &smallestVec, V &largestVec)
+                          RawType *valueBuf, AddrType *addrBuf, V &smallestVec, V &largestVec)
 {
     int32_t num = to - from;
     RawType *valueStart = values + from;
@@ -180,7 +189,7 @@ int32_t PartitionWithSIMD(D d, Traits st, RawType *values, AddrType *addresses, 
     auto addrLast = LoadU(ADDR_TAG, addressStart + last);
 
     int32_t consumedL = PartitionToMultipleOfUnroll(d, st, valueStart, addressStart, num, pivotVec, valueBuf, addrBuf,
-        smallestVec, largestVec);
+                                                    smallestVec, largestVec);
     valueStart += consumedL;
     addressStart += consumedL;
     last -= consumedL;
@@ -263,16 +272,16 @@ int32_t PartitionWithSIMD(D d, Traits st, RawType *values, AddrType *addresses, 
             }
 
             StoreLeftRight4(d, st, valueStart, pivotVec, curValueVec0, curValueVec1, curValueVec2, curValueVec3,
-                addressStart, curAddrVec0, curAddrVec1, curAddrVec2, curAddrVec3, writeL, remaining, smallestVec,
-                largestVec);
+                            addressStart, curAddrVec0, curAddrVec1, curAddrVec2, curAddrVec3, writeL, remaining,
+                            smallestVec, largestVec);
         }
 
         StoreLeftRight4(d, st, valueStart, pivotVec, leftValueVec0, leftValueVec1, leftValueVec2, leftValueVec3,
-            addressStart, leftAddrVec0, leftAddrVec1, leftAddrVec2, leftAddrVec3, writeL, remaining, smallestVec,
-            largestVec);
+                        addressStart, leftAddrVec0, leftAddrVec1, leftAddrVec2, leftAddrVec3, writeL, remaining,
+                        smallestVec, largestVec);
         StoreLeftRight4(d, st, valueStart, pivotVec, rightValueVec0, rightValueVec1, rightValueVec2, rightValueVec3,
-            addressStart, rightAddrVec0, rightAddrVec1, rightAddrVec2, rightAddrVec3, writeL, remaining, smallestVec,
-            largestVec);
+                        addressStart, rightAddrVec0, rightAddrVec1, rightAddrVec2, rightAddrVec3, writeL, remaining,
+                        smallestVec, largestVec);
     }
 
     int32_t totalR = last - writeL;
@@ -294,13 +303,13 @@ int32_t PartitionWithSIMD(D d, Traits st, RawType *values, AddrType *addresses, 
     return consumedL + writeL + from;
 }
 
-template void QuickSortAscSIMD<long>(long*, unsigned long*, int, int);
-template void QuickSortDescSIMD<double>(double*, unsigned long*, int, int);
-template void QuickSortDescSIMD<long>(long*, unsigned long*, int, int);
-template void QuickSortAscSIMD<double>(double*, unsigned long*, int, int);
+template void QuickSortAscSIMD<long>(long *, unsigned long *, int, int);
+template void QuickSortDescSIMD<double>(double *, unsigned long *, int, int);
+template void QuickSortDescSIMD<long>(long *, unsigned long *, int, int);
+template void QuickSortAscSIMD<double>(double *, unsigned long *, int, int);
 template <class D, class Traits, class RawType>
 void QuickSortInternalSIMD(D d, Traits st, RawType *values, AddrType *addresses, int32_t from, int32_t to,
-    RawType *valueBuf, AddrType *addrBuf, bool chooseAvg, RawType avg)
+                           RawType *valueBuf, AddrType *addrBuf, bool chooseAvg, RawType avg)
 {
     int32_t num = to - from;
     if (num <= SMALL_CASE_LENGTH) {
@@ -347,23 +356,23 @@ void QuickSortInternalSIMD(D d, Traits st, RawType *values, AddrType *addresses,
 }
 // only for ut
 #ifdef COVERAGE
-template void QuickSortInternalSIMD<simd::Simd<long, 2ul, 0>,
-    simd::SharedTraits<simd::TraitsLane<simd::OrderAscending<long> > >, long>(simd::Simd<long, 2ul, 0>,
-    simd::SharedTraits<simd::TraitsLane<simd::OrderAscending<long> > >, long *, unsigned long *, int, int, long *,
-    unsigned long *, bool, long);
-template void QuickSortInternalSIMD<simd::Simd<long, 2ul, 0>,
-    simd::SharedTraits<simd::TraitsLane<simd::OrderDescending<long> > >, long>(simd::Simd<long, 2ul, 0>,
-    simd::SharedTraits<simd::TraitsLane<simd::OrderDescending<long> > >, long *, unsigned long *, int, int, long *,
-    unsigned long *, bool, long);
+template void
+QuickSortInternalSIMD<simd::Simd<long, 2ul, 0>, simd::SharedTraits<simd::TraitsLane<simd::OrderAscending<long>>>, long>(
+    simd::Simd<long, 2ul, 0>, simd::SharedTraits<simd::TraitsLane<simd::OrderAscending<long>>>, long *, unsigned long *,
+    int, int, long *, unsigned long *, bool, long);
+template void
+QuickSortInternalSIMD<simd::Simd<long, 2ul, 0>, simd::SharedTraits<simd::TraitsLane<simd::OrderDescending<long>>>,
+                      long>(simd::Simd<long, 2ul, 0>, simd::SharedTraits<simd::TraitsLane<simd::OrderDescending<long>>>,
+                            long *, unsigned long *, int, int, long *, unsigned long *, bool, long);
 #else
-template void QuickSortInternalSIMD<simd::Simd<long, 4ul, 0>,
-    simd::SharedTraits<simd::TraitsLane<simd::OrderAscending<long> > >, long>(simd::Simd<long, 4ul, 0>,
-    simd::SharedTraits<simd::TraitsLane<simd::OrderAscending<long> > >, long *, unsigned long *, int, int, long *,
-    unsigned long *, bool, long);
-template void QuickSortInternalSIMD<simd::Simd<long, 4ul, 0>,
-    simd::SharedTraits<simd::TraitsLane<simd::OrderDescending<long> > >, long>(simd::Simd<long, 4ul, 0>,
-    simd::SharedTraits<simd::TraitsLane<simd::OrderDescending<long> > >, long *, unsigned long *, int, int, long *,
-    unsigned long *, bool, long);
+template void
+QuickSortInternalSIMD<simd::Simd<long, 4ul, 0>, simd::SharedTraits<simd::TraitsLane<simd::OrderAscending<long>>>, long>(
+    simd::Simd<long, 4ul, 0>, simd::SharedTraits<simd::TraitsLane<simd::OrderAscending<long>>>, long *, unsigned long *,
+    int, int, long *, unsigned long *, bool, long);
+template void
+QuickSortInternalSIMD<simd::Simd<long, 4ul, 0>, simd::SharedTraits<simd::TraitsLane<simd::OrderDescending<long>>>,
+                      long>(simd::Simd<long, 4ul, 0>, simd::SharedTraits<simd::TraitsLane<simd::OrderDescending<long>>>,
+                            long *, unsigned long *, int, int, long *, unsigned long *, bool, long);
 #endif
 
 template <class ValType> void QuickSortAscSIMD(ValType *values, AddrType *addresses, int32_t from, int32_t to)

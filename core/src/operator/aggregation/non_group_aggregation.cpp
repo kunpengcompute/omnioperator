@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Aggregation Source File
  */
 #include "non_group_aggregation.h"
@@ -31,10 +41,7 @@ OmniStatus AggregationOperatorFactory::Init()
     return CreateAggregatorFactories(aggregatorFactories, aggFuncTypesVector, GetMaskColumns());
 }
 
-OmniStatus AggregationOperatorFactory::Close()
-{
-    return OMNI_STATUS_NORMAL;
-}
+OmniStatus AggregationOperatorFactory::Close() { return OMNI_STATUS_NORMAL; }
 
 Operator *AggregationOperatorFactory::CreateOperator()
 {
@@ -62,10 +69,10 @@ Operator *AggregationOperatorFactory::CreateOperator()
         auto inputTypes = DataTypes(inputDataTypesPtr).Instance();
         auto outputTypes = aggsOutputTypes[i].Instance();
         auto aggregator = aggregatorFactories[i]->CreateAggregator(*inputTypes, *outputTypes, aggInputColIdxVec,
-            inputRaws[i], outputPartials[i], isOverflowAsNull);
+                                                                   inputRaws[i], outputPartials[i], isOverflowAsNull);
         if (UNLIKELY(aggregator == nullptr)) {
             throw OmniException("OPERATOR_RUNTIME_ERROR", "Unable to create aggregator " + std::to_string(i) + " / " +
-                std::to_string(this->aggregatorFactories.size()));
+                                                              std::to_string(this->aggregatorFactories.size()));
         }
         aggregator->SetStatisticalAggregate(isStatisticalAggregate);
         aggs.push_back(std::move(aggregator));
@@ -154,5 +161,5 @@ int AggregationOperator::GetOutput(VectorBatch **outputVecBatch)
     SetStatus(OMNI_STATUS_FINISHED);
     return OMNI_STATUS_FINISHED;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

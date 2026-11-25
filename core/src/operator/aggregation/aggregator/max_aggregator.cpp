@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Max aggregate
  */
 
@@ -10,7 +20,7 @@ namespace omniruntime {
 namespace op {
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors,
-    int32_t rowIndex)
+                                                 int32_t rowIndex)
 {
     auto v = static_cast<OutVector *>(vectors[0]);
     auto maxState = MaxState::ConstCastState(state + aggStateOffset);
@@ -32,7 +42,8 @@ void MaxAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *state, st
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxAggregator<IN_ID, OUT_ID>::ExtractValuesBatch(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors, int32_t rowOffset, int32_t rowCount)
+                                                      std::vector<BaseVector *> &vectors, int32_t rowOffset,
+                                                      int32_t rowCount)
 {
     auto v = static_cast<OutVector *>(vectors[0]);
     for (int32_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
@@ -67,7 +78,7 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID> std::vector<DataTypePtr> MaxAggre
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxAggregator<IN_ID, OUT_ID>::ExtractValuesForSpill(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors)
+                                                         std::vector<BaseVector *> &vectors)
 {
     auto spillValueVec = static_cast<Vector<ResultType> *>(vectors[0]);
     auto rowCount = static_cast<int32_t>(groupStates.size());
@@ -98,7 +109,8 @@ void MaxAggregator<IN_ID, OUT_ID>::InitStates(std::vector<AggregateState *> &gro
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, BaseVector *vector,
-    const int32_t rowOffset, const int32_t rowCount, const std::shared_ptr<NullsHelper> nullMap)
+                                                         const int32_t rowOffset, const int32_t rowCount,
+                                                         const std::shared_ptr<NullsHelper> nullMap)
 {
     auto maxState = MaxState::CastState(state);
     if (vector->GetEncoding() != vec::OMNI_DICTIONARY) {
@@ -107,7 +119,7 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
         if (nullMap == nullptr) {
             if constexpr (CheckTypesContainsDecimal128<InType, ResultType>::value) {
                 Add<InType, ResultType, AggValueState, MaxOp<InType, ResultType>>(&maxState->value,
-                    maxState->valueState, ptr, rowCount);
+                                                                                  maxState->valueState, ptr, rowCount);
             } else {
                 simd::ReduceExternal<InType, ResultType, AggValueState, StateValueHandler, simd::ReduceFunc::Max>(
                     &maxState->value, maxState->valueState, ptr, rowCount);
@@ -119,8 +131,8 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
             } else {
                 auto conditionArray = nullMap->convertToArray(rowCount);
                 simd::ReduceWithNullsExternal<InType, ResultType, AggValueState, StateValueHandler,
-                    simd::ReduceFunc::Max>(&maxState->value, maxState->valueState, ptr, rowCount,
-                    conditionArray.data());
+                                              simd::ReduceFunc::Max>(&maxState->value, maxState->valueState, ptr,
+                                                                     rowCount, conditionArray.data());
             }
         }
     } else {
@@ -128,11 +140,12 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
         auto *indexMap = GetIdsFromDict<IN_ID>(vector) + rowOffset;
         if (nullMap == nullptr) {
             if constexpr (CheckTypesContainsDecimal128<InType, ResultType>::value) {
-                AddDict<InType, ResultType, AggValueState, MaxOp<InType, ResultType>>(&maxState->value,
-                    maxState->valueState, ptr, rowCount, indexMap);
+                AddDict<InType, ResultType, AggValueState, MaxOp<InType, ResultType>>(
+                    &maxState->value, maxState->valueState, ptr, rowCount, indexMap);
             } else {
                 simd::ReduceWithDicExternal<InType, ResultType, AggValueState, StateValueHandler,
-                    simd::ReduceFunc::Max>(&maxState->value, maxState->valueState, ptr, rowCount, indexMap);
+                                            simd::ReduceFunc::Max>(&maxState->value, maxState->valueState, ptr,
+                                                                   rowCount, indexMap);
             }
         } else {
             if constexpr (CheckTypesContainsDecimal128<InType, ResultType>::value) {
@@ -141,8 +154,8 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
             } else {
                 auto conditionArray = nullMap->convertToArray(rowCount);
                 simd::ReduceWithDicAndNullsExternal<InType, ResultType, AggValueState, StateValueHandler,
-                    simd::ReduceFunc::Max>(&maxState->value, maxState->valueState, ptr, rowCount, conditionArray.data(),
-                    indexMap);
+                                                    simd::ReduceFunc::Max>(&maxState->value, maxState->valueState, ptr,
+                                                                           rowCount, conditionArray.data(), indexMap);
             }
         }
     }
@@ -150,7 +163,8 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<AggregateState *> &rowStates, BaseVector *vector,
-    const int32_t rowOffset, const std::shared_ptr<NullsHelper> nullMap)
+                                                        const int32_t rowOffset,
+                                                        const std::shared_ptr<NullsHelper> nullMap)
 {
     if (vector->GetEncoding() != vec::OMNI_DICTIONARY) {
         auto *ptr = reinterpret_cast<InType *>(GetValuesFromVector<IN_ID>(vector));
@@ -166,18 +180,18 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<AggregateSta
         auto *indexMap = GetIdsFromDict<IN_ID>(vector) + rowOffset;
         if (nullMap == nullptr) {
             AddDictUseRowIndex<InType, MaxState::template UpdateState<InType, ResultType>>(rowStates, aggStateOffset,
-                ptr, indexMap);
+                                                                                           ptr, indexMap);
         } else {
             AddDictConditionalUseRowIndex<InType, ResultType,
-                MaxState::template UpdateStateWithCondition<InType, ResultType, false>>(rowStates, aggStateOffset, ptr,
-                *nullMap, indexMap);
+                                          MaxState::template UpdateStateWithCondition<InType, ResultType, false>>(
+                rowStates, aggStateOffset, ptr, *nullMap, indexMap);
         }
     }
 }
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRowInfo> &unspillRows, int32_t rowCount,
-    int32_t &vectorIndex)
+                                                       int32_t &vectorIndex)
 {
     auto firstVecIdx = vectorIndex++;
     for (int32_t rowIdx = 0; rowIdx < rowCount; rowIdx++) {
@@ -195,7 +209,8 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRowInf
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter)
+                                                         const std::shared_ptr<NullsHelper> nullMap,
+                                                         const bool aggFilter)
 {
     int rowCount = originVector->GetSize();
     if constexpr (std::is_same_v<InType, OutType>) {
@@ -213,10 +228,10 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *result, Ba
     }
 }
 
-template<DataTypeId IN_ID, DataTypeId OUT_ID>
-template<typename T>
+template <DataTypeId IN_ID, DataTypeId OUT_ID>
+template <typename T>
 void MaxAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap)
+                                                                 const std::shared_ptr<NullsHelper> nullMap)
 {
     int rowCount = originVector->GetSize();
     auto maxVector = reinterpret_cast<OutVector *>(VectorHelper::CreateFlatVector(OUT_ID, rowCount));
@@ -245,10 +260,12 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch *re
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 MaxAggregator<IN_ID, OUT_ID>::MaxAggregator(const DataTypes &inputTypes, const DataTypes &outputTypes,
-    std::vector<int32_t> &channels, const bool inputRaw, const bool outputPartial, const bool isOverflowAsNull)
+                                            std::vector<int32_t> &channels, const bool inputRaw,
+                                            const bool outputPartial, const bool isOverflowAsNull)
     : TypedAggregator(OMNI_AGGREGATION_TYPE_MAX, inputTypes, outputTypes, channels, inputRaw, outputPartial,
-    isOverflowAsNull)
-{}
+                      isOverflowAsNull)
+{
+}
 
 // Explicit template instantiation
 // Defining templated aggregators in header file consume a lot of memory during compilation
@@ -352,5 +369,5 @@ template class MaxAggregator<OMNI_DECIMAL64, OMNI_DOUBLE>;
 template class MaxAggregator<OMNI_DECIMAL64, OMNI_DECIMAL128>;
 
 template class MaxAggregator<OMNI_DECIMAL64, OMNI_DECIMAL64>;
-}
-}
+} // namespace op
+} // namespace omniruntime

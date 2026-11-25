@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: udf functions.
  */
 #include <mutex>
@@ -14,7 +24,7 @@ namespace {
 std::once_flag init_udf_flag;
 bool g_isUdfInited;
 const std::string INIT_UDF_FAILED = "Init UDF failed";
-}
+} // namespace
 
 static void InitHiveUdf()
 {
@@ -27,8 +37,9 @@ static void InitHiveUdf()
 }
 
 extern DLLEXPORT void EvaluateHiveUdfSingle(int64_t contextPtr, const char *udfClass, int32_t *inputTypes,
-    int32_t retType, int32_t vecCount, int64_t inputValue, int64_t inputNull, int64_t inputLength, int64_t outputValue,
-    int64_t outputNull, int64_t outputLength)
+                                            int32_t retType, int32_t vecCount, int64_t inputValue, int64_t inputNull,
+                                            int64_t inputLength, int64_t outputValue, int64_t outputNull,
+                                            int64_t outputLength)
 {
     std::call_once(init_udf_flag, InitHiveUdf);
     if (!g_isUdfInited) {
@@ -36,12 +47,13 @@ extern DLLEXPORT void EvaluateHiveUdfSingle(int64_t contextPtr, const char *udfC
         return;
     }
     ExecuteHiveUdfSingle(contextPtr, udfClass, inputTypes, retType, vecCount, inputValue, inputNull, inputLength,
-        outputValue, outputNull, outputLength);
+                         outputValue, outputNull, outputLength);
 }
 
 extern DLLEXPORT void EvaluateHiveUdfBatch(int64_t contextPtr, const char *udfClass, int32_t *inputTypes,
-    int32_t retType, int32_t vecCount, int32_t rowCount, int64_t *inputValues, int64_t *inputNulls,
-    int64_t *inputLengths, int64_t outputValue, int64_t outputNull, int64_t outputLength)
+                                           int32_t retType, int32_t vecCount, int32_t rowCount, int64_t *inputValues,
+                                           int64_t *inputNulls, int64_t *inputLengths, int64_t outputValue,
+                                           int64_t outputNull, int64_t outputLength)
 {
     std::call_once(init_udf_flag, InitHiveUdf);
     if (!g_isUdfInited) {
@@ -49,6 +61,6 @@ extern DLLEXPORT void EvaluateHiveUdfBatch(int64_t contextPtr, const char *udfCl
         return;
     }
     ExecuteHiveUdfBatch(contextPtr, udfClass, inputTypes, retType, vecCount, rowCount, inputValues, inputNulls,
-        inputLengths, outputValue, outputNull, outputLength);
+                        inputLengths, outputValue, outputNull, outputLength);
 }
-}
+} // namespace omniruntime::codegen::function

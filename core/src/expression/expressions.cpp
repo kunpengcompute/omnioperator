@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description:
  */
 #include "expressions.h"
@@ -40,13 +50,10 @@ bool IsNullLiteral(const std::string &value)
 bool IsComparisonOperator(Operator op)
 {
     return op == Operator::GT || op == Operator::GTE || op == Operator::LT || op == Operator::LTE ||
-        op == Operator::EQ || op == Operator::NEQ;
+           op == Operator::EQ || op == Operator::NEQ;
 }
 
-bool IsLogicalOperator(Operator op)
-{
-    return op == Operator::AND || op == Operator::OR || op == Operator::NOT;
-}
+bool IsLogicalOperator(Operator op) { return op == Operator::AND || op == Operator::OR || op == Operator::NOT; }
 
 Operator StringToOperator(const std::string &opStr)
 {
@@ -57,20 +64,11 @@ Operator StringToOperator(const std::string &opStr)
     return Operator::INVALIDOP;
 }
 
-ExprType Expr::GetType() const
-{
-    return ExprType::INVALID_E;
-}
+ExprType Expr::GetType() const { return ExprType::INVALID_E; }
 
-DataTypePtr Expr::GetReturnType() const
-{
-    return dataType;
-}
+DataTypePtr Expr::GetReturnType() const { return dataType; }
 
-DataTypeId Expr::GetReturnTypeId() const
-{
-    return dataType->GetId();
-}
+DataTypeId Expr::GetReturnTypeId() const { return dataType->GetId(); }
 
 void Expr::DeleteExprs(const std::vector<Expr *> &exprs)
 {
@@ -89,15 +87,9 @@ void Expr::DeleteExprs(const std::vector<std::vector<Expr *>> &exprs)
 // Literal Expression methods
 LiteralExpr::LiteralExpr() = default;
 
-LiteralExpr::~LiteralExpr()
-{
-    delete stringVal;
-}
+LiteralExpr::~LiteralExpr() { delete stringVal; }
 
-ExprType LiteralExpr::GetType() const
-{
-    return ExprType::LITERAL_E;
-}
+ExprType LiteralExpr::GetType() const { return ExprType::LITERAL_E; }
 
 // Helper constructors for different data types
 LiteralExpr::LiteralExpr(bool val, DataTypePtr dt)
@@ -150,10 +142,7 @@ FieldExpr::FieldExpr() = default;
 
 FieldExpr::~FieldExpr() = default;
 
-ExprType FieldExpr::GetType() const
-{
-    return ExprType::FIELD_E;
-}
+ExprType FieldExpr::GetType() const { return ExprType::FIELD_E; }
 
 // Helper constructors
 FieldExpr::FieldExpr(int32_t colIdx, DataTypePtr colType)
@@ -162,10 +151,7 @@ FieldExpr::FieldExpr(int32_t colIdx, DataTypePtr colType)
     colVal = colIdx;
 }
 
-BinaryExpr::BinaryExpr()
-{
-    dataType = BooleanType();
-}
+BinaryExpr::BinaryExpr() { dataType = BooleanType(); }
 
 BinaryExpr::BinaryExpr(Operator bop, Expr *leftExpr, Expr *rightExpr, DataTypePtr dt)
 {
@@ -181,42 +167,21 @@ BinaryExpr::~BinaryExpr()
     delete right;
 }
 
-ExprType BinaryExpr::GetType() const
-{
-    return ExprType::BINARY_E;
-}
+ExprType BinaryExpr::GetType() const { return ExprType::BINARY_E; }
 
-UnaryExpr::UnaryExpr()
-{
-    dataType = BooleanType();
-}
+UnaryExpr::UnaryExpr() { dataType = BooleanType(); }
 
 UnaryExpr::UnaryExpr(Operator logOp, Expr *bodyExpr) : op(logOp), exp(bodyExpr) {}
 
-UnaryExpr::UnaryExpr(Operator uop, Expr *expr, DataTypePtr dt) : op(uop), exp(expr)
-{
-    dataType = std::move(dt);
-}
+UnaryExpr::UnaryExpr(Operator uop, Expr *expr, DataTypePtr dt) : op(uop), exp(expr) { dataType = std::move(dt); }
 
-UnaryExpr::~UnaryExpr()
-{
-    delete exp;
-}
+UnaryExpr::~UnaryExpr() { delete exp; }
 
-ExprType UnaryExpr::GetType() const
-{
-    return ExprType::UNARY_E;
-}
+ExprType UnaryExpr::GetType() const { return ExprType::UNARY_E; }
 
-InExpr::InExpr()
-{
-    dataType = BooleanType();
-}
+InExpr::InExpr() { dataType = BooleanType(); }
 
-InExpr::~InExpr()
-{
-    DeleteExprs(arguments);
-}
+InExpr::~InExpr() { DeleteExprs(arguments); }
 
 InExpr::InExpr(std::vector<Expr *> args)
 {
@@ -224,15 +189,9 @@ InExpr::InExpr(std::vector<Expr *> args)
     arguments = std::move(args);
 }
 
-ExprType InExpr::GetType() const
-{
-    return ExprType::IN_E;
-}
+ExprType InExpr::GetType() const { return ExprType::IN_E; }
 
-BetweenExpr::BetweenExpr()
-{
-    dataType = BooleanType();
-}
+BetweenExpr::BetweenExpr() { dataType = BooleanType(); }
 
 BetweenExpr::~BetweenExpr()
 {
@@ -249,10 +208,7 @@ BetweenExpr::BetweenExpr(Expr *val, Expr *lowBound, Expr *upBound)
     upperBound = upBound;
 }
 
-ExprType BetweenExpr::GetType() const
-{
-    return ExprType::BETWEEN_E;
-}
+ExprType BetweenExpr::GetType() const { return ExprType::BETWEEN_E; }
 
 SwitchExpr::SwitchExpr() : whenClause(), falseExpr() {}
 
@@ -272,10 +228,7 @@ SwitchExpr::SwitchExpr(const std::vector<std::pair<Expr *, Expr *>> &whens, Expr
     falseExpr = fexp;
 }
 
-ExprType SwitchExpr::GetType() const
-{
-    return ExprType::SWITCH_E;
-}
+ExprType SwitchExpr::GetType() const { return ExprType::SWITCH_E; }
 
 IfExpr::IfExpr() : condition(), trueExpr(), falseExpr() {}
 
@@ -294,10 +247,7 @@ IfExpr::IfExpr(Expr *cond, Expr *texp, Expr *fexp)
     falseExpr = fexp;
 }
 
-ExprType IfExpr::GetType() const
-{
-    return ExprType::IF_E;
-}
+ExprType IfExpr::GetType() const { return ExprType::IF_E; }
 
 CoalesceExpr::CoalesceExpr() : value1(), value2() {}
 
@@ -314,17 +264,11 @@ CoalesceExpr::CoalesceExpr(Expr *val1, Expr *val2)
     value2 = val2;
 }
 
-ExprType CoalesceExpr::GetType() const
-{
-    return ExprType::COALESCE_E;
-}
+ExprType CoalesceExpr::GetType() const { return ExprType::COALESCE_E; }
 
 IsNullExpr::IsNullExpr() : value() {}
 
-IsNullExpr::~IsNullExpr()
-{
-    delete value;
-}
+IsNullExpr::~IsNullExpr() { delete value; }
 
 IsNullExpr::IsNullExpr(Expr *value)
 {
@@ -333,17 +277,11 @@ IsNullExpr::IsNullExpr(Expr *value)
     this->value = value;
 }
 
-ExprType IsNullExpr::GetType() const
-{
-    return ExprType::IS_NULL_E;
-}
+ExprType IsNullExpr::GetType() const { return ExprType::IS_NULL_E; }
 
 FuncExpr::FuncExpr() : function(nullptr) {}
 
-FuncExpr::~FuncExpr()
-{
-    DeleteExprs(arguments);
-}
+FuncExpr::~FuncExpr() { DeleteExprs(arguments); }
 
 FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, DataTypePtr returnType)
     : funcName(fnName), arguments(args), functionType(BUILTIN)
@@ -352,28 +290,25 @@ FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, D
 
     std::vector<DataTypeId> argTypes(arguments.size());
     std::transform(arguments.begin(), arguments.end(), argTypes.begin(),
-        [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
+                   [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
     auto signature = FunctionSignature(funcName, argTypes, dataType->GetId());
     this->function = FunctionRegistry::LookupFunction(&signature);
 }
 
 FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, DataTypePtr returnType,
-    const Function *function)
+                   const Function *function)
     : funcName(fnName), arguments(args), function(function), functionType(BUILTIN)
 {
     dataType = std::move(returnType);
 }
 
 FuncExpr::FuncExpr(const std::string &fnName, const std::vector<Expr *> &args, DataTypePtr returnType,
-    ExprFunctionType functionType)
+                   ExprFunctionType functionType)
     : funcName(fnName), arguments(args), function(nullptr), functionType(functionType)
 {
     dataType = std::move(returnType);
 }
 
-ExprType FuncExpr::GetType() const
-{
-    return ExprType::FUNC_E;
-}
-}
-}
+ExprType FuncExpr::GetType() const { return ExprType::FUNC_E; }
+} // namespace expressions
+} // namespace omniruntime

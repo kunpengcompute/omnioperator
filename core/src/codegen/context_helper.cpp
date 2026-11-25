@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: registry  function  implementation
  */
 #include "context_helper.h"
@@ -51,37 +61,21 @@ extern "C" DLLEXPORT
         std::ostringstream errorMessage;
         switch (type) {
             case OMNI_CHAR:
-            case OMNI_VARCHAR:
-                errorMessage << "VARCHAR";
-                break;
-            case OMNI_BYTE:
-                errorMessage << "TINYINT";
-                break;
-            case OMNI_SHORT:
-                errorMessage << "SMALLINT";
-                break;
-            case OMNI_INT:
-                errorMessage << "INTEGER";
-                break;
-            case OMNI_LONG:
-                errorMessage << "BIGINT";
-                break;
-            case OMNI_TIMESTAMP:
-                errorMessage << "TIMESTAMP";
-                break;
-            case OMNI_DOUBLE:
-                errorMessage << "DOUBLE";
-                break;
+            case OMNI_VARCHAR: errorMessage << "VARCHAR"; break;
+            case OMNI_BYTE: errorMessage << "TINYINT"; break;
+            case OMNI_SHORT: errorMessage << "SMALLINT"; break;
+            case OMNI_INT: errorMessage << "INTEGER"; break;
+            case OMNI_LONG: errorMessage << "BIGINT"; break;
+            case OMNI_TIMESTAMP: errorMessage << "TIMESTAMP"; break;
+            case OMNI_DOUBLE: errorMessage << "DOUBLE"; break;
             case OMNI_DECIMAL64:
             case OMNI_DECIMAL128:
                 errorMessage << "DECIMAL(" << va_arg(v, int32_t) << ", " << va_arg(v, int32_t) << ")";
                 break;
-            default:
-                errorMessage << "No Support data type";
-                break;
+            default: errorMessage << "No Support data type"; break;
         }
         va_end(v);
         return errorMessage.str();
     }
 }
-}
+} // namespace omniruntime::codegen

@@ -1,5 +1,14 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "selectivity_vector.h"
@@ -7,16 +16,18 @@ namespace omniruntime::vec {
 // only for UT
 template void omniruntime::vec::SelectivityVector::GetSelectivityVectorFromVectorBatch<
     (omniruntime::vec::GetSelectivityVectorMethod)0>(omniruntime::vec::VectorBatch *,
-    omniruntime::vec::SelectivityVector &);
+                                                     omniruntime::vec::SelectivityVector &);
 template void omniruntime::vec::SelectivityVector::GetSelectivityVectorFromVectorBatch<
     (omniruntime::vec::GetSelectivityVectorMethod)0>(omniruntime::vec::VectorBatch *,
-    const std::vector<unsigned long, std::allocator<unsigned long>> &, omniruntime::vec::SelectivityVector &);
+                                                     const std::vector<unsigned long, std::allocator<unsigned long>> &,
+                                                     omniruntime::vec::SelectivityVector &);
 template void omniruntime::vec::SelectivityVector::GetSelectivityVectorFromVectorBatch<
     (omniruntime::vec::GetSelectivityVectorMethod)1>(omniruntime::vec::VectorBatch *,
-    omniruntime::vec::SelectivityVector &);
+                                                     omniruntime::vec::SelectivityVector &);
 template void omniruntime::vec::SelectivityVector::GetSelectivityVectorFromVectorBatch<
     (omniruntime::vec::GetSelectivityVectorMethod)1>(omniruntime::vec::VectorBatch *,
-    const std::vector<unsigned long, std::allocator<unsigned long>> &, omniruntime::vec::SelectivityVector &);
+                                                     const std::vector<unsigned long, std::allocator<unsigned long>> &,
+                                                     omniruntime::vec::SelectivityVector &);
 
 SelectivityVector SelectivityVector::GetSelectivityVectorFromBaseVector(omniruntime::vec::BaseVector *baseVector)
 {
@@ -34,7 +45,7 @@ SelectivityVector SelectivityVector::GetSelectivityVectorFromBaseVector(omnirunt
 
 template <typename FlatVector>
 void SetFlatVectorValue(size_t rowCount, BaseVector *baseVector, BaseVector *selectedBaseVector,
-    SelectivityVector &selectivityVector)
+                        SelectivityVector &selectivityVector)
 {
     size_t index = 0;
     for (auto j = 0; j < rowCount; j++) {
@@ -50,7 +61,8 @@ void SetFlatVectorValue(size_t rowCount, BaseVector *baseVector, BaseVector *sel
 }
 
 bool SelectivityVector::GetFlatBaseVectorsFromSelectivityVector(std::vector<BaseVector *> &baseVectors,
-    SelectivityVector &selectivityVector, std::vector<BaseVector *> &result)
+                                                                SelectivityVector &selectivityVector,
+                                                                std::vector<BaseVector *> &result)
 {
     if (selectivityVector.IsAllSelected()) {
         // all selected, filtering is not required.
@@ -104,14 +116,15 @@ bool SelectivityVector::GetFlatBaseVectorsFromSelectivityVector(std::vector<Base
             }
             case OMNI_VARCHAR:
             case OMNI_CHAR: {
-                SetFlatVectorValue<Vector<LargeStringContainer<std::string_view>>>(rowCount, baseVector,
-                    selectedBaseVector, selectivityVector);
+                SetFlatVectorValue<Vector<LargeStringContainer<std::string_view>>>(
+                    rowCount, baseVector, selectedBaseVector, selectivityVector);
                 break;
             }
             default: {
                 LogError("No such %d type support", dataType);
                 throw omniruntime::exception::OmniException("OPERATOR_RUNTIME_ERROR",
-                    "unsupported selectivity type: " + std::to_string(static_cast<int>(dataType)));
+                                                            "unsupported selectivity type: " +
+                                                                std::to_string(static_cast<int>(dataType)));
             }
         }
         result[i] = selectedBaseVector;
@@ -121,7 +134,8 @@ bool SelectivityVector::GetFlatBaseVectorsFromSelectivityVector(std::vector<Base
 
 template <GetSelectivityVectorMethod type>
 void SelectivityVector::GetSelectivityVectorFromVectorBatch(omniruntime::vec::VectorBatch *vectorBatch,
-    const std::vector<size_t> &selectedColumns, SelectivityVector &selectivityVector)
+                                                            const std::vector<size_t> &selectedColumns,
+                                                            SelectivityVector &selectivityVector)
 {
     auto rowNum = vectorBatch->GetRowCount();
     SelectivityVector singleColumnSelectivityVector(rowNum, true);
@@ -148,14 +162,14 @@ void SelectivityVector::GetSelectivityVectorFromVectorBatch(omniruntime::vec::Ve
             singleColumnSelectivityVector.SetAll();
         }
     } else {
-        throw omniruntime::exception::OmniException("OPERATOR_RUNTIME_ERROR",
-            "unsupported selectivity type: " + std::to_string(static_cast<int>(type)));
+        throw omniruntime::exception::OmniException(
+            "OPERATOR_RUNTIME_ERROR", "unsupported selectivity type: " + std::to_string(static_cast<int>(type)));
     }
 }
 
 template <GetSelectivityVectorMethod type>
 void SelectivityVector::GetSelectivityVectorFromVectorBatch(omniruntime::vec::VectorBatch *vectorBatch,
-    SelectivityVector &selectivityVector)
+                                                            SelectivityVector &selectivityVector)
 {
     auto vectorBatchSize = vectorBatch->GetVectorCount();
     auto rowNum = vectorBatch->GetRowCount();
@@ -184,8 +198,8 @@ void SelectivityVector::GetSelectivityVectorFromVectorBatch(omniruntime::vec::Ve
             singleColumnSelectivityVector.SetAll();
         }
     } else {
-        throw omniruntime::exception::OmniException("OPERATOR_RUNTIME_ERROR",
-            "unsupported selectivity type: " + std::to_string(static_cast<int>(type)));
+        throw omniruntime::exception::OmniException(
+            "OPERATOR_RUNTIME_ERROR", "unsupported selectivity type: " + std::to_string(static_cast<int>(type)));
     }
 }
-}
+} // namespace omniruntime::vec

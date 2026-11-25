@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: java udf util.
  */
 #include <mutex>
@@ -8,9 +18,9 @@
 
 static const char *HIVE_UDF_EXECUTOR = "omniruntime/udf/HiveUdfExecutor";
 static const char *EXEC_SINGLE_SIGNATURE = "(Ljava/lang/String;[Lnova/hetu/omniruntime/type/DataType$DataTypeId;Lnova/"
-    "hetu/omniruntime/type/DataType$DataTypeId;JJJJJJ)V";
+                                           "hetu/omniruntime/type/DataType$DataTypeId;JJJJJJ)V";
 static const char *EXEC_BATCH_SIGNATURE = "(Ljava/lang/String;[Lnova/hetu/omniruntime/type/DataType$DataTypeId;Lnova/"
-    "hetu/omniruntime/type/DataType$DataTypeId;JJJIJJJJ)V";
+                                          "hetu/omniruntime/type/DataType$DataTypeId;JJJIJJJJ)V";
 static jclass hiveUdfExecutorCls;
 static jmethodID executeSingleMethod;
 static jmethodID executeBatchMethod;
@@ -46,12 +56,12 @@ static std::once_flag initJVMFlag;
 static JavaVM *javaVm;
 __thread JNIEnv *JniUtil::threadLocalEnv = nullptr;
 
-#define RETURN_ERROR_MSG_IF_EXC(env, msg) \
-    do {                                  \
-        if ((env)->ExceptionCheck()) {    \
-            (env)->ExceptionClear();      \
-            return (msg);                 \
-        }                                 \
+#define RETURN_ERROR_MSG_IF_EXC(env, msg)                                                                              \
+    do {                                                                                                               \
+        if ((env)->ExceptionCheck()) {                                                                                 \
+            (env)->ExceptionClear();                                                                                   \
+            return (msg);                                                                                              \
+        }                                                                                                              \
     } while (false)
 
 using namespace omniruntime::op;
@@ -198,35 +208,17 @@ ErrorCode JniUtil::GetGlobalClassRef(JNIEnv *env, const char *className, jclass 
     return ErrorCode::SUCCESS;
 }
 
-jclass JniUtil::GetHiveUdfExecutorCls()
-{
-    return hiveUdfExecutorCls;
-}
+jclass JniUtil::GetHiveUdfExecutorCls() { return hiveUdfExecutorCls; }
 
-jmethodID JniUtil::GetExecuteSingleMethod()
-{
-    return executeSingleMethod;
-}
+jmethodID JniUtil::GetExecuteSingleMethod() { return executeSingleMethod; }
 
-jmethodID JniUtil::GetExecuteBatchMethod()
-{
-    return executeBatchMethod;
-}
+jmethodID JniUtil::GetExecuteBatchMethod() { return executeBatchMethod; }
 
-jclass JniUtil::GetDataTypeIdCls()
-{
-    return dataTypeIdCls;
-}
+jclass JniUtil::GetDataTypeIdCls() { return dataTypeIdCls; }
 
-jclass JniUtil::GetUdfUtilCls()
-{
-    return udfUtilCls;
-}
+jclass JniUtil::GetUdfUtilCls() { return udfUtilCls; }
 
-jmethodID JniUtil::GetThrowableToStringMethod()
-{
-    return throwableToStringMethod;
-}
+jmethodID JniUtil::GetThrowableToStringMethod() { return throwableToStringMethod; }
 
 std::string JniUtil::GetExceptionMsg(JNIEnv *env)
 {
@@ -250,11 +242,10 @@ std::string JniUtil::GetExceptionMsg(JNIEnv *env)
 jfieldID JniUtil::GetFieldId(int32_t id)
 {
     static jfieldID omniDataTypeIds[] = {
-        omniNoneField, omniIntField, omniLongField, omniDoubleField, omniBooleanField, omniShortField,
-        omniDecimal64Field, omniDecimal128Field, omniData32Field, omniData64Field, omniTime32Field, omniTime64Field,
-        omniTimestampField, omniIntervalMonthsField, omniIntervalDayTimeField, omniVarcharField, omniCharField,
-        omniContainerField, omniInvalidField
-    };
+        omniNoneField,    omniIntField,       omniLongField,       omniDoubleField,         omniBooleanField,
+        omniShortField,   omniDecimal64Field, omniDecimal128Field, omniData32Field,         omniData64Field,
+        omniTime32Field,  omniTime64Field,    omniTimestampField,  omniIntervalMonthsField, omniIntervalDayTimeField,
+        omniVarcharField, omniCharField,      omniContainerField,  omniInvalidField};
     return omniDataTypeIds[id];
 }
 

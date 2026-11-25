@@ -1,5 +1,15 @@
 /*
  * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * @Description: lookup join implementations
  */
 
@@ -18,19 +28,19 @@ LookupJoinWithExprOperatorFactory *LookupJoinWithExprOperatorFactory::CreateLook
     const DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount,
     const std::vector<omniruntime::expressions::Expr *> &probeHashKeys, int32_t probeHashKeysCount,
     int32_t *buildOutputCols, int32_t buildOutputColsCount, const DataTypes &buildOutputTypes,
-    int64_t hashBuilderFactoryAddr, omniruntime::expressions::Expr *filterExpr,
-    bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig)
+    int64_t hashBuilderFactoryAddr, omniruntime::expressions::Expr *filterExpr, bool isShuffleExchangeBuildPlan,
+    OverflowConfig *overflowConfig)
 {
-    auto operatorFactory = new LookupJoinWithExprOperatorFactory(probeTypes, probeOutputCols, probeOutputColsCount,
-        probeHashKeys, probeHashKeysCount, buildOutputCols, buildOutputColsCount, buildOutputTypes,
-        hashBuilderFactoryAddr, filterExpr, isShuffleExchangeBuildPlan, overflowConfig);
+    auto operatorFactory = new LookupJoinWithExprOperatorFactory(
+        probeTypes, probeOutputCols, probeOutputColsCount, probeHashKeys, probeHashKeysCount, buildOutputCols,
+        buildOutputColsCount, buildOutputTypes, hashBuilderFactoryAddr, filterExpr, isShuffleExchangeBuildPlan,
+        overflowConfig);
     return operatorFactory;
 }
 
-void setOutputColsExpr(std::shared_ptr<const HashJoinNode> planNode,
-                       std::vector<int32_t> &buildOutputCols,
-                       std::vector<int32_t> &probeOutputCols,
-                       int32_t probeOutputColsCount, int32_t buildOutputColsCount)
+void setOutputColsExpr(std::shared_ptr<const HashJoinNode> planNode, std::vector<int32_t> &buildOutputCols,
+                       std::vector<int32_t> &probeOutputCols, int32_t probeOutputColsCount,
+                       int32_t buildOutputColsCount)
 {
     auto partitionKeys = planNode->PartitionKeys();
     if (planNode->IsExistence()) {
@@ -64,10 +74,8 @@ void setOutputColsExpr(std::shared_ptr<const HashJoinNode> planNode,
     }
 }
 
-void getOutputList(std::shared_ptr<const HashJoinNode> planNode,
-                   std::vector<int32_t> &buildOutputCols,
-                   std::vector<int32_t> &probeOutputCols,
-                   std::vector<int32_t> &outputList)
+void getOutputList(std::shared_ptr<const HashJoinNode> planNode, std::vector<int32_t> &buildOutputCols,
+                   std::vector<int32_t> &probeOutputCols, std::vector<int32_t> &outputList)
 {
     auto keys = planNode->PartitionKeys();
     auto probeIndex = 0;
@@ -100,7 +108,7 @@ void getOutputList(std::shared_ptr<const HashJoinNode> planNode,
 }
 
 LookupJoinWithExprOperatorFactory *LookupJoinWithExprOperatorFactory::CreateLookupJoinWithExprOperatorFactory(
-    std::shared_ptr<const HashJoinNode> planNode, HashBuilderWithExprOperatorFactory* hashBuilderOperatorFactory,
+    std::shared_ptr<const HashJoinNode> planNode, HashBuilderWithExprOperatorFactory *hashBuilderOperatorFactory,
     const config::QueryConfig &queryConfig)
 {
     auto buildTypes = planNode->RightOutputType();
@@ -129,33 +137,33 @@ LookupJoinWithExprOperatorFactory *LookupJoinWithExprOperatorFactory::CreateLook
 
     if (!planNode->IsExistence()) {
         std::vector<std::shared_ptr<DataType>> outType;
-        for (auto col:buildOutputCols) {
+        for (auto col : buildOutputCols) {
             outType.push_back(buildTypes->GetType(col));
         }
         buildTypes = std::make_shared<DataTypes>(outType);
     }
 
     auto probeHashCols = planNode->LeftKeys();
-    auto probeHashColsCount = (int32_t) probeHashCols.size();
+    auto probeHashColsCount = (int32_t)probeHashCols.size();
 
     auto filter = planNode->Filter();
     auto isShuffle = planNode->IsShuffle();
 
-    auto overflowConfig = queryConfig.IsOverFlowASNull()
-                          ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
-                          : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
+    auto overflowConfig = queryConfig.IsOverFlowASNull() ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
+                                                         : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
 
-    auto pLookupJoinWithExprOperatorFactory = new LookupJoinWithExprOperatorFactory(*probeTypes, probeOutputCols.data(), probeOutputCols.size(),
-        probeHashCols, probeHashColsCount, buildOutputCols.data(), buildOutputCols.size(), *buildTypes,
-    reinterpret_cast<int64_t>(hashBuilderOperatorFactory), filter, isShuffle, overflowConfig, outputList.data());
+    auto pLookupJoinWithExprOperatorFactory = new LookupJoinWithExprOperatorFactory(
+        *probeTypes, probeOutputCols.data(), probeOutputCols.size(), probeHashCols, probeHashColsCount,
+        buildOutputCols.data(), buildOutputCols.size(), *buildTypes,
+        reinterpret_cast<int64_t>(hashBuilderOperatorFactory), filter, isShuffle, overflowConfig, outputList.data());
 
     delete overflowConfig;
     overflowConfig = nullptr;
     return pLookupJoinWithExprOperatorFactory;
 }
 
-LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(const DataTypes &probeTypes,
-    int32_t *probeOutputCols, int32_t probeOutputColsCount,
+LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(
+    const DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount,
     const std::vector<omniruntime::expressions::Expr *> &probeHashKeys, int32_t probeHashKeysCount,
     int32_t *buildOutputCols, int32_t buildOutputColsCount, const DataTypes &buildOutputTypes,
     int64_t hashBuilderFactoryAddr, Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig,
@@ -163,21 +171,18 @@ LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(const DataT
 {
     std::vector<DataTypePtr> newProbeTypes;
     OperatorUtil::CreateProjections(probeTypes, probeHashKeys, newProbeTypes, this->projections, this->probeHashCols,
-        overflowConfig);
+                                    overflowConfig);
     this->probeTypes = std::make_unique<DataTypes>(newProbeTypes);
     auto hashBuilderWithExprOperatorFactory =
         reinterpret_cast<HashBuilderWithExprOperatorFactory *>(hashBuilderFactoryAddr);
-    this->operatorFactory =
-        LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(*(this->probeTypes), probeOutputCols,
-        probeOutputColsCount, this->probeHashCols.data(), probeHashKeysCount, buildOutputCols, buildOutputColsCount,
-        std::move(buildOutputTypes), (int64_t)(hashBuilderWithExprOperatorFactory->GetHashBuilderOperatorFactory()),
-        filterExpr, probeTypes.GetSize(), isShuffleExchangeBuildPlan, overflowConfig, outputList);
+    this->operatorFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        *(this->probeTypes), probeOutputCols, probeOutputColsCount, this->probeHashCols.data(), probeHashKeysCount,
+        buildOutputCols, buildOutputColsCount, std::move(buildOutputTypes),
+        (int64_t)(hashBuilderWithExprOperatorFactory->GetHashBuilderOperatorFactory()), filterExpr,
+        probeTypes.GetSize(), isShuffleExchangeBuildPlan, overflowConfig, outputList);
 }
 
-LookupJoinWithExprOperatorFactory::~LookupJoinWithExprOperatorFactory()
-{
-    delete this->operatorFactory;
-}
+LookupJoinWithExprOperatorFactory::~LookupJoinWithExprOperatorFactory() { delete this->operatorFactory; }
 
 Operator *LookupJoinWithExprOperatorFactory::CreateOperator()
 {
@@ -186,18 +191,14 @@ Operator *LookupJoinWithExprOperatorFactory::CreateOperator()
 }
 
 LookupJoinWithExprOperator::LookupJoinWithExprOperator(const type::DataTypes &probeTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, LookupJoinOperator *lookupJoinOperator)
-    : probeTypes(probeTypes),
-      projections(projections),
-      lookupJoinOperator(lookupJoinOperator)
+                                                       std::vector<std::unique_ptr<Projection>> &projections,
+                                                       LookupJoinOperator *lookupJoinOperator)
+    : probeTypes(probeTypes), projections(projections), lookupJoinOperator(lookupJoinOperator)
 {
     SetOperatorName(opNameForLookUpJoin);
 }
 
-LookupJoinWithExprOperator::~LookupJoinWithExprOperator()
-{
-    delete lookupJoinOperator;
-}
+LookupJoinWithExprOperator::~LookupJoinWithExprOperator() { delete lookupJoinOperator; }
 
 int32_t LookupJoinWithExprOperator::AddInput(VectorBatch *vecBatch)
 {
@@ -222,7 +223,7 @@ int32_t LookupJoinWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
     return status;
 }
 
-BlockingReason LookupJoinWithExprOperator::IsBlocked(ContinueFuture* future)
+BlockingReason LookupJoinWithExprOperator::IsBlocked(ContinueFuture *future)
 {
     return lookupJoinOperator->IsBlocked(future);
 }
@@ -232,5 +233,5 @@ OmniStatus LookupJoinWithExprOperator::Close()
     lookupJoinOperator->Close();
     return OMNI_STATUS_NORMAL;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

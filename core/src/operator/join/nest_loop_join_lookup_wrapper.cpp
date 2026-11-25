@@ -1,5 +1,15 @@
 /*
  * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2022-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * @Description: lookup outer join implementations
  */
 
@@ -8,8 +18,11 @@
 
 namespace omniruntime {
 namespace op {
-NestLoopJoinLookupWrapperOperatorFactory::NestLoopJoinLookupWrapperOperatorFactory(NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
-    : nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory) {}
+NestLoopJoinLookupWrapperOperatorFactory::NestLoopJoinLookupWrapperOperatorFactory(
+    NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
+    : nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory)
+{
+}
 
 NestLoopJoinLookupWrapperOperatorFactory::~NestLoopJoinLookupWrapperOperatorFactory()
 {
@@ -19,10 +32,13 @@ NestLoopJoinLookupWrapperOperatorFactory::~NestLoopJoinLookupWrapperOperatorFact
     }
 }
 
-NestLoopJoinLookupWrapperOperatorFactory *NestLoopJoinLookupWrapperOperatorFactory::CreateNestLoopJoinLookupWrapperOperatorFactory(std::shared_ptr<const NestedLoopJoinNode> planNode,
-    NestedLoopJoinBuildOperatorFactory* builderOperatorFactory, const config::QueryConfig& queryConfig)
+NestLoopJoinLookupWrapperOperatorFactory *
+NestLoopJoinLookupWrapperOperatorFactory::CreateNestLoopJoinLookupWrapperOperatorFactory(
+    std::shared_ptr<const NestedLoopJoinNode> planNode, NestedLoopJoinBuildOperatorFactory *builderOperatorFactory,
+    const config::QueryConfig &queryConfig)
 {
-    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(planNode, builderOperatorFactory, queryConfig);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        planNode, builderOperatorFactory, queryConfig);
     return new NestLoopJoinLookupWrapperOperatorFactory(*nestLoopJoinLookupOperatorFactory);
 }
 
@@ -32,8 +48,11 @@ Operator *NestLoopJoinLookupWrapperOperatorFactory::CreateOperator()
     return pNestLoopJoinLookupWrapperOperator;
 }
 
-NestLoopJoinLookupWrapperOperator::NestLoopJoinLookupWrapperOperator(NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
-    : nestLoopJoinLookupOperator(nullptr), nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory) {}
+NestLoopJoinLookupWrapperOperator::NestLoopJoinLookupWrapperOperator(
+    NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
+    : nestLoopJoinLookupOperator(nullptr), nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory)
+{
+}
 
 NestLoopJoinLookupWrapperOperator::~NestLoopJoinLookupWrapperOperator()
 {
@@ -45,7 +64,8 @@ NestLoopJoinLookupWrapperOperator::~NestLoopJoinLookupWrapperOperator()
 
 void NestLoopJoinLookupWrapperOperator::InitOperator()
 {
-    this->nestLoopJoinLookupOperator = dynamic_cast<NestLoopJoinLookupOperator*>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+    this->nestLoopJoinLookupOperator =
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     this->nestLoopJoinLookupOperator->setNoMoreInput(false);
 }
 
@@ -95,5 +115,5 @@ OmniStatus NestLoopJoinLookupWrapperOperator::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-}
-}
+} // namespace op
+} // namespace omniruntime

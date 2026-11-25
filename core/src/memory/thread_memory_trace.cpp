@@ -1,5 +1,14 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "thread_memory_trace.h"
@@ -34,7 +43,7 @@ void ThreadMemoryTrace::RemoveVectorMemory(uintptr_t ptr, int64_t size)
     if ((iter = vectorTraced.find(ptr)) != vectorTraced.end()) {
         if (iter->second != size) {
             auto message =
-                    "wrong vector size, alloc: " + std::to_string(iter->second) + ", free: " + std::to_string(size);
+                "wrong vector size, alloc: " + std::to_string(iter->second) + ", free: " + std::to_string(size);
             throw exception::OmniException("Memory Trace Error", message);
         }
         vectorTraced.erase(ptr);
@@ -73,7 +82,7 @@ void ThreadMemoryTrace::RemoveArenaMemory(uintptr_t ptr, int64_t size)
     if ((iter = arenaTraced.find(ptr)) != arenaTraced.end()) {
         if (iter->second != size) {
             auto message =
-                    "wrong arena size, alloc: " + std::to_string(iter->second) + ", free: " + std::to_string(size);
+                "wrong arena size, alloc: " + std::to_string(iter->second) + ", free: " + std::to_string(size);
             throw exception::OmniException("Memory Trace Error", message);
         }
         arenaTraced.erase(ptr);
@@ -98,15 +107,9 @@ void ThreadMemoryTrace::RemoveArenaMemory(uintptr_t ptr, int64_t size)
     }
 }
 
-std::unordered_map<uintptr_t, int64_t> ThreadMemoryTrace::GetVectorTraced()
-{
-    return vectorTraced;
-}
+std::unordered_map<uintptr_t, int64_t> ThreadMemoryTrace::GetVectorTraced() { return vectorTraced; }
 
-std::unordered_map<uintptr_t, int64_t> ThreadMemoryTrace::GetArenaTraced()
-{
-    return arenaTraced;
-}
+std::unordered_map<uintptr_t, int64_t> ThreadMemoryTrace::GetArenaTraced() { return arenaTraced; }
 
 std::unordered_map<uintptr_t, std::pair<int64_t, std::string>> ThreadMemoryTrace::GetVectorTracedWithLog()
 {
@@ -141,8 +144,8 @@ bool ThreadMemoryTrace::HasMemoryLeak()
         // print leak stackLog
         std::unordered_map<uintptr_t, std::pair<int64_t, std::string>>::iterator iter;
         for (iter = vectorTracedWithLog.begin(); iter != vectorTracedWithLog.end(); ++iter) {
-            std::cout << "vector leaked memory: " << iter->second.first << ", stack is: "
-                      << iter->second.second << std::endl;
+            std::cout << "vector leaked memory: " << iter->second.first << ", stack is: " << iter->second.second
+                      << std::endl;
         }
     }
 
@@ -150,8 +153,8 @@ bool ThreadMemoryTrace::HasMemoryLeak()
         // print leak stackLog
         std::unordered_map<uintptr_t, std::pair<int64_t, std::string>>::iterator iter;
         for (iter = arenaTracedWithLog.begin(); iter != arenaTracedWithLog.end(); ++iter) {
-            std::cout << "arena leaked memory: " << iter->second.first << ", stack is: "
-                      << iter->second.second << std::endl;
+            std::cout << "arena leaked memory: " << iter->second.first << ", stack is: " << iter->second.second
+                      << std::endl;
         }
     }
 #endif
@@ -202,4 +205,4 @@ void ThreadMemoryTrace::Clear()
     vectorTracedWithLog.clear();
     arenaTracedWithLog.clear();
 }
-}
+} // namespace omniruntime::mem

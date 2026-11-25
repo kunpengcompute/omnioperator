@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Max aggregate for varchar
  */
 
@@ -11,7 +21,7 @@ namespace omniruntime {
 namespace op {
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxVarcharAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors,
-    int32_t rowIndex)
+                                                        int32_t rowIndex)
 {
     const VarcharState *varcharState = VarcharState::ConstCastState(state + aggStateOffset);
     auto v = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vectors[0]);
@@ -20,14 +30,15 @@ void MaxVarcharAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *st
         v->SetNull(rowIndex);
     } else {
         std::string_view val(reinterpret_cast<char *>(varcharState->realValue),
-            static_cast<int64_t>(varcharState->len));
+                             static_cast<int64_t>(varcharState->len));
         v->SetValue(rowIndex, val);
     }
 }
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxVarcharAggregator<IN_ID, OUT_ID>::ExtractValuesBatch(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors, int32_t rowOffset, int32_t rowCount)
+                                                             std::vector<BaseVector *> &vectors, int32_t rowOffset,
+                                                             int32_t rowCount)
 {
     auto v = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vectors[0]);
     for (int32_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
@@ -44,7 +55,7 @@ void MaxVarcharAggregator<IN_ID, OUT_ID>::ExtractValuesBatch(std::vector<Aggrega
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxVarcharAggregator<IN_ID, OUT_ID>::ExtractValuesForSpill(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors)
+                                                                std::vector<BaseVector *> &vectors)
 {
     auto v = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vectors[0]);
     auto rowCount = static_cast<int32_t>(groupStates.size());
@@ -62,7 +73,8 @@ void MaxVarcharAggregator<IN_ID, OUT_ID>::ExtractValuesForSpill(std::vector<Aggr
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, BaseVector *vector,
-    const int32_t rowOffset, const int32_t rowCount, const std::shared_ptr<NullsHelper> nullMap)
+                                                                const int32_t rowOffset, const int32_t rowCount,
+                                                                const std::shared_ptr<NullsHelper> nullMap)
 {
     VarcharState *varcharState = VarcharState::CastState(state);
     if (vector->GetEncoding() != vec::OMNI_DICTIONARY) {
@@ -83,7 +95,8 @@ void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<AggregateState *> &rowStates,
-    BaseVector *vector, const int32_t rowOffset, const std::shared_ptr<NullsHelper> nullMap)
+                                                               BaseVector *vector, const int32_t rowOffset,
+                                                               const std::shared_ptr<NullsHelper> nullMap)
 {
     if (vector->GetEncoding() != vec::OMNI_DICTIONARY) {
         if (nullMap == nullptr) {
@@ -106,7 +119,7 @@ void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<Aggre
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRowInfo> &unspillRows,
-    int32_t rowCount, int32_t &vectorIndex)
+                                                              int32_t rowCount, int32_t &vectorIndex)
 {
     auto firstVecIdx = vectorIndex++;
     for (int32_t rowIdx = 0; rowIdx < rowCount; rowIdx++) {
@@ -132,7 +145,8 @@ void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<Unspil
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter)
+                                                                const std::shared_ptr<NullsHelper> nullMap,
+                                                                const bool aggFilter)
 {
     // note: type relationship matches only (IN_ID == OMNI_CHAR || IN_ID == OMNI_VARCHAR) and
     // (OUT_ID == OMNI_CHAR || OUT_ID == OMNI_VARCHAR)
@@ -151,14 +165,14 @@ void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *res
     }
 }
 
-template<DataTypeId IN_ID, DataTypeId OUT_ID>
-template<typename T>
+template <DataTypeId IN_ID, DataTypeId OUT_ID>
+template <typename T>
 void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap)
+                                                                        const std::shared_ptr<NullsHelper> nullMap)
 {
     int rowCount = originVector->GetSize();
     auto maxVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(
-            VectorHelper::CreateFlatVector(OUT_ID, rowCount));
+        VectorHelper::CreateFlatVector(OUT_ID, rowCount));
     auto vector = reinterpret_cast<T *>(originVector);
     for (int index = 0; index < rowCount; ++index) {
         if ((*nullMap)[index]) {
@@ -171,8 +185,7 @@ void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBa
     result->Append(maxVector);
 }
 
-template <DataTypeId IN_ID, DataTypeId OUT_ID>
-void MaxVarcharAggregator<IN_ID, OUT_ID>::SaveState(VarcharState *state)
+template <DataTypeId IN_ID, DataTypeId OUT_ID> void MaxVarcharAggregator<IN_ID, OUT_ID>::SaveState(VarcharState *state)
 {
     if (not state->needUpdate) {
         return;
@@ -204,5 +217,5 @@ template class MaxVarcharAggregator<OMNI_CHAR, OMNI_VARCHAR>;
 template class MaxVarcharAggregator<OMNI_VARCHAR, OMNI_CHAR>;
 
 template class MaxVarcharAggregator<OMNI_VARCHAR, OMNI_VARCHAR>;
-}
-}
+} // namespace op
+} // namespace omniruntime

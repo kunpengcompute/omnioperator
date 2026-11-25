@@ -1,5 +1,14 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "local_planner.h"
@@ -24,11 +33,11 @@
 
 namespace omniruntime::compute {
 
-// Returns ture if source nodes must run in a separate pipeline
+// Returns true if source nodes must run in a separate pipeline
 bool MustStartNewPipeline(int sourceId) { return sourceId != 0; }
 
-std::shared_ptr<omniruntime::op::Operator> createOperator(
-    OperatorFactory* factory, const std::shared_ptr<const PlanNode>& planNode)
+std::shared_ptr<omniruntime::op::Operator> createOperator(OperatorFactory *factory,
+                                                          const std::shared_ptr<const PlanNode> &planNode)
 {
     std::shared_ptr<omniruntime::op::Operator> operatorPtr(factory->CreateOperator());
     operatorPtr->setNoMoreInput(false);
@@ -39,9 +48,9 @@ std::shared_ptr<omniruntime::op::Operator> createOperator(
     return std::move(operatorPtr);
 }
 
-std::shared_ptr<omniruntime::op::Operator> createUnionBuildOperator(
-    std::shared_ptr<omniruntime::op::Operator> unionOperator,
-    const std::shared_ptr<const PlanNode>& planNode)
+std::shared_ptr<omniruntime::op::Operator>
+createUnionBuildOperator(std::shared_ptr<omniruntime::op::Operator> unionOperator,
+                         const std::shared_ptr<const PlanNode> &planNode)
 {
     std::shared_ptr<omniruntime::op::Operator> unionBuildOperator = std::make_shared<UnionBuildOperator>(unionOperator);
     unionBuildOperator->setNoMoreInput(false);
@@ -52,9 +61,8 @@ std::shared_ptr<omniruntime::op::Operator> createUnionBuildOperator(
     return std::move(unionBuildOperator);
 }
 
-OperatorFactory* createOperatorFactory(
-    const std::shared_ptr<const PlanNode>& planNode,
-    const config::QueryConfig& queryConfig)
+OperatorFactory *createOperatorFactory(const std::shared_ptr<const PlanNode> &planNode,
+                                       const config::QueryConfig &queryConfig)
 {
     if (auto orderByNode = std::dynamic_pointer_cast<const OrderByNode>(planNode)) {
         return SortWithExprOperatorFactory::CreateSortWithExprOperatorFactory(orderByNode, queryConfig);
@@ -67,8 +75,7 @@ OperatorFactory* createOperatorFactory(
     } else if (auto topNNode = std::dynamic_pointer_cast<const TopNNode>(planNode)) {
         return TopNWithExprOperatorFactory::CreateTopNWithExprOperatorFactory(topNNode, queryConfig);
     } else if (auto topNSortNode = std::dynamic_pointer_cast<const TopNSortNode>(planNode)) {
-        return TopNSortWithExprOperatorFactory::CreateTopNSortWithExprOperatorFactory(
-            topNSortNode, queryConfig);
+        return TopNSortWithExprOperatorFactory::CreateTopNSortWithExprOperatorFactory(topNSortNode, queryConfig);
     } else if (auto limitNode = std::dynamic_pointer_cast<const LimitNode>(planNode)) {
         return LimitOperatorFactory::CreateLimitOperatorFactory(limitNode);
     } else if (auto unionNode = std::dynamic_pointer_cast<const UnionNode>(planNode)) {
@@ -77,29 +84,27 @@ OperatorFactory* createOperatorFactory(
         return ValueStreamFactory::CreateValueStreamFactory(valueStreamNode);
     } else if (auto aggregationNode = std::dynamic_pointer_cast<const AggregationNode>(planNode)) {
         if (aggregationNode->GetGroupByKeys().empty()) {
-            return AggregationWithExprOperatorFactory::CreateAggregationWithExprOperatorFactory(
-                aggregationNode, queryConfig);
+            return AggregationWithExprOperatorFactory::CreateAggregationWithExprOperatorFactory(aggregationNode,
+                                                                                                queryConfig);
         }
-        return HashAggregationWithExprOperatorFactory::CreateAggregationWithExprOperatorFactory(
-            aggregationNode, queryConfig);
+        return HashAggregationWithExprOperatorFactory::CreateAggregationWithExprOperatorFactory(aggregationNode,
+                                                                                                queryConfig);
     } else if (auto expandNode = std::dynamic_pointer_cast<const ExpandNode>(planNode)) {
         return CreateExpandOperatorFactory(expandNode, queryConfig);
     } else if (auto groupingNode = std::dynamic_pointer_cast<const GroupingNode>(planNode)) {
         return GroupingOperatorFactory::CreateGroupingOperatorFactory(groupingNode, queryConfig);
     } else {
-        throw omniruntime::exception::OmniException(
-            "PLANNODE_NOT_SUPPORT", "The plannode is not supported yet." + planNode->Id());
+        throw omniruntime::exception::OmniException("PLANNODE_NOT_SUPPORT",
+                                                    "The plannode is not supported yet." + planNode->Id());
     }
 }
 
-void planDetail(
-    const std::shared_ptr<const PlanNode>& planNode,
-    std::vector<std::shared_ptr<omniruntime::op::Operator>>* currentOperators,
-    std::vector<std::shared_ptr<OmniDriver>>* drivers,
-    std::vector<OperatorFactory*>* factories,
-    const config::QueryConfig& queryConfig)
+void planDetail(const std::shared_ptr<const PlanNode> &planNode,
+                std::vector<std::shared_ptr<omniruntime::op::Operator>> *currentOperators,
+                std::vector<std::shared_ptr<OmniDriver>> *drivers, std::vector<OperatorFactory *> *factories,
+                const config::QueryConfig &queryConfig)
 {
-    OperatorFactory* factory = nullptr;
+    OperatorFactory *factory = nullptr;
     if (!currentOperators) {
         drivers->emplace_back(std::make_unique<OmniDriver>());
         currentOperators = drivers->back()->operators();
@@ -112,7 +117,7 @@ void planDetail(
     } else {
         for (int32_t i = 0; i < sources.size(); ++i) {
             planDetail(sources[i], MustStartNewPipeline(i) ? nullptr : currentOperators,
-                MustStartNewPipeline(i) ? &builderDrivers[i] : drivers, factories, queryConfig);
+                       MustStartNewPipeline(i) ? &builderDrivers[i] : drivers, factories, queryConfig);
         }
     }
 
@@ -125,31 +130,35 @@ void planDetail(
         factories->emplace_back(hashBuilderOperatorFactory);
 
         auto joinType = joinNode->GetJoinType();
-        if (joinNode->IsFullJoin() || (joinNode->IsLeftJoin() && joinNode->IsBuildLeft()) || (joinNode->IsRightJoin() && joinNode->IsBuildRight())) {
-            factory =
-                LookupJoinWrapperOperatorFactory::CreateLookupJoinWrapperOperatorFactory(joinNode, hashBuilderOperatorFactory, queryConfig);
+        if (joinNode->IsFullJoin() || (joinNode->IsLeftJoin() && joinNode->IsBuildLeft()) ||
+            (joinNode->IsRightJoin() && joinNode->IsBuildRight())) {
+            factory = LookupJoinWrapperOperatorFactory::CreateLookupJoinWrapperOperatorFactory(
+                joinNode, hashBuilderOperatorFactory, queryConfig);
         } else {
-            factory =
-                LookupJoinWithExprOperatorFactory::CreateLookupJoinWithExprOperatorFactory(joinNode, hashBuilderOperatorFactory, queryConfig);
+            factory = LookupJoinWithExprOperatorFactory::CreateLookupJoinWithExprOperatorFactory(
+                joinNode, hashBuilderOperatorFactory, queryConfig);
         }
     } else if (auto sortMergejoinNode = std::dynamic_pointer_cast<const MergeJoinNode>(planNode)) {
         auto streamedTableWithExprOperatorFactoryV2 =
-            StreamedTableWithExprOperatorFactoryV2::CreateStreamedTableWithExprOperatorFactoryV2(
-                sortMergejoinNode, queryConfig);
+            StreamedTableWithExprOperatorFactoryV2::CreateStreamedTableWithExprOperatorFactoryV2(sortMergejoinNode,
+                                                                                                 queryConfig);
         auto bufferedTableWithExprOperatorFactoryV2 =
             BufferedTableWithExprOperatorFactoryV2::CreateBufferedTableWithExprOperatorFactoryV2(
                 sortMergejoinNode, reinterpret_cast<int64_t>(streamedTableWithExprOperatorFactoryV2), queryConfig);
         auto builderDriver = builderDrivers[1][0];
-        builderDriver->operators()->emplace_back(createOperator(bufferedTableWithExprOperatorFactoryV2, sortMergejoinNode));
+        builderDriver->operators()->emplace_back(
+            createOperator(bufferedTableWithExprOperatorFactoryV2, sortMergejoinNode));
         factories->emplace_back(bufferedTableWithExprOperatorFactoryV2);
         factory = streamedTableWithExprOperatorFactoryV2;
     } else if (auto nestedLoopJoinNode = std::dynamic_pointer_cast<const NestedLoopJoinNode>(planNode)) {
         auto nestedLoopJoinBuilderOperatorFactory =
             NestedLoopJoinBuildOperatorFactory::CreateNestedLoopJoinBuildOperatorFactory(nestedLoopJoinNode);
         auto nestedLoopJoinLookupWrapperOperatorFactory =
-            NestLoopJoinLookupWrapperOperatorFactory::CreateNestLoopJoinLookupWrapperOperatorFactory(nestedLoopJoinNode, nestedLoopJoinBuilderOperatorFactory, queryConfig);
+            NestLoopJoinLookupWrapperOperatorFactory::CreateNestLoopJoinLookupWrapperOperatorFactory(
+                nestedLoopJoinNode, nestedLoopJoinBuilderOperatorFactory, queryConfig);
         auto builderDriver = builderDrivers[1][0];
-        builderDriver->operators()->emplace_back(createOperator(nestedLoopJoinBuilderOperatorFactory, nestedLoopJoinNode));
+        builderDriver->operators()->emplace_back(
+            createOperator(nestedLoopJoinBuilderOperatorFactory, nestedLoopJoinNode));
         factories->emplace_back(nestedLoopJoinBuilderOperatorFactory);
         factory = nestedLoopJoinLookupWrapperOperatorFactory;
     } else {
@@ -173,14 +182,14 @@ void planDetail(
     }
 }
 
-void LocalPlanner::buildOperatorStats(std::vector<std::shared_ptr<OmniDriver>>* drivers)
+void LocalPlanner::buildOperatorStats(std::vector<std::shared_ptr<OmniDriver>> *drivers)
 {
     if (drivers->empty()) {
         LogError("drivers is empty");
         return;
     }
 
-    for (auto index = 0; index <drivers->size(); ++index) {
+    for (auto index = 0; index < drivers->size(); ++index) {
         const auto operators = (*drivers)[index]->operators();
         if (operators->empty()) {
             LogError("operators is empty");
@@ -188,26 +197,16 @@ void LocalPlanner::buildOperatorStats(std::vector<std::shared_ptr<OmniDriver>>* 
         }
         for (auto i = 0; i < operators->size(); ++i) {
             (*operators)[i]->SetOperatorId(i);
-            (*operators)[i]->stats_ = OperatorStats(
-                i,
-                index,
-                (*operators)[i]->planNodeId(),
-                (*operators)[i]->operatorType());
+            (*operators)[i]->stats_ =
+                OperatorStats(i, index, (*operators)[i]->planNodeId(), (*operators)[i]->operatorType());
         }
     }
 }
 
-void LocalPlanner::plan(
-    const PlanFragment& fragment,
-    std::vector<std::shared_ptr<OmniDriver>>* drivers,
-    std::vector<OperatorFactory*>* factories,
-    const config::QueryConfig& queryConfig)
+void LocalPlanner::plan(const PlanFragment &fragment, std::vector<std::shared_ptr<OmniDriver>> *drivers,
+                        std::vector<OperatorFactory *> *factories, const config::QueryConfig &queryConfig)
 {
-    planDetail(fragment.planNode,
-        nullptr,
-        drivers,
-        factories,
-        queryConfig);
+    planDetail(fragment.planNode, nullptr, drivers, factories, queryConfig);
     (*drivers)[0]->outputDriver = true;
 
     buildOperatorStats(drivers);

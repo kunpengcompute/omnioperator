@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2022-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Average aggregate
  */
 
@@ -11,7 +21,7 @@ namespace op {
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 template <bool PARTIAL_OUT, bool DECIMAL_PRECISION_IMPROVEMENT>
 void AverageAggregator<IN_ID, OUT_ID>::ExtractValuesFunction(const AggregateState *state,
-    std::vector<BaseVector *> &vectors, int32_t rowIndex)
+                                                             std::vector<BaseVector *> &vectors, int32_t rowIndex)
 {
     auto *avgState = AvgState::ConstCastState(state + SumAggregator<IN_ID, OUT_ID>::aggStateOffset);
     if constexpr (PARTIAL_OUT) {
@@ -51,7 +61,7 @@ void AverageAggregator<IN_ID, OUT_ID>::ExtractValuesFunction(const AggregateStat
             } else {
                 // Result type is int64, we generate double avgResult
                 double avgResult = static_cast<double>(static_cast<ResultType>(avgState->value)) /
-                    static_cast<double>(avgState->count);
+                                   static_cast<double>(avgState->count);
                 result = this->template CastWithOverflow<double, OutType>(avgResult, overflow);
             }
         }
@@ -68,7 +78,8 @@ void AverageAggregator<IN_ID, OUT_ID>::ExtractValuesFunction(const AggregateStat
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 template <bool PARTIAL_OUT, bool DECIMAL_PRECISION_IMPROVEMENT, bool IS_OVERFLOW_AS_NULL>
 void AverageAggregator<IN_ID, OUT_ID>::ExtractValuesBatchInternal(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors, int32_t rowOffset, int32_t rowCount)
+                                                                  std::vector<BaseVector *> &vectors, int32_t rowOffset,
+                                                                  int32_t rowCount)
 {
     if constexpr (PARTIAL_OUT) {
         if constexpr (OUT_ID == OMNI_VARCHAR) {
@@ -146,7 +157,7 @@ void AverageAggregator<IN_ID, OUT_ID>::DivideWithOverflow(const AvgState *avgSta
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void AverageAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors,
-    int32_t rowIndex)
+                                                     int32_t rowIndex)
 {
     // average is different from other aggregator
     // sum aggregator will offset aggStateOffset , so average aggregator can not offset
@@ -158,7 +169,8 @@ void AverageAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *state
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void AverageAggregator<IN_ID, OUT_ID>::ExtractValuesBatch(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors, int32_t rowOffset, int32_t rowCount)
+                                                          std::vector<BaseVector *> &vectors, int32_t rowOffset,
+                                                          int32_t rowCount)
 {
     // varchar only in partial stage
     if constexpr (OUT_ID == OMNI_VARCHAR || OUT_ID == OMNI_CONTAINER) {
@@ -201,7 +213,7 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID> std::vector<DataTypePtr> AverageA
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void AverageAggregator<IN_ID, OUT_ID>::ExtractValuesForSpill(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors)
+                                                             std::vector<BaseVector *> &vectors)
 {
     auto spillValueVec = static_cast<Vector<ResultType> *>(vectors[0]);
     auto spillCountVec = reinterpret_cast<Vector<int64_t> *>(vectors[1]);
@@ -231,7 +243,8 @@ void AverageAggregator<IN_ID, OUT_ID>::ExtractValuesForSpill(std::vector<Aggrega
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void AverageAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, BaseVector *vector,
-    const int32_t rowOffset, const int32_t rowCount, const std::shared_ptr<NullsHelper> nullMap)
+                                                             const int32_t rowOffset, const int32_t rowCount,
+                                                             const std::shared_ptr<NullsHelper> nullMap)
 {
     auto *avgState = AvgState::CastState(state);
     if constexpr (IN_ID == OMNI_CONTAINER) {
@@ -252,10 +265,10 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *sta
             } else {
                 if constexpr (std::is_floating_point_v<InType>) {
                     AvgConditionalFloat<InType, ResultType, false>(reinterpret_cast<ResultType *>(&avgState->value),
-                        avgState->count, ptr, cntPtr, rowCount, *nullMap);
+                                                                   avgState->count, ptr, cntPtr, rowCount, *nullMap);
                 } else {
                     AddConditionalAvg<InType, ResultType,
-                        SumConditionalOp<InType, ResultType, int64_t, StateCountHandler, false>>(
+                                      SumConditionalOp<InType, ResultType, int64_t, StateCountHandler, false>>(
                         reinterpret_cast<ResultType *>(&avgState->value), avgState->count, ptr, cntPtr, rowCount,
                         *nullMap);
                 }
@@ -269,7 +282,7 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *sta
                     reinterpret_cast<ResultType *>(&avgState->value), avgState->count, ptr, cntPtr, rowCount, indexMap);
             } else {
                 AddDictConditionalAvg<InType, ResultType,
-                    SumConditionalOp<InType, ResultType, int64_t, StateCountHandler, false>>(
+                                      SumConditionalOp<InType, ResultType, int64_t, StateCountHandler, false>>(
                     reinterpret_cast<ResultType *>(&avgState->value), avgState->count, ptr, cntPtr, rowCount, *nullMap,
                     indexMap);
             }
@@ -281,7 +294,8 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *sta
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void AverageAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<AggregateState *> &rowStates,
-    BaseVector *vector, const int32_t rowOffset, const std::shared_ptr<NullsHelper> nullMap)
+                                                            BaseVector *vector, const int32_t rowOffset,
+                                                            const std::shared_ptr<NullsHelper> nullMap)
 {
     if constexpr (IN_ID == OMNI_CONTAINER) {
         // when input is not raw, vector is container with <double, long> columns for <sum, count>
@@ -300,8 +314,8 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<Aggregat
             } else {
                 // Reza: can we use customize float operation similar to sumConditionalFloat
                 AddConditionalUseRowIndexAvg<InType, ResultType, AvgState,
-                    SumConditionalOp<InType, ResultType, int64_t, StateCountHandler, false>>(rowStates,
-                    SumAggregator<IN_ID, OUT_ID>::aggStateOffset, ptr, cntPtr, *nullMap);
+                                             SumConditionalOp<InType, ResultType, int64_t, StateCountHandler, false>>(
+                    rowStates, SumAggregator<IN_ID, OUT_ID>::aggStateOffset, ptr, cntPtr, *nullMap);
             }
         } else {
             auto *ptr = reinterpret_cast<InType *>(GetValuesFromDict<OMNI_DOUBLE>(sumVector));
@@ -309,12 +323,13 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<Aggregat
             auto *indexMap = GetIdsFromDict<IN_ID>(vector) + rowOffset;
             if (nullMap == nullptr) {
                 AddDictUseRowIndexAvg<InType, ResultType, AvgState,
-                    SumOp<InType, ResultType, int64_t, StateCountHandler>>(rowStates,
-                    SumAggregator<IN_ID, OUT_ID>::aggStateOffset, ptr, cntPtr, indexMap);
+                                      SumOp<InType, ResultType, int64_t, StateCountHandler>>(
+                    rowStates, SumAggregator<IN_ID, OUT_ID>::aggStateOffset, ptr, cntPtr, indexMap);
             } else {
-                AddDictConditionalUseRowIndexAvg<InType, ResultType, AvgState,
-                    SumConditionalOp<InType, ResultType, int64_t, StateCountHandler, false>>(rowStates,
-                    SumAggregator<IN_ID, OUT_ID>::aggStateOffset, ptr, cntPtr, *nullMap, indexMap);
+                AddDictConditionalUseRowIndexAvg<
+                    InType, ResultType, AvgState,
+                    SumConditionalOp<InType, ResultType, int64_t, StateCountHandler, false>>(
+                    rowStates, SumAggregator<IN_ID, OUT_ID>::aggStateOffset, ptr, cntPtr, *nullMap, indexMap);
             }
         }
     } else {
@@ -324,7 +339,7 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<Aggregat
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void AverageAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRowInfo> &unspillRows, int32_t rowCount,
-    int32_t &vectorIndex)
+                                                           int32_t &vectorIndex)
 {
     auto firstVecIdx = vectorIndex++;
     auto secondVecIdx = vectorIndex++;
@@ -344,8 +359,7 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRo
         } else {
             auto sumVector = static_cast<Vector<ResultType> *>(batch->Get(firstVecIdx));
             auto value = sumVector->GetValue(index);
-            SumOp<ResultType, ResultType, int64_t, StateCountHandler>(&state->value,
-                                                                      state->count, value, count);
+            SumOp<ResultType, ResultType, int64_t, StateCountHandler>(&state->value, state->count, value, count);
         }
     }
 }
@@ -353,7 +367,8 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRo
 // olk interface
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void AverageAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter)
+                                                             const std::shared_ptr<NullsHelper> nullMap,
+                                                             const bool aggFilter)
 {
     if constexpr (OUT_ID == OMNI_VARCHAR) {
         SumAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(result, originVector, nullMap, aggFilter);
@@ -371,7 +386,7 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *result
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 template <typename T>
 void AverageAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap)
+                                                                     const std::shared_ptr<NullsHelper> nullMap)
 {
     int rowCount = originVector->GetSize();
     auto containerVector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, 2));
@@ -409,9 +424,10 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 AverageAggregator<IN_ID, OUT_ID>::AverageAggregator(const DataTypes &inputTypes, const DataTypes &outputTypes,
-    std::vector<int32_t> &channels, const bool inputRaw, const bool outputPartial, const bool isOverflowAsNull)
+                                                    std::vector<int32_t> &channels, const bool inputRaw,
+                                                    const bool outputPartial, const bool isOverflowAsNull)
     : SumAggregator<IN_ID, OUT_ID>(OMNI_AGGREGATION_TYPE_AVG, inputTypes, outputTypes, channels, inputRaw,
-    outputPartial, isOverflowAsNull)
+                                   outputPartial, isOverflowAsNull)
 {
     // varchar only in partial stage
     if constexpr (OUT_ID == OMNI_VARCHAR || OUT_ID == OMNI_CONTAINER) {
@@ -494,5 +510,5 @@ template class AverageAggregator<OMNI_CONTAINER, OMNI_DECIMAL128>;
 template class AverageAggregator<OMNI_CONTAINER, OMNI_DECIMAL64>;
 
 template class AverageAggregator<OMNI_CONTAINER, OMNI_CONTAINER>;
-}
-}
+} // namespace op
+} // namespace omniruntime

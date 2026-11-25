@@ -1,5 +1,14 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "topn.h"
@@ -14,7 +23,8 @@ using namespace omniruntime::vec;
 using namespace std;
 
 TopNOperatorFactory::TopNOperatorFactory(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset,
-    int32_t *sortCols, int32_t *sortAscendings, int32_t *sortNullFirsts, int32_t sortColCount)
+                                         int32_t *sortCols, int32_t *sortAscendings, int32_t *sortNullFirsts,
+                                         int32_t sortColCount)
     : sourceTypes(sourceTypes), limit(limit), offset(offset), sortColCount(sortColCount)
 {
     this->sortCols.insert(this->sortCols.end(), sortCols, sortCols + sortColCount);
@@ -23,9 +33,12 @@ TopNOperatorFactory::TopNOperatorFactory(const type::DataTypes &sourceTypes, int
 }
 
 TopNOperatorFactory::TopNOperatorFactory(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset,
-                                         std::vector<int32_t> sortCols, std::vector<int32_t> sortAscendings, std::vector<int32_t> sortNullFirsts, int32_t sortColCount)
-    : sourceTypes(sourceTypes), limit(limit), offset(offset), sortCols(sortCols),
-      sortAscendings(sortAscendings), sortNullFirsts(sortNullFirsts), sortColCount(sortColCount) {}
+                                         std::vector<int32_t> sortCols, std::vector<int32_t> sortAscendings,
+                                         std::vector<int32_t> sortNullFirsts, int32_t sortColCount)
+    : sourceTypes(sourceTypes), limit(limit), offset(offset), sortCols(sortCols), sortAscendings(sortAscendings),
+      sortNullFirsts(sortNullFirsts), sortColCount(sortColCount)
+{
+}
 
 TopNOperatorFactory::~TopNOperatorFactory() = default;
 
@@ -35,16 +48,10 @@ Operator *TopNOperatorFactory::CreateOperator()
 }
 
 TopNOperator::TopNOperator(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset,
-    std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
-    std::vector<int32_t> &sortNullFirsts, int32_t sortColCount)
-    : sourceTypes(sourceTypes),
-      sourceTypesCount(this->sourceTypes.GetSize()),
-      sortCols(sortCols),
-      limit(limit),
-      offset(offset),
-      sortAscendings(sortAscendings),
-      sortNullFirsts(sortNullFirsts),
-      sortColCount(sortColCount)
+                           std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
+                           std::vector<int32_t> &sortNullFirsts, int32_t sortColCount)
+    : sourceTypes(sourceTypes), sourceTypesCount(this->sourceTypes.GetSize()), sortCols(sortCols), limit(limit),
+      offset(offset), sortAscendings(sortAscendings), sortNullFirsts(sortNullFirsts), sortColCount(sortColCount)
 {
     int32_t eachRowSize = OperatorUtil::GetRowSize(sourceTypes.Get());
     maxRowCount = OperatorUtil::GetMaxRowCount(eachRowSize);
@@ -59,8 +66,8 @@ TopNOperator::~TopNOperator()
 }
 
 int CompareVectorBatch(int32_t leftPosition, omniruntime::vec::VectorBatch *left, int32_t rightPosition,
-    omniruntime::vec::VectorBatch *right, int32_t sortColCount, const int32_t *sortCols, const int32_t *sourceTypeIds,
-    const int32_t *sortAscendings, const int32_t *sortNullFirsts)
+                       omniruntime::vec::VectorBatch *right, int32_t sortColCount, const int32_t *sortCols,
+                       const int32_t *sourceTypeIds, const int32_t *sortAscendings, const int32_t *sortNullFirsts)
 {
     int compare = 0;
 
@@ -104,13 +111,13 @@ int32_t TopNOperator::AddInput(VectorBatch *vectorBatch)
     for (; (static_cast<int32_t>(pq.size()) < limit) && (position < vectorBatch->GetRowCount()); ++position) {
         VectorBatch *singleRowVecBatch = CreateSingleRowVecBatch(vectorBatch, position);
         pq.emplace(typeIds, sortCols.data(), sortAscendings.data(), sortNullFirsts.data(), sortColCount,
-            singleRowVecBatch);
+                   singleRowVecBatch);
         singleRowVectorBatchSet.insert(singleRowVecBatch);
     }
     for (; position < vectorBatch->GetRowCount(); ++position) {
         VectorBatch *top = pq.top().GetVecBatch();
         if (CompareVectorBatch(position, vectorBatch, 0, top, sortColCount, sortCols.data(), typeIds,
-            sortAscendings.data(), sortNullFirsts.data()) < 0) {
+                               sortAscendings.data(), sortNullFirsts.data()) < 0) {
             pq.pop();
             UpdateSingleRowVectorBatch(vectorBatch, top, position);
             pq.emplace(typeIds, sortCols.data(), sortAscendings.data(), sortNullFirsts.data(), sortColCount, top);
@@ -124,7 +131,7 @@ int32_t TopNOperator::AddInput(VectorBatch *vectorBatch)
 
 template <type::DataTypeId typeId>
 static void ALWAYS_INLINE SetValueForSingleRowVecBatch(VectorBatch *singleRowVecBatch, int32_t colIndex,
-    BaseVector *vector, int32_t position)
+                                                       BaseVector *vector, int32_t position)
 {
     using Type = typename NativeAndVectorType<typeId>::type;
     using Vector = typename NativeAndVectorType<typeId>::vector;
@@ -147,7 +154,7 @@ static void ALWAYS_INLINE SetValueForSingleRowVecBatch(VectorBatch *singleRowVec
 }
 
 static void ALWAYS_INLINE SetVarCharForSingleRowVecBatch(VectorBatch *singleRowVecBatch, int32_t colIndex,
-    BaseVector *vector, int32_t position)
+                                                         BaseVector *vector, int32_t position)
 {
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
     using VarcharDictVector = Vector<DictionaryContainer<std::string_view>>;
@@ -170,7 +177,7 @@ static void ALWAYS_INLINE SetVarCharForSingleRowVecBatch(VectorBatch *singleRowV
 }
 
 void TopNOperator::UpdateSingleRowVectorBatch(VectorBatch *vectorBatch, VectorBatch *singleRowVecBatch,
-    int32_t position) const
+                                              int32_t position) const
 {
     auto typeIds = sourceTypes.GetIds();
     for (int i = 0; i < sourceTypesCount; ++i) {
@@ -180,20 +187,12 @@ void TopNOperator::UpdateSingleRowVectorBatch(VectorBatch *vectorBatch, VectorBa
                 SetValueForSingleRowVecBatch<OMNI_BOOLEAN>(singleRowVecBatch, i, vector, position);
                 break;
             case OMNI_INT:
-            case OMNI_DATE32:
-                SetValueForSingleRowVecBatch<OMNI_INT>(singleRowVecBatch, i, vector, position);
-                break;
-            case OMNI_SHORT:
-                SetValueForSingleRowVecBatch<OMNI_SHORT>(singleRowVecBatch, i, vector, position);
-                break;
+            case OMNI_DATE32: SetValueForSingleRowVecBatch<OMNI_INT>(singleRowVecBatch, i, vector, position); break;
+            case OMNI_SHORT: SetValueForSingleRowVecBatch<OMNI_SHORT>(singleRowVecBatch, i, vector, position); break;
             case OMNI_LONG:
             case OMNI_TIMESTAMP:
-            case OMNI_DECIMAL64:
-                SetValueForSingleRowVecBatch<OMNI_LONG>(singleRowVecBatch, i, vector, position);
-                break;
-            case OMNI_DOUBLE:
-                SetValueForSingleRowVecBatch<OMNI_DOUBLE>(singleRowVecBatch, i, vector, position);
-                break;
+            case OMNI_DECIMAL64: SetValueForSingleRowVecBatch<OMNI_LONG>(singleRowVecBatch, i, vector, position); break;
+            case OMNI_DOUBLE: SetValueForSingleRowVecBatch<OMNI_DOUBLE>(singleRowVecBatch, i, vector, position); break;
             case OMNI_VARCHAR:
             case OMNI_CHAR: {
                 SetVarCharForSingleRowVecBatch(singleRowVecBatch, i, vector, position);
@@ -202,18 +201,15 @@ void TopNOperator::UpdateSingleRowVectorBatch(VectorBatch *vectorBatch, VectorBa
             case OMNI_DECIMAL128:
                 SetValueForSingleRowVecBatch<OMNI_DECIMAL128>(singleRowVecBatch, i, vector, position);
                 break;
-            case OMNI_BYTE:
-                SetValueForSingleRowVecBatch<OMNI_BYTE>(singleRowVecBatch, i, vector, position);
-                break;
-            default:
-                break;
+            case OMNI_BYTE: SetValueForSingleRowVecBatch<OMNI_BYTE>(singleRowVecBatch, i, vector, position); break;
+            default: break;
         }
     }
 }
 
 template <type::DataTypeId typeId>
 static void ALWAYS_INLINE SetVectorForSingleRowVecBatch(omniruntime::vec::VectorBatch *singleRowVecBatch,
-    BaseVector *vector, int32_t position)
+                                                        BaseVector *vector, int32_t position)
 {
     using Type = typename NativeAndVectorType<typeId>::type;
     using Vector = typename NativeAndVectorType<typeId>::vector;
@@ -318,7 +314,7 @@ int32_t TopNOperator::GetOutput(VectorBatch **outputVecBatch)
 }
 
 void TopNOperator::SetValueForVectorBatch(int32_t typeId, int64_t index, BaseVector *pqVector,
-    BaseVector *tmpVector) const
+                                          BaseVector *tmpVector) const
 {
     if (pqVector->IsNull(0)) {
         tmpVector->SetNull(static_cast<int32_t>(index));
@@ -349,43 +345,25 @@ OmniStatus TopNOperator::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-
 RowComparator::~RowComparator() = default;
 
-const int32_t *RowComparator::GetSourceTypes() const
-{
-    return sourceTypes;
-}
+const int32_t *RowComparator::GetSourceTypes() const { return sourceTypes; }
 
-int32_t *RowComparator::GetSortAscendings() const
-{
-    return sortAscendings;
-}
+int32_t *RowComparator::GetSortAscendings() const { return sortAscendings; }
 
-int32_t *RowComparator::GetSortNullFirsts() const
-{
-    return sortNullFirsts;
-}
+int32_t *RowComparator::GetSortNullFirsts() const { return sortNullFirsts; }
 
-int32_t RowComparator::GetSortColCount() const
-{
-    return sortColCount;
-}
+int32_t RowComparator::GetSortColCount() const { return sortColCount; }
 
-VectorBatch *RowComparator::GetVecBatch() const
-{
-    return vectorBatch;
-}
+VectorBatch *RowComparator::GetVecBatch() const { return vectorBatch; }
 
-int32_t *RowComparator::GetSortCols() const
-{
-    return sortCols;
-}
+int32_t *RowComparator::GetSortCols() const { return sortCols; }
 
-bool operator < (const RowComparator &left, const RowComparator &right)
+bool operator<(const RowComparator &left, const RowComparator &right)
 {
-    int compare = CompareVectorBatch(0, left.GetVecBatch(), 0, right.GetVecBatch(), left.GetSortColCount(),
-        left.GetSortCols(), left.GetSourceTypes(), left.GetSortAscendings(), left.GetSortNullFirsts());
+    int compare =
+        CompareVectorBatch(0, left.GetVecBatch(), 0, right.GetVecBatch(), left.GetSortColCount(), left.GetSortCols(),
+                           left.GetSourceTypes(), left.GetSortAscendings(), left.GetSortNullFirsts());
     // priority_queue is desc, return 1 means left smaller than right,so
     // priority_queue will swap. suppose output is asc,compare>0 means left bigger
     // than right so pq shouldn't swap,so return 0

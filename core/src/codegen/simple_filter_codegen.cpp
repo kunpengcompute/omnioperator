@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: simple filter code generator
  */
 #include "simple_filter_codegen.h"
@@ -14,7 +24,7 @@ namespace {
 const std::string FUNCTION_NAME = "WRAPPER_FUNC";
 const int SIMPLE_FILTER_OUTPUT_LENGTH_INDEX = 4;
 const int SIMPLE_FILTER_OUTPUT_IS_NULL_INDEX = 3;
-}
+} // namespace
 
 void SimpleFilterCodeGen::Visit(const omniruntime::expressions::FieldExpr &fieldExpr)
 {
@@ -78,7 +88,8 @@ bool SimpleFilterCodeGen::InitCodegenContext(iterator_range<llvm::Function::arg_
         }
     }
 
-    codegenContext->print = modulePtr->getOrInsertFunction("printf",
+    codegenContext->print = modulePtr->getOrInsertFunction(
+        "printf",
         FunctionType::get(IntegerType::getInt32Ty(*context), PointerType::get(Type::getInt8Ty(*context), 0), true));
 
     return true;
@@ -87,7 +98,7 @@ bool SimpleFilterCodeGen::InitCodegenContext(iterator_range<llvm::Function::arg_
 llvm::Function *SimpleFilterCodeGen::CreateFunction()
 {
     // The args indicates the type of the function parameter list.
-    std::vector<Type *> args {
+    std::vector<Type *> args{
         llvmTypes->I64PtrType(), // valueArray*
         llvmTypes->I1PtrType(),  // isNullArray*
         llvmTypes->I32PtrType(), // lengthArray*
@@ -99,10 +110,7 @@ llvm::Function *SimpleFilterCodeGen::CreateFunction()
     FunctionType *prototype = FunctionType::get(llvmTypes->GetFunctionReturnType(expr->GetReturnTypeId()), args, false);
     func = llvm::Function::Create(prototype, llvm::Function::ExternalLinkage, FUNCTION_NAME, modulePtr);
 
-    std::string argNames[] = {
-        "data", "isNulls", "lengths", "isResultNull",
-        "dataLength", "executionContext"
-    };
+    std::string argNames[] = {"data", "isNulls", "lengths", "isResultNull", "dataLength", "executionContext"};
     int32_t idx = 0;
     for (auto &arg : func->args()) {
         arg.setName(argNames[idx]);
@@ -128,7 +136,7 @@ llvm::Function *SimpleFilterCodeGen::CreateFunction()
     if (result->length != nullptr) {
         Argument *outputLength = func->getArg(SIMPLE_FILTER_OUTPUT_LENGTH_INDEX);
         Value *lengthGep = builder->CreateGEP(llvmTypes->I32Type(), outputLength, llvmTypes->CreateConstantInt(0),
-            "OUTPUT_LENGTH_ADDRESS");
+                                              "OUTPUT_LENGTH_ADDRESS");
         builder->CreateStore(result->length, lengthGep);
     }
 
@@ -165,5 +173,5 @@ intptr_t SimpleFilterCodeGen::GetFunction()
 #endif
     return Compile();
 }
-}
-}
+} // namespace codegen
+} // namespace omniruntime

@@ -1,16 +1,30 @@
 /*
  * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ *
+ * Project license notice for OmniOperator
+ * Existing file-specific copyright and license terms continue to apply.
+ *
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
+ * Third-party license and source notices
+ *
  * @Description: md5 function implementations
  *  This code is taken from duckdb/common/crypto/md5.hpp with following changes:
  *  1. removed other duckdb dependencies.
  *  2. Add the DigestToBase10 method which produce the md5 in decimal
- */
-/*
-** This code taken from the SQLite test library.  Originally found on
-** the internet.  The original header comment follows this comment.
-** The code is largerly unchanged, but there have been some modifications.
-*/
-/*
+ *
+ * This code taken from the SQLite test library.  Originally found on
+ * the internet.  The original header comment follows this comment.
+ * The code is largerly unchanged, but there have been some modifications.
+ *
  * This code implements the MD5 message-digest algorithm.
  * The algorithm is due to Ron Rivest.  This code was
  * written by Colin Plumb in 1993, no copyright is claimed.
@@ -31,28 +45,16 @@
 namespace omniruntime::codegen::function {
 using Fun = unsigned int (*)(unsigned int, unsigned int, unsigned int);
 
-static inline unsigned int Fun1(unsigned int x, unsigned int y, unsigned int z)
-{
-    return z ^ (x & (y ^ z));
-}
+static inline unsigned int Fun1(unsigned int x, unsigned int y, unsigned int z) { return z ^ (x & (y ^ z)); }
 
-static inline unsigned int Fun2(unsigned int x, unsigned int y, unsigned int z)
-{
-    return Fun1(z, x, y);
-}
+static inline unsigned int Fun2(unsigned int x, unsigned int y, unsigned int z) { return Fun1(z, x, y); }
 
-static inline unsigned int Fun3(unsigned int x, unsigned int y, unsigned int z)
-{
-    return x ^ y ^ z;
-}
+static inline unsigned int Fun3(unsigned int x, unsigned int y, unsigned int z) { return x ^ y ^ z; }
 
-static inline unsigned int Fun4(unsigned int x, unsigned int y, unsigned int z)
-{
-    return y ^ (x | ~z);
-}
+static inline unsigned int Fun4(unsigned int x, unsigned int y, unsigned int z) { return y ^ (x | ~z); }
 
-static inline void Md5Fun(Fun f, unsigned int &w, unsigned int x, unsigned int y, unsigned int z,
-    unsigned int data, unsigned int s)
+static inline void Md5Fun(Fun f, unsigned int &w, unsigned int x, unsigned int y, unsigned int z, unsigned int data,
+                          unsigned int s)
 {
     w += f(x, y, z) + data;
     w = w << s | w >> (32 - s);
@@ -63,7 +65,7 @@ static inline void Md5Fun(Fun f, unsigned int &w, unsigned int x, unsigned int y
  * The core of the MD5 algorithm, this alters an existing MD5 hash to
  * reflect the addition of 16 long words of new data.  MD5Update blocks
  * the data and converts bytes into long words for this routine.
-*/
+ */
 static void MD5Transform(unsigned int buf[4], const unsigned int in[16])
 {
     unsigned int b1 = buf[0];
@@ -250,4 +252,4 @@ void Md5Function::DigestToBase16(const unsigned char *digest, char *zBuf)
         zBuf[j++] = HEX_CODES[a & 0xf];
     }
 }
-}
+} // namespace omniruntime::codegen::function

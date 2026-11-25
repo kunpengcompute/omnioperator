@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Hash Aggregation Source File
  */
 #include "group_aggregation.h"
@@ -21,10 +31,7 @@ using namespace omniruntime::type;
 static constexpr int32_t UNSPILL_ROW_COUNT_ONE_BATCH = 128;
 
 using SetVector = void (*)(VectorBatch *vecBatch, int32_t rowCount);
-template <typename V> void SetVectorImpl(VectorBatch *vecBatch, int32_t rowCount)
-{
-    vecBatch->Append(new V(rowCount));
-}
+template <typename V> void SetVectorImpl(VectorBatch *vecBatch, int32_t rowCount) { vecBatch->Append(new V(rowCount)); }
 
 void SetVarcharVector(VectorBatch *vecBatch, int32_t rowCount)
 {
@@ -38,7 +45,7 @@ void SetContainerVector(VectorBatch *vecBatch, int32_t rowCount)
     std::vector<int64_t> vectorAddresses(AVG_VECTOR_COUNT);
     vectorAddresses[0] = reinterpret_cast<int64_t>(doubleVector);
     vectorAddresses[1] = reinterpret_cast<int64_t>(longVector);
-    std::vector<DataTypePtr> dataTypes{ DoubleType(), LongType() };
+    std::vector<DataTypePtr> dataTypes{DoubleType(), LongType()};
     auto containerVector = new ContainerVector(rowCount, vectorAddresses, dataTypes);
     vecBatch->Append(containerVector);
 }
@@ -68,10 +75,10 @@ static constexpr SetVector GROUP_AGG_FUNCTIONS[DATA_TYPE_MAX_COUNT] = {
 
 OmniStatus HashAggregationOperatorFactory::Init()
 {
-    for (auto groupByCol: groupByColsVector) {
+    for (auto groupByCol : groupByColsVector) {
         groupByColIndices.push_back(groupByCol);
     }
-    for (auto aggInputColsVector: aggsInputColsVector) {
+    for (auto aggInputColsVector : aggsInputColsVector) {
         std::vector<int32_t> aggInputCols;
         for (uint32_t i = 0; i < aggInputColsVector.size(); ++i) {
             aggInputCols.push_back(aggInputColsVector[i]);
@@ -84,10 +91,7 @@ OmniStatus HashAggregationOperatorFactory::Init()
     return ret;
 }
 
-OmniStatus HashAggregationOperatorFactory::Close()
-{
-    return OMNI_STATUS_NORMAL;
-}
+OmniStatus HashAggregationOperatorFactory::Close() { return OMNI_STATUS_NORMAL; }
 
 Operator *HashAggregationOperatorFactory::CreateOperator()
 {
@@ -126,17 +130,18 @@ Operator *HashAggregationOperatorFactory::CreateOperator()
         auto inputTypes = DataTypes(inputDataTypesPtr).Instance();
         auto outputTypes = aggOutputTypes[i].Instance();
         auto aggregator = aggregatorFactories[i]->CreateAggregator(*inputTypes, *outputTypes, aggInputColIdxVec,
-            inputRaws[i], outputPartials[i], isOverflowAsNull);
+                                                                   inputRaws[i], outputPartials[i], isOverflowAsNull);
         if (UNLIKELY(aggregator == nullptr)) {
             throw OmniException("OPERATOR_RUNTIME_ERROR", "Unable to create aggregator " + std::to_string(i) + " / " +
-                std::to_string(this->aggregatorFactories.size()));
+                                                              std::to_string(this->aggregatorFactories.size()));
         }
         aggregator->SetStatisticalAggregate(isStatisticalAggregate);
         aggs.push_back(std::move(aggregator));
     }
 
-    auto groupByOperator = new HashAggregationOperator(groupByIndex, aggsInputCols, aggInputColsSize, aggInputTypes,
-        aggOutputTypes, std::move(aggs), inputRaws, outputPartials, hasAggFilters, operatorConfig);
+    auto groupByOperator =
+        new HashAggregationOperator(groupByIndex, aggsInputCols, aggInputColsSize, aggInputTypes, aggOutputTypes,
+                                    std::move(aggs), inputRaws, outputPartials, hasAggFilters, operatorConfig);
     groupByOperator->SetGroupByColumnsHandleType(handleType);
     groupByOperator->Init();
     return groupByOperator;
@@ -163,10 +168,7 @@ void HashAggregationOperatorFactory::ChooseGroupByType()
     handleType = HandleType::serialize;
 }
 
-void HashAggregationOperator::SetGroupByColumnsHandleType(HandleType t)
-{
-    groupByColumnsHandleType = t;
-}
+void HashAggregationOperator::SetGroupByColumnsHandleType(HandleType t) { groupByColumnsHandleType = t; }
 
 OmniStatus HashAggregationOperator::Init()
 {
@@ -202,7 +204,7 @@ OmniStatus HashAggregationOperator::Init()
     auto colSize = groupByCols.size() + aggInputColsSize;
     sourceTypes = new int32_t[colSize];
     // group by source types
-    for (const auto &c: groupByCols) {
+    for (const auto &c : groupByCols) {
         sourceTypes[c.idx] = static_cast<int32_t>(c.input->GetId());
         memoryChunkSize += OperatorUtil::GetTypeSize(c.input);
     }
@@ -214,9 +216,9 @@ OmniStatus HashAggregationOperator::Init()
         }
     }
 
-    for (auto &aggregator: aggregators) {
+    for (auto &aggregator : aggregators) {
         const std::vector<DataTypePtr> &aggTypes = aggregator->GetOutputTypes().Get();
-        for (auto dataType: aggTypes) {
+        for (auto dataType : aggTypes) {
             memoryChunkSize += OperatorUtil::GetTypeSize(dataType);
         }
     }
@@ -258,10 +260,9 @@ void HashAggregationOperator::ResizeArrayMap(int64_t oldMin)
                              (oldTableSize - 1) * sizeof(bool));
     newArrayTable->AddElementsSize(arrayTable->GetElementsSize());
     if (UNLIKELY(res1 != EOK || res2 != EOK)) {
-        std::string omniExceptionInfo =
-                "In adjust hashagg array table, memcpy faild, ret1 is：" + std::to_string(res1) + " , ret2 is：" +
-                std::to_string(res2) +
-                ", reason is: " + std::string(strerror(errno));
+        std::string omniExceptionInfo = "In adjust hashagg array table, memcpy failed, ret1 is：" +
+                                        std::to_string(res1) + " , ret2 is：" + std::to_string(res2) +
+                                        ", reason is: " + std::string(strerror(errno));
         throw omniruntime::exception::OmniException("OPERATOR_RUNTIME_ERROR", omniExceptionInfo);
     }
     arrayTable.reset(newArrayTable.release());
@@ -274,20 +275,17 @@ void HashAggregationOperator::MoveEntryArrayTableToHashMap(int64_t minValue)
     arrayTable->ForEachValue([&](const auto &value, const auto &index) {
         if (index != 0) {
             if (groupByColumnsHandleType == HandleType::fixedInt32) {
-                auto ret =
-                        fixedInt32->InsertOneValueToHashmap<false>(static_cast<int32_t>(index + minValue - 1));
+                auto ret = fixedInt32->InsertOneValueToHashmap<false>(static_cast<int32_t>(index + minValue - 1));
                 if (hasAgg) {
                     ret.SetValue(reinterpret_cast<AggregateState *>(value));
                 }
             } else if (groupByColumnsHandleType == HandleType::fixedInt64) {
-                auto ret =
-                        fixedInt64->InsertOneValueToHashmap<false>(static_cast<int64_t>(index + minValue - 1));
+                auto ret = fixedInt64->InsertOneValueToHashmap<false>(static_cast<int64_t>(index + minValue - 1));
                 if (hasAgg) {
                     ret.SetValue(reinterpret_cast<AggregateState *>(value));
                 }
             } else if (groupByColumnsHandleType == HandleType::fixedInt16) {
-                auto ret =
-                        fixedInt16->InsertOneValueToHashmap<false>(static_cast<int16_t>(index + minValue - 1));
+                auto ret = fixedInt16->InsertOneValueToHashmap<false>(static_cast<int16_t>(index + minValue - 1));
                 if (hasAgg) {
                     ret.SetValue(reinterpret_cast<AggregateState *>(value));
                 }
@@ -295,20 +293,17 @@ void HashAggregationOperator::MoveEntryArrayTableToHashMap(int64_t minValue)
             return;
         }
         if (groupByColumnsHandleType == HandleType::fixedInt32) {
-            auto ret =
-                    fixedInt32->InsertOneValueToHashmap<true>(0);
+            auto ret = fixedInt32->InsertOneValueToHashmap<true>(0);
             if (hasAgg) {
                 ret.SetValue(reinterpret_cast<AggregateState *>(value));
             }
         } else if (groupByColumnsHandleType == HandleType::fixedInt64) {
-            auto ret =
-                    fixedInt64->InsertOneValueToHashmap<true>(0);
+            auto ret = fixedInt64->InsertOneValueToHashmap<true>(0);
             if (hasAgg) {
                 ret.SetValue(reinterpret_cast<AggregateState *>(value));
             }
         } else if (groupByColumnsHandleType == HandleType::fixedInt16) {
-            auto ret =
-                    fixedInt16->InsertOneValueToHashmap<true>(0);
+            auto ret = fixedInt16->InsertOneValueToHashmap<true>(0);
             if (hasAgg) {
                 ret.SetValue(reinterpret_cast<AggregateState *>(value));
             }
@@ -414,13 +409,13 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
 int32_t HashAggregationOperator::InitMaxRowCountAndOutputTypes()
 {
     int32_t rowSize = 0;
-    for (auto &i: groupByCols) {
+    for (auto &i : groupByCols) {
         outputTypes.push_back(i.input);
         rowSize += OperatorUtil::GetTypeSize(i.input);
     }
-    for (auto &aggregator: aggregators) {
+    for (auto &aggregator : aggregators) {
         const std::vector<DataTypePtr> &aggTypes = aggregator->GetOutputTypes().Get();
-        for (auto dataType: aggTypes) {
+        for (auto dataType : aggTypes) {
             outputTypes.push_back(dataType);
             rowSize += OperatorUtil::GetTypeSize(dataType);
         }
@@ -431,7 +426,7 @@ int32_t HashAggregationOperator::InitMaxRowCountAndOutputTypes()
 void HashAggregationOperator::InitSpillInfos()
 {
     spillTypes.push_back(VarcharType());
-    for (auto &aggregator: aggregators) {
+    for (auto &aggregator : aggregators) {
         auto currentSpillType = aggregator->GetSpillType();
         aggTypes.insert(aggTypes.end(), currentSpillType.begin(), currentSpillType.end());
         spillTypes.insert(spillTypes.end(), currentSpillType.begin(), currentSpillType.end());
@@ -493,9 +488,8 @@ OmniStatus HashAggregationOperator::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-template<typename T, typename GroupMap>
-void HashAggregationOperator::InsertValueToArrayMap(GroupMap &arrayMap, BaseVector *groupVector,
-                                                    int32_t rowIdx)
+template <typename T, typename GroupMap>
+void HashAggregationOperator::InsertValueToArrayMap(GroupMap &arrayMap, BaseVector *groupVector, int32_t rowIdx)
 {
     // just one columnar
     auto curVector = reinterpret_cast<Vector<T> *>(groupVector);
@@ -555,7 +549,7 @@ void ComputeHashSIMD(int64_t *key, uint8_t nullMask, uint64_t *hashes, int64x2_t
         for (int i = 0; i < vecLanes; i++) {
             nulls[i] = -(((nullMask) >> i) & 1);
         }
-        uint64x2x4_t vNull = vld4q_u64(reinterpret_cast<uint64_t*>(nulls));
+        uint64x2x4_t vNull = vld4q_u64(reinterpret_cast<uint64_t *>(nulls));
         vHashes.val[0] = vandq_u64(vHashes.val[0], vNull.val[0]);
         vHashes.val[1] = vandq_u64(vHashes.val[1], vNull.val[1]);
         vHashes.val[2] = vandq_u64(vHashes.val[2], vNull.val[2]);
@@ -580,7 +574,7 @@ void ComputeHashSIMD(int32_t *key, uint16_t nullMask, uint32_t *hashes, int32x4_
         for (int i = 0; i < vecLanes; i++) {
             nulls[i] = -(((nullMask) >> i) & 1);
         }
-        uint32x4x4_t vNull = vld4q_u32(reinterpret_cast<uint32_t*>(nulls));
+        uint32x4x4_t vNull = vld4q_u32(reinterpret_cast<uint32_t *>(nulls));
         vHashes.val[0] = vandq_u32(vHashes.val[0], vNull.val[0]);
         vHashes.val[1] = vandq_u32(vHashes.val[1], vNull.val[1]);
         vHashes.val[2] = vandq_u32(vHashes.val[2], vNull.val[2]);
@@ -605,7 +599,7 @@ void ComputeHashSIMD(int16_t *key, uint32_t nullMask, uint16_t *hashes, int16x8_
         for (int i = 0; i < vecLanes; i++) {
             nulls[i] = static_cast<int16_t>(-(((nullMask) >> i) & 1));
         }
-        uint16x8x4_t vNull = vld4q_u16(reinterpret_cast<uint16_t*>(nulls));
+        uint16x8x4_t vNull = vld4q_u16(reinterpret_cast<uint16_t *>(nulls));
         vHashes.val[0] = vandq_u16(vHashes.val[0], vNull.val[0]);
         vHashes.val[1] = vandq_u16(vHashes.val[1], vNull.val[1]);
         vHashes.val[2] = vandq_u16(vHashes.val[2], vNull.val[2]);
@@ -619,7 +613,7 @@ void HashAggregationOperator::InsertAggStatesToArrayMap(T *hashes, int32_t vecLa
                                                         mem::SimpleArenaAllocator &arenaAllocator,
                                                         int32_t probePosition)
 {
-    int64_t *matchSlotsData = reinterpret_cast<int64_t*>(rowsAggStates.data());
+    int64_t *matchSlotsData = reinterpret_cast<int64_t *>(rowsAggStates.data());
     auto arrayTablePtr = arrayTable.get();
     int32_t missCnt = 0;
     for (auto miss = 0; miss < vecLanes; ++miss) {
@@ -639,7 +633,7 @@ void HashAggregationOperator::InsertAggStatesToArrayMap(T *hashes, int32_t vecLa
     }
 }
 
-template<typename T, bool hasNull>
+template <typename T, bool hasNull>
 void HashAggregationOperator::ArrayGroupProbeSIMD(BaseVector *groupVector, VectorBatch *vecBatch)
 {
     using namespace omniruntime::type;
@@ -808,7 +802,7 @@ void HashAggregationOperator::EmplaceToArrayMap(VectorBatch *vecBatch, BaseVecto
     }
 }
 
-template<typename Serialize>
+template <typename Serialize>
 void HashAggregationOperator::Emplace(Serialize &emplaceKey, VectorBatch *vecBatch, BaseVector **groupVectors,
                                       int32_t groupColNum)
 {
@@ -858,7 +852,7 @@ void HashAggregationOperator::Emplace(Serialize &emplaceKey, VectorBatch *vecBat
                 newGroupStates.emplace_back(currentGroupStates);
             } else {
                 currentGroupStates = ret.GetValue();
-                    arenaAllocator.RollBackContinualMem();
+                arenaAllocator.RollBackContinualMem();
             }
             currentRowStates[rowIdx] = currentGroupStates;
         }
@@ -889,7 +883,7 @@ void HashAggregationOperator::Emplace(Serialize &emplaceKey, VectorBatch *vecBat
     }
 }
 
-template<typename Deserialize>
+template <typename Deserialize>
 void HashAggregationOperator::TraverseHashmapToGetOneResult(Deserialize &deserializeHashmap, VectorBatch *output)
 {
     const int32_t expectSize = output->GetRowCount();
@@ -906,21 +900,27 @@ void HashAggregationOperator::TraverseHashmapToGetOneResult(Deserialize &deseria
         auto statefulMachine = hashmap.GetOutputMachine(outputState.outputHashmapPos, outputState.hasBeenOutputNum);
 
         if constexpr (std::remove_reference_t<decltype(deserializeHashmap)>::element_type::HasSpecialNullFunc) {
-            curOutputState = statefulMachine.HandleElements(expectSize, [&](const auto &key, auto &mapped) mutable {
-                deserializeHashmap->ParseKeyToCols(key, groupOutputVectors, groupColNum, lambdaRowIndex);
-                ++lambdaRowIndex;
-            }, [&](const auto &key, auto &mapped) mutable {
-                deserializeHashmap->ParseNull(key, groupOutputVectors, groupColNum, lambdaRowIndex);
-                ++lambdaRowIndex;
-            });
+            curOutputState = statefulMachine.HandleElements(
+                expectSize,
+                [&](const auto &key, auto &mapped) mutable {
+                    deserializeHashmap->ParseKeyToCols(key, groupOutputVectors, groupColNum, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                },
+                [&](const auto &key, auto &mapped) mutable {
+                    deserializeHashmap->ParseNull(key, groupOutputVectors, groupColNum, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                });
         } else {
-            curOutputState = statefulMachine.HandleElements(expectSize, [&](const auto &key, auto &mapped) mutable {
-                deserializeHashmap->ParseKeyToCols(key, groupOutputVectors, groupColNum, lambdaRowIndex);
-                ++lambdaRowIndex;
-            }, [&](const auto &key, auto &mapped) mutable {
-                deserializeHashmap->ParseKeyToCols(key, groupOutputVectors, groupColNum, lambdaRowIndex);
-                ++lambdaRowIndex;
-            });
+            curOutputState = statefulMachine.HandleElements(
+                expectSize,
+                [&](const auto &key, auto &mapped) mutable {
+                    deserializeHashmap->ParseKeyToCols(key, groupOutputVectors, groupColNum, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                },
+                [&](const auto &key, auto &mapped) mutable {
+                    deserializeHashmap->ParseKeyToCols(key, groupOutputVectors, groupColNum, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                });
         }
     }
 
@@ -930,13 +930,16 @@ void HashAggregationOperator::TraverseHashmapToGetOneResult(Deserialize &deseria
         int32_t lambdaRowIndex = 0;
         {
             auto statefulMachine = hashmap.GetOutputMachine(outputState.outputHashmapPos, outputState.hasBeenOutputNum);
-            statefulMachine.HandleElements(expectSize, [&](const auto &key, auto &mapped) mutable {
-                groupStates[lambdaRowIndex] = mapped;
-                lambdaRowIndex++;
-            }, [&](const auto &key, auto &mapped) mutable {
-                groupStates[lambdaRowIndex] = mapped;
-                lambdaRowIndex++;
-            });
+            statefulMachine.HandleElements(
+                expectSize,
+                [&](const auto &key, auto &mapped) mutable {
+                    groupStates[lambdaRowIndex] = mapped;
+                    lambdaRowIndex++;
+                },
+                [&](const auto &key, auto &mapped) mutable {
+                    groupStates[lambdaRowIndex] = mapped;
+                    lambdaRowIndex++;
+                });
         }
         auto aggOutputStartIndex = groupColNum;
         for (size_t aggIndex = 0; aggIndex < aggNum; ++aggIndex) {
@@ -954,9 +957,9 @@ void HashAggregationOperator::TraverseHashmapToGetOneResult(Deserialize &deseria
     outputState.UpdateState(curOutputState);
 }
 
-template<bool hasAgg, typename T>
-void HashAggregationOperator::TraverseArrayMapGetOutput(BaseVector *groupVector,
-                                                        std::vector<AggregateState *> *states, int64_t minValue)
+template <bool hasAgg, typename T>
+void HashAggregationOperator::TraverseArrayMapGetOutput(BaseVector *groupVector, std::vector<AggregateState *> *states,
+                                                        int64_t minValue)
 {
     int32_t lambdaRowIndex = 0;
     int32_t outputRows = groupVector->GetSize();
@@ -974,9 +977,8 @@ void HashAggregationOperator::TraverseArrayMapGetOutput(BaseVector *groupVector,
     this->arrayTable->OutputEachValue(func, outputState.outputHashmapPos, outputRows);
 }
 
-template<bool hasAgg>
-void HashAggregationOperator::TraverseArrayMap(BaseVector *groupVector,
-                                               std::vector<AggregateState *> *states)
+template <bool hasAgg>
+void HashAggregationOperator::TraverseArrayMap(BaseVector *groupVector, std::vector<AggregateState *> *states)
 {
     int32_t lambdaRowIndex = 0;
     auto typeId = groupVector->GetTypeId();
@@ -984,23 +986,14 @@ void HashAggregationOperator::TraverseArrayMap(BaseVector *groupVector,
     int32_t outputRows = groupVector->GetSize();
     switch (typeId) {
         case OMNI_INT:
-        case OMNI_DATE32:
-            TraverseArrayMapGetOutput<hasAgg, int32_t>(groupVector, states, minValue);
-            break;
-        case OMNI_SHORT:
-            TraverseArrayMapGetOutput<hasAgg, int16_t>(groupVector, states, minValue);
-            break;
-        case OMNI_BYTE:
-            TraverseArrayMapGetOutput<hasAgg, int8_t>(groupVector, states, minValue);
-            break;
+        case OMNI_DATE32: TraverseArrayMapGetOutput<hasAgg, int32_t>(groupVector, states, minValue); break;
+        case OMNI_SHORT: TraverseArrayMapGetOutput<hasAgg, int16_t>(groupVector, states, minValue); break;
+        case OMNI_BYTE: TraverseArrayMapGetOutput<hasAgg, int8_t>(groupVector, states, minValue); break;
         case OMNI_LONG:
         case OMNI_TIMESTAMP:
-        case OMNI_DECIMAL64:
-            TraverseArrayMapGetOutput<hasAgg, int64_t>(groupVector, states, minValue);
-            break;
+        case OMNI_DECIMAL64: TraverseArrayMapGetOutput<hasAgg, int64_t>(groupVector, states, minValue); break;
         default:
-            std::string omniExceptionInfo =
-                    std::to_string(typeId) + "should not call TraverseArrayMapToGetOneResult";
+            std::string omniExceptionInfo = std::to_string(typeId) + "should not call TraverseArrayMapToGetOneResult";
             throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
     }
     outputState.hasBeenOutputNum += outputRows;
@@ -1050,38 +1043,44 @@ ErrorCode HashAggregationOperator::SpillToDisk()
     OutputState curOutputState;
     {
         if (serialize != nullptr) {
-            auto statefulMachine =
-                    serialize->hashmap.GetOutputMachine(spillOutputState.outputHashmapPos,
-                                                        spillOutputState.hasBeenOutputNum);
-            curOutputState = statefulMachine.HandleElements(totalSpillCount, [&](const auto &key, auto &value) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, lambdaRowIndex);
-                ++lambdaRowIndex;
-            }, [&](const auto &key, auto &value) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, lambdaRowIndex);
-                ++lambdaRowIndex;
-            });
+            auto statefulMachine = serialize->hashmap.GetOutputMachine(spillOutputState.outputHashmapPos,
+                                                                       spillOutputState.hasBeenOutputNum);
+            curOutputState = statefulMachine.HandleElements(
+                totalSpillCount,
+                [&](const auto &key, auto &value) mutable {
+                    aggregationSortPtr->ParseHashMapToVector(key, value, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                },
+                [&](const auto &key, auto &value) mutable {
+                    aggregationSortPtr->ParseHashMapToVector(key, value, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                });
         } else if (fixedInt32 != nullptr) {
-            auto statefulMachine =
-                    fixedInt32->hashmap.GetOutputMachine(spillOutputState.outputHashmapPos,
-                                                         spillOutputState.hasBeenOutputNum);
-            curOutputState = statefulMachine.HandleElements(totalSpillCount, [&](const auto &key, auto &value) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, lambdaRowIndex);
-                ++lambdaRowIndex;
-            }, [&](const auto &key, auto &value) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, lambdaRowIndex);
-                ++lambdaRowIndex;
-            });
+            auto statefulMachine = fixedInt32->hashmap.GetOutputMachine(spillOutputState.outputHashmapPos,
+                                                                        spillOutputState.hasBeenOutputNum);
+            curOutputState = statefulMachine.HandleElements(
+                totalSpillCount,
+                [&](const auto &key, auto &value) mutable {
+                    aggregationSortPtr->ParseHashMapToVector(key, value, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                },
+                [&](const auto &key, auto &value) mutable {
+                    aggregationSortPtr->ParseNullHashMapToVector(key, value, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                });
         } else if (fixedInt64 != nullptr) {
-            auto statefulMachine =
-                    fixedInt64->hashmap.GetOutputMachine(spillOutputState.outputHashmapPos,
-                                                         spillOutputState.hasBeenOutputNum);
-            curOutputState = statefulMachine.HandleElements(totalSpillCount, [&](const auto &key, auto &value) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, lambdaRowIndex);
-                ++lambdaRowIndex;
-            }, [&](const auto &key, auto &value) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, lambdaRowIndex);
-                ++lambdaRowIndex;
-            });
+            auto statefulMachine = fixedInt64->hashmap.GetOutputMachine(spillOutputState.outputHashmapPos,
+                                                                        spillOutputState.hasBeenOutputNum);
+            curOutputState = statefulMachine.HandleElements(
+                totalSpillCount,
+                [&](const auto &key, auto &value) mutable {
+                    aggregationSortPtr->ParseHashMapToVector(key, value, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                },
+                [&](const auto &key, auto &value) mutable {
+                    aggregationSortPtr->ParseNullHashMapToVector(key, value, lambdaRowIndex);
+                    ++lambdaRowIndex;
+                });
         } else if (fixedInt16 != nullptr) {
             auto statefulMachine = fixedInt16->hashmap.GetOutputMachine(spillOutputState.outputHashmapPos,
                                                                         spillOutputState.hasBeenOutputNum);
@@ -1140,24 +1139,15 @@ ErrorCode HashAggregationOperator::SpillHashMap()
     return result;
 }
 
-uint64_t HashAggregationOperator::GetSpilledBytes()
-{
-    return spilledBytes;
-}
+uint64_t HashAggregationOperator::GetSpilledBytes() { return spilledBytes; }
 
-uint64_t HashAggregationOperator::GetUsedMemBytes()
-{
-    return usedMemBytes;
-}
+uint64_t HashAggregationOperator::GetUsedMemBytes() { return usedMemBytes; }
 
-uint64_t HashAggregationOperator::GetTotalMemBytes()
-{
-    return totalMemBytes;
-}
+uint64_t HashAggregationOperator::GetTotalMemBytes() { return totalMemBytes; }
 
 std::vector<uint64_t> HashAggregationOperator::GetSpecialMetricsInfo()
 {
-    int arrayLength = 2;  // 根据返回元素个数修改长度
+    int arrayLength = 2; // 根据返回元素个数修改长度
     std::vector<uint64_t> specialMetricsInfoArray(arrayLength);
     specialMetricsInfoArray[0] = GetUsedMemBytes();
     specialMetricsInfoArray[1] = GetTotalMemBytes();
@@ -1477,13 +1467,13 @@ void HashAggregationOperator::GetOutputFromDisk(VectorBatch **outputVecBatch)
 void HashAggregationOperator::CalcAndSetStatesSize()
 {
     totalAggStatesSize = 0;
-    for (auto &agg: aggregators) {
+    for (auto &agg : aggregators) {
         agg->SetStateOffset(totalAggStatesSize);
         totalAggStatesSize += agg->GetStateSize();
     }
 }
 
-template<typename Deserialize>
+template <typename Deserialize>
 int32_t HashAggregationOperator::Output(Deserialize &deserializeHashmap, VectorBatch **outputVecBatch)
 {
     usedMemBytes = executionContext->GetArena()->UsedBytes();

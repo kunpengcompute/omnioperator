@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description:filter code generation methods
  */
 #include "filter_codegen.h"
@@ -17,7 +27,7 @@ const int BITMAP_INDEX = 3;
 const int OFFSETS_INDEX = 4;
 const int EXECUTION_CONTEXT_IDX = 5;
 const int DICTIONARY_VECTORS_IDX = 6;
-}
+} // namespace
 
 intptr_t FilterCodeGen::GetFunction(const DataTypes &inputDataTypes)
 {
@@ -31,7 +41,7 @@ intptr_t FilterCodeGen::GetFunction(const DataTypes &inputDataTypes)
 intptr_t FilterCodeGen::CreateWrapper()
 {
     // The args indicates the type of the function parameter list.
-    std::vector<Type *> args {
+    std::vector<Type *> args{
         llvmTypes->I64PtrType(), // data address array
         llvmTypes->I32Type(),    // the num of rows
         llvmTypes->I32PtrType(), // output array
@@ -172,4 +182,4 @@ intptr_t FilterCodeGen::CreateWrapper()
 
     return Compile();
 }
-}
+} // namespace omniruntime::codegen

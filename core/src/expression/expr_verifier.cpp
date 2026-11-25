@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Expression Verifier
  */
 #include "expr_verifier.h"
@@ -25,7 +35,7 @@ bool ExprVerifier::VisitExpr(const std::shared_ptr<const Expr> &e)
 bool ExprVerifier::AreInvalidDataTypes(DataTypeId type1, DataTypeId type2)
 {
     return type1 != type2 && !(TypeUtil::IsStringType(type1) && TypeUtil::IsStringType(type2)) &&
-        !(TypeUtil::IsDecimalType(type1) && TypeUtil::IsDecimalType(type2));
+           !(TypeUtil::IsDecimalType(type1) && TypeUtil::IsDecimalType(type2));
 }
 
 void ExprVerifier::Visit(const LiteralExpr &literalExpr)
@@ -43,12 +53,8 @@ void ExprVerifier::Visit(const LiteralExpr &literalExpr)
         case OMNI_BOOLEAN:
         case OMNI_DECIMAL64:
         case OMNI_DECIMAL128:
-        case OMNI_ARRAY:
-            this->supportedFlag = true;
-            break;
-        default:
-            this->supportedFlag = false;
-            break;
+        case OMNI_ARRAY: this->supportedFlag = true; break;
+        default: this->supportedFlag = false; break;
     }
 }
 
@@ -67,13 +73,11 @@ void ExprVerifier::Visit(const FieldExpr &fieldExpr)
         case OMNI_BOOLEAN:
         case OMNI_DECIMAL64:
         case OMNI_DECIMAL128:
-        case OMNI_ARRAY:
-            this->supportedFlag = true;
-            break;
+        case OMNI_ARRAY: this->supportedFlag = true; break;
         default:
             this->supportedFlag = false;
-            this->unSupportedReason = "unSupported FieldExpr DataTypeId: "
-                                      + std::to_string(static_cast<int>(fieldExpr.GetReturnTypeId()));
+            this->unSupportedReason =
+                "unSupported FieldExpr DataTypeId: " + std::to_string(static_cast<int>(fieldExpr.GetReturnTypeId()));
             break;
     }
 }
@@ -85,12 +89,8 @@ void ExprVerifier::Visit(const UnaryExpr &unaryExpr)
         return;
     }
     switch (unaryExpr.op) {
-        case omniruntime::expressions::Operator::NOT:
-            this->supportedFlag = true;
-            break;
-        default:
-            this->supportedFlag = false;
-            break;
+        case omniruntime::expressions::Operator::NOT: this->supportedFlag = true; break;
+        default: this->supportedFlag = false; break;
     }
 }
 
@@ -116,29 +116,25 @@ void ExprVerifier::Visit(const BinaryExpr &binaryExpr)
     if (binaryExpr.op == omniruntime::expressions::Operator::AND ||
         binaryExpr.op == omniruntime::expressions::Operator::OR) {
         this->supportedFlag = (binaryExpr.left->GetReturnTypeId() == binaryExpr.right->GetReturnTypeId() &&
-            binaryExpr.left->GetReturnTypeId() == DataTypeId::OMNI_BOOLEAN);
+                               binaryExpr.left->GetReturnTypeId() == DataTypeId::OMNI_BOOLEAN);
         return;
     }
 
-    if (binaryExpr.left->GetReturnTypeId() == OMNI_BYTE ||binaryExpr.left->GetReturnTypeId() == OMNI_SHORT ||
+    if (binaryExpr.left->GetReturnTypeId() == OMNI_BYTE || binaryExpr.left->GetReturnTypeId() == OMNI_SHORT ||
         binaryExpr.left->GetReturnTypeId() == OMNI_INT || binaryExpr.left->GetReturnTypeId() == OMNI_LONG ||
         binaryExpr.left->GetReturnTypeId() == OMNI_DATE32 || binaryExpr.left->GetReturnTypeId() == OMNI_DOUBLE) {
         this->supportedFlag = true;
         return;
     } else if (TypeUtil::IsStringType(binaryExpr.left->GetReturnTypeId()) ||
-        binaryExpr.left->GetReturnTypeId() == OMNI_TIMESTAMP) {
+               binaryExpr.left->GetReturnTypeId() == OMNI_TIMESTAMP) {
         switch (binaryExpr.op) {
             case omniruntime::expressions::Operator::LT:
             case omniruntime::expressions::Operator::GT:
             case omniruntime::expressions::Operator::LTE:
             case omniruntime::expressions::Operator::GTE:
             case omniruntime::expressions::Operator::EQ:
-            case omniruntime::expressions::Operator::NEQ:
-                this->supportedFlag = true;
-                break;
-            default:
-                this->supportedFlag = false;
-                break;
+            case omniruntime::expressions::Operator::NEQ: this->supportedFlag = true; break;
+            default: this->supportedFlag = false; break;
         }
         return;
     } else if (TypeUtil::IsDecimalType(binaryExpr.left->GetReturnTypeId())) {
@@ -162,11 +158,8 @@ void ExprVerifier::Visit(const InExpr &inExpr)
         case OMNI_CHAR:
         case OMNI_VARCHAR:
         case OMNI_DECIMAL64:
-        case OMNI_DECIMAL128:
-            break;
-        default:
-            this->supportedFlag = false;
-            return;
+        case OMNI_DECIMAL128: break;
+        default: this->supportedFlag = false; return;
     }
 
     if (!VisitExpr(*toCompare)) {
@@ -284,7 +277,7 @@ void ExprVerifier::Visit(const FuncExpr &funcExpr)
 
 void ExprVerifier::Visit(const SwitchExpr &switchExpr)
 {
-    std::vector<std::pair<Expr*, Expr*>> whenClause = switchExpr.whenClause;
+    std::vector<std::pair<Expr *, Expr *>> whenClause = switchExpr.whenClause;
     auto size = whenClause.size();
 
     for (size_t i = 0; i < size; i++) {
@@ -308,5 +301,5 @@ void ExprVerifier::Visit(const SwitchExpr &switchExpr)
 
     this->supportedFlag = true;
 }
-}
-}
+} // namespace expressions
+} // namespace omniruntime

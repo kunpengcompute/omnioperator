@@ -1,5 +1,14 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <limits>
@@ -92,8 +101,8 @@ bool Timestamp::EpochToUtc(int64_t epoch, std::tm &tm)
     if (y + days / daysPerYear <= -LEAP_YEAR_OFFSET + 10) {
         return false;
     }
-    bool leapYear;
-    while (days < 0 || days >= daysPerYear + (leapYear = Date32::IsLeapYear(static_cast<int>(y)))) {
+    bool isLeapYear;
+    while (days < 0 || days >= daysPerYear + (isLeapYear = Date32::IsLeapYear(static_cast<int>(y)))) {
         auto newY = y + days / daysPerYear - (days < 0);
         days -= (newY - y) * daysPerYear + LeapThroughEndOf(newY - 1) - LeapThroughEndOf(y - 1);
         y = newY;
@@ -104,7 +113,7 @@ bool Timestamp::EpochToUtc(int64_t epoch, std::tm &tm)
     }
     tm.tm_year = static_cast<int>(y);
     tm.tm_yday = static_cast<int>(days);
-    auto *ip = MONTH_LENGTHS[leapYear];
+    auto *ip = MONTH_LENGTHS[isLeapYear];
     for (tm.tm_mon = 0; days >= ip[tm.tm_mon]; ++tm.tm_mon) {
         days = days - ip[tm.tm_mon];
     }
@@ -115,12 +124,10 @@ bool Timestamp::EpochToUtc(int64_t epoch, std::tm &tm)
 
 int64_t Timestamp::TmToStringView(const std::tm &tmValue, char *const startPosition)
 {
-    const auto appendDigits = [](const int value,
-        const std::optional<uint32_t> minWidth,
-        char *const position) {
+    const auto appendDigits = [](const int value, const std::optional<uint32_t> minWidth, char *const position) {
         const auto numDigits = CountDigits(value);
         uint32_t offset = 0;
-        // Append leading zeros when there is the requirement for minumum width.
+        // Append leading zeros when there is the requirement for minimum width.
         if (minWidth.has_value() && numDigits < minWidth.value()) {
             const auto leadingZeros = minWidth.value() - numDigits;
             memset_s(position, leadingZeros, '0', leadingZeros);
@@ -155,57 +162,39 @@ int64_t Timestamp::TmToStringView(const std::tm &tmValue, char *const startPosit
     // Day.
     *writePosition++ = '-';
     writePosition += appendDigits(tmValue.tm_mday, 2, writePosition);
-    
+
     return (writePosition - startPosition);
 }
 
-Date32 &Date32::operator = (const Date32 &right)
+Date32 &Date32::operator=(const Date32 &right)
 {
     value = right.value;
     return *this;
 }
 
-Date32 &Date32::operator += (const Date32 &right)
+Date32 &Date32::operator+=(const Date32 &right)
 {
     value += right.value;
     return *this;
 }
 
-Date32 &Date32::operator -= (const Date32 &right)
+Date32 &Date32::operator-=(const Date32 &right)
 {
     value += right.value;
     return *this;
 }
 
-bool Date32::operator == (const Date32 &right) const
-{
-    return value == right.value;
-}
+bool Date32::operator==(const Date32 &right) const { return value == right.value; }
 
-bool Date32::operator != (const Date32 &right) const
-{
-    return value != right.value;
-}
+bool Date32::operator!=(const Date32 &right) const { return value != right.value; }
 
-bool Date32::operator < (const Date32 &right) const
-{
-    return value < right.value;
-}
+bool Date32::operator<(const Date32 &right) const { return value < right.value; }
 
-bool Date32::operator > (const Date32 &right) const
-{
-    return value > right.value;
-}
+bool Date32::operator>(const Date32 &right) const { return value > right.value; }
 
-bool Date32::operator <= (const Date32 &right) const
-{
-    return value <= right.value;
-}
+bool Date32::operator<=(const Date32 &right) const { return value <= right.value; }
 
-bool Date32::operator >= (const Date32 &right) const
-{
-    return value >= right.value;
-}
+bool Date32::operator>=(const Date32 &right) const { return value >= right.value; }
 
 int Date32::StringToTm(const char *s, int32_t len, tm &r)
 {
@@ -439,13 +428,10 @@ size_t Date32::ToString(char *res, int32_t len) const
 bool Date32::ValidDate(int64_t daysSinceEpoch)
 {
     return daysSinceEpoch >= std::numeric_limits<int32_t>::min() &&
-        daysSinceEpoch <= std::numeric_limits<int32_t>::max();
+           daysSinceEpoch <= std::numeric_limits<int32_t>::max();
 }
 
-bool Date32::IsLeapYear(int32_t year)
-{
-    return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-}
+bool Date32::IsLeapYear(int32_t year) { return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0); }
 
 bool Date32::IsValidDate(int32_t year, int32_t month, int32_t day)
 {
@@ -489,8 +475,7 @@ bool Date32::DaysSinceEpochFromDate(int32_t year, int32_t month, int32_t day, in
         daysSinceEpoch += DAYS_PER_YEAR_INTERVAL;
     }
     daysSinceEpoch += CUMULATIVE_YEAR_DAYS[year - 1970];
-    daysSinceEpoch += IsLeapYear(year) ? CUMULATIVE_LEAP_DAYS[month - 1]
-        : CUMULATIVE_DAYS[month - 1];
+    daysSinceEpoch += IsLeapYear(year) ? CUMULATIVE_LEAP_DAYS[month - 1] : CUMULATIVE_DAYS[month - 1];
     daysSinceEpoch += day - 1;
     out = daysSinceEpoch;
     return true;
@@ -532,16 +517,16 @@ DateTruncMode Date32::ParseTruncLevel(const std::string &format)
 Status Date32::TruncDate(int32_t days, DateTruncMode level, int32_t &result)
 {
     switch (level) {
-        case DateTruncMode::TRUNC_TO_WEEK :
+        case DateTruncMode::TRUNC_TO_WEEK:
             result = GetNextDateForDayOfWeek(days - 7, MONDAY);
             return Status::CONVERT_SUCCESS;
-        case DateTruncMode::TRUNC_TO_MONTH :
+        case DateTruncMode::TRUNC_TO_MONTH:
             result = days - LocalDate(days).GetDay() + 1;
             return Status::CONVERT_SUCCESS;
-        case DateTruncMode::TRUNC_TO_QUARTER :
+        case DateTruncMode::TRUNC_TO_QUARTER:
             result = LocalDate(days).SetQuarter().ToDays();
             return Status::CONVERT_SUCCESS;
-        case DateTruncMode::TRUNC_TO_YEAR :
+        case DateTruncMode::TRUNC_TO_YEAR:
             result = days - LocalDate(days).getDayOfYear() + 1;
             return Status::CONVERT_SUCCESS;
         default:
@@ -550,13 +535,7 @@ Status Date32::TruncDate(int32_t days, DateTruncMode level, int32_t &result)
     }
 }
 
-Date32 operator + (const Date32 &left, const Date32 &right)
-{
-    return Date32(left.Value() + right.Value());
-}
+Date32 operator+(const Date32 &left, const Date32 &right) { return Date32(left.Value() + right.Value()); }
 
-Date32 operator - (const Date32 &left, const Date32 &right)
-{
-    return Date32(left.Value() - right.Value());
-}
-}
+Date32 operator-(const Date32 &left, const Date32 &right) { return Date32(left.Value() - right.Value()); }
+} // namespace omniruntime::type

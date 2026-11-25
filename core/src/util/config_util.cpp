@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2022-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Omni config util source file.
  */
 
@@ -20,7 +30,7 @@ static std::string GetOmniHome()
 {
     auto omniHome = std::getenv("OMNI_HOME");
     if (omniHome != nullptr && omniHome[0] != '\0') {
-        std::string confDir { omniHome };
+        std::string confDir{omniHome};
         Trim(confDir);
         return confDir;
     } else {
@@ -33,7 +43,7 @@ static std::string GetConfigFilePath()
     static std::string confFile = "/conf/omni.conf";
     auto omniConf = std::getenv("OMNI_CONF");
     if (omniConf != nullptr && omniConf[0] != '\0') {
-        std::string confDir { omniConf };
+        std::string confDir{omniConf};
         Trim(confDir);
         return confDir + confFile;
     }
@@ -124,10 +134,7 @@ static void Convert(const std::string &value, bool &property)
     }
 }
 
-static void Convert(const std::string &value, std::string &property)
-{
-    property = value;
-}
+static void Convert(const std::string &value, std::string &property) { property = value; }
 
 template <typename T> bool ConfigUtil::GetProperty(const char *key, T &value)
 {
@@ -139,40 +146,19 @@ template <typename T> bool ConfigUtil::GetProperty(const char *key, T &value)
     return true;
 }
 
-bool ConfigUtil::IsEnableBatchExprEvaluate()
-{
-    return g_properties.IsEnableBatchExprEvaluate();
-}
+bool ConfigUtil::IsEnableBatchExprEvaluate() { return g_properties.IsEnableBatchExprEvaluate(); }
 
-std::string &ConfigUtil::GetHiveUdfPropertyFilePath()
-{
-    return g_properties.GetHiveUdfPropertyFilePath();
-}
+std::string &ConfigUtil::GetHiveUdfPropertyFilePath() { return g_properties.GetHiveUdfPropertyFilePath(); }
 
-void ConfigUtil::SetEnableBatchExprEvaluate(bool isEnable)
-{
-    g_properties.SetEnableBatchExprEvaluate(isEnable);
-}
+void ConfigUtil::SetEnableBatchExprEvaluate(bool isEnable) { g_properties.SetEnableBatchExprEvaluate(isEnable); }
 
-void ConfigUtil::SetRoundingRule(RoundingRule rule)
-{
-    g_properties.GetPolicy()->SetRoundingRule(rule);
-}
+void ConfigUtil::SetRoundingRule(RoundingRule rule) { g_properties.GetPolicy()->SetRoundingRule(rule); }
 
-RoundingRule ConfigUtil::GetRoundingRule()
-{
-    return g_properties.GetPolicy()->GetRoundingRule();
-}
+RoundingRule ConfigUtil::GetRoundingRule() { return g_properties.GetPolicy()->GetRoundingRule(); }
 
-void ConfigUtil::SetCheckReScaleRule(CheckReScaleRule rule)
-{
-    g_properties.GetPolicy()->SetCheckReScaleRule(rule);
-}
+void ConfigUtil::SetCheckReScaleRule(CheckReScaleRule rule) { g_properties.GetPolicy()->SetCheckReScaleRule(rule); }
 
-CheckReScaleRule ConfigUtil::GetCheckReScaleRule()
-{
-    return g_properties.GetPolicy()->GetCheckReScaleRule();
-}
+CheckReScaleRule ConfigUtil::GetCheckReScaleRule() { return g_properties.GetPolicy()->GetCheckReScaleRule(); }
 
 void ConfigUtil::SetEmptySearchStrReplaceRule(EmptySearchStrReplaceRule rule)
 {
@@ -224,15 +210,9 @@ SupportContainerVecRule ConfigUtil::GetSupportContainerVecRule()
     return g_properties.GetPolicy()->GetSupportContainerVecRule();
 }
 
-AggHashTableRule ConfigUtil::GetAggHashTableRule()
-{
-    return g_properties.GetPolicy()->GetAggHashTableRule();
-}
+AggHashTableRule ConfigUtil::GetAggHashTableRule() { return g_properties.GetPolicy()->GetAggHashTableRule(); }
 
-void ConfigUtil::SetAggHashTableRule(AggHashTableRule rule)
-{
-    g_properties.GetPolicy()->SetAggHashTableRule(rule);
-}
+void ConfigUtil::SetAggHashTableRule(AggHashTableRule rule) { g_properties.GetPolicy()->SetAggHashTableRule(rule); }
 
 void ConfigUtil::SetStringToDateFormatRule(StringToDateFormatRule rule)
 {
@@ -254,26 +234,23 @@ SupportDecimalPrecisionImprovementRule ConfigUtil::GetSupportDecimalPrecisionImp
     return g_properties.GetPolicy()->GetSupportDecimalPrecisionImprovementRule();
 }
 
-Policy *ConfigUtil::GetPolicy()
-{
-    return g_properties.GetPolicy();
-}
+Policy *ConfigUtil::GetPolicy() { return g_properties.GetPolicy(); }
 
 Policy *ConfigUtil::InitializePolicy()
 {
     static Policy policy;
-    std::map<const char *, std::function<void(Policy *, std::string) >> initFunctionMap = { { "RoundingRule",
-        InitRoundingRule },
-        { "CheckReScaleRule", InitCheckReScaleRule },
-        { "EmptySearchStrReplaceRule", InitEmptySearchStrReplaceRule },
-        { "CastDecimalToDoubleRule", InitCastDecimalToDoubleRule },
-        { "NegativeStartIndexOutOfBoundsRule", InitNegativeStartIndexOutOfBoundsRule },
-        { "ZeroStartIndexSupportRule", InitZeroStartIndexSupportRule},
-        { "SupportContainerVecRule", InitSupportContainerVecRule },
-        { "StringToDateFormatRule", InitStringToDateFormatRule },
-        { "StringToDecimalRule", InitStringToDecimalRule },
-        { "SupportDecimalPrecisionImprovementRule", InitSupportDecimalPrecisionImprovementRule },
-        { "AggHashTableRule", InitAggHashTableRule }};
+    std::map<const char *, std::function<void(Policy *, std::string)>> initFunctionMap = {
+        {"RoundingRule", InitRoundingRule},
+        {"CheckReScaleRule", InitCheckReScaleRule},
+        {"EmptySearchStrReplaceRule", InitEmptySearchStrReplaceRule},
+        {"CastDecimalToDoubleRule", InitCastDecimalToDoubleRule},
+        {"NegativeStartIndexOutOfBoundsRule", InitNegativeStartIndexOutOfBoundsRule},
+        {"ZeroStartIndexSupportRule", InitZeroStartIndexSupportRule},
+        {"SupportContainerVecRule", InitSupportContainerVecRule},
+        {"StringToDateFormatRule", InitStringToDateFormatRule},
+        {"StringToDecimalRule", InitStringToDecimalRule},
+        {"SupportDecimalPrecisionImprovementRule", InitSupportDecimalPrecisionImprovementRule},
+        {"AggHashTableRule", InitAggHashTableRule}};
     std::string ruleValueStr;
     for (const auto &item : initFunctionMap) {
         const char *ruleKeyStr = item.first;

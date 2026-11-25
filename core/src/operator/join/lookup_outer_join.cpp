@@ -1,5 +1,15 @@
 /*
  * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2022-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * @Description: lookup outer join implementations
  */
 #include <vector>
@@ -11,18 +21,22 @@ using namespace omniruntime::vec;
 namespace omniruntime {
 namespace op {
 LookupOuterJoinOperatorFactory::LookupOuterJoinOperatorFactory(const type::DataTypes &probeTypes,
-    int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *buildOutputCols,
-    const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables)
+                                                               int32_t *probeOutputCols, int32_t probeOutputColsCount,
+                                                               int32_t *buildOutputCols,
+                                                               const type::DataTypes &buildOutputTypes,
+                                                               HashTableVariants *hashTables)
     : buildOutputTypes(buildOutputTypes), probeTypes(probeTypes), hashTables(hashTables)
 {
     this->probeOutputCols.insert(this->probeOutputCols.end(), probeOutputCols, probeOutputCols + probeOutputColsCount);
     this->buildOutputCols.insert(this->buildOutputCols.end(), buildOutputCols,
-        buildOutputCols + buildOutputTypes.GetSize());
+                                 buildOutputCols + buildOutputTypes.GetSize());
 }
 
 LookupOuterJoinOperatorFactory::LookupOuterJoinOperatorFactory(const type::DataTypes &probeTypes,
-    int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *buildOutputCols,
-    const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, BuildSide buildSide)
+                                                               int32_t *probeOutputCols, int32_t probeOutputColsCount,
+                                                               int32_t *buildOutputCols,
+                                                               const type::DataTypes &buildOutputTypes,
+                                                               HashTableVariants *hashTables, BuildSide buildSide)
     : buildOutputTypes(buildOutputTypes), probeTypes(probeTypes), hashTables(hashTables), buildSide(buildSide)
 {
     this->probeOutputCols.insert(this->probeOutputCols.end(), probeOutputCols, probeOutputCols + probeOutputColsCount);
@@ -37,8 +51,9 @@ LookupOuterJoinOperatorFactory *LookupOuterJoinOperatorFactory::CreateLookupOute
     const type::DataTypes &buildOutputTypes, int64_t hashBuilderFactoryAddr)
 {
     auto hashBuilderFactory = reinterpret_cast<HashBuilderOperatorFactory *>(hashBuilderFactoryAddr);
-    auto pOperatorFactory = new LookupOuterJoinOperatorFactory(probeTypes, probeOutputCols, probeOutputColsCount,
-        buildOutputCols, buildOutputTypes, hashBuilderFactory->GetHashTablesVariants());
+    auto pOperatorFactory =
+        new LookupOuterJoinOperatorFactory(probeTypes, probeOutputCols, probeOutputColsCount, buildOutputCols,
+                                           buildOutputTypes, hashBuilderFactory->GetHashTablesVariants());
     return pOperatorFactory;
 }
 
@@ -47,14 +62,15 @@ LookupOuterJoinOperatorFactory *LookupOuterJoinOperatorFactory::CreateLookupOute
     const type::DataTypes &buildOutputTypes, int64_t hashBuilderFactoryAddr, BuildSide buildSide)
 {
     auto hashBuilderFactory = reinterpret_cast<HashBuilderOperatorFactory *>(hashBuilderFactoryAddr);
-    auto pOperatorFactory = new LookupOuterJoinOperatorFactory(probeTypes, probeOutputCols, probeOutputColsCount,
-        buildOutputCols, buildOutputTypes, hashBuilderFactory->GetHashTablesVariants(), buildSide);
+    auto pOperatorFactory =
+        new LookupOuterJoinOperatorFactory(probeTypes, probeOutputCols, probeOutputColsCount, buildOutputCols,
+                                           buildOutputTypes, hashBuilderFactory->GetHashTablesVariants(), buildSide);
     return pOperatorFactory;
 }
 
 LookupOuterJoinOperatorFactory *LookupOuterJoinOperatorFactory::CreateLookupOuterJoinOperatorFactory(
-    std::shared_ptr<const HashJoinNode> planNode, HashBuilderOperatorFactory* hashBuilderOperatorFactory,
-    const config::QueryConfig& queryConfig)
+    std::shared_ptr<const HashJoinNode> planNode, HashBuilderOperatorFactory *hashBuilderOperatorFactory,
+    const config::QueryConfig &queryConfig)
 {
     auto buildOutputTypes = planNode->RightOutputType();
     auto buildOutputColsCount = buildOutputTypes->GetSize();
@@ -71,18 +87,19 @@ LookupOuterJoinOperatorFactory *LookupOuterJoinOperatorFactory::CreateLookupOute
     }
 
     return new LookupOuterJoinOperatorFactory(*probeOutputTypes, probeOutputCols.data(), probeOutputColsCount,
-        buildOutputCols.data(), *buildOutputTypes, hashBuilderOperatorFactory->GetHashTablesVariants());
+                                              buildOutputCols.data(), *buildOutputTypes,
+                                              hashBuilderOperatorFactory->GetHashTablesVariants());
 }
 
 Operator *LookupOuterJoinOperatorFactory::CreateOperator()
 {
     auto probeOutputType = std::vector<type::DataTypePtr>();
-    for (const auto& col : probeOutputCols) {
+    for (const auto &col : probeOutputCols) {
         probeOutputType.push_back(probeTypes.Get()[col]);
     }
     auto probeOutputTypes = DataTypes(probeOutputType);
-    auto lookupOuterJoinOperator =
-        new LookupOuterJoinOperator(probeOutputTypes, probeOutputCols, buildOutputCols, buildOutputTypes, hashTables, buildSide);
+    auto lookupOuterJoinOperator = new LookupOuterJoinOperator(probeOutputTypes, probeOutputCols, buildOutputCols,
+                                                               buildOutputTypes, hashTables, buildSide);
     return lookupOuterJoinOperator;
 }
 
@@ -108,13 +125,10 @@ void LookupOuterJoinOperator::PrepareTotalVisitedCounts()
 }
 
 LookupOuterJoinOperator::LookupOuterJoinOperator(DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
-    std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables)
-    : probeOutputTypes(probeOutputTypes),
-      probeOutputCols(probeOutputCols),
-      buildOutputCols(buildOutputCols),
-      buildOutputTypes(buildOutputTypes),
-      hashTables(hashTables),
-      iterator(new LookupOuterPositionIterator(hashTables)),
+                                                 std::vector<int32_t> &buildOutputCols,
+                                                 const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables)
+    : probeOutputTypes(probeOutputTypes), probeOutputCols(probeOutputCols), buildOutputCols(buildOutputCols),
+      buildOutputTypes(buildOutputTypes), hashTables(hashTables), iterator(new LookupOuterPositionIterator(hashTables)),
       outputColsCount(static_cast<int32_t>(probeOutputCols.size() + buildOutputCols.size()))
 {
     int32_t outputRowSize =
@@ -124,18 +138,15 @@ LookupOuterJoinOperator::LookupOuterJoinOperator(DataTypes &probeOutputTypes, st
 }
 
 LookupOuterJoinOperator::LookupOuterJoinOperator(DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
-    std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, BuildSide buildSide)
-    : probeOutputTypes(probeOutputTypes),
-      probeOutputCols(probeOutputCols),
-      buildOutputCols(buildOutputCols),
-      buildOutputTypes(buildOutputTypes),
-      hashTables(hashTables),
-      iterator(new LookupOuterPositionIterator(hashTables)),
-      outputColsCount(static_cast<int32_t>(probeOutputCols.size() + buildOutputCols.size())),
-      buildSide(buildSide)
+                                                 std::vector<int32_t> &buildOutputCols,
+                                                 const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
+                                                 BuildSide buildSide)
+    : probeOutputTypes(probeOutputTypes), probeOutputCols(probeOutputCols), buildOutputCols(buildOutputCols),
+      buildOutputTypes(buildOutputTypes), hashTables(hashTables), iterator(new LookupOuterPositionIterator(hashTables)),
+      outputColsCount(static_cast<int32_t>(probeOutputCols.size() + buildOutputCols.size())), buildSide(buildSide)
 {
     int32_t outputRowSize =
-            OperatorUtil::GetRowSize(this->buildOutputTypes.Get()) + OperatorUtil::GetRowSize(this->probeOutputTypes.Get());
+        OperatorUtil::GetRowSize(this->buildOutputTypes.Get()) + OperatorUtil::GetRowSize(this->probeOutputTypes.Get());
     maxRowCount = OperatorUtil::GetMaxRowCount((outputColsCount == 0) ? DEFAULT_ROW_SIZE : outputRowSize);
     SetOperatorName(opNameForLookUpJoin);
 }
@@ -211,7 +222,7 @@ void LookupOuterJoinOperator::BuildVecBatch(VectorBatch *vectorBatch)
     }
 
     AppendAllUnvisitedRows(vectorBatch, buildOutputTypes.GetIds(), buildOutputTypes.GetSize(),
-        probeOutputTypes.GetSize(), rowCount);
+                           probeOutputTypes.GetSize(), rowCount);
 }
 
 template <DataTypeId typeId>
@@ -237,7 +248,8 @@ void AppendTo(VectorBatch *vectorBatch, int32_t destCol, int32_t destRowIndex, u
 }
 
 void LookupOuterJoinOperator::AppendAllUnvisitedRows(VectorBatch *vectorBatch, const int32_t *buildOutputIds,
-    int32_t buildOutputColsCount, int32_t probeOutputColsCount, int rowCount)
+                                                     int32_t buildOutputColsCount, int32_t probeOutputColsCount,
+                                                     int rowCount)
 {
     std::visit(
         [&](auto &&arg) {
@@ -285,10 +297,11 @@ void LookupOuterJoinOperator::PrepareAllUnvisitedRows()
 
 LookupOuterPositionIterator::LookupOuterPositionIterator(HashTableVariants *hashTables)
     : currentHashTable(0), currentPosition(0), hashTables(hashTables)
-{}
+{
+}
 
-void LookupOuterPositionIterator::GetAllUnVisitedAddressFromSingleTable(std::vector<uint32_t> &hashTableIndexes,
-    std::vector<std::pair<uint32_t, uint32_t>> &addresses)
+void LookupOuterPositionIterator::GetAllUnVisitedAddressFromSingleTable(
+    std::vector<uint32_t> &hashTableIndexes, std::vector<std::pair<uint32_t, uint32_t>> &addresses)
 {
     std::visit(
         [&](auto &&arg) {
@@ -324,8 +337,8 @@ void LookupOuterPositionIterator::GetAllUnVisitedAddressFromSingleTable(std::vec
         *hashTables);
 }
 
-void LookupOuterPositionIterator::GetAllUnVisitedAddressFromMultipleTables(std::vector<uint32_t> &hashTableIndexes,
-    std::vector<std::pair<uint32_t, uint32_t>> &addresses)
+void LookupOuterPositionIterator::GetAllUnVisitedAddressFromMultipleTables(
+    std::vector<uint32_t> &hashTableIndexes, std::vector<std::pair<uint32_t, uint32_t>> &addresses)
 {
     std::visit(
         [&](auto &&arg) {
@@ -370,5 +383,5 @@ void LookupOuterPositionIterator::Reset()
     currentPosition = 0;
     currentHashTable = 0;
 }
-} // end of op
-} // end of omniruntime
+} // namespace op
+} // namespace omniruntime

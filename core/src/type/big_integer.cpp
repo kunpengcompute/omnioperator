@@ -1,54 +1,64 @@
-// Â© 2018 and later: Unicode, Inc. and others.
-// License & terms of use: http://www.unicode.org/copyright.html
-//
-// From the double-conversion library. Original license:
-//
-// Copyright 2010 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+/*
+ * Â© 2018 and later: Unicode, Inc. and others.
+ * Copyright 2010 the V8 project authors. All rights reserved.
+ *
+ * Project license notice for OmniOperator
+ * Existing file-specific copyright and license terms continue to apply.
+ *
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
+ * Third-party license and source notices
+ *
+ * License & terms of use: http://www.unicode.org/copyright.html
+ *
+ * From the double-conversion library. Original license:
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials provided
+ *       with the distribution.
+ *     * Neither the name of Google Inc. nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <algorithm>
 #include "big_integer.h"
 
 namespace omniruntime::type {
-BigInteger::LimbType &BigInteger::RawBigit(const int index)
-{
-    return dataBuffer_[index];
-}
+BigInteger::LimbType &BigInteger::RawBigit(const int index) { return dataBuffer_[index]; }
 
-const BigInteger::LimbType &BigInteger::RawBigit(const int index) const
-{
-    return dataBuffer_[index];
-}
+const BigInteger::LimbType &BigInteger::RawBigit(const int index) const { return dataBuffer_[index]; }
 
-template<typename S>
-static int BitSize(const S value)
+template <typename S> static int BitSize(const S value)
 {
-    (void)value;  // Mark variable as used.
+    (void)value; // Mark variable as used.
     return 8 * sizeof(value);
 }
 
@@ -232,8 +242,7 @@ void BigInteger::MultiplyByUInt64(const uint64_t factor)
         const uint64_t productHigh = high * RawBigit(i);
         const uint64_t tmp = (carry & DATA_MASK) + productLow;
         RawBigit(i) = tmp & DATA_MASK;
-        carry = (carry >> DATA_SIZE) + (tmp >> DATA_SIZE) +
-            (productHigh << (32 - DATA_SIZE));
+        carry = (carry >> DATA_SIZE) + (tmp >> DATA_SIZE) + (productHigh << (32 - DATA_SIZE));
     }
     while (carry != 0) {
         EnsureCapacity(usedData_ + 1);
@@ -259,8 +268,8 @@ void BigInteger::MultiplyByPowerOfTen(const int exponent)
     static const uint32_t FIVE_11 = FIVE_10 * 5;
     static const uint32_t FIVE_12 = FIVE_11 * 5;
     static const uint32_t FIVE_13 = FIVE_12 * 5;
-    static const uint32_t FIVE_1_TO_12[] = {
-        FIVE_1, FIVE_2, FIVE_3, FIVE_4, FIVE_5, FIVE_6, FIVE_7, FIVE_8, FIVE_9, FIVE_10, FIVE_11, FIVE_12};
+    static const uint32_t FIVE_1_TO_12[] = {FIVE_1, FIVE_2, FIVE_3, FIVE_4,  FIVE_5,  FIVE_6,
+                                            FIVE_7, FIVE_8, FIVE_9, FIVE_10, FIVE_11, FIVE_12};
 
     if (exponent == 0) {
         return;
@@ -367,7 +376,8 @@ BigInteger::BigInteger(uint16_t base, const int powerExponent)
 
     // Left to Right exponentiation.
     int mask = 1;
-    while (powerExponent >= mask) mask <<= 1;
+    while (powerExponent >= mask)
+        mask <<= 1;
 
     // The mask is now pointing to the bit above the most significant 1-bit of
     // powerExponent.
@@ -465,8 +475,7 @@ uint16_t BigInteger::DivideModuloIntBigInteger(const BigInteger &other)
     return result;
 }
 
-template<typename S>
-static int SizeInHexChars(S number)
+template <typename S> static int SizeInHexChars(S number)
 {
     int result = 0;
     while (number != 0) {
@@ -492,8 +501,8 @@ std::string BigInteger::ToHexString() const
         return "0";
     }
     // We add 1 for the terminating '\0' character.
-    const int neededChars = (BigIntegerLength() - 1) * HEX_CHARS_PER_BIGIT +
-        SizeInHexChars(RawBigit(usedData_ - 1)) + 1;
+    const int neededChars =
+        (BigIntegerLength() - 1) * HEX_CHARS_PER_BIGIT + SizeInHexChars(RawBigit(usedData_ - 1)) + 1;
 
     char *buffer = new char[neededChars];
 
@@ -656,8 +665,7 @@ void BigInteger::SubtractTimes(const BigInteger &other, const int factor)
         const DoubleLimbType remove = borrow + product;
         const LimbType difference = RawBigit(i + exponentDiff) - (remove & DATA_MASK);
         RawBigit(i + exponentDiff) = difference & DATA_MASK;
-        borrow = static_cast<LimbType>((difference >> (TYPE_SIZE - 1)) +
-            (remove >> DATA_SIZE));
+        borrow = static_cast<LimbType>((difference >> (TYPE_SIZE - 1)) + (remove >> DATA_SIZE));
     }
     for (int i = other.usedData_ + exponentDiff; i < usedData_; ++i) {
         if (borrow == 0) {
@@ -669,4 +677,4 @@ void BigInteger::SubtractTimes(const BigInteger &other, const int factor)
     }
     Clamp();
 }
-}
+} // namespace omniruntime::type

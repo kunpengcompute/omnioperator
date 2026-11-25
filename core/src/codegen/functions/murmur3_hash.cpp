@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Murmur3 Hash function
  */
 #include "util/compiler_util.h"
@@ -77,7 +87,7 @@ bool ALWAYS_INLINE IsBigEndian()
     union {
         uint32_t m;
         char n;
-    } uval = { 0 };
+    } uval = {0};
     uval.m = MM3_INT_ONE;
     if (uval.n == MM3_INT_ONE) {
         return false;
@@ -89,7 +99,7 @@ bool ALWAYS_INLINE IsBigEndian()
 uint32_t ALWAYS_INLINE ReverseBytes(uint32_t x)
 {
     return ((x >> REVERSE_SHIFT_M) & REVERSE_AND_A) | ((x << REVERSE_SHIFT_N) & REVERSE_AND_B) |
-        ((x >> REVERSE_SHIFT_N) & REVERSE_AND_C) | ((x << REVERSE_SHIFT_M) & REVERSE_AND_D);
+           ((x >> REVERSE_SHIFT_N) & REVERSE_AND_C) | ((x << REVERSE_SHIFT_M) & REVERSE_AND_D);
 }
 
 uint32_t ALWAYS_INLINE HashBytesByInt(char *base, uint32_t lengthInBytes, uint32_t seed)
@@ -201,7 +211,7 @@ extern "C" DLLEXPORT int32_t Mm3Double(double val, bool isValNull, int32_t seed,
     union {
         uint64_t lVal;
         double dVal;
-    } uVal = { 0 };
+    } uVal = {0};
     uVal.dVal = val * !isValNull;
     if (isSeedNull) {
         seed = 0;
@@ -214,7 +224,7 @@ extern "C" DLLEXPORT int32_t Mm3Double(double val, bool isValNull, int32_t seed,
 }
 
 extern "C" DLLEXPORT int32_t Mm3Decimal64(int64_t val, int32_t precision, int32_t scale, bool isValNull, int32_t seed,
-    bool isSeedNull)
+                                          bool isSeedNull)
 {
     if (isSeedNull) {
         seed = 0;
@@ -227,7 +237,7 @@ extern "C" DLLEXPORT int32_t Mm3Decimal64(int64_t val, int32_t precision, int32_
 }
 
 extern "C" DLLEXPORT int32_t Mm3Decimal128(int64_t xHigh, uint64_t xLow, int32_t precision, int32_t scale,
-    bool isValNull, int32_t seed, bool isSeedNull)
+                                           bool isValNull, int32_t seed, bool isSeedNull)
 {
     if (isSeedNull) {
         seed = 0;
@@ -266,4 +276,4 @@ extern "C" DLLEXPORT int64_t CombineHash(int64_t prevHashVal, bool isPrevHashVal
     }
     return COMBINE_HASH_VALUE * prevHashVal + val;
 }
-}
+} // namespace omniruntime::codegen::function

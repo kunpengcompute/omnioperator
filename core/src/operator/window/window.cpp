@@ -1,5 +1,15 @@
 /*
  * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2021-2024. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * @Description: window implementations
  */
 
@@ -11,140 +21,120 @@ namespace omniruntime {
 namespace op {
 const int MID_SEARCH_FACTOR = 2;
 
-WindowOperatorFactory::WindowOperatorFactory(const DataTypes &sourceTypes, int32_t *outputCols, int32_t outputColsCount,
-    int32_t *windowFunctionTypes, int32_t windowFunctionCount, int32_t *partitionCols, int32_t partitionCount,
-    int32_t *preGroupedCols, int32_t preGroupedCount, int32_t *sortCols, int32_t *sortAscendings,
-    int32_t *sortNullFirsts, int32_t sortColCount, int32_t preSortedChannelPrefix, int32_t expectedPositions,
-    const DataTypes &allTypes, int32_t *argumentChannels, int32_t argumentChannelsCount, int32_t *windowFrameTypesField,
-    int32_t *windowFrameStartTypesField, int32_t *windowFrameStartChannelsField, int32_t *windowFrameEndTypesField,
-    int32_t *windowFrameEndChannelsField, const OperatorConfig &operatorConfig)
-    : sourceTypes(sourceTypes),
-      outputColsCount(outputColsCount),
-      windowFunctionCount(windowFunctionCount),
-      partitionCount(partitionCount),
-      preGroupedCount(preGroupedCount),
-      sortColCount(sortColCount),
-      preSortedChannelPrefix(preSortedChannelPrefix),
-      expectedPositions(expectedPositions),
-      allTypes(allTypes),
-      argumentChannelsCount(argumentChannelsCount),
-      operatorConfig(operatorConfig)
+WindowOperatorFactory::WindowOperatorFactory(
+    const DataTypes &sourceTypes, int32_t *outputCols, int32_t outputColsCount, int32_t *windowFunctionTypes,
+    int32_t windowFunctionCount, int32_t *partitionCols, int32_t partitionCount, int32_t *preGroupedCols,
+    int32_t preGroupedCount, int32_t *sortCols, int32_t *sortAscendings, int32_t *sortNullFirsts, int32_t sortColCount,
+    int32_t preSortedChannelPrefix, int32_t expectedPositions, const DataTypes &allTypes, int32_t *argumentChannels,
+    int32_t argumentChannelsCount, int32_t *windowFrameTypesField, int32_t *windowFrameStartTypesField,
+    int32_t *windowFrameStartChannelsField, int32_t *windowFrameEndTypesField, int32_t *windowFrameEndChannelsField,
+    const OperatorConfig &operatorConfig)
+    : sourceTypes(sourceTypes), outputColsCount(outputColsCount), windowFunctionCount(windowFunctionCount),
+      partitionCount(partitionCount), preGroupedCount(preGroupedCount), sortColCount(sortColCount),
+      preSortedChannelPrefix(preSortedChannelPrefix), expectedPositions(expectedPositions), allTypes(allTypes),
+      argumentChannelsCount(argumentChannelsCount), operatorConfig(operatorConfig)
 {
     this->outputCols.insert(this->outputCols.begin(), outputCols, outputCols + outputColsCount);
     this->windowFunctionTypes.insert(this->windowFunctionTypes.begin(), windowFunctionTypes,
-        windowFunctionTypes + windowFunctionCount);
+                                     windowFunctionTypes + windowFunctionCount);
     this->partitionCols.insert(this->partitionCols.begin(), partitionCols, partitionCols + partitionCount);
     this->preGroupedCols.insert(this->preGroupedCols.begin(), preGroupedCols, preGroupedCols + preGroupedCount);
     this->sortCols.insert(this->sortCols.begin(), sortCols, sortCols + sortColCount);
     this->sortAscendings.insert(this->sortAscendings.begin(), sortAscendings, sortAscendings + sortColCount);
     this->sortNullFirsts.insert(this->sortNullFirsts.begin(), sortNullFirsts, sortNullFirsts + sortColCount);
     this->argumentChannels.insert(this->argumentChannels.begin(), argumentChannels,
-        argumentChannels + argumentChannelsCount);
+                                  argumentChannels + argumentChannelsCount);
     this->windowFrameTypes.insert(this->windowFrameTypes.begin(), windowFrameTypesField,
-        windowFrameTypesField + windowFunctionCount); // each windowFunction has one windowFrame
+                                  windowFrameTypesField +
+                                      windowFunctionCount); // each windowFunction has one windowFrame
     this->windowFrameStartTypes.insert(this->windowFrameStartTypes.begin(), windowFrameStartTypesField,
-        windowFrameStartTypesField + windowFunctionCount);
+                                       windowFrameStartTypesField + windowFunctionCount);
     this->windowFrameStartChannels.insert(this->windowFrameStartChannels.begin(), windowFrameStartChannelsField,
-        windowFrameStartChannelsField + windowFunctionCount);
+                                          windowFrameStartChannelsField + windowFunctionCount);
     this->windowFrameEndTypes.insert(this->windowFrameEndTypes.begin(), windowFrameEndTypesField,
-        windowFrameEndTypesField + windowFunctionCount);
+                                     windowFrameEndTypesField + windowFunctionCount);
     this->windowFrameEndChannels.insert(this->windowFrameEndChannels.begin(), windowFrameEndChannelsField,
-        windowFrameEndChannelsField + windowFunctionCount);
+                                        windowFrameEndChannelsField + windowFunctionCount);
 }
 
-OmniStatus WindowOperatorFactory::Init()
-{
-    return OMNI_STATUS_NORMAL;
-}
+OmniStatus WindowOperatorFactory::Init() { return OMNI_STATUS_NORMAL; }
 
 WindowOperatorFactory::~WindowOperatorFactory() = default;
 
-WindowOperatorFactory *WindowOperatorFactory::CreateWindowOperatorFactory(const DataTypes &sourceTypesField,
-    int32_t *outputColsField, int32_t outputColsCountField, int32_t *windowFunctionTypesField,
-    int32_t windowFunctionCountField, int32_t *partitionColsField, int32_t partitionCountField,
-    int32_t *preGroupedColsField, int32_t preGroupedCountField, int32_t *sortColsField, int32_t *sortAscendingsField,
-    int32_t *sortNullFirstsField, int32_t sortColCountField, int32_t preSortedChannelPrefixField,
-    int32_t expectedPositionsField, const DataTypes &allTypesField, int32_t *argumentChannelsField,
-    int32_t argumentChannelsCountField, int32_t *windowFrameTypesField, int32_t *windowFrameStartTypesField,
-    int32_t *windowFrameStartChannelsField, int32_t *windowFrameEndTypesField, int32_t *windowFrameEndChannelsField)
+WindowOperatorFactory *WindowOperatorFactory::CreateWindowOperatorFactory(
+    const DataTypes &sourceTypesField, int32_t *outputColsField, int32_t outputColsCountField,
+    int32_t *windowFunctionTypesField, int32_t windowFunctionCountField, int32_t *partitionColsField,
+    int32_t partitionCountField, int32_t *preGroupedColsField, int32_t preGroupedCountField, int32_t *sortColsField,
+    int32_t *sortAscendingsField, int32_t *sortNullFirstsField, int32_t sortColCountField,
+    int32_t preSortedChannelPrefixField, int32_t expectedPositionsField, const DataTypes &allTypesField,
+    int32_t *argumentChannelsField, int32_t argumentChannelsCountField, int32_t *windowFrameTypesField,
+    int32_t *windowFrameStartTypesField, int32_t *windowFrameStartChannelsField, int32_t *windowFrameEndTypesField,
+    int32_t *windowFrameEndChannelsField)
 {
     OperatorConfig defaultConfig;
-    auto operatorFactory = new WindowOperatorFactory(sourceTypesField, outputColsField, outputColsCountField,
-        windowFunctionTypesField, windowFunctionCountField, partitionColsField, partitionCountField,
-        preGroupedColsField, preGroupedCountField, sortColsField, sortAscendingsField, sortNullFirstsField,
-        sortColCountField, preSortedChannelPrefixField, expectedPositionsField, allTypesField, argumentChannelsField,
-        argumentChannelsCountField, windowFrameTypesField, windowFrameStartTypesField, windowFrameStartChannelsField,
-        windowFrameEndTypesField, windowFrameEndChannelsField, defaultConfig);
+    auto operatorFactory = new WindowOperatorFactory(
+        sourceTypesField, outputColsField, outputColsCountField, windowFunctionTypesField, windowFunctionCountField,
+        partitionColsField, partitionCountField, preGroupedColsField, preGroupedCountField, sortColsField,
+        sortAscendingsField, sortNullFirstsField, sortColCountField, preSortedChannelPrefixField,
+        expectedPositionsField, allTypesField, argumentChannelsField, argumentChannelsCountField, windowFrameTypesField,
+        windowFrameStartTypesField, windowFrameStartChannelsField, windowFrameEndTypesField,
+        windowFrameEndChannelsField, defaultConfig);
     operatorFactory->Init();
     return operatorFactory;
 }
 
-WindowOperatorFactory *WindowOperatorFactory::CreateWindowOperatorFactory(const DataTypes &sourceTypesField,
-    int32_t *outputColsField, int32_t outputColsCountField, int32_t *windowFunctionTypesField,
-    int32_t windowFunctionCountField, int32_t *partitionColsField, int32_t partitionCountField,
-    int32_t *preGroupedColsField, int32_t preGroupedCountField, int32_t *sortColsField, int32_t *sortAscendingsField,
-    int32_t *sortNullFirstsField, int32_t sortColCountField, int32_t preSortedChannelPrefixField,
-    int32_t expectedPositionsField, const DataTypes &allTypesField, int32_t *argumentChannelsField,
-    int32_t argumentChannelsCountField, int32_t *windowFrameTypesField, int32_t *windowFrameStartTypesField,
-    int32_t *windowFrameStartChannelsField, int32_t *windowFrameEndTypesField, int32_t *windowFrameEndChannelsField,
-    const OperatorConfig &operatorConfig)
+WindowOperatorFactory *WindowOperatorFactory::CreateWindowOperatorFactory(
+    const DataTypes &sourceTypesField, int32_t *outputColsField, int32_t outputColsCountField,
+    int32_t *windowFunctionTypesField, int32_t windowFunctionCountField, int32_t *partitionColsField,
+    int32_t partitionCountField, int32_t *preGroupedColsField, int32_t preGroupedCountField, int32_t *sortColsField,
+    int32_t *sortAscendingsField, int32_t *sortNullFirstsField, int32_t sortColCountField,
+    int32_t preSortedChannelPrefixField, int32_t expectedPositionsField, const DataTypes &allTypesField,
+    int32_t *argumentChannelsField, int32_t argumentChannelsCountField, int32_t *windowFrameTypesField,
+    int32_t *windowFrameStartTypesField, int32_t *windowFrameStartChannelsField, int32_t *windowFrameEndTypesField,
+    int32_t *windowFrameEndChannelsField, const OperatorConfig &operatorConfig)
 {
-    auto operatorFactory = new WindowOperatorFactory(sourceTypesField, outputColsField, outputColsCountField,
-        windowFunctionTypesField, windowFunctionCountField, partitionColsField, partitionCountField,
-        preGroupedColsField, preGroupedCountField, sortColsField, sortAscendingsField, sortNullFirstsField,
-        sortColCountField, preSortedChannelPrefixField, expectedPositionsField, allTypesField, argumentChannelsField,
-        argumentChannelsCountField, windowFrameTypesField, windowFrameStartTypesField, windowFrameStartChannelsField,
-        windowFrameEndTypesField, windowFrameEndChannelsField, operatorConfig);
+    auto operatorFactory = new WindowOperatorFactory(
+        sourceTypesField, outputColsField, outputColsCountField, windowFunctionTypesField, windowFunctionCountField,
+        partitionColsField, partitionCountField, preGroupedColsField, preGroupedCountField, sortColsField,
+        sortAscendingsField, sortNullFirstsField, sortColCountField, preSortedChannelPrefixField,
+        expectedPositionsField, allTypesField, argumentChannelsField, argumentChannelsCountField, windowFrameTypesField,
+        windowFrameStartTypesField, windowFrameStartChannelsField, windowFrameEndTypesField,
+        windowFrameEndChannelsField, operatorConfig);
     operatorFactory->Init();
     return operatorFactory;
 }
 
 Operator *WindowOperatorFactory::CreateOperator()
 {
-    auto windowOperator = new WindowOperator(sourceTypes, outputCols, outputColsCount, windowFunctionTypes,
-        windowFunctionCount, partitionCols, partitionCount, preGroupedCols, preGroupedCount, sortCols, sortAscendings,
-        sortNullFirsts, sortColCount, preSortedChannelPrefix, expectedPositions, allTypes, argumentChannels,
-        argumentChannelsCount, windowFrameTypes, windowFrameStartTypes, windowFrameStartChannels, windowFrameEndTypes,
-        windowFrameEndChannels, operatorConfig);
+    auto windowOperator = new WindowOperator(
+        sourceTypes, outputCols, outputColsCount, windowFunctionTypes, windowFunctionCount, partitionCols,
+        partitionCount, preGroupedCols, preGroupedCount, sortCols, sortAscendings, sortNullFirsts, sortColCount,
+        preSortedChannelPrefix, expectedPositions, allTypes, argumentChannels, argumentChannelsCount, windowFrameTypes,
+        windowFrameStartTypes, windowFrameStartChannels, windowFrameEndTypes, windowFrameEndChannels, operatorConfig);
     windowOperator->Init();
     return windowOperator;
 }
 
-WindowOperator::WindowOperator(const type::DataTypes &sourceTypes, std::vector<int32_t> &outputCols,
-    int32_t outputColsCount, std::vector<int32_t> &windowFunctionTypes, int32_t windowFunctionCount,
-    std::vector<int32_t> &partitionCols, int32_t partitionCount, std::vector<int32_t> &preGroupedCols,
-    int32_t preGroupedCount, std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
-    std::vector<int32_t> &sortNullFirsts, int32_t sortColCount, int32_t preSortedChannelPrefix,
-    int32_t expectedPositions, const type::DataTypes &allTypes, std::vector<int32_t> &argumentChannels,
-    int32_t argumentChannelsCount, const std::vector<int32_t> &windowFrameTypes,
+WindowOperator::WindowOperator(
+    const type::DataTypes &sourceTypes, std::vector<int32_t> &outputCols, int32_t outputColsCount,
+    std::vector<int32_t> &windowFunctionTypes, int32_t windowFunctionCount, std::vector<int32_t> &partitionCols,
+    int32_t partitionCount, std::vector<int32_t> &preGroupedCols, int32_t preGroupedCount,
+    std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings, std::vector<int32_t> &sortNullFirsts,
+    int32_t sortColCount, int32_t preSortedChannelPrefix, int32_t expectedPositions, const type::DataTypes &allTypes,
+    std::vector<int32_t> &argumentChannels, int32_t argumentChannelsCount, const std::vector<int32_t> &windowFrameTypes,
     const std::vector<int32_t> &windowFrameStartTypes, const std::vector<int32_t> &windowFrameStartChannels,
     const std::vector<int32_t> &windowFrameEndTypes, const std::vector<int32_t> &windowFrameEndChannels,
     const OperatorConfig &operatorConfig)
-    : sourceTypes(sourceTypes),
-      typesCount(sourceTypes.GetSize()),
-      outputCols(outputCols),
-      outputColsCount(outputColsCount),
-      windowFunctionTypes(windowFunctionTypes),
-      windowFunctionCount(windowFunctionCount),
-      partitionCols(partitionCols),
-      partitionCount(partitionCount),
-      preGroupedCols(preGroupedCols),
-      preGroupedCount(preGroupedCount),
-      originSortCols(sortCols),
-      originSortColCount(sortColCount),
-      sortColCount(sortColCount + partitionCount),
-      preSortedChannelPrefix(preSortedChannelPrefix),
-      expectedPositions(expectedPositions),
-      allTypes(allTypes),
-      pendingInput(nullptr),
-      partition(nullptr),
-      argumentChannels(argumentChannels),
-      argumentChannelsCount(argumentChannelsCount),
-      windowFrameTypes(windowFrameTypes),
-      windowFrameStartTypes(windowFrameStartTypes),
-      windowFrameStartChannels(windowFrameStartChannels),
-      windowFrameEndTypes(windowFrameEndTypes),
-      windowFrameEndChannels(windowFrameEndChannels),
+    : sourceTypes(sourceTypes), typesCount(sourceTypes.GetSize()), outputCols(outputCols),
+      outputColsCount(outputColsCount), windowFunctionTypes(windowFunctionTypes),
+      windowFunctionCount(windowFunctionCount), partitionCols(partitionCols), partitionCount(partitionCount),
+      preGroupedCols(preGroupedCols), preGroupedCount(preGroupedCount), originSortCols(sortCols),
+      originSortColCount(sortColCount), sortColCount(sortColCount + partitionCount),
+      preSortedChannelPrefix(preSortedChannelPrefix), expectedPositions(expectedPositions), allTypes(allTypes),
+      pendingInput(nullptr), partition(nullptr), argumentChannels(argumentChannels),
+      argumentChannelsCount(argumentChannelsCount), windowFrameTypes(windowFrameTypes),
+      windowFrameStartTypes(windowFrameStartTypes), windowFrameStartChannels(windowFrameStartChannels),
+      windowFrameEndTypes(windowFrameEndTypes), windowFrameEndChannels(windowFrameEndChannels),
       operatorConfig(operatorConfig)
 {
     for (int32_t i = 0; i < partitionCount; i++) {
@@ -171,17 +161,18 @@ OmniStatus WindowOperator::Init()
     pagesIndex = std::make_unique<PagesIndex>(sourceTypes);
     for (int32_t i = 0; i < windowFunctionCount; i++) {
         auto type = windowFunctionTypes[i];
-        auto windowFrame = std::make_unique<WindowFrameInfo>(static_cast<FrameType>(windowFrameTypes[i]),
-            static_cast<FrameBoundType>(windowFrameStartTypes[i]), windowFrameStartChannels[i],
-            static_cast<FrameBoundType>(windowFrameEndTypes[i]), windowFrameEndChannels[i]);
+        auto windowFrame = std::make_unique<WindowFrameInfo>(
+            static_cast<FrameType>(windowFrameTypes[i]), static_cast<FrameBoundType>(windowFrameStartTypes[i]),
+            windowFrameStartChannels[i], static_cast<FrameBoundType>(windowFrameEndTypes[i]),
+            windowFrameEndChannels[i]);
         switch (type) {
             case OMNI_WINDOW_TYPE_ROW_NUMBER:
-                windowFunctions.push_back(std::move(make_unique<RowNumberFunction>(std::move(windowFrame),
-                    NoneDataType::Instance(), allTypes.GetType(sourceTypes.GetSize() + i))));
+                windowFunctions.push_back(std::move(make_unique<RowNumberFunction>(
+                    std::move(windowFrame), NoneDataType::Instance(), allTypes.GetType(sourceTypes.GetSize() + i))));
                 break;
             case OMNI_WINDOW_TYPE_RANK:
-                windowFunctions.push_back(std::move(make_unique<RankFunction>(std::move(windowFrame),
-                    NoneDataType::Instance(), allTypes.GetType(sourceTypes.GetSize() + i))));
+                windowFunctions.push_back(std::move(make_unique<RankFunction>(
+                    std::move(windowFrame), NoneDataType::Instance(), allTypes.GetType(sourceTypes.GetSize() + i))));
                 break;
             // for aggregate function we use AggregateType
             case OMNI_AGGREGATION_TYPE_SUM:
@@ -192,28 +183,24 @@ OmniStatus WindowOperator::Init()
             case OMNI_AGGREGATION_TYPE_MIN:
             case OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL:
             case OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL:
-                windowFunctions.push_back(std::move(make_unique<AggregateWindowFunction>(argumentChannels[i], type,
-                    sourceTypes.GetType(argumentChannels[i]), allTypes.GetType(sourceTypes.GetSize() + i),
-                    std::move(windowFrame), executionContext.get(), isOverflowAsNull)));
+                windowFunctions.push_back(std::move(make_unique<AggregateWindowFunction>(
+                    argumentChannels[i], type, sourceTypes.GetType(argumentChannels[i]),
+                    allTypes.GetType(sourceTypes.GetSize() + i), std::move(windowFrame), executionContext.get(),
+                    isOverflowAsNull)));
                 break;
             case OMNI_AGGREGATION_TYPE_COUNT_ALL:
-                windowFunctions.push_back(std::move(make_unique<AggregateWindowFunction>(argumentChannels[i], type,
-                    NoneDataType::Instance(), allTypes.GetType(sourceTypes.GetSize() + i), std::move(windowFrame),
-                    executionContext.get(), isOverflowAsNull)));
+                windowFunctions.push_back(std::move(make_unique<AggregateWindowFunction>(
+                    argumentChannels[i], type, NoneDataType::Instance(), allTypes.GetType(sourceTypes.GetSize() + i),
+                    std::move(windowFrame), executionContext.get(), isOverflowAsNull)));
                 break;
-            default:
-                ret = OMNI_STATUS_ERROR;
-                break;
+            default: ret = OMNI_STATUS_ERROR; break;
         }
     }
     SetOperatorName(metricsNameWindow);
     return ret;
 }
 
-WindowOperator::~WindowOperator()
-{
-    delete pendingInput;
-}
+WindowOperator::~WindowOperator() { delete pendingInput; }
 
 int32_t WindowOperator::AddInput(VectorBatch *vecBatch)
 {
@@ -369,7 +356,7 @@ void WindowOperator::ProcessData(VectorBatch *&outputVecBatch, int32_t rowCount)
     // build the output data with original input vecBatch, input data are not changed in window operator
     // we add extra columns of window result to the output vecBatch in window partition
     pagesIndex->GetOutput(outputCols.data(), outputColsCount, outputVecBatch, sourceTypes.GetIds(), rowCountOutputted,
-        rowCount);
+                          rowCount);
 
     for (int32_t j = 0; j < rowCount; j++) {
         if (partition == nullptr || !partition->HasNext()) {
@@ -380,7 +367,8 @@ void WindowOperator::ProcessData(VectorBatch *&outputVecBatch, int32_t rowCount)
             }
             int32_t partitionEnd = FindGroupEnd(pagesIndex.get(), unGroupedPartitionHashStrategy.get(), partitionStart);
             partition = make_unique<WindowPartition>(sourceTypes, pagesIndex.get(), partitionStart, partitionEnd,
-                outputCols.data(), outputColsCount, windowFunctions, peerGroupHashStrategy.get());
+                                                     outputCols.data(), outputColsCount, windowFunctions,
+                                                     peerGroupHashStrategy.get());
         }
         partition->ProcessNextRow(inputVecBatchForAgg.get(), outputVecBatch, j);
     }
@@ -392,19 +380,16 @@ void WindowOperator::Initialization()
 
     // right now we assume the pregroup and presort are null
     preGroupedPartitionHashStrategy = make_unique<PagesHashStrategy>(pagesIndex->GetColumns(), pagesIndex->GetTypes(),
-        preGroupedCols.data(), preGroupedCount);
+                                                                     preGroupedCols.data(), preGroupedCount);
     unGroupedPartitionHashStrategy = make_unique<PagesHashStrategy>(pagesIndex->GetColumns(), pagesIndex->GetTypes(),
-        partitionCols.data(), partitionCount);
+                                                                    partitionCols.data(), partitionCount);
     preSortedPartitionHashStrategy = make_unique<PagesHashStrategy>(pagesIndex->GetColumns(), pagesIndex->GetTypes(),
-        preGroupedCols.data(), preGroupedCount);
+                                                                    preGroupedCols.data(), preGroupedCount);
     peerGroupHashStrategy = make_unique<PagesHashStrategy>(pagesIndex->GetColumns(), pagesIndex->GetTypes(),
-        originSortCols.data(), originSortColCount);
+                                                           originSortCols.data(), originSortColCount);
 }
 
-void WindowOperator::FinishPagesIndex()
-{
-    SortPagesIndexIfNecessary();
-}
+void WindowOperator::FinishPagesIndex() { SortPagesIndexIfNecessary(); }
 
 void WindowOperator::SortPagesIndexIfNecessary()
 {
@@ -414,7 +399,7 @@ void WindowOperator::SortPagesIndexIfNecessary()
         while (startPosition < positionCount) {
             int32_t endPosition = FindGroupEnd(pagesIndex.get(), preSortedPartitionHashStrategy.get(), startPosition);
             pagesIndex->Sort(sortCols.data(), sortAscendings.data(), sortNullFirsts.data(), sortColCount, startPosition,
-                endPosition);
+                             endPosition);
             startPosition = endPosition;
         }
     }
@@ -458,10 +443,7 @@ OmniStatus WindowOperator::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-uint64_t WindowOperator::GetSpilledBytes()
-{
-    return spilledBytes;
-}
+uint64_t WindowOperator::GetSpilledBytes() { return spilledBytes; }
 
 ErrorCode WindowOperator::SpillToDisk()
 {
@@ -476,11 +458,11 @@ ErrorCode WindowOperator::SpillToDisk()
         size_t sortColsCount = sortCols.size();
         std::vector<SortOrder> sortOrders;
         for (size_t i = 0; i < sortColsCount; i++) {
-            SortOrder sortOrder{ sortAscendings[i] == 1, sortNullFirsts[i] == 1 };
+            SortOrder sortOrder{sortAscendings[i] == 1, sortNullFirsts[i] == 1};
             sortOrders.emplace_back(sortOrder);
         }
         spiller = new Spiller(sourceTypes, sortCols, sortOrders, spillConfig->GetSpillPath(),
-            spillConfig->GetMaxSpillBytes(), spillConfig->GetWriteBufferSize());
+                              spillConfig->GetMaxSpillBytes(), spillConfig->GetWriteBufferSize());
         hasSpill = true;
     }
 
@@ -505,7 +487,7 @@ void WindowOperator::Sort()
 
     if (canInplaceSort) {
         pagesIndex->SortInplace(sortCols.data(), sortAscendings.data(), sortNullFirsts.data(), sortColCount, 0,
-            positionCount);
+                                positionCount);
     } else {
         pagesIndex->Sort(sortCols.data(), sortAscendings.data(), sortNullFirsts.data(), sortColCount, 0, positionCount);
     }
@@ -565,7 +547,7 @@ void WindowOperator::ProcessDataFromDisk(VectorBatch *&outputVecBatch, int32_t r
     if (partition != nullptr && partition->HasNext()) {
         int32_t outputCount = min(partitionRowCount - partitionOutputted, rowCount);
         pagesIndex->GetOutput(outputCols.data(), outputColsCount, outputVecBatch, sourceTypes.GetIds(),
-            partitionOutputted, outputCount);
+                              partitionOutputted, outputCount);
     }
 
     for (int32_t i = 0; i < rowCount; i++) {
@@ -579,7 +561,7 @@ void WindowOperator::ProcessDataFromDisk(VectorBatch *&outputVecBatch, int32_t r
             inputVecBatchForAgg->ResizeVectorCount(1);
             int32_t outputCount = min(partitionRowCount, rowCount - i);
             pagesIndex->GetOutput(outputCols.data(), outputColsCount, outputVecBatch, sourceTypes.GetIds(), 0,
-                outputCount, i);
+                                  outputCount, i);
         }
         partition->ProcessNextRow(inputVecBatchForAgg.get(), outputVecBatch, i);
         rowCountOutputted++;
@@ -636,21 +618,21 @@ bool WindowOperator::ProcessNextWindowPartition()
     pagesIndex->AddVecBatch(vecBatch);
     pagesIndex->Prepare();
     peerGroupHashStrategy = make_unique<PagesHashStrategy>(pagesIndex->GetColumns(), pagesIndex->GetTypes(),
-        originSortCols.data(), originSortColCount);
+                                                           originSortCols.data(), originSortColCount);
 
     inputVecBatchForAgg->SetVector(0, nullptr);
     inputVecBatchForAgg = make_unique<VectorBatch>(totalRowCount);
     inputVecBatchForAgg->ResizeVectorCount(1);
 
     partition = make_unique<WindowPartition>(sourceTypes, pagesIndex.get(), 0, partitionRowCount, outputCols.data(),
-        outputColsCount, windowFunctions, peerGroupHashStrategy.get());
+                                             outputColsCount, windowFunctions, peerGroupHashStrategy.get());
 
     return true;
 }
 
 template <typename T>
 static ALWAYS_INLINE bool ValueEqualsLastValue(vec::VectorBatch *partitionVecBatch, vec::VectorBatch *currentVecBatch,
-    int32_t columnId, int32_t lastIdx, int32_t nextIdx)
+                                               int32_t columnId, int32_t lastIdx, int32_t nextIdx)
 {
     auto partitionVector = partitionVecBatch->Get(columnId);
     auto currentVector = currentVecBatch->Get(columnId);
@@ -734,10 +716,9 @@ bool WindowOperator::IsSamePartition(VectorBatch *lastBatch, int32_t lastIdx)
             case OMNI_ARRAY:
                 // Reuse OperatorUtil::CompareArrayValue (lexicographic, null-aware) for equality check
                 isSame = (OperatorUtil::CompareArrayValue(lastVector, lastIdx, currentVector, currentRowIdx) ==
-                    OperatorUtil::COMPARE_STATUS_EQUAL);
+                          OperatorUtil::COMPARE_STATUS_EQUAL);
                 break;
-            default:
-                break;
+            default: break;
         }
         if (!isSame) {
             return false;
@@ -754,38 +735,20 @@ void WindowOperator::PaddingPartitionVecBatch(vec::VectorBatch *partitionVecBatc
         auto partitionVector = partitionVecBatch->Get(i);
         auto typeId = sourceTypes.GetType(i)->GetId();
         switch (typeId) {
-            case OMNI_BYTE:
-                PaddingPartitionVector<int8_t>(partitionVector, rowIdx, i);
-                break;
+            case OMNI_BYTE: PaddingPartitionVector<int8_t>(partitionVector, rowIdx, i); break;
             case OMNI_INT:
-            case OMNI_DATE32:
-                PaddingPartitionVector<int32_t>(partitionVector, rowIdx, i);
-                break;
+            case OMNI_DATE32: PaddingPartitionVector<int32_t>(partitionVector, rowIdx, i); break;
             case OMNI_LONG:
             case OMNI_DECIMAL64:
-            case OMNI_TIMESTAMP:
-                PaddingPartitionVector<int64_t>(partitionVector, rowIdx, i);
-                break;
-            case OMNI_DOUBLE:
-                PaddingPartitionVector<double>(partitionVector, rowIdx, i);
-                break;
-            case OMNI_BOOLEAN:
-                PaddingPartitionVector<bool>(partitionVector, rowIdx, i);
-                break;
-            case OMNI_SHORT:
-                PaddingPartitionVector<int16_t>(partitionVector, rowIdx, i);
-                break;
-            case OMNI_DECIMAL128:
-                PaddingPartitionVector<Decimal128>(partitionVector, rowIdx, i);
-                break;
+            case OMNI_TIMESTAMP: PaddingPartitionVector<int64_t>(partitionVector, rowIdx, i); break;
+            case OMNI_DOUBLE: PaddingPartitionVector<double>(partitionVector, rowIdx, i); break;
+            case OMNI_BOOLEAN: PaddingPartitionVector<bool>(partitionVector, rowIdx, i); break;
+            case OMNI_SHORT: PaddingPartitionVector<int16_t>(partitionVector, rowIdx, i); break;
+            case OMNI_DECIMAL128: PaddingPartitionVector<Decimal128>(partitionVector, rowIdx, i); break;
             case OMNI_VARCHAR:
-            case OMNI_CHAR:
-                PaddingPartitionVector<std::string_view>(partitionVector, rowIdx, i);
-                break;
-            case OMNI_ARRAY:
-                PaddingPartitionArrayVector(partitionVector, rowIdx, i);
-            default:
-                break;
+            case OMNI_CHAR: PaddingPartitionVector<std::string_view>(partitionVector, rowIdx, i); break;
+            case OMNI_ARRAY: PaddingPartitionArrayVector(partitionVector, rowIdx, i);
+            default: break;
         }
     }
 }
@@ -825,5 +788,5 @@ void WindowOperator::PaddingPartitionArrayVector(vec::BaseVector *groupedVector,
     }
 }
 
-}
-}
+} // namespace op
+} // namespace omniruntime

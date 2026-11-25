@@ -1,5 +1,15 @@
 /*
-* Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: String Function Registry
  */
 #include "json_functions.h"
@@ -7,7 +17,8 @@ using json = nlohmann::json;
 
 namespace omniruntime::codegen::function {
 extern "C" DLLEXPORT const char *GetJsonObject(int64_t contextPtr, const char *jsonStr, int32_t jsonLen,
-    bool jsonIsNull, const char *pathStr, int32_t pathLen, bool pathIsNull, bool* retIsNull, int32_t *outLen)
+                                               bool jsonIsNull, const char *pathStr, int32_t pathLen, bool pathIsNull,
+                                               bool *retIsNull, int32_t *outLen)
 {
     *retIsNull = true;
     *outLen = 0;
@@ -27,7 +38,7 @@ extern "C" DLLEXPORT const char *GetJsonObject(int64_t contextPtr, const char *j
         if (!resultOpt.has_value()) {
             return nullptr;
         }
-    } catch (const json::exception& e) {
+    } catch (const json::exception &e) {
         // WARN: Here return null if parsing failed, as the Spark does.
         // std::ostringstream errorMessage;
         // errorMessage << "ERROR ! nlohmann json exception id : " << e.id << " for " << e.what();
@@ -35,7 +46,7 @@ extern "C" DLLEXPORT const char *GetJsonObject(int64_t contextPtr, const char *j
         return nullptr;
     }
 
-    const std::string& result = resultOpt.value();
+    const std::string &result = resultOpt.value();
     *retIsNull = false;
     *outLen = static_cast<int32_t>(result.size());
 
@@ -45,7 +56,7 @@ extern "C" DLLEXPORT const char *GetJsonObject(int64_t contextPtr, const char *j
         *outLen = 0;
         return nullptr;
     }
-    static_cast<char*>(ret)[*outLen] = '\0';
+    static_cast<char *>(ret)[*outLen] = '\0';
     return ret;
 }
-}
+} // namespace omniruntime::codegen::function

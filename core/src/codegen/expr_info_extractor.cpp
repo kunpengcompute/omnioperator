@@ -1,5 +1,15 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan
+ * PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ *
  * Description: Extract essential information from the expression tree
  */
 #include <string>
@@ -11,10 +21,7 @@ using namespace std;
 
 void ExprInfoExtractor::Visit(const LiteralExpr &e) {}
 
-void ExprInfoExtractor::Visit(const FieldExpr &e)
-{
-    this->vectorIndexes.insert(e.colVal);
-}
+void ExprInfoExtractor::Visit(const FieldExpr &e) { this->vectorIndexes.insert(e.colVal); }
 
 void ExprInfoExtractor::Visit(const BinaryExpr &e)
 {
@@ -22,10 +29,7 @@ void ExprInfoExtractor::Visit(const BinaryExpr &e)
     e.right->Accept(*this);
 }
 
-void ExprInfoExtractor::Visit(const UnaryExpr &e)
-{
-    e.exp->Accept(*this);
-}
+void ExprInfoExtractor::Visit(const UnaryExpr &e) { e.exp->Accept(*this); }
 
 void ExprInfoExtractor::Visit(const IfExpr &e)
 {
@@ -61,10 +65,7 @@ void ExprInfoExtractor::Visit(const SwitchExpr &e)
         when.second->Accept(*this);
     }
 }
-void ExprInfoExtractor::Visit(const IsNullExpr &e)
-{
-    e.value->Accept(*this);
-}
+void ExprInfoExtractor::Visit(const IsNullExpr &e) { e.value->Accept(*this); }
 
 void ExprInfoExtractor::Visit(const FuncExpr &e)
 {
@@ -73,8 +74,5 @@ void ExprInfoExtractor::Visit(const FuncExpr &e)
     }
 }
 
-std::set<int32_t> ExprInfoExtractor::GetVectorIndexes()
-{
-    return this->vectorIndexes;
-}
-}
+std::set<int32_t> ExprInfoExtractor::GetVectorIndexes() { return this->vectorIndexes; }
+} // namespace omniruntime::codegen
