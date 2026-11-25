@@ -341,6 +341,8 @@ OmniOperator docs目录下的文档适用CC-BY 4.0许可证，具体请参见[LI
 
 ## 贡献声明<a name="ZH-CN_TOPIC_0000002547298203"></a>
 
+有关提交 Issue 和 Pull Request 的通用流程，请参阅 [openEuler 社区贡献指南](https://gitcode.com/openeuler/community/blob/master/CONTRIBUTING.md)。
+
 1. 提交错误报告：如果您在OmniOperator中发现了一个不存在安全问题的漏洞，请在OmniOperator仓库中的Issues中搜索，以防该漏洞被重复提交，如果找不到漏洞可以创建一个新的Issues。如果发现了一个安全问题请不要将其公开，请参阅安全问题处理方式。提交错误报告时应该包含完整信息。
 2. 安全问题处理：本项目中对安全问题处理的形式，请通过邮箱通知项目核心人员确认编辑。
 3. 解决现有问题：通过查看仓库的Issues列表可以发现需要处理的问题信息，可以尝试解决其中的某个问题。
@@ -358,7 +360,7 @@ OmniOperator docs目录下的文档适用CC-BY 4.0许可证，具体请参见[LI
 
 ## 建议与交流<a name="ZH-CN_TOPIC_0000002547258203"></a>
 
-欢迎大家为社区做贡献。如果有任何疑问或建议，请提交[Issues](https://gitcode.com/openeuler/OmniOperator)，我们会尽快回复。感谢您的支持。
+欢迎大家为社区做贡献。如果在使用过程中有任何问题或建议，或想提出新功能需求、报告非安全类缺陷，请在 [OmniOperator Issues](https://gitcode.com/openeuler/OmniOperator/issues) 中提交 Issue，我们会尽快回复。也欢迎在 [openEuler 社区论坛](https://forum.openeuler.org/) 参与讨论交流。感谢您的支持。
 
 ## 致谢<a name="ZH-CN_TOPIC_0000002515658382"></a>
 

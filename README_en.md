@@ -328,6 +328,8 @@ The documents in the **_xxxdocs_** directory are licensed under CC BY 4.0. For d
 
 ## Contribution Statement<a name="EN-US_TOPIC_0000002547298203"></a>
 
+See the [openEuler community contribution guide](https://gitcode.com/openeuler/community/blob/master/CONTRIBUTING.md) for general guidance on filing issues and submitting pull requests.
+
 1. Submit an error report: If you discover a vulnerability in OminiOperator that is not a security issue, first search the **Issues** in the OminiOperator repository to avoid submitting duplicates. If the vulnerability is not listed, create a new issue. If you discover a security-related problem, do not disclose it publicly. Please refer to the security handling guidelines for details. All error reports must include complete information about the issue.
 2. Security issue handling: For guidance on handling security issues in this project, please contact the core team via email for instructions.
 3. Resolving existing issues: Review the repository's issue list to identify issues that need attention, and attempt to resolve them.
@@ -345,7 +347,7 @@ The documents in the **_xxxdocs_** directory are licensed under CC BY 4.0. For d
 
 ## Suggestions and Feedback<a name="EN-US_TOPIC_0000002547258203"></a>
 
-You are welcome to contribute to the community. If you have any questions or suggestions, please submit an [issue](https://gitcode.com/openeuler/OmniAdaptor). We will respond as soon as possible. Thank you for your support.
+We welcome your contributions to the community. If you have questions or suggestions, want to request a feature, or need to report a non-security bug, please file an issue in [OmniOperator Issues](https://gitcode.com/openeuler/OmniOperator/issues). We will respond as soon as possible. You are also welcome to join the discussion on the [openEuler community forum](https://forum.openeuler.org/). Thank you for your support.
 
 ## Acknowledgments<a name="EN-US_TOPIC_0000002515658382"></a>
 
