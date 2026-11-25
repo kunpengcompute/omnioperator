@@ -20,7 +20,7 @@ namespace omniruntime {
 namespace op {
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinVarcharAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors,
-    int32_t rowIndex)
+                                                        int32_t rowIndex)
 {
     auto v = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vectors[0]);
     const auto *varcharState = VarcharState::ConstCastState(state + aggStateOffset);
@@ -35,7 +35,8 @@ void MinVarcharAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *st
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinVarcharAggregator<IN_ID, OUT_ID>::ExtractValuesBatch(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors, int32_t rowOffset, int32_t rowCount)
+                                                             std::vector<BaseVector *> &vectors, int32_t rowOffset,
+                                                             int32_t rowCount)
 {
     auto v = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vectors[0]);
     for (int32_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
@@ -52,7 +53,7 @@ void MinVarcharAggregator<IN_ID, OUT_ID>::ExtractValuesBatch(std::vector<Aggrega
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinVarcharAggregator<IN_ID, OUT_ID>::ExtractValuesForSpill(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors)
+                                                                std::vector<BaseVector *> &vectors)
 {
     auto v = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vectors[0]);
     auto rowCount = static_cast<int32_t>(groupStates.size());
@@ -70,7 +71,8 @@ void MinVarcharAggregator<IN_ID, OUT_ID>::ExtractValuesForSpill(std::vector<Aggr
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinVarcharAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, BaseVector *vector,
-    const int32_t rowOffset, const int32_t rowCount, const std::shared_ptr<NullsHelper> nullMap)
+                                                                const int32_t rowOffset, const int32_t rowCount,
+                                                                const std::shared_ptr<NullsHelper> nullMap)
 {
     if (vector->GetEncoding() != vec::OMNI_DICTIONARY) {
         if (nullMap == nullptr) {
@@ -91,7 +93,8 @@ void MinVarcharAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinVarcharAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<AggregateState *> &rowStates,
-    BaseVector *vector, const int32_t rowOffset, const std::shared_ptr<NullsHelper> nullMap)
+                                                               BaseVector *vector, const int32_t rowOffset,
+                                                               const std::shared_ptr<NullsHelper> nullMap)
 {
     if (vector->GetEncoding() != vec::OMNI_DICTIONARY) {
         if (nullMap == nullptr) {
@@ -114,7 +117,7 @@ void MinVarcharAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<Aggre
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinVarcharAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRowInfo> &unspillRows,
-    int32_t rowCount, int32_t &vectorIndex)
+                                                              int32_t rowCount, int32_t &vectorIndex)
 {
     auto firstVecIdx = vectorIndex++;
     for (int32_t rowIdx = 0; rowIdx < rowCount; rowIdx++) {
@@ -140,7 +143,8 @@ void MinVarcharAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<Unspil
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinVarcharAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter)
+                                                                const std::shared_ptr<NullsHelper> nullMap,
+                                                                const bool aggFilter)
 {
     // note: type relationship matches only (IN_ID == OMNI_CHAR || IN_ID == OMNI_VARCHAR) and
     // (OUT_ID == OMNI_CHAR || OUT_ID == OMNI_VARCHAR)
@@ -159,14 +163,14 @@ void MinVarcharAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *res
     }
 }
 
-template<DataTypeId IN_ID, DataTypeId OUT_ID>
-template<typename T>
+template <DataTypeId IN_ID, DataTypeId OUT_ID>
+template <typename T>
 void MinVarcharAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap)
+                                                                        const std::shared_ptr<NullsHelper> nullMap)
 {
     int rowCount = originVector->GetSize();
     auto minVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(
-            VectorHelper::CreateFlatVector(OUT_ID, rowCount));
+        VectorHelper::CreateFlatVector(OUT_ID, rowCount));
     auto vector = reinterpret_cast<T *>(originVector);
     for (int index = 0; index < rowCount; ++index) {
         if ((*nullMap)[index]) {
@@ -208,5 +212,5 @@ template class MinVarcharAggregator<OMNI_CHAR, OMNI_VARCHAR>;
 template class MinVarcharAggregator<OMNI_VARCHAR, OMNI_CHAR>;
 
 template class MinVarcharAggregator<OMNI_VARCHAR, OMNI_VARCHAR>;
-}
-}
+} // namespace op
+} // namespace omniruntime

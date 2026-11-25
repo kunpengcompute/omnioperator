@@ -52,7 +52,8 @@ AggregationWithExprOperatorFactory::AggregationWithExprOperatorFactory(
     std::vector<int8_t> hasAggFilters(aggFilterNum, 0);
     for (int32_t i = 0; i < aggFilterNum; ++i) {
         auto aggFilter = aggFilters[i];
-        if (aggFilter == nullptr) continue;
+        if (aggFilter == nullptr)
+            continue;
         auto simpleFilter = new SimpleFilter(*aggFilter);
         if (simpleFilter->Initialize(overflowConfig)) {
             aggSimpleFilters[i] = simpleFilter;
@@ -64,14 +65,14 @@ AggregationWithExprOperatorFactory::AggregationWithExprOperatorFactory(
             }
             aggSimpleFilters.clear();
             throw omniruntime::exception::OmniException("EXPRESSION_NOT_SUPPORT",
-                "The expression is not supported yet.");
+                                                        "The expression is not supported yet.");
         }
     }
 
     std::vector<int32_t> groupByAndAggColumnarIdx;
     std::vector<DataTypePtr> newSourceTypes;
     OperatorUtil::CreateRequiredProjections(sourceDataTypes, projectKeys, newSourceTypes, this->projections,
-        groupByAndAggColumnarIdx, *overflowConfig);
+                                            groupByAndAggColumnarIdx, *overflowConfig);
     uint32_t aggCols[aggColNum];
     for (uint32_t i = 0, j = groupByNum; i < aggColNum; i++, j++) {
         aggCols[i] = static_cast<uint32_t>(groupByAndAggColumnarIdx[j]);
@@ -97,8 +98,8 @@ AggregationWithExprOperatorFactory::AggregationWithExprOperatorFactory(
     originSourceTypes = std::make_unique<DataTypes>(sourceDataTypes);
     sourceTypes = std::make_unique<DataTypes>(newSourceTypes);
     aggOperatorFactory = new AggregationOperatorFactory(*sourceTypes, aggFuncTypes, aggColIdx, maskColumns,
-        aggOutputTypes, inputRaws, outputPartial, hasAggFilters, overflowConfig->IsOverflowAsNull(),
-        isStatisticalAggregate);
+                                                        aggOutputTypes, inputRaws, outputPartial, hasAggFilters,
+                                                        overflowConfig->IsOverflowAsNull(), isStatisticalAggregate);
     aggOperatorFactory->Init();
 }
 
@@ -115,16 +116,15 @@ Operator *AggregationWithExprOperatorFactory::CreateOperator()
 {
     auto aggOperator = static_cast<AggregationOperator *>(aggOperatorFactory->CreateOperator());
     return new AggregationWithExprOperator(*originSourceTypes, *sourceTypes, projections, aggSimpleFilters,
-        aggOperator);
+                                           aggOperator);
 }
 
 AggregationWithExprOperator::AggregationWithExprOperator(const DataTypes &originSourceTypes,
-    const DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
-    std::vector<SimpleFilter *> &aggSimpleFilters, AggregationOperator *aggOperator)
-    : originTypes(originSourceTypes),
-      sourceTypes(sourceTypes),
-      projections(projections),
-      aggOperator(aggOperator)
+                                                         const DataTypes &sourceTypes,
+                                                         std::vector<std::unique_ptr<Projection>> &projections,
+                                                         std::vector<SimpleFilter *> &aggSimpleFilters,
+                                                         AggregationOperator *aggOperator)
+    : originTypes(originSourceTypes), sourceTypes(sourceTypes), projections(projections), aggOperator(aggOperator)
 {
     auto aggFilterNum = aggSimpleFilters.size();
     this->aggSimpleFilters.resize(aggFilterNum, nullptr);
@@ -138,7 +138,7 @@ AggregationWithExprOperator::AggregationWithExprOperator(const DataTypes &origin
 
 AggregationWithExprOperator::~AggregationWithExprOperator()
 {
-    for (auto it: aggSimpleFilters) {
+    for (auto it : aggSimpleFilters) {
         delete it;
     }
     aggSimpleFilters.clear();
@@ -153,15 +153,15 @@ int32_t AggregationWithExprOperator::AddInput(VectorBatch *inputVecBatch)
         return 0;
     }
 
-    auto newInputVecBatch = AggUtil::AggFilterRequiredVectors(inputVecBatch, originTypes, sourceTypes, projections,
-        executionContext.get());
+    auto newInputVecBatch =
+        AggUtil::AggFilterRequiredVectors(inputVecBatch, originTypes, sourceTypes, projections, executionContext.get());
 
     // if hasAggFilter is false, then skip AddFilterColumn
     if (hasAggFilter) {
         try {
             // do filter and update newInputVecBatch
             AggUtil::AddFilterColumn(inputVecBatch, newInputVecBatch, aggSimpleFilters, executionContext.get(),
-                originTypes);
+                                     originTypes);
         } catch (const std::exception &e) {
             VectorHelper::FreeVecBatch(inputVecBatch);
             ResetInputVecBatch();
@@ -211,11 +211,11 @@ AggregationWithExprOperatorFactory *AggregationWithExprOperatorFactory::CreateAg
     auto outputPartial = planNode->GetOutputPartials();
     auto isStatisticalAggregate = planNode->GetIsStatisticalAggregate();
     auto overflowConfig = queryConfig.IsOverFlowASNull() == true ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
-                                                             : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
+                                                                 : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
     return new AggregationWithExprOperatorFactory(groupByKeys, groupByNum, aggsKeys, *sourceDataTypes, aggsOutputTypes,
-        aggFuncTypes, aggFilters, maskColsVector, inputRaws, outputPartial, overflowConfig,
-        isStatisticalAggregate);
+                                                  aggFuncTypes, aggFilters, maskColsVector, inputRaws, outputPartial,
+                                                  overflowConfig, isStatisticalAggregate);
 }
 
-}
-}
+} // namespace op
+} // namespace omniruntime

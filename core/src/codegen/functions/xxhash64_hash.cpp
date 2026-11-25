@@ -98,7 +98,7 @@ extern "C" DLLEXPORT int64_t XxH64Double(double val, bool isValNull, int64_t see
 }
 
 extern "C" DLLEXPORT int64_t XxH64Decimal64(int64_t val, int32_t precision, int32_t scale, bool isValNull, int64_t seed,
-    bool isSeedNull)
+                                            bool isSeedNull)
 {
     if (isSeedNull) {
         seed = 0;
@@ -107,7 +107,7 @@ extern "C" DLLEXPORT int64_t XxH64Decimal64(int64_t val, int32_t precision, int3
 }
 
 extern "C" DLLEXPORT int64_t XxH64Decimal128(int64_t xHigh, uint64_t xLow, int32_t precision, int32_t scale,
-    bool isValNull, int64_t seed, bool isSeedNull)
+                                             bool isValNull, int64_t seed, bool isSeedNull)
 {
     if (isSeedNull) {
         seed = 0;
@@ -136,4 +136,4 @@ extern "C" DLLEXPORT int64_t XxH64Boolean(bool val, bool isValNull, int64_t seed
     int32_t intVal = val ? 1 : 0;
     return HashInt(intVal, seed);
 }
-}
+} // namespace omniruntime::codegen::function

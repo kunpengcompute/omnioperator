@@ -144,8 +144,9 @@ static jobject Transform(JNIEnv *env, VectorBatch &result)
     env->SetLongArrayRegion(jVecOffsetsBufAddrs, 0, vecCount, offsetsBufAddrs);
 
     // create vector batch java object.
-    jobject obj = env->NewObject(vecBatchCls, vecBatchInitMethodId, (jlong)((int64_t)(&result)), jVecAddresses,
-        jVecValueBufAddrs, jVecNullBufAddrs, jVecOffsetsBufAddrs, jVecEncodingIds, jDataTypeIds, result.GetRowCount());
+    jobject obj =
+        env->NewObject(vecBatchCls, vecBatchInitMethodId, (jlong)((int64_t)(&result)), jVecAddresses, jVecValueBufAddrs,
+                       jVecNullBufAddrs, jVecOffsetsBufAddrs, jVecEncodingIds, jDataTypeIds, result.GetRowCount());
     return obj;
 }
 
@@ -167,7 +168,8 @@ static jobject TransformFromRow(JNIEnv *env, RowBatch &result)
 }
 
 JNIEXPORT jint JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_addInputNative(JNIEnv *env, jobject jObj,
-    jlong jOperatorAddress, jlong jVecBatchAddress)
+                                                                                       jlong jOperatorAddress,
+                                                                                       jlong jVecBatchAddress)
 {
     int32_t errNo = 0;
     auto *vecBatch = reinterpret_cast<VectorBatch *>(jVecBatchAddress);
@@ -186,7 +188,7 @@ JNIEXPORT jint JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_addInput
  * Signature: (J)[Lnova/hetu/omniruntime/operator/OMResult;
  */
 JNIEXPORT jobject JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_getOutputNative(JNIEnv *env, jobject jObj,
-    jlong jOperatorAddr)
+                                                                                           jlong jOperatorAddr)
 {
     std::call_once(loadVecBatchClsFlag, LoadVecBatchAndOmniResults, env);
     if (vecBatchCls == nullptr || omniResultsCls == nullptr) {
@@ -213,7 +215,7 @@ JNIEXPORT jobject JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_getOu
  * Signature: (J)[Lnova/hetu/omniruntime/operator/void;
  */
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_closeNative(JNIEnv *env, jobject jObj,
-    jlong jOperatorAddr)
+                                                                                    jlong jOperatorAddr)
 {
     try {
         auto *nativeOperator = reinterpret_cast<op::Operator *>(jOperatorAddr);
@@ -229,21 +231,23 @@ JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_closeNat
  * Signature: (J)J
  */
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_getSpilledBytesNative(JNIEnv *env,
-    jobject jObj, jlong jOperatorAddr)
+                                                                                               jobject jObj,
+                                                                                               jlong jOperatorAddr)
 {
     auto *nativeOperator = reinterpret_cast<op::Operator *>(jOperatorAddr);
     return static_cast<jlong>(nativeOperator->GetSpilledBytes());
 }
 
 JNIEXPORT jlongArray JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_getMetricsInfoNative(JNIEnv *env,
-    jobject jObj, jlong jOperatorAddr)
+                                                                                                   jobject jObj,
+                                                                                                   jlong jOperatorAddr)
 {
     auto *nativeOperator = reinterpret_cast<op::Operator *>(jOperatorAddr);
     // get simpleMetrics info, used by all operators.
     static const uint64_t metricsLength = 200;
     static const uint64_t boundaryIndex = 100;
     jlongArray metricsInfoArray = env->NewLongArray(metricsLength);
-    jlong* elementsSimple = env->GetLongArrayElements(metricsInfoArray, nullptr);
+    jlong *elementsSimple = env->GetLongArrayElements(metricsInfoArray, nullptr);
     elementsSimple[0] = static_cast<jlong>(nativeOperator->GetSpilledBytes());
     // get specialMetrics info, every operator is different.
     std::vector<uint64_t> specialMetricsInfoArray = nativeOperator->GetSpecialMetricsInfo();
@@ -257,7 +261,8 @@ JNIEXPORT jlongArray JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_ge
 }
 
 JNIEXPORT jobject JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_alignSchemaNative(JNIEnv *env, jobject jObj,
-    jlong jOperatorAddr, jlong jVecBatchAddr)
+                                                                                             jlong jOperatorAddr,
+                                                                                             jlong jVecBatchAddr)
 {
     auto nativeOperator = (op::Operator *)jOperatorAddr;
     auto nativeVeBatch = (vec::VectorBatch *)jVecBatchAddr;
@@ -275,21 +280,22 @@ JNIEXPORT jobject JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_align
  * Signature: (J)J
  */
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_operator_OmniOperator_getHashMapUniqueKeysNative(JNIEnv *env,
-    jobject jObj, jlong jOperatorAddr)
+                                                                                                    jobject jObj,
+                                                                                                    jlong jOperatorAddr)
 {
     auto *nativeOperator = (op::Operator *)jOperatorAddr;
     return static_cast<jlong>(nativeOperator->GetHashMapUniqueKeys());
 }
 
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_freeRowBatchNative(JNIEnv *env, jclass jcls,
-    jlong jrowBatchAddress)
+                                                                                     jlong jrowBatchAddress)
 {
     auto *rowBatch = reinterpret_cast<RowBatch *>(jrowBatchAddress);
     delete rowBatch;
 }
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_newRowBatchNative(JNIEnv *env, jclass jcls,
-    jobjectArray rows, jint rowCount)
+                                                                                     jobjectArray rows, jint rowCount)
 {
     jclass rowClass = env->FindClass("nova/hetu/omniruntime/vector/Row");
 
@@ -308,7 +314,7 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_newRowBatchNa
 }
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_RowBatch_transFromVectorBatch(JNIEnv *env, jclass jcls,
-    jlong vectorBatch)
+                                                                                        jlong vectorBatch)
 {
     auto *vecBatch = reinterpret_cast<VectorBatch *>(vectorBatch);
     int32_t vecCount = vecBatch->GetVectorCount();
@@ -355,8 +361,8 @@ JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeseri
     delete rowParser;
 }
 
-JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeserializer_parseOneRow(JNIEnv *env,
-    jclass jcls, jlong parserAddr, jbyteArray bytes, jint rowIndex)
+JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeserializer_parseOneRow(
+    JNIEnv *env, jclass jcls, jlong parserAddr, jbyteArray bytes, jint rowIndex)
 {
     jboolean isCopy = false;
     auto *row = env->GetByteArrayElements(bytes, &isCopy);
@@ -365,8 +371,8 @@ JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeseri
     env->ReleaseByteArrayElements(bytes, row, 0);
 }
 
-JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeserializer_parseOneRowByAddr(JNIEnv *env,
-    jclass jcls, jlong parserAddr, jlong rowAddr, jint rowIndex)
+JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeserializer_parseOneRowByAddr(
+    JNIEnv *env, jclass jcls, jlong parserAddr, jlong rowAddr, jint rowIndex)
 {
     auto *parser = reinterpret_cast<RowParser *>(parserAddr);
     auto *row = reinterpret_cast<uint8_t *>(rowAddr);
@@ -376,7 +382,9 @@ JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeseri
 }
 
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_serialize_OmniRowDeserializer_parseAllRow(JNIEnv *env,
-    jclass jcls, jlong parserAddr, jlong rowBatchAddr)
+                                                                                                   jclass jcls,
+                                                                                                   jlong parserAddr,
+                                                                                                   jlong rowBatchAddr)
 {
     auto *parser = reinterpret_cast<RowParser *>(parserAddr);
     auto *rowBatch = reinterpret_cast<RowBatch *>(rowBatchAddr);

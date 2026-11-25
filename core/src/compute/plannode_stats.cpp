@@ -28,7 +28,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
 #include "plannode_stats.h"
 #include "compute/task.h"
 #include "plannode/planNode.h"
@@ -37,7 +37,7 @@
 #include <unordered_map>
 
 namespace omniruntime::compute {
-PlanNodeStats& PlanNodeStats::operator+=(const PlanNodeStats& another)
+PlanNodeStats &PlanNodeStats::operator+=(const PlanNodeStats &another)
 {
     inputRows += another.inputRows;
     inputBytes += another.inputBytes;
@@ -85,9 +85,9 @@ PlanNodeStats& PlanNodeStats::operator+=(const PlanNodeStats& another)
 }
 
 // Returns true if an operator is a hash join operator given 'operatorType'.
-void PlanNodeStats::HashJoinOperator(const OperatorStats& stats)
+void PlanNodeStats::HashJoinOperator(const OperatorStats &stats)
 {
-    const std::string& opType = stats.operatorType;
+    const std::string &opType = stats.operatorType;
 
     if (opType == opNameForHashBuilder) {
         buildInputRows += stats.inputRows;
@@ -106,8 +106,7 @@ void PlanNodeStats::HashJoinOperator(const OperatorStats& stats)
     }
 }
 
-
-void PlanNodeStats::Add(const OperatorStats& stats)
+void PlanNodeStats::Add(const OperatorStats &stats)
 {
     auto it = operatorStats.find(stats.operatorType);
     if (it != operatorStats.end()) {
@@ -120,7 +119,7 @@ void PlanNodeStats::Add(const OperatorStats& stats)
     AddTotals(stats);
 }
 
-void PlanNodeStats::AddTotals(const OperatorStats& stats)
+void PlanNodeStats::AddTotals(const OperatorStats &stats)
 {
     inputRows += stats.inputRows;
     inputBytes += stats.inputBytes;
@@ -161,11 +160,9 @@ void PlanNodeStats::AddTotals(const OperatorStats& stats)
     HashJoinOperator(stats);
 }
 
-void appendOperatorStats(
-    const OperatorStats& stats,
-    std::unordered_map<std::string, PlanNodeStats>& planStats)
+void appendOperatorStats(const OperatorStats &stats, std::unordered_map<std::string, PlanNodeStats> &planStats)
 {
-    const auto& planNodeId = stats.planNodeId;
+    const auto &planNodeId = stats.planNodeId;
     auto it = planStats.find(planNodeId);
     if (it != planStats.end()) {
         it->second.Add(stats);
@@ -176,16 +173,15 @@ void appendOperatorStats(
     }
 }
 
-std::unordered_map<std::string, PlanNodeStats> ToPlanStats(
-    const TaskStats& taskStats)
+std::unordered_map<std::string, PlanNodeStats> ToPlanStats(const TaskStats &taskStats)
 {
     std::unordered_map<PlanNodeId, PlanNodeStats> planStats;
 
-    for (const auto& pipelineStats : taskStats.pipelineStats) {
-        for (const auto& opStats : pipelineStats.operatorStats) {
+    for (const auto &pipelineStats : taskStats.pipelineStats) {
+        for (const auto &opStats : pipelineStats.operatorStats) {
             if (opStats.statsSplitter.has_value()) {
-                const auto& multiNodeStats = opStats.statsSplitter.value()(opStats);
-                for (const auto& stats : multiNodeStats) {
+                const auto &multiNodeStats = opStats.statsSplitter.value()(opStats);
+                for (const auto &stats : multiNodeStats) {
                     appendOperatorStats(stats, planStats);
                 }
             } else {
@@ -196,37 +192,27 @@ std::unordered_map<std::string, PlanNodeStats> ToPlanStats(
     return planStats;
 }
 
-std::string PlanNodeStats::ToString(
-    bool includeInputStats) const
+std::string PlanNodeStats::ToString(bool includeInputStats) const
 {
     std::stringstream out;
     if (includeInputStats) {
-        out << "Input: " << inputRows << " rows (" << inputBytes
-            << ", " << numInputVecBatches << " batches), ";
+        out << "Input: " << inputRows << " rows (" << inputBytes << ", " << numInputVecBatches << " batches), ";
         if ((rawInputRows > 0) && (rawInputRows != inputRows)) {
-            out << "Raw Input: " << rawInputRows << " rows ("
-                << rawInputBytes << "), ";
+            out << "Raw Input: " << rawInputRows << " rows (" << rawInputBytes << "), ";
         }
     }
-    out << "Output: " << outputRows << " rows (" << outputBytes
-        << ", " << numOutputVecBatches << " batches)";
+    out << "Output: " << outputRows << " rows (" << outputBytes << ", " << numOutputVecBatches << " batches)";
     if (physicalWrittenBytes > 0) {
         out << ", Physical written output: " << physicalWrittenBytes;
     }
-    out << ", Cpu time: " << cpuWallTiming.cpuNanos
-        << ", Wall time: " << cpuWallTiming.wallNanos
-        << ", Blocked wall time: " << blockedWallNanos
-        << ", Peak memory: " << peakMemoryBytes
-        << ", Memory allocations: " << numMemoryAllocations
-        << ", Threads: " << numDrivers
-        << ", Splits: " << numSplits
-        <<", Spilled: " << spilledRows << " rows ("
-            << spilledBytes << ", " << spilledFiles << " files)";
+    out << ", Cpu time: " << cpuWallTiming.cpuNanos << ", Wall time: " << cpuWallTiming.wallNanos
+        << ", Blocked wall time: " << blockedWallNanos << ", Peak memory: " << peakMemoryBytes
+        << ", Memory allocations: " << numMemoryAllocations << ", Threads: " << numDrivers << ", Splits: " << numSplits
+        << ", Spilled: " << spilledRows << " rows (" << spilledBytes << ", " << spilledFiles << " files)";
     out << ", CPU breakdown: B/I/O/F "
-        << Format(
-            "({}/{}/{}/{})", isBlockedTiming.cpuNanos, addInputTime.cpuNanos,
-            getOutputTime.cpuNanos, finishTiming.cpuNanos);
+        << Format("({}/{}/{}/{})", isBlockedTiming.cpuNanos, addInputTime.cpuNanos, getOutputTime.cpuNanos,
+                  finishTiming.cpuNanos);
     return out.str();
 }
 
-}
+} // namespace omniruntime::compute

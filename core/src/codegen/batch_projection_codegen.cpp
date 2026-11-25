@@ -34,7 +34,7 @@ const int NEW_NULL_VALUES_INDEX = 7;
 const int OUTPUT_OFFSETS_INDEX = 8;
 const int EXECUTION_CONTEXT_IDX = 9;
 const int DICTIONARY_VECTORS_IDX = 10;
-}
+} // namespace
 intptr_t BatchProjectionCodeGen::GetFunction()
 {
     llvm::Function *func = this->CreateBatchFunction();
@@ -57,7 +57,7 @@ intptr_t BatchProjectionCodeGen::CreateBatchWrapper(llvm::Function &projFunc)
     args.push_back(llvmTypes->I32Type());    // the num of selected rows
     args.push_back(llvmTypes->I64PtrType()); // bitmap address array
     args.push_back(llvmTypes->I64PtrType()); // offset address array
-    args.push_back(llvmTypes->I32PtrType());  // output null values array
+    args.push_back(llvmTypes->I32PtrType()); // output null values array
     args.push_back(llvmTypes->I32PtrType()); // output offset array
     args.push_back(llvmTypes->I64Type());    // execution content address
     args.push_back(llvmTypes->I64PtrType()); // dictionary address array
@@ -109,33 +109,33 @@ intptr_t BatchProjectionCodeGen::CreateBatchWrapper(llvm::Function &projFunc)
         numRows = numSelected;
     } else {
         rowIdxArray = builder->CreateAlloca(llvmTypes->I32Type(), numRows, "ROW_IDX_ARRAY");
-        CallExternFunction("fill_rowIdx", { OMNI_INT, OMNI_INT }, OMNI_INT, { rowIdxArray, numRows }, nullptr,
-            "fill_rowIdx");
+        CallExternFunction("fill_rowIdx", {OMNI_INT, OMNI_INT}, OMNI_INT, {rowIdxArray, numRows}, nullptr,
+                           "fill_rowIdx");
     }
     // generate output array for inner function
     AllocaInst *outputLenPtr = builder->CreateAlloca(llvmTypes->I32Type(), numRows, "OUTPUT_LENGTH");
     auto isNullPtr = builder->CreateAlloca(llvmTypes->I1Type(), numRows, "IS_NULL");
     auto resArray = this->GetResultArray(this->expr->GetReturnTypeId(), numRows);
 
-    std::vector<Value *> projFuncArgs { input,        bitmap,           offsets,           numRows,   rowIdxArray,
-        outputLenPtr, executionContext, dictionaryVectors, isNullPtr, resArray };
+    std::vector<Value *> projFuncArgs{input,        bitmap,           offsets,           numRows,   rowIdxArray,
+                                      outputLenPtr, executionContext, dictionaryVectors, isNullPtr, resArray};
     builder->CreateCall(proj, projFuncArgs, "INNER_FUNC");
 
     std::vector<Value *> funcArgs;
     if (TypeUtil::IsStringType(expr->GetReturnTypeId())) {
-        std::vector<DataTypeId> paramTypes = { OMNI_LONG, OMNI_VARCHAR, OMNI_INT, OMNI_INT };
-        funcArgs = { outColPtr, resArray, outputLenPtr, numRows };
+        std::vector<DataTypeId> paramTypes = {OMNI_LONG, OMNI_VARCHAR, OMNI_INT, OMNI_INT};
+        funcArgs = {outColPtr, resArray, outputLenPtr, numRows};
         CallExternFunction("batch_WrapVarcharVector", paramTypes, OMNI_INT, funcArgs, nullptr, "copy_varchar_result");
     } else {
-        funcArgs = { outColPtr, resArray, numRows };
-        CallExternFunction("batch_copy", { this->expr->GetReturnTypeId() }, this->expr->GetReturnTypeId(), funcArgs,
-            nullptr, "copy_result");
+        funcArgs = {outColPtr, resArray, numRows};
+        CallExternFunction("batch_copy", {this->expr->GetReturnTypeId()}, this->expr->GetReturnTypeId(), funcArgs,
+                           nullptr, "copy_result");
     }
 
-    funcArgs = { nullValuesAddress, isNullPtr, numRows };
-    CallExternFunction("batch_NullArrayToBits", { OMNI_BOOLEAN }, OMNI_BOOLEAN, funcArgs, nullptr, "copy_null");
+    funcArgs = {nullValuesAddress, isNullPtr, numRows};
+    CallExternFunction("batch_NullArrayToBits", {OMNI_BOOLEAN}, OMNI_BOOLEAN, funcArgs, nullptr, "copy_null");
     builder->CreateRet(numRows);
     OptimizeFunctionsAndModule();
     return Compile();
 }
-}
+} // namespace omniruntime::codegen

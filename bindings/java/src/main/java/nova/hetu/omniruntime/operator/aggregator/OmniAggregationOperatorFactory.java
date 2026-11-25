@@ -38,7 +38,7 @@ public class OmniAggregationOperatorFactory extends OmniOperatorFactory<OmniAggr
      * @param sourceTypes the aggregation source types
      * @param aggFunctionTypes the aggregation function types
      * @param aggInputChannels the aggregation function input channels
-     * @param maskChannels mask chennels array for aggregetions
+     * @param maskChannels mask channel array for aggregations
      * @param aggOutputTypes the aggregation output types
      * @param isInputRaw the input raw
      * @param isOutputPartial the output partial
@@ -58,7 +58,7 @@ public class OmniAggregationOperatorFactory extends OmniOperatorFactory<OmniAggr
      * @param sourceTypes the aggregation source types
      * @param aggFunctionTypes the aggregation function types
      * @param aggInputChannels the aggregation function input channels
-     * @param maskChannels mask chennels array for aggregetions
+     * @param maskChannels mask channel array for aggregations
      * @param aggOutputTypes the aggregation output types
      * @param isInputRaw the input raw
      * @param isOutputPartial the output partial

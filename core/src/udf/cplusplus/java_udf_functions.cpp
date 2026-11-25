@@ -33,10 +33,7 @@ struct OutputState {
     int32_t rowIdx;
 };
 
-omniruntime::op::ErrorCode InitUdf()
-{
-    return JniUtil::Init();
-}
+omniruntime::op::ErrorCode InitUdf() { return JniUtil::Init(); }
 
 static jobjectArray CreateInputTypeArray(JNIEnv *env, jclass dataTypeIdCls, const int32_t *inputTypes, int32_t vecCount)
 {
@@ -50,8 +47,8 @@ static jobjectArray CreateInputTypeArray(JNIEnv *env, jclass dataTypeIdCls, cons
 }
 
 void ExecuteHiveUdfSingle(int64_t contextPtr, const char *udfClass, int32_t *inputTypes, int32_t retType,
-    int32_t vecCount, int64_t inputValueAddr, int64_t inputNullAddr, int64_t inputLengthAddr, int64_t outputValueAddr,
-    int64_t outputNullAddr, int64_t outputLengthAddr)
+                          int32_t vecCount, int64_t inputValueAddr, int64_t inputNullAddr, int64_t inputLengthAddr,
+                          int64_t outputValueAddr, int64_t outputNullAddr, int64_t outputLengthAddr)
 {
     auto executorCls = JniUtil::GetHiveUdfExecutorCls();
     auto executeSingleMethod = JniUtil::GetExecuteSingleMethod();
@@ -74,7 +71,7 @@ void ExecuteHiveUdfSingle(int64_t contextPtr, const char *udfClass, int32_t *inp
     auto jRetType = env->GetStaticObjectField(dataTypeIdCls, JniUtil::GetFieldId(retType));
 
     env->CallStaticVoidMethod(executorCls, executeSingleMethod, jUdfClassName, jParamTypes, jRetType, inputValueAddr,
-        inputNullAddr, inputLengthAddr, outputValueAddr, outputNullAddr, outputLengthAddr);
+                              inputNullAddr, inputLengthAddr, outputValueAddr, outputNullAddr, outputLengthAddr);
     if (env->ExceptionCheck()) {
         auto msg = JniUtil::GetExceptionMsg(env);
         SetError(contextPtr, msg);
@@ -83,8 +80,9 @@ void ExecuteHiveUdfSingle(int64_t contextPtr, const char *udfClass, int32_t *inp
 }
 
 static void ExecHiveUdfOutputString(int64_t contextPtr, const char *udfClass, int32_t *inputTypes, int32_t retType,
-    int32_t vecCount, int32_t rowCount, int64_t *inputValues, int64_t *inputNulls, int64_t *inputLengths,
-    int64_t outputValueAddr, int64_t outputNullAddr, int64_t outputLengthAddr)
+                                    int32_t vecCount, int32_t rowCount, int64_t *inputValues, int64_t *inputNulls,
+                                    int64_t *inputLengths, int64_t outputValueAddr, int64_t outputNullAddr,
+                                    int64_t outputLengthAddr)
 {
     auto executorCls = JniUtil::GetHiveUdfExecutorCls();
     auto executeBatchMethod = JniUtil::GetExecuteBatchMethod();
@@ -109,7 +107,7 @@ static void ExecHiveUdfOutputString(int64_t contextPtr, const char *udfClass, in
     auto outputValueAddrArr = reinterpret_cast<int64_t *>(outputValueAddr);
     auto outputLengthArr = reinterpret_cast<int32_t *>(outputLengthAddr);
 
-    auto outputState = new OutputState { 0, 0 };
+    auto outputState = new OutputState{0, 0};
     auto outputStateAddr = reinterpret_cast<int64_t>(outputState);
     int32_t outputValueCapacity = 1024;
     int32_t start = 0;
@@ -118,9 +116,9 @@ static void ExecHiveUdfOutputString(int64_t contextPtr, const char *udfClass, in
         auto outputValuePtr = ArenaAllocatorMalloc(contextPtr, outputValueCapacity);
         outputState->outputValueCapacity = outputValueCapacity;
         env->CallStaticVoidMethod(executorCls, executeBatchMethod, jUdfClassName, jParamTypes, jRetType,
-            reinterpret_cast<int64_t>(inputValues), reinterpret_cast<int64_t>(inputNulls),
-            reinterpret_cast<int64_t>(inputLengths), rowCount, outputValuePtr, outputNullAddr, outputLengthAddr,
-            outputStateAddr);
+                                  reinterpret_cast<int64_t>(inputValues), reinterpret_cast<int64_t>(inputNulls),
+                                  reinterpret_cast<int64_t>(inputLengths), rowCount, outputValuePtr, outputNullAddr,
+                                  outputLengthAddr, outputStateAddr);
         if (env->ExceptionCheck()) {
             auto msg = JniUtil::GetExceptionMsg(env);
             SetError(contextPtr, msg);
@@ -143,8 +141,9 @@ static void ExecHiveUdfOutputString(int64_t contextPtr, const char *udfClass, in
 }
 
 static void ExecHiveUdfOutputNonString(int64_t contextPtr, const char *udfClass, int32_t *inputTypes, int32_t retType,
-    int32_t vecCount, int32_t rowCount, int64_t *inputValues, int64_t *inputNulls, int64_t *inputLengths,
-    int64_t outputValueAddr, int64_t outputNullAddr, int64_t outputLengthAddr)
+                                       int32_t vecCount, int32_t rowCount, int64_t *inputValues, int64_t *inputNulls,
+                                       int64_t *inputLengths, int64_t outputValueAddr, int64_t outputNullAddr,
+                                       int64_t outputLengthAddr)
 {
     // prepare udf name for jni call
     auto env = JniUtil::GetJNIEnv();
@@ -164,8 +163,9 @@ static void ExecHiveUdfOutputNonString(int64_t contextPtr, const char *udfClass,
     auto jRetType = env->GetStaticObjectField(dataTypeIdCls, JniUtil::GetFieldId(retType));
 
     env->CallStaticVoidMethod(JniUtil::GetHiveUdfExecutorCls(), JniUtil::GetExecuteBatchMethod(), jUdfClassName,
-        jParamTypes, jRetType, reinterpret_cast<int64_t>(inputValues), reinterpret_cast<int64_t>(inputNulls),
-        reinterpret_cast<int64_t>(inputLengths), rowCount, outputValueAddr, outputNullAddr, outputLengthAddr, 0);
+                              jParamTypes, jRetType, reinterpret_cast<int64_t>(inputValues),
+                              reinterpret_cast<int64_t>(inputNulls), reinterpret_cast<int64_t>(inputLengths), rowCount,
+                              outputValueAddr, outputNullAddr, outputLengthAddr, 0);
     if (env->ExceptionCheck()) {
         auto msg = JniUtil::GetExceptionMsg(env);
         SetError(contextPtr, msg);
@@ -174,16 +174,17 @@ static void ExecHiveUdfOutputNonString(int64_t contextPtr, const char *udfClass,
 }
 
 void ExecuteHiveUdfBatch(int64_t contextPtr, const char *udfClass, int32_t *inputTypes, int32_t retType,
-    int32_t vecCount, int32_t rowCount, int64_t *inputValues, int64_t *inputNulls, int64_t *inputLengths,
-    int64_t outputValueAddr, int64_t outputNullAddr, int64_t outputLengthAddr)
+                         int32_t vecCount, int32_t rowCount, int64_t *inputValues, int64_t *inputNulls,
+                         int64_t *inputLengths, int64_t outputValueAddr, int64_t outputNullAddr,
+                         int64_t outputLengthAddr)
 {
     if (TypeUtil::IsStringType(static_cast<type::DataTypeId>(retType))) {
         ExecHiveUdfOutputString(contextPtr, udfClass, inputTypes, retType, vecCount, rowCount, inputValues, inputNulls,
-            inputLengths, outputValueAddr, outputNullAddr, outputLengthAddr);
+                                inputLengths, outputValueAddr, outputNullAddr, outputLengthAddr);
     } else {
         ExecHiveUdfOutputNonString(contextPtr, udfClass, inputTypes, retType, vecCount, rowCount, inputValues,
-            inputNulls, inputLengths, outputValueAddr, outputNullAddr, outputLengthAddr);
+                                   inputNulls, inputLengths, outputValueAddr, outputNullAddr, outputLengthAddr);
     }
 }
-}
-}
+} // namespace udf
+} // namespace omniruntime

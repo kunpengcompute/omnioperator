@@ -21,10 +21,7 @@ using namespace std;
 
 void ExprInfoExtractor::Visit(const LiteralExpr &e) {}
 
-void ExprInfoExtractor::Visit(const FieldExpr &e)
-{
-    this->vectorIndexes.insert(e.colVal);
-}
+void ExprInfoExtractor::Visit(const FieldExpr &e) { this->vectorIndexes.insert(e.colVal); }
 
 void ExprInfoExtractor::Visit(const BinaryExpr &e)
 {
@@ -32,10 +29,7 @@ void ExprInfoExtractor::Visit(const BinaryExpr &e)
     e.right->Accept(*this);
 }
 
-void ExprInfoExtractor::Visit(const UnaryExpr &e)
-{
-    e.exp->Accept(*this);
-}
+void ExprInfoExtractor::Visit(const UnaryExpr &e) { e.exp->Accept(*this); }
 
 void ExprInfoExtractor::Visit(const IfExpr &e)
 {
@@ -71,10 +65,7 @@ void ExprInfoExtractor::Visit(const SwitchExpr &e)
         when.second->Accept(*this);
     }
 }
-void ExprInfoExtractor::Visit(const IsNullExpr &e)
-{
-    e.value->Accept(*this);
-}
+void ExprInfoExtractor::Visit(const IsNullExpr &e) { e.value->Accept(*this); }
 
 void ExprInfoExtractor::Visit(const FuncExpr &e)
 {
@@ -83,8 +74,5 @@ void ExprInfoExtractor::Visit(const FuncExpr &e)
     }
 }
 
-std::set<int32_t> ExprInfoExtractor::GetVectorIndexes()
-{
-    return this->vectorIndexes;
-}
-}
+std::set<int32_t> ExprInfoExtractor::GetVectorIndexes() { return this->vectorIndexes; }
+} // namespace omniruntime::codegen

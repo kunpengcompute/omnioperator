@@ -61,37 +61,21 @@ extern "C" DLLEXPORT
         std::ostringstream errorMessage;
         switch (type) {
             case OMNI_CHAR:
-            case OMNI_VARCHAR:
-                errorMessage << "VARCHAR";
-                break;
-            case OMNI_BYTE:
-                errorMessage << "TINYINT";
-                break;
-            case OMNI_SHORT:
-                errorMessage << "SMALLINT";
-                break;
-            case OMNI_INT:
-                errorMessage << "INTEGER";
-                break;
-            case OMNI_LONG:
-                errorMessage << "BIGINT";
-                break;
-            case OMNI_TIMESTAMP:
-                errorMessage << "TIMESTAMP";
-                break;
-            case OMNI_DOUBLE:
-                errorMessage << "DOUBLE";
-                break;
+            case OMNI_VARCHAR: errorMessage << "VARCHAR"; break;
+            case OMNI_BYTE: errorMessage << "TINYINT"; break;
+            case OMNI_SHORT: errorMessage << "SMALLINT"; break;
+            case OMNI_INT: errorMessage << "INTEGER"; break;
+            case OMNI_LONG: errorMessage << "BIGINT"; break;
+            case OMNI_TIMESTAMP: errorMessage << "TIMESTAMP"; break;
+            case OMNI_DOUBLE: errorMessage << "DOUBLE"; break;
             case OMNI_DECIMAL64:
             case OMNI_DECIMAL128:
                 errorMessage << "DECIMAL(" << va_arg(v, int32_t) << ", " << va_arg(v, int32_t) << ")";
                 break;
-            default:
-                errorMessage << "No Support data type";
-                break;
+            default: errorMessage << "No Support data type"; break;
         }
         va_end(v);
         return errorMessage.str();
     }
 }
-}
+} // namespace omniruntime::codegen

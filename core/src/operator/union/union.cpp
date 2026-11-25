@@ -18,14 +18,15 @@ using namespace omniruntime::vec;
 namespace omniruntime {
 namespace op {
 UnionOperatorFactory::UnionOperatorFactory(const type::DataTypes &sourceTypes, int32_t sourceTypesCount,
-    bool isDistinct)
+                                           bool isDistinct)
     : sourceTypes(sourceTypes), sourceTypesCount(sourceTypesCount), isDistinct(isDistinct)
-{}
+{
+}
 
 UnionOperatorFactory::~UnionOperatorFactory() {}
 
 UnionOperatorFactory *UnionOperatorFactory::CreateUnionOperatorFactory(const type::DataTypes &sourceTypesField,
-    int32_t sourceTypesCountField, bool distinct)
+                                                                       int32_t sourceTypesCountField, bool distinct)
 {
     auto uOperatorFactory = new UnionOperatorFactory(sourceTypesField, sourceTypesCountField, distinct);
     return uOperatorFactory;
@@ -34,8 +35,8 @@ UnionOperatorFactory *UnionOperatorFactory::CreateUnionOperatorFactory(const typ
 UnionOperatorFactory *UnionOperatorFactory::CreateUnionOperatorFactory(std::shared_ptr<const UnionNode> planNode)
 {
     auto dataTypes = planNode->GetSourceTypes();
-    auto unionOperatorFactory = new UnionOperatorFactory(
-        *dataTypes.get(), (*dataTypes).GetSize(), planNode->IsDistinct());
+    auto unionOperatorFactory =
+        new UnionOperatorFactory(*dataTypes.get(), (*dataTypes).GetSize(), planNode->IsDistinct());
     return unionOperatorFactory;
 }
 
@@ -47,7 +48,8 @@ Operator *UnionOperatorFactory::CreateOperator()
 
 UnionOperator::UnionOperator(const type::DataTypes &sourceTypes, int32_t sourceTypesCount, bool isDistinct)
     : sourceTypes(sourceTypes), sourceTypesCount(sourceTypesCount), isDistinct(isDistinct)
-{}
+{
+}
 
 UnionOperator::~UnionOperator() = default;
 
@@ -107,12 +109,12 @@ OmniStatus UnionOperator::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-BlockingReason UnionOperator::IsBlocked(ContinueFuture* future)
+BlockingReason UnionOperator::IsBlocked(ContinueFuture *future)
 {
     if (inputOperatorCnt_ > 1) {
         return BlockingReason::kWaitForUnionBuild;
     }
     return BlockingReason::kNotBlocked;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

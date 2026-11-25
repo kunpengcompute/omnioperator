@@ -15,17 +15,17 @@
 
 namespace omniruntime::compute {
 
-    CpuWallTimer::CpuWallTimer(CpuWallTiming& timing) : timing_(timing)
-    {
-        ++timing_.count;
-        cpuTimeStart_ = ThreadCpuNanos();
-        wallTimeStart_ = 0;
-    }
+CpuWallTimer::CpuWallTimer(CpuWallTiming &timing) : timing_(timing)
+{
+    ++timing_.count;
+    cpuTimeStart_ = ThreadCpuNanos();
+    wallTimeStart_ = 0;
+}
 
-    CpuWallTimer::~CpuWallTimer()
-    {
-        timing_.cpuNanos += ThreadCpuNanos() - cpuTimeStart_;
-        timing_.wallNanos += 0;
-    }
+CpuWallTimer::~CpuWallTimer()
+{
+    timing_.cpuNanos += ThreadCpuNanos() - cpuTimeStart_;
+    timing_.wallNanos += 0;
+}
 
 } // namespace omniruntime::compute

@@ -21,7 +21,7 @@ using namespace omniruntime::vec;
 
 namespace omniruntime::codegen::function {
 extern "C" DLLEXPORT void BatchGetIntFromDictionaryVector(int64_t dictionaryVectorAddr, int32_t *rowIdxArray,
-    int32_t rowCnt, int32_t *output)
+                                                          int32_t rowCnt, int32_t *output)
 {
     auto dictionaryVectorPtr = reinterpret_cast<Vector<DictionaryContainer<int32_t>> *>(dictionaryVectorAddr);
     for (int i = 0; i < rowCnt; ++i) {
@@ -30,7 +30,7 @@ extern "C" DLLEXPORT void BatchGetIntFromDictionaryVector(int64_t dictionaryVect
 }
 
 extern "C" DLLEXPORT void BatchGetLongFromDictionaryVector(int64_t dictionaryVectorAddr, int32_t *rowIdxArray,
-    int32_t rowCnt, int64_t *output)
+                                                           int32_t rowCnt, int64_t *output)
 {
     auto dictionaryVectorPtr = reinterpret_cast<Vector<DictionaryContainer<int64_t>> *>(dictionaryVectorAddr);
     for (int i = 0; i < rowCnt; ++i) {
@@ -39,7 +39,7 @@ extern "C" DLLEXPORT void BatchGetLongFromDictionaryVector(int64_t dictionaryVec
 }
 
 extern "C" DLLEXPORT void BatchGetDoubleFromDictionaryVector(int64_t dictionaryVectorAddr, int32_t *rowIdxArray,
-    int32_t rowCnt, double *output)
+                                                             int32_t rowCnt, double *output)
 {
     auto dictionaryVectorPtr = reinterpret_cast<Vector<DictionaryContainer<double>> *>(dictionaryVectorAddr);
     for (int i = 0; i < rowCnt; ++i) {
@@ -48,7 +48,7 @@ extern "C" DLLEXPORT void BatchGetDoubleFromDictionaryVector(int64_t dictionaryV
 }
 
 extern "C" DLLEXPORT void BatchGetBooleanFromDictionaryVector(int64_t dictionaryVectorAddr, int32_t *rowIdxArray,
-    int32_t rowCnt, bool *output)
+                                                              int32_t rowCnt, bool *output)
 {
     auto dictionaryVectorPtr = reinterpret_cast<Vector<DictionaryContainer<bool>> *>(dictionaryVectorAddr);
     for (int i = 0; i < rowCnt; ++i) {
@@ -57,7 +57,8 @@ extern "C" DLLEXPORT void BatchGetBooleanFromDictionaryVector(int64_t dictionary
 }
 
 extern "C" DLLEXPORT void BatchGetVarcharFromDictionaryVector(int64_t contextPtr, int64_t dictionaryVectorAddr,
-    int32_t *rowIdxArray, int32_t rowCnt, uint8_t **str, int32_t *length)
+                                                              int32_t *rowIdxArray, int32_t rowCnt, uint8_t **str,
+                                                              int32_t *length)
 {
     auto dictionaryVectorPtr = reinterpret_cast<Vector<DictionaryContainer<std::string_view>> *>(dictionaryVectorAddr);
     for (int i = 0; i < rowCnt; ++i) {
@@ -68,7 +69,7 @@ extern "C" DLLEXPORT void BatchGetVarcharFromDictionaryVector(int64_t contextPtr
 }
 
 extern "C" DLLEXPORT void BatchGetDecimalFromDictionaryVector(int64_t dictionaryVectorAddr, int32_t *rowIdxArray,
-    int32_t rowCnt, Decimal128 *output)
+                                                              int32_t rowCnt, Decimal128 *output)
 {
     auto dictionaryVectorPtr = reinterpret_cast<Vector<DictionaryContainer<type::Decimal128>> *>(dictionaryVectorAddr);
     for (int i = 0; i < rowCnt; ++i) {
@@ -105,7 +106,8 @@ extern "C" DLLEXPORT void BatchGetBooleanFromVector(bool *vector, int32_t *rowId
 }
 
 extern "C" DLLEXPORT void BatchGetVarcharFromVector(int64_t contextPtr, int32_t *offsetArray, const char *vector,
-    int32_t *rowIdxArray, int32_t rowCnt, uint8_t **str, int32_t *length)
+                                                    int32_t *rowIdxArray, int32_t rowCnt, uint8_t **str,
+                                                    int32_t *length)
 {
     errno_t err;
     char *ret;
@@ -127,10 +129,10 @@ extern "C" DLLEXPORT void BatchGetVarcharFromVector(int64_t contextPtr, int32_t 
 }
 
 extern "C" DLLEXPORT void BatchGetDecimalFromVector(Decimal128 *vector, int32_t *rowIdxArray, int32_t rowCnt,
-    Decimal128 *output)
+                                                    Decimal128 *output)
 {
     for (int i = 0; i < rowCnt; ++i) {
         output[i] = vector[rowIdxArray[i]];
     }
 }
-}
+} // namespace omniruntime::codegen::function

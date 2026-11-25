@@ -40,6 +40,3 @@ else
       echo "[INFO] using $(basename $JAVA_BINDING) in OMNI_HOME"
   fi
 fi
-
-
-

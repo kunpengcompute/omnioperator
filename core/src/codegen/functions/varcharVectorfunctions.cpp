@@ -39,8 +39,5 @@ extern DLLEXPORT void WrapSetBitNull(int32_t *bits, int32_t index, bool isNull)
     }
 }
 
-extern DLLEXPORT bool WrapIsBitNull(int32_t *bits, int32_t index)
-{
-    return BitUtil::IsBitSet(bits, index);
-}
-}
+extern DLLEXPORT bool WrapIsBitNull(int32_t *bits, int32_t index) { return BitUtil::IsBitSet(bits, index); }
+} // namespace omniruntime::codegen::function

@@ -33,7 +33,7 @@ const int NEW_NULL_VALUES_INDEX = 7;
 const int OUTPUT_OFFSETS_INDEX = 8;
 const int EXECUTION_CONTEXT_IDX = 9;
 const int DICTIONARY_VECTORS_IDX = 10;
-}
+} // namespace
 
 intptr_t ProjectionCodeGen::GetFunction(const DataTypes &inputDataTypes)
 {
@@ -47,7 +47,7 @@ intptr_t ProjectionCodeGen::GetFunction(const DataTypes &inputDataTypes)
 intptr_t ProjectionCodeGen::CreateWrapper()
 {
     // The args indicates the type of the function parameter list.
-    std::vector<Type *> args {
+    std::vector<Type *> args{
         llvmTypes->I64PtrType(), // data address array
         llvmTypes->I32Type(),    // the num of rows
         llvmTypes->I64Type(),    // output array address
@@ -55,7 +55,7 @@ intptr_t ProjectionCodeGen::CreateWrapper()
         llvmTypes->I32Type(),    // the num of selected rows
         llvmTypes->I64PtrType(), // bitmap address array
         llvmTypes->I64PtrType(), // offset address array
-        llvmTypes->I32PtrType(),  // output null values array
+        llvmTypes->I32PtrType(), // output null values array
         llvmTypes->I32PtrType(), // output offset array
         llvmTypes->I64Type(),    // execution content address
         llvmTypes->I64PtrType()  // dictionary address array
@@ -130,14 +130,14 @@ intptr_t ProjectionCodeGen::CreateWrapper()
     Value *selectedAddress;
 
     // set bits null func
-    FunctionSignature setBitNullFuncSignature = FunctionSignature("WrapSetBitNull", { OMNI_INT }, OMNI_BOOLEAN);
+    FunctionSignature setBitNullFuncSignature = FunctionSignature("WrapSetBitNull", {OMNI_INT}, OMNI_BOOLEAN);
     llvm::Function *setBitNullFunc =
         modulePtr->getFunction(FunctionRegistry::LookupFunction(&setBitNullFuncSignature)->GetId());
 
     // Type of output column
     llvm::Function *varcharVectorFunc = nullptr;
     if (expr->GetReturnTypeId() == OMNI_CHAR || expr->GetReturnTypeId() == OMNI_VARCHAR) {
-        std::vector<DataTypeId> paramTypes = { OMNI_LONG, OMNI_INT, OMNI_VARCHAR };
+        std::vector<DataTypeId> paramTypes = {OMNI_LONG, OMNI_INT, OMNI_VARCHAR};
         FunctionSignature varcharVectorFuncSignature = FunctionSignature("WrapVarcharVector", paramTypes, OMNI_INT);
         varcharVectorFunc =
             modulePtr->getFunction(FunctionRegistry::LookupFunction(&varcharVectorFuncSignature)->GetId());
@@ -203,7 +203,7 @@ intptr_t ProjectionCodeGen::CreateWrapper()
         auto outputLen = builder->CreateLoad(llvmTypes->I32Type(), outputLenPtr, "OUTPUT_LENGTH");
         auto stringPtr = builder->CreateIntToPtr(ret, Type::getInt8PtrTy(*context));
         // call wrap_varchar_vector function
-        std::vector<Value *> argVals { outColPtr, curIndexVal, stringPtr, outputLen };
+        std::vector<Value *> argVals{outColPtr, curIndexVal, stringPtr, outputLen};
         auto call = builder->CreateCall(varcharVectorFunc, argVals, "wrap_varchar_vector");
         InlineFunctionInfo inlineFunctionInfo;
         InlineFunction(*call, inlineFunctionInfo);
@@ -214,8 +214,9 @@ intptr_t ProjectionCodeGen::CreateWrapper()
         builder->CreateStore(ret, gep);
     }
 
-    auto setNullRet = builder->CreateCall(setBitNullFunc,
-        { nullValuesAddress, curIndexVal, builder->CreateLoad(llvmTypes->I1Type(), isNullPtr) }, "wrap_set_bit_null");
+    auto setNullRet = builder->CreateCall(
+        setBitNullFunc, {nullValuesAddress, curIndexVal, builder->CreateLoad(llvmTypes->I1Type(), isNullPtr)},
+        "wrap_set_bit_null");
     InlineFunctionInfo inlineSetNullFuncInfo;
     InlineFunction(*setNullRet, inlineSetNullFuncInfo);
 
@@ -242,5 +243,5 @@ intptr_t ProjectionCodeGen::CreateWrapper()
 
     return Compile();
 }
-}
-}
+} // namespace codegen
+} // namespace omniruntime

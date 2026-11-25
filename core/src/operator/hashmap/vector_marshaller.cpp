@@ -36,17 +36,10 @@ template <DataTypeId id> const char *VariableTypeDeserializer(BaseVector *baseVe
         // decompress rowLenSize byte to stringLen.
         auto stringLen = 0;
         switch (rowLenSize) {
-            case BYTE_1:
-                stringLen = *reinterpret_cast<const int8_t *>(pos + sizeof(uint8_t));
-                break;
-            case BYTE_2:
-                stringLen = *reinterpret_cast<const int16_t *>(pos + sizeof(uint8_t));
-                break;
-            case BYTE_4:
-                stringLen = *reinterpret_cast<const int32_t *>(pos + sizeof(uint8_t));
-                break;
-            default:
-                throw OmniException("DESERIALIZED FAILED", "Invalid String Length");
+            case BYTE_1: stringLen = *reinterpret_cast<const int8_t *>(pos + sizeof(uint8_t)); break;
+            case BYTE_2: stringLen = *reinterpret_cast<const int16_t *>(pos + sizeof(uint8_t)); break;
+            case BYTE_4: stringLen = *reinterpret_cast<const int32_t *>(pos + sizeof(uint8_t)); break;
+            default: throw OmniException("DESERIALIZED FAILED", "Invalid String Length");
         }
         pos = pos + sizeof(uint8_t) + rowLenSize;
         std::string_view strView(pos, stringLen);
@@ -59,7 +52,7 @@ template <DataTypeId id> const char *VariableTypeDeserializer(BaseVector *baseVe
 }
 
 void ALWAYS_INLINE VariableTypeSerializer(const std::string_view &inValue, mem::SimpleArenaAllocator &arenaAllocator,
-    StringRef &result)
+                                          StringRef &result)
 {
     auto stringLen = static_cast<int32_t>(inValue.size());
     // __builtin_clzll is a built-in function of gcc and clang compiler
@@ -82,11 +75,11 @@ void ALWAYS_INLINE VariableTypeSerializer(const std::string_view &inValue, mem::
 
 void NullVariableTypeSerializer(mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
 {
-    auto resSize = sizeof(uint8_t);
+    auto resultSize = sizeof(uint8_t);
     auto *&data = result.data;
-    auto *pos = arenaAllocator.AllocateContinue(resSize, reinterpret_cast<const uint8_t *&>(data));
+    auto *pos = arenaAllocator.AllocateContinue(resultSize, reinterpret_cast<const uint8_t *&>(data));
     (*pos) = 0; // value is null
-    result.size += resSize;
+    result.size += resultSize;
 }
 
 const char *Decimal128Deserializer(BaseVector *baseVector, size_t rowIdx, const char *pos)
@@ -109,15 +102,9 @@ template <typename T> T GetValue(uint8_t rowDataSize, const char *pos)
 {
     T value;
     switch (rowDataSize) {
-        case BYTE_1:
-            value = static_cast<T>(*reinterpret_cast<const int8_t *>(pos));
-            break;
-        case BYTE_2:
-            value = static_cast<T>(*reinterpret_cast<const int16_t *>(pos));
-            break;
-        case BYTE_4:
-            value = static_cast<T>(*reinterpret_cast<const int32_t *>(pos));
-            break;
+        case BYTE_1: value = static_cast<T>(*reinterpret_cast<const int8_t *>(pos)); break;
+        case BYTE_2: value = static_cast<T>(*reinterpret_cast<const int16_t *>(pos)); break;
+        case BYTE_4: value = static_cast<T>(*reinterpret_cast<const int32_t *>(pos)); break;
         case BYTE_8:
             if constexpr (std::is_same_v<T, double>) {
                 value = *reinterpret_cast<const double *>(pos);
@@ -153,12 +140,12 @@ template <DataTypeId id> const char *FixedLenTypeDeserializer(BaseVector *baseVe
 void Decimal128Serializer(Decimal128 &value, mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
 {
     uint8_t rowDataSize = BYTE_16;
-    auto resSize = sizeof(uint8_t) + rowDataSize;
+    auto resultSize = sizeof(uint8_t) + rowDataSize;
     auto *&data = result.data;
-    auto *pos = arenaAllocator.AllocateContinue(resSize, reinterpret_cast<const uint8_t *&>(data));
+    auto *pos = arenaAllocator.AllocateContinue(resultSize, reinterpret_cast<const uint8_t *&>(data));
     (*pos) = rowDataSize;
     *reinterpret_cast<Decimal128 *>((pos + sizeof(uint8_t))) = value;
-    result.size += resSize;
+    result.size += resultSize;
 }
 
 template <typename RawDataType>
@@ -180,37 +167,37 @@ void FixedLenTypeSerializer(RawDataType value, mem::SimpleArenaAllocator &arenaA
         rowDataSize = BYTE_1 << (BIT_32 - __builtin_clz(rowDataSize));
     }
 
-    auto resSize = sizeof(int8_t) + rowDataSize;
+    auto resultSize = sizeof(int8_t) + rowDataSize;
     auto *&data = result.data;
 
-    auto *pos = arenaAllocator.AllocateContinue(resSize, reinterpret_cast<const uint8_t *&>(data));
+    auto *pos = arenaAllocator.AllocateContinue(resultSize, reinterpret_cast<const uint8_t *&>(data));
     (*pos) = rowDataSize;
     // copy value
     memcpy_s(pos + sizeof(uint8_t), rowDataSize, &value, rowDataSize);
-    result.size += resSize;
+    result.size += resultSize;
 }
 
 void NullDecimal128Serializer(mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
 {
-    auto resSize = sizeof(uint8_t);
+    auto resultSize = sizeof(uint8_t);
     auto *&data = result.data;
-    auto *pos = arenaAllocator.AllocateContinue(resSize, reinterpret_cast<const uint8_t *&>(data));
+    auto *pos = arenaAllocator.AllocateContinue(resultSize, reinterpret_cast<const uint8_t *&>(data));
     (*pos) = 0;
-    result.size += resSize;
+    result.size += resultSize;
 }
 
 void NullFixedLenTypeSerializer(mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
 {
-    auto resSize = sizeof(uint8_t);
+    auto resultSize = sizeof(uint8_t);
     auto *&data = result.data;
-    auto *pos = arenaAllocator.AllocateContinue(resSize, reinterpret_cast<const uint8_t *&>(data));
+    auto *pos = arenaAllocator.AllocateContinue(resultSize, reinterpret_cast<const uint8_t *&>(data));
     (*pos) = 0; // value is null
-    result.size += resSize;
+    result.size += resultSize;
 }
 
 template <type::DataTypeId id>
 void SerializeValueIntoArena(BaseVector *baseVector, int32_t rowIdx, mem::SimpleArenaAllocator &arenaAllocator,
-    StringRef &result)
+                             StringRef &result)
 {
     using RawDataType = typename NativeAndVectorType<id>::type;
 
@@ -242,7 +229,7 @@ void SerializeValueIntoArena(BaseVector *baseVector, int32_t rowIdx, mem::Simple
 
 template <type::DataTypeId id>
 void SerializeDictionaryValueIntoArena(BaseVector *baseVector, int32_t rowIdx,
-    mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
+                                       mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
 {
     using RawDataType = typename NativeAndVectorType<id>::type;
     if (!baseVector->IsNull(rowIdx)) {
@@ -351,7 +338,7 @@ std::vector<VectorDeSerializer> vectorDeSerializerCenter = {
 
 template <typename RawDataType>
 void ALWAYS_INLINE FixedLenTypeSerializerForJoin(RawDataType value, mem::SimpleArenaAllocator &arenaAllocator,
-    StringRef &result)
+                                                 StringRef &result)
 {
     static constexpr uint8_t RawDataSize = sizeof(RawDataType);
     auto *&data = result.data;
@@ -361,7 +348,7 @@ void ALWAYS_INLINE FixedLenTypeSerializerForJoin(RawDataType value, mem::SimpleA
 }
 
 void ALWAYS_INLINE Decimal128SerializerForJoin(Decimal128 &value, mem::SimpleArenaAllocator &arenaAllocator,
-    StringRef &result)
+                                               StringRef &result)
 {
     static constexpr uint8_t RawDataSize = sizeof(Decimal128);
     auto *&data = result.data;
@@ -372,7 +359,7 @@ void ALWAYS_INLINE Decimal128SerializerForJoin(Decimal128 &value, mem::SimpleAre
 
 template <type::DataTypeId id>
 bool SerializeValueIgnoreNullIntoArena(BaseVector *baseVector, int32_t rowIdx,
-    mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
+                                       mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
 {
     using RawDataType = typename NativeAndVectorType<id>::type;
 
@@ -396,7 +383,7 @@ bool SerializeValueIgnoreNullIntoArena(BaseVector *baseVector, int32_t rowIdx,
 
 template <type::DataTypeId id>
 bool SerializeDictionaryValueIgnoreNullIntoArena(BaseVector *baseVector, int32_t rowIdx,
-    mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
+                                                 mem::SimpleArenaAllocator &arenaAllocator, StringRef &result)
 {
     using RawDataType = typename NativeAndVectorType<id>::type;
     if (!baseVector->IsNull(rowIdx)) {
@@ -507,7 +494,7 @@ bool SerializeFixedKeysIgnoreNullIntoArena(BaseVector *baseVector, int32_t rowId
 
 template <type::DataTypeId id>
 bool SerializeDictionaryFixedKeysIgnoreNullIntoArena(BaseVector *baseVector, int32_t rowIdx, StringRef &result,
-    size_t &pos)
+                                                     size_t &pos)
 {
     using RawDataType = typename NativeAndVectorType<id>::type;
     if (!baseVector->IsNull(rowIdx)) {
@@ -520,7 +507,6 @@ bool SerializeDictionaryFixedKeysIgnoreNullIntoArena(BaseVector *baseVector, int
     return false;
 }
 
-
 template <typename RawDataType>
 void ALWAYS_INLINE FixedKeysSerializerForJoinSimd(RawDataType value, StringRef &result, size_t &pos)
 {
@@ -528,10 +514,9 @@ void ALWAYS_INLINE FixedKeysSerializerForJoinSimd(RawDataType value, StringRef &
     *reinterpret_cast<RawDataType *>(const_cast<char *>(result.data) + pos) = value;
 }
 
-
 template <type::DataTypeId id>
-bool SerializeFixedKeysIgnoreNullIntoArenaSimd(BaseVector *baseVector, int32_t rowid,
-    std::vector<StringRef> &result, size_t &pos, int32_t joinRownum)
+bool SerializeFixedKeysIgnoreNullIntoArenaSimd(BaseVector *baseVector, int32_t rowid, std::vector<StringRef> &result,
+                                               size_t &pos, int32_t joinRownum)
 {
     using RawDataType = typename NativeAndVectorType<id>::type;
     static constexpr uint8_t rawDataSize = sizeof(RawDataType);
@@ -554,7 +539,8 @@ bool SerializeFixedKeysIgnoreNullIntoArenaSimd(BaseVector *baseVector, int32_t r
 
 template <type::DataTypeId id>
 bool SerializeDictionaryFixedKeysIgnoreNullIntoArenaSimd(BaseVector *baseVector, int32_t rowid,
-    std::vector<StringRef> &result, size_t &pos, int32_t joinRownum)
+                                                         std::vector<StringRef> &result, size_t &pos,
+                                                         int32_t joinRownum)
 {
     using RawDataType = typename NativeAndVectorType<id>::type;
     static constexpr uint8_t rawDataSize = sizeof(RawDataType);
@@ -619,7 +605,7 @@ std::vector<FixedKeyVectorSerializerIgnoreNull> dicVectorSerializerFixedKeysIgno
 };
 
 std::vector<FixedKeyVectorSerializerIgnoreNullSimd> vectorSerializerFixedKeysIgnoreNullCenterSimd = {
-    nullptr,                                                      // OMNI_NONE,
+    nullptr,                                                          // OMNI_NONE,
     SerializeFixedKeysIgnoreNullIntoArenaSimd<type::OMNI_INT>,        // OMNI_INT
     SerializeFixedKeysIgnoreNullIntoArenaSimd<type::OMNI_LONG>,       // OMNI_LONG
     SerializeFixedKeysIgnoreNullIntoArenaSimd<type::OMNI_DOUBLE>,     // OMNI_DOUBLE
@@ -641,7 +627,7 @@ std::vector<FixedKeyVectorSerializerIgnoreNullSimd> vectorSerializerFixedKeysIgn
 };
 
 std::vector<FixedKeyVectorSerializerIgnoreNullSimd> dicVectorSerializerFixedKeysIgnoreNullCenterSimd = {
-    nullptr,                                                                // OMNI_NONE,
+    nullptr,                                                                    // OMNI_NONE,
     SerializeDictionaryFixedKeysIgnoreNullIntoArenaSimd<type::OMNI_INT>,        // OMNI_INT
     SerializeDictionaryFixedKeysIgnoreNullIntoArenaSimd<type::OMNI_LONG>,       // OMNI_LONG
     SerializeDictionaryFixedKeysIgnoreNullIntoArenaSimd<type::OMNI_DOUBLE>,     // OMNI_DOUBLE
@@ -661,5 +647,5 @@ std::vector<FixedKeyVectorSerializerIgnoreNullSimd> dicVectorSerializerFixedKeys
     nullptr,                                                                    // OMNI_CONTAINER,
     SerializeDictionaryFixedKeysIgnoreNullIntoArenaSimd<type::OMNI_BYTE>        // OMNI_BYTE
 };
-}
-}
+} // namespace op
+} // namespace omniruntime

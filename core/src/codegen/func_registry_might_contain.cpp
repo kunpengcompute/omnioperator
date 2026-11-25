@@ -23,11 +23,10 @@ std::vector<Function> MightContainFunctionRegistry::GetFunctions()
 {
     DataTypeId retTypeBoolean = OMNI_BOOLEAN;
     std::string mightContainFnStr = "might_contain";
-    std::vector<Function> mightContainRegistry = { // insert native function for might contain function
-        Function(reinterpret_cast<void *>(MightContain), mightContainFnStr, {}, { OMNI_LONG, OMNI_LONG },
-            retTypeBoolean, INPUT_DATA)
-    };
+    std::vector<Function> mightContainRegistry = {// insert native function for might contain function
+                                                  Function(reinterpret_cast<void *>(MightContain), mightContainFnStr,
+                                                           {}, {OMNI_LONG, OMNI_LONG}, retTypeBoolean, INPUT_DATA)};
 
     return mightContainRegistry;
 }
-}
+} // namespace omniruntime::codegen

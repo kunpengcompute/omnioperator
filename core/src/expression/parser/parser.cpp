@@ -27,7 +27,7 @@ namespace {
 const string OPERATOR_PREFIX = "$operator$";
 const int32_t SUBSTR_LEN = 10;
 const int32_t ARG2 = 2;
-}
+} // namespace
 
 // Helper function to remove operator prefix if it is there
 string DemangleOperator(string opStr)
@@ -40,10 +40,10 @@ string DemangleOperator(string opStr)
 
 OperatorType GetBinaryOperatorType(string opStr)
 {
-    vector<string> allCmpOps { "LESS_THAN", "LESS_THAN_OR_EQUAL", "GREATER_THAN", "GREATER_THAN_OR_EQUAL",
-        "EQUAL",     "NOT_EQUAL" };
-    vector<string> allLogOps { "AND", "OR" };
-    vector<string> allArithOps { "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "MODULUS" };
+    vector<string> allCmpOps{"LESS_THAN", "LESS_THAN_OR_EQUAL", "GREATER_THAN", "GREATER_THAN_OR_EQUAL",
+                             "EQUAL",     "NOT_EQUAL"};
+    vector<string> allLogOps{"AND", "OR"};
+    vector<string> allArithOps{"ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "MODULUS"};
     for (const string &cmpOp : allCmpOps) {
         if (opStr == cmpOp) {
             return OperatorType::COMPARISON;
@@ -64,7 +64,7 @@ OperatorType GetBinaryOperatorType(string opStr)
 
 bool IsUnaryOperator(const string &opStr)
 {
-    vector<string> allUnaryOps { "NOT", "not" };
+    vector<string> allUnaryOps{"NOT", "not"};
     for (const string &unaryOp : allUnaryOps) {
         if (opStr == unaryOp) {
             return true;
@@ -110,8 +110,8 @@ DataTypeId ParseReturnType(const string &typeString)
     return OMNI_INVALID;
 }
 
-std::vector<omniruntime::expressions::Expr *> Parser::ParseExpressions(const string expressions[],
-    int32_t numberOfExpressions, DataTypes &inputTypes)
+std::vector<omniruntime::expressions::Expr *>
+Parser::ParseExpressions(const string expressions[], int32_t numberOfExpressions, DataTypes &inputTypes)
 {
     std::vector<Expr *> vExprs;
     for (int32_t i = 0; i < numberOfExpressions; i++) {
@@ -256,7 +256,7 @@ Expr *Parser::ParseRowExpressionHelper(string opStr, vector<Expr *> args)
     // Check that the signature matches
     vector<DataTypeId> argTypes(args.size());
     std::transform(args.begin(), args.end(), argTypes.begin(),
-        [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
+                   [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
     for (size_t i = 0; i < argTypes.size(); i++) {
         if (argTypes[i] == omniruntime::type::OMNI_DATE32) {
             argTypes[i] = omniruntime::type::OMNI_INT;

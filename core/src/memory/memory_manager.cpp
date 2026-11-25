@@ -35,8 +35,7 @@ MemoryManager::MemoryManager(MemoryManager *parentMemoryManager)
     isBlocked.store(false, std::memory_order_relaxed);
 }
 
-MemoryManager::~MemoryManager()
-{}
+MemoryManager::~MemoryManager() {}
 
 void MemoryManager::AddMemory(int64_t reportedMemory, int64_t curAllocateSize)
 {
@@ -51,16 +50,16 @@ void MemoryManager::AddMemory(int64_t reportedMemory, int64_t curAllocateSize)
          * the other thread is called and the AddMemory interface is executed again,
          * which may cause the OmniException to be thrown again.
          * Note: Only global memory manager can throw the MEM_CAP_EXCEEDED exception.
-        *  */
+         *  */
         if (!isBlocked.load(std::memory_order_relaxed)) {
             isBlocked.store(true, std::memory_order_relaxed);
             memoryAmount.fetch_sub(curAllocateSize, std::memory_order_relaxed);
 
             if (parent.load(std::memory_order_relaxed) == nullptr) {
-                auto message =
-                        op::GetErrorMessage(op::ErrorCode::MEM_CAP_EXCEEDED) + std::to_string(limit / 1024 / 1024)
-                        + "; current Memory Usage Total: " + std::to_string(newMemoryAmount / 1024 / 1024)
-                        + "MB; current Memory Allocate Size: " + std::to_string(curAllocateSize) + "B";
+                auto message = op::GetErrorMessage(op::ErrorCode::MEM_CAP_EXCEEDED) +
+                               std::to_string(limit / 1024 / 1024) +
+                               "; current Memory Usage Total: " + std::to_string(newMemoryAmount / 1024 / 1024) +
+                               "MB; current Memory Allocate Size: " + std::to_string(curAllocateSize) + "B";
                 throw OmniException(GetErrorCode(op::ErrorCode::MEM_CAP_EXCEEDED), message);
             }
         }
@@ -114,49 +113,25 @@ void MemoryManager::SetParent(MemoryManager *parentMemoryManager)
     parent.store(parentMemoryManager, std::memory_order_relaxed);
 }
 
-MemoryManager *MemoryManager::GetParent()
-{
-    return parent.load(std::memory_order_relaxed);
-}
+MemoryManager *MemoryManager::GetParent() { return parent.load(std::memory_order_relaxed); }
 
-void MemoryManager::SetMemoryAmount(int64_t amount)
-{
-    memoryAmount.store(amount, std::memory_order_relaxed);
-}
+void MemoryManager::SetMemoryAmount(int64_t amount) { memoryAmount.store(amount, std::memory_order_relaxed); }
 
-int64_t MemoryManager::GetMemoryAmount()
-{
-    return memoryAmount.load(std::memory_order_relaxed);
-}
+int64_t MemoryManager::GetMemoryAmount() { return memoryAmount.load(std::memory_order_relaxed); }
 
-void MemoryManager::SetMemoryLimit(int64_t limit)
-{
-    memoryLimit.store(limit, std::memory_order_relaxed);
-}
+void MemoryManager::SetMemoryLimit(int64_t limit) { memoryLimit.store(limit, std::memory_order_relaxed); }
 
-int64_t MemoryManager::GetMemoryLimit()
-{
-    return memoryLimit.load(std::memory_order_relaxed);
-}
+int64_t MemoryManager::GetMemoryLimit() { return memoryLimit.load(std::memory_order_relaxed); }
 
-void MemoryManager::SetMemoryPeak(int64_t peak)
-{
-    memoryPeak.store(peak, std::memory_order_relaxed);
-}
+void MemoryManager::SetMemoryPeak(int64_t peak) { memoryPeak.store(peak, std::memory_order_relaxed); }
 
-int64_t MemoryManager::GetMemoryPeak()
-{
-    return memoryPeak.load(std::memory_order_relaxed);
-}
+int64_t MemoryManager::GetMemoryPeak() { return memoryPeak.load(std::memory_order_relaxed); }
 
-bool MemoryManager::IsMemoryManagerBlocked()
-{
-    return isBlocked.load(std::memory_order_relaxed);
-}
+bool MemoryManager::IsMemoryManagerBlocked() { return isBlocked.load(std::memory_order_relaxed); }
 
 #ifdef DEBUG
 std::unordered_map<std::string, int64_t, std::hash<std::string>, std::equal_to<std::string>,
-    MemoryManagerAllocator<std::pair<std::string, int64_t>>>
+                   MemoryManagerAllocator<std::pair<std::string, int64_t>>>
 MemoryManager::GetScopeMap()
 {
     return scopeMap;
@@ -180,4 +155,4 @@ void MemoryManager::Clear()
     scopeMap.clear();
 #endif
 }
-}
+} // namespace omniruntime::mem

@@ -20,7 +20,7 @@ namespace omniruntime {
 namespace op {
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *state, std::vector<BaseVector *> &vectors,
-    int32_t rowIndex)
+                                                 int32_t rowIndex)
 {
     auto *minState = MinState::ConstCastState(state + aggStateOffset);
     auto v = static_cast<OutVector *>(vectors[0]);
@@ -39,7 +39,8 @@ void MinAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *state, st
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinAggregator<IN_ID, OUT_ID>::ExtractValuesBatch(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors, int32_t rowOffset, int32_t rowCount)
+                                                      std::vector<BaseVector *> &vectors, int32_t rowOffset,
+                                                      int32_t rowCount)
 {
     auto v = static_cast<OutVector *>(vectors[0]);
     for (int32_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
@@ -74,7 +75,7 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID> std::vector<DataTypePtr> MinAggre
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinAggregator<IN_ID, OUT_ID>::ExtractValuesForSpill(std::vector<AggregateState *> &groupStates,
-    std::vector<BaseVector *> &vectors)
+                                                         std::vector<BaseVector *> &vectors)
 {
     auto spillValueVec = static_cast<Vector<ResultType> *>(vectors[0]);
     auto rowCount = static_cast<int32_t>(groupStates.size());
@@ -108,7 +109,8 @@ void MinAggregator<IN_ID, OUT_ID>::InitStates(std::vector<AggregateState *> &gro
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, BaseVector *vector,
-    const int32_t rowOffset, const int32_t rowCount, const std::shared_ptr<NullsHelper> nullMap)
+                                                         const int32_t rowOffset, const int32_t rowCount,
+                                                         const std::shared_ptr<NullsHelper> nullMap)
 {
     auto *minState = MinState::CastState(state);
     if (vector->GetEncoding() != vec::OMNI_DICTIONARY) {
@@ -117,7 +119,7 @@ void MinAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
         if (nullMap == nullptr) {
             if constexpr (CheckTypesContainsDecimal128<InType, ResultType>::value) {
                 Add<InType, ResultType, AggValueState, MinOp<InType, ResultType>>(&minState->value,
-                    minState->valueState, ptr, rowCount);
+                                                                                  minState->valueState, ptr, rowCount);
             } else {
                 simd::ReduceExternal<InType, ResultType, AggValueState, StateValueHandler, simd::ReduceFunc::Min>(
                     &minState->value, minState->valueState, ptr, rowCount);
@@ -129,8 +131,8 @@ void MinAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
             } else {
                 auto conditionArray = nullMap->convertToArray(rowCount);
                 simd::ReduceWithNullsExternal<InType, ResultType, AggValueState, StateValueHandler,
-                    simd::ReduceFunc::Min>(&minState->value, minState->valueState, ptr, rowCount,
-                    conditionArray.data());
+                                              simd::ReduceFunc::Min>(&minState->value, minState->valueState, ptr,
+                                                                     rowCount, conditionArray.data());
             }
         }
     } else {
@@ -138,11 +140,12 @@ void MinAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
         auto *indexMap = GetIdsFromDict<IN_ID>(vector) + rowOffset;
         if (nullMap == nullptr) {
             if constexpr (CheckTypesContainsDecimal128<InType, ResultType>::value) {
-                AddDict<InType, ResultType, AggValueState, MinOp<InType, ResultType>>(&minState->value,
-                    minState->valueState, ptr, rowCount, indexMap);
+                AddDict<InType, ResultType, AggValueState, MinOp<InType, ResultType>>(
+                    &minState->value, minState->valueState, ptr, rowCount, indexMap);
             } else {
                 simd::ReduceWithDicExternal<InType, ResultType, AggValueState, StateValueHandler,
-                    simd::ReduceFunc::Min>(&minState->value, minState->valueState, ptr, rowCount, indexMap);
+                                            simd::ReduceFunc::Min>(&minState->value, minState->valueState, ptr,
+                                                                   rowCount, indexMap);
             }
         } else {
             if constexpr (CheckTypesContainsDecimal128<InType, ResultType>::value) {
@@ -151,8 +154,8 @@ void MinAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
             } else {
                 auto conditionArray = nullMap->convertToArray(rowCount);
                 simd::ReduceWithDicAndNullsExternal<InType, ResultType, AggValueState, StateValueHandler,
-                    simd::ReduceFunc::Min>(&minState->value, minState->valueState, ptr, rowCount,
-                    conditionArray.data(), indexMap);
+                                                    simd::ReduceFunc::Min>(&minState->value, minState->valueState, ptr,
+                                                                           rowCount, conditionArray.data(), indexMap);
             }
         }
     }
@@ -160,7 +163,8 @@ void MinAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state, 
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<AggregateState *> &rowStates, BaseVector *vector,
-    const int32_t rowOffset, const std::shared_ptr<NullsHelper> nullMap)
+                                                        const int32_t rowOffset,
+                                                        const std::shared_ptr<NullsHelper> nullMap)
 {
     if (vector->GetEncoding() != vec::OMNI_DICTIONARY) {
         auto *ptr = reinterpret_cast<InType *>(GetValuesFromVector<IN_ID>(vector));
@@ -176,18 +180,18 @@ void MinAggregator<IN_ID, OUT_ID>::ProcessGroupInternal(std::vector<AggregateSta
         auto *indexMap = GetIdsFromDict<IN_ID>(vector) + rowOffset;
         if (nullMap == nullptr) {
             AddDictUseRowIndex<InType, MinState::template UpdateState<InType, ResultType>>(rowStates, aggStateOffset,
-                ptr, indexMap);
+                                                                                           ptr, indexMap);
         } else {
             AddDictConditionalUseRowIndex<InType, ResultType,
-                MinState::template UpdateStateWithCondition<InType, ResultType, false>>(rowStates, aggStateOffset, ptr,
-                *nullMap, indexMap);
+                                          MinState::template UpdateStateWithCondition<InType, ResultType, false>>(
+                rowStates, aggStateOffset, ptr, *nullMap, indexMap);
         }
     }
 }
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRowInfo> &unspillRows, int32_t rowCount,
-    int32_t &vectorIndex)
+                                                       int32_t &vectorIndex)
 {
     auto firstVecIdx = vectorIndex++;
     for (int32_t rowIdx = 0; rowIdx < rowCount; rowIdx++) {
@@ -205,7 +209,8 @@ void MinAggregator<IN_ID, OUT_ID>::ProcessGroupUnspill(std::vector<UnspillRowInf
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void MinAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter)
+                                                         const std::shared_ptr<NullsHelper> nullMap,
+                                                         const bool aggFilter)
 {
     int rowCount = originVector->GetSize();
     if constexpr (std::is_same_v<InType, OutType>) {
@@ -223,10 +228,10 @@ void MinAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *result, Ba
     }
 }
 
-template<DataTypeId IN_ID, DataTypeId OUT_ID>
-template<typename T>
+template <DataTypeId IN_ID, DataTypeId OUT_ID>
+template <typename T>
 void MinAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch *result, BaseVector *originVector,
-    const std::shared_ptr<NullsHelper> nullMap)
+                                                                 const std::shared_ptr<NullsHelper> nullMap)
 {
     int rowCount = originVector->GetSize();
     auto minVector = reinterpret_cast<OutVector *>(VectorHelper::CreateFlatVector(OUT_ID, rowCount));
@@ -255,10 +260,12 @@ void MinAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch *re
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
 MinAggregator<IN_ID, OUT_ID>::MinAggregator(const DataTypes &inputTypes, const DataTypes &outputTypes,
-    std::vector<int32_t> &channels, const bool inputRaw, const bool outputPartial, const bool isOverflowAsNull)
+                                            std::vector<int32_t> &channels, const bool inputRaw,
+                                            const bool outputPartial, const bool isOverflowAsNull)
     : TypedAggregator(OMNI_AGGREGATION_TYPE_MIN, inputTypes, outputTypes, channels, inputRaw, outputPartial,
-    isOverflowAsNull)
-{}
+                      isOverflowAsNull)
+{
+}
 
 // Explicit template instantiation
 // Defining templated aggregators in header file consume a lot of memory during compilation
@@ -362,5 +369,5 @@ template class MinAggregator<OMNI_DECIMAL64, OMNI_DOUBLE>;
 template class MinAggregator<OMNI_DECIMAL64, OMNI_DECIMAL128>;
 
 template class MinAggregator<OMNI_DECIMAL64, OMNI_DECIMAL64>;
-}
-}
+} // namespace op
+} // namespace omniruntime

@@ -95,8 +95,8 @@ Operator *FilterAndProjectOperatorFactory::CreateOperator()
     return new FilterAndProjectOperator(this->exprEvaluator);
 }
 
-OperatorFactory *CreateFilterOperatorFactory(
-    const std::shared_ptr<const FilterNode> filterNode, const config::QueryConfig &queryConfig)
+OperatorFactory *CreateFilterOperatorFactory(const std::shared_ptr<const FilterNode> filterNode,
+                                             const config::QueryConfig &queryConfig)
 {
     auto filterExpr = filterNode->GetFilterExpr();
     std::vector<Expr *> projections;
@@ -160,8 +160,8 @@ OmniStatus FilterAndProjectOperator::Close()
  * @param outLens contains null or length of each projection.
  * @return true(filter pass) or false(filter fail).
  */
-bool FilterAndProjectOperator::ProcessRow(
-    int64_t valueAddrs[], const int32_t inputLens[], int64_t outValueAddrs[], int32_t outLens[])
+bool FilterAndProjectOperator::ProcessRow(int64_t valueAddrs[], const int32_t inputLens[], int64_t outValueAddrs[],
+                                          int32_t outLens[])
 {
     auto vecCount = exprEvaluator->GetInputDataTypes().GetSize();
     auto dictsAddrs = new int64_t[vecCount];
@@ -190,8 +190,9 @@ bool FilterAndProjectOperator::ProcessRow(
 
     const int rowCount = 1;
     int32_t selectedRows[rowCount];
-    int32_t numSelectedRows = exprEvaluator->GetFilterFunc()(valueAddrs, rowCount, selectedRows, nullsAddrs,
-        offsetsAddrs, reinterpret_cast<int64_t>(executionContext.get()), dictsAddrs);
+    int32_t numSelectedRows =
+        exprEvaluator->GetFilterFunc()(valueAddrs, rowCount, selectedRows, nullsAddrs, offsetsAddrs,
+                                       reinterpret_cast<int64_t>(executionContext.get()), dictsAddrs);
 
     if (executionContext->HasError()) {
         executionContext->GetArena()->Reset();

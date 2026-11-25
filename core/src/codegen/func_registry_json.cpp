@@ -1,5 +1,5 @@
 /*
-* Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * OmniOperator is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan
  * PSL v2.
@@ -27,8 +27,9 @@ const std::string GetJsonObjectFnStr()
 
 std::vector<Function> JsonFunctionRegistry::GetFunctions()
 {
-    std::vector<Function> jsonFnRegistry = { Function(reinterpret_cast<void *>(GetJsonObject), GetJsonObjectFnStr(), {},
-        { OMNI_VARCHAR, OMNI_VARCHAR }, OMNI_VARCHAR, INPUT_DATA_AND_NULL_AND_RETURN_NULL, true) };
+    std::vector<Function> jsonFnRegistry = {Function(reinterpret_cast<void *>(GetJsonObject), GetJsonObjectFnStr(), {},
+                                                     {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_VARCHAR,
+                                                     INPUT_DATA_AND_NULL_AND_RETURN_NULL, true)};
     return jsonFnRegistry;
 }
-}
+} // namespace omniruntime::codegen

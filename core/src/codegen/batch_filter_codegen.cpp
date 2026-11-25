@@ -30,7 +30,7 @@ const int ARGUMENT_THREE = 3;
 const int OFFSETS_INDEX = 4;
 const int EXECUTION_CONTEXT_IDX = 5;
 const int DICTIONARY_VECTORS_IDX = 6;
-}
+} // namespace
 
 intptr_t BatchFilterCodeGen::GetFunction()
 {
@@ -77,21 +77,21 @@ intptr_t BatchFilterCodeGen::CreateBatchWrapper(llvm::Function &filter)
     AllocaInst *lengthAllocaInst = builder->CreateAlloca(llvmTypes->I32Type(), numRows, "LENGTH_PTR");
     AllocaInst *isNullPtr = builder->CreateAlloca(llvmTypes->I1Type(), numRows, "IS_NULL_PTR");
     AllocaInst *rowIdxArray = builder->CreateAlloca(llvmTypes->I32Type(), numRows, "ROW_INDEX_ARRAY");
-    std::vector<Value *> funcArgs { rowIdxArray, numRows };
-    CallExternFunction("fill_rowIdx", { OMNI_INT, OMNI_INT }, OMNI_INT, funcArgs, nullptr, "fill_rowIdx");
+    std::vector<Value *> funcArgs{rowIdxArray, numRows};
+    CallExternFunction("fill_rowIdx", {OMNI_INT, OMNI_INT}, OMNI_INT, funcArgs, nullptr, "fill_rowIdx");
     // in the form of {0, 1, 1, ...}. 1 indicates passing the filter, 0 otherwise.
     auto filterResArray = builder->CreateAlloca(llvmTypes->I1Type(), numRows, "FILTER_RES_PTR");
 
-    std::vector<Value *> filterFuncArgs { data,        bitmap,           offsets,          numRows,
-        rowIdxArray, lengthAllocaInst, executionContext, dictionaryVectors,
-        isNullPtr,   filterResArray };
+    std::vector<Value *> filterFuncArgs{data,        bitmap,           offsets,          numRows,
+                                        rowIdxArray, lengthAllocaInst, executionContext, dictionaryVectors,
+                                        isNullPtr,   filterResArray};
     builder->CreateCall(filterFunc, filterFuncArgs, "INNER_FUNC");
 
-    std::vector<DataTypeId> paramTypes = { OMNI_BOOLEAN, OMNI_BOOLEAN, OMNI_INT, OMNI_INT };
-    funcArgs = { filterResArray, isNullPtr, selectedRows, numRows };
+    std::vector<DataTypeId> paramTypes = {OMNI_BOOLEAN, OMNI_BOOLEAN, OMNI_INT, OMNI_INT};
+    funcArgs = {filterResArray, isNullPtr, selectedRows, numRows};
     auto res = CallExternFunction("batch_and_not", paramTypes, OMNI_INT, funcArgs, nullptr, "fill_filter_result");
     builder->CreateRet(res);
     OptimizeFunctionsAndModule();
     return Compile();
 }
-}
+} // namespace omniruntime::codegen

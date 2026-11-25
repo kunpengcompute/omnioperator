@@ -18,8 +18,11 @@
 
 namespace omniruntime {
 namespace op {
-NestLoopJoinLookupWrapperOperatorFactory::NestLoopJoinLookupWrapperOperatorFactory(NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
-    : nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory) {}
+NestLoopJoinLookupWrapperOperatorFactory::NestLoopJoinLookupWrapperOperatorFactory(
+    NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
+    : nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory)
+{
+}
 
 NestLoopJoinLookupWrapperOperatorFactory::~NestLoopJoinLookupWrapperOperatorFactory()
 {
@@ -29,10 +32,13 @@ NestLoopJoinLookupWrapperOperatorFactory::~NestLoopJoinLookupWrapperOperatorFact
     }
 }
 
-NestLoopJoinLookupWrapperOperatorFactory *NestLoopJoinLookupWrapperOperatorFactory::CreateNestLoopJoinLookupWrapperOperatorFactory(std::shared_ptr<const NestedLoopJoinNode> planNode,
-    NestedLoopJoinBuildOperatorFactory* builderOperatorFactory, const config::QueryConfig& queryConfig)
+NestLoopJoinLookupWrapperOperatorFactory *
+NestLoopJoinLookupWrapperOperatorFactory::CreateNestLoopJoinLookupWrapperOperatorFactory(
+    std::shared_ptr<const NestedLoopJoinNode> planNode, NestedLoopJoinBuildOperatorFactory *builderOperatorFactory,
+    const config::QueryConfig &queryConfig)
 {
-    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(planNode, builderOperatorFactory, queryConfig);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        planNode, builderOperatorFactory, queryConfig);
     return new NestLoopJoinLookupWrapperOperatorFactory(*nestLoopJoinLookupOperatorFactory);
 }
 
@@ -42,8 +48,11 @@ Operator *NestLoopJoinLookupWrapperOperatorFactory::CreateOperator()
     return pNestLoopJoinLookupWrapperOperator;
 }
 
-NestLoopJoinLookupWrapperOperator::NestLoopJoinLookupWrapperOperator(NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
-    : nestLoopJoinLookupOperator(nullptr), nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory) {}
+NestLoopJoinLookupWrapperOperator::NestLoopJoinLookupWrapperOperator(
+    NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory)
+    : nestLoopJoinLookupOperator(nullptr), nestLoopJoinLookupOperatorFactory(&nestLoopJoinLookupOperatorFactory)
+{
+}
 
 NestLoopJoinLookupWrapperOperator::~NestLoopJoinLookupWrapperOperator()
 {
@@ -55,7 +64,8 @@ NestLoopJoinLookupWrapperOperator::~NestLoopJoinLookupWrapperOperator()
 
 void NestLoopJoinLookupWrapperOperator::InitOperator()
 {
-    this->nestLoopJoinLookupOperator = dynamic_cast<NestLoopJoinLookupOperator*>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+    this->nestLoopJoinLookupOperator =
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     this->nestLoopJoinLookupOperator->setNoMoreInput(false);
 }
 
@@ -105,5 +115,5 @@ OmniStatus NestLoopJoinLookupWrapperOperator::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-}
-}
+} // namespace op
+} // namespace omniruntime

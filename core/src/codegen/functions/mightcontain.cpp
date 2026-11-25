@@ -28,4 +28,4 @@ extern "C" DLLEXPORT bool MightContain(int64_t bloomFilterAddr, int64_t hashValu
     }
     return false;
 }
-}
+} // namespace omniruntime::codegen::function

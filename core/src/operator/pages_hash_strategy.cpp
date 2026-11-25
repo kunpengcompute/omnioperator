@@ -23,7 +23,7 @@ using namespace omniruntime::type;
 namespace omniruntime {
 namespace op {
 PagesHashStrategy::PagesHashStrategy(BaseVector ***columns, const DataTypes &columnTypes, int32_t *hashCols,
-    int32_t hashColsCount)
+                                     int32_t hashColsCount)
     : buildColumns(columns), buildColumnCount(columnTypes.GetSize()), buildHashColsCount(hashColsCount)
 {
     if (hashColsCount > 0) {
@@ -53,7 +53,7 @@ PagesHashStrategy::~PagesHashStrategy()
 
 template <typename T>
 static ALWAYS_INLINE bool ValueEqualsValueIgnoreNulls(omniruntime::vec::BaseVector *leftVector, uint32_t leftIndex,
-    omniruntime::vec::BaseVector *rightVector, uint32_t rightIndex)
+                                                      omniruntime::vec::BaseVector *rightVector, uint32_t rightIndex)
 {
     using DictionaryVector = Vector<DictionaryContainer<T>>;
     using FlatVector = Vector<T>;
@@ -73,7 +73,9 @@ static ALWAYS_INLINE bool ValueEqualsValueIgnoreNulls(omniruntime::vec::BaseVect
 }
 
 static ALWAYS_INLINE bool DoubleValueEqualsValueIgnoreNulls(omniruntime::vec::BaseVector *leftVector,
-    uint32_t leftIndex, omniruntime::vec::BaseVector *rightVector, uint32_t rightIndex)
+                                                            uint32_t leftIndex,
+                                                            omniruntime::vec::BaseVector *rightVector,
+                                                            uint32_t rightIndex)
 {
     using DictionaryVector = Vector<DictionaryContainer<double>>;
     using FlatVector = Vector<double>;
@@ -98,7 +100,9 @@ static ALWAYS_INLINE bool DoubleValueEqualsValueIgnoreNulls(omniruntime::vec::Ba
 }
 
 static ALWAYS_INLINE bool VarcharValueEqualsValueIgnoreNulls(omniruntime::vec::BaseVector *leftVector,
-    uint32_t leftIndex, omniruntime::vec::BaseVector *rightVector, uint32_t rightIndex)
+                                                             uint32_t leftIndex,
+                                                             omniruntime::vec::BaseVector *rightVector,
+                                                             uint32_t rightIndex)
 {
     using DictionaryVector = Vector<DictionaryContainer<std::string_view>>;
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
@@ -127,7 +131,7 @@ static ALWAYS_INLINE bool VarcharValueEqualsValueIgnoreNulls(omniruntime::vec::B
 }
 
 bool ValueEqualsValueIgnoreNulls(int32_t dataType, BaseVector *leftVector, uint32_t leftRowIndex,
-    BaseVector *rightVector, uint32_t rightRowIndex)
+                                 BaseVector *rightVector, uint32_t rightRowIndex)
 {
     switch (dataType) {
         case OMNI_BYTE:
@@ -146,20 +150,19 @@ bool ValueEqualsValueIgnoreNulls(int32_t dataType, BaseVector *leftVector, uint3
         case OMNI_BOOLEAN:
             return ValueEqualsValueIgnoreNulls<bool>(leftVector, leftRowIndex, rightVector, rightRowIndex);
         case OMNI_VARCHAR:
-        case OMNI_CHAR:
-            return VarcharValueEqualsValueIgnoreNulls(leftVector, leftRowIndex, rightVector, rightRowIndex);
+        case OMNI_CHAR: return VarcharValueEqualsValueIgnoreNulls(leftVector, leftRowIndex, rightVector, rightRowIndex);
         case OMNI_DECIMAL128:
             return ValueEqualsValueIgnoreNulls<Decimal128>(leftVector, leftRowIndex, rightVector, rightRowIndex);
         case OMNI_ARRAY:
-            return OperatorUtil::CompareArrayValue(leftVector, static_cast<int32_t>(leftRowIndex),
-                rightVector, static_cast<int32_t>(rightRowIndex)) == OperatorUtil::COMPARE_STATUS_EQUAL;
-        default:
-            return false;
+            return OperatorUtil::CompareArrayValue(leftVector, static_cast<int32_t>(leftRowIndex), rightVector,
+                                                   static_cast<int32_t>(rightRowIndex)) ==
+                   OperatorUtil::COMPARE_STATUS_EQUAL;
+        default: return false;
     }
 }
 
 bool PagesHashStrategy::PositionEqualsPosition(int32_t leftTableIndex, int32_t leftRowIndex, int32_t rightTableIndex,
-    int32_t rightRowIndex) const
+                                               int32_t rightRowIndex) const
 {
     for (uint32_t columnIdx = 0; columnIdx < buildHashColsCount; columnIdx++) {
         auto leftColumn = buildHashColumns[columnIdx][leftTableIndex];
@@ -173,13 +176,13 @@ bool PagesHashStrategy::PositionEqualsPosition(int32_t leftTableIndex, int32_t l
             return false;
         }
 
-        auto result = ValueEqualsValueIgnoreNulls(buildHashColTypes[columnIdx], leftColumn, leftRowIndex,
-            rightColumn, rightRowIndex);
+        auto result = ValueEqualsValueIgnoreNulls(buildHashColTypes[columnIdx], leftColumn, leftRowIndex, rightColumn,
+                                                  rightRowIndex);
         if (!result) {
             return false;
         }
     }
     return true;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

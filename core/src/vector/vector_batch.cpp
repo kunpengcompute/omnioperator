@@ -20,27 +20,18 @@ namespace omniruntime::vec {
  */
 VectorBatch::VectorBatch(size_t rowCnt) : capacity(rowCnt), rowCnt(rowCnt) {}
 
-VectorBatch::~VectorBatch()
-{
-    FreeAllVectors();
-}
+VectorBatch::~VectorBatch() { FreeAllVectors(); }
 
 /**
  * Set the vector at the indicated index, need ResizeVectorCount before SetVector
  * @param vector
  */
-void VectorBatch::SetVector(int32_t index, BaseVector *vector)
-{
-    vectors[index] = vector;
-}
+void VectorBatch::SetVector(int32_t index, BaseVector *vector) { vectors[index] = vector; }
 
 /**
  * @param vector
  */
-void VectorBatch::Append(BaseVector *vector)
-{
-    vectors.emplace_back(vector);
-}
+void VectorBatch::Append(BaseVector *vector) { vectors.emplace_back(vector); }
 
 void VectorBatch::AppendFlat(BaseVector *vector)
 {
@@ -48,28 +39,16 @@ void VectorBatch::AppendFlat(BaseVector *vector)
     ++flatSize;
 }
 
-BaseVector **VectorBatch::GetVectors()
-{
-    return vectors.data();
-}
+BaseVector **VectorBatch::GetVectors() { return vectors.data(); }
 
-int32_t VectorBatch::GetRowCount() const
-{
-    return static_cast<int32_t>(rowCnt);
-}
+int32_t VectorBatch::GetRowCount() const { return static_cast<int32_t>(rowCnt); }
 
-int32_t VectorBatch::GetVectorCount()
-{
-    return static_cast<int32_t>(vectors.size());
-}
+int32_t VectorBatch::GetVectorCount() { return static_cast<int32_t>(vectors.size()); }
 
 /**
  * @param vectorCnt
  */
-void VectorBatch::ResizeVectorCount(size_t vectorCnt)
-{
-    vectors.resize(vectorCnt);
-}
+void VectorBatch::ResizeVectorCount(size_t vectorCnt) { vectors.resize(vectorCnt); }
 
 void VectorBatch::FreeAllVectors()
 {
@@ -106,15 +85,9 @@ void VectorBatch::Resize(size_t rowCount)
     rowCnt = rowCount;
 }
 
-void VectorBatch::ClearVectors()
-{
-    vectors.clear();
-}
+void VectorBatch::ClearVectors() { vectors.clear(); }
 
-size_t VectorBatch::GetCapacity()
-{
-    return capacity;
-}
+size_t VectorBatch::GetCapacity() { return capacity; }
 
 uint64_t VectorBatch::CalculateTotalSize() const
 {
@@ -123,10 +96,10 @@ uint64_t VectorBatch::CalculateTotalSize() const
     }
 
     uint64_t totalSize = 0;
-    for (const auto& vector : vectors) {
+    for (const auto &vector : vectors) {
         totalSize += static_cast<uint64_t>(vector->GetSize());
     }
 
     return totalSize;
 }
-}
+} // namespace omniruntime::vec

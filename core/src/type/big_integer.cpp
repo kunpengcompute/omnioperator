@@ -48,25 +48,17 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #include <algorithm>
 #include "big_integer.h"
 
 namespace omniruntime::type {
-BigInteger::LimbType &BigInteger::RawBigit(const int index)
-{
-    return dataBuffer_[index];
-}
+BigInteger::LimbType &BigInteger::RawBigit(const int index) { return dataBuffer_[index]; }
 
-const BigInteger::LimbType &BigInteger::RawBigit(const int index) const
-{
-    return dataBuffer_[index];
-}
+const BigInteger::LimbType &BigInteger::RawBigit(const int index) const { return dataBuffer_[index]; }
 
-template<typename S>
-static int BitSize(const S value)
+template <typename S> static int BitSize(const S value)
 {
-    (void)value;  // Mark variable as used.
+    (void)value; // Mark variable as used.
     return 8 * sizeof(value);
 }
 
@@ -250,8 +242,7 @@ void BigInteger::MultiplyByUInt64(const uint64_t factor)
         const uint64_t productHigh = high * RawBigit(i);
         const uint64_t tmp = (carry & DATA_MASK) + productLow;
         RawBigit(i) = tmp & DATA_MASK;
-        carry = (carry >> DATA_SIZE) + (tmp >> DATA_SIZE) +
-            (productHigh << (32 - DATA_SIZE));
+        carry = (carry >> DATA_SIZE) + (tmp >> DATA_SIZE) + (productHigh << (32 - DATA_SIZE));
     }
     while (carry != 0) {
         EnsureCapacity(usedData_ + 1);
@@ -277,8 +268,8 @@ void BigInteger::MultiplyByPowerOfTen(const int exponent)
     static const uint32_t FIVE_11 = FIVE_10 * 5;
     static const uint32_t FIVE_12 = FIVE_11 * 5;
     static const uint32_t FIVE_13 = FIVE_12 * 5;
-    static const uint32_t FIVE_1_TO_12[] = {
-        FIVE_1, FIVE_2, FIVE_3, FIVE_4, FIVE_5, FIVE_6, FIVE_7, FIVE_8, FIVE_9, FIVE_10, FIVE_11, FIVE_12};
+    static const uint32_t FIVE_1_TO_12[] = {FIVE_1, FIVE_2, FIVE_3, FIVE_4,  FIVE_5,  FIVE_6,
+                                            FIVE_7, FIVE_8, FIVE_9, FIVE_10, FIVE_11, FIVE_12};
 
     if (exponent == 0) {
         return;
@@ -385,7 +376,8 @@ BigInteger::BigInteger(uint16_t base, const int powerExponent)
 
     // Left to Right exponentiation.
     int mask = 1;
-    while (powerExponent >= mask) mask <<= 1;
+    while (powerExponent >= mask)
+        mask <<= 1;
 
     // The mask is now pointing to the bit above the most significant 1-bit of
     // powerExponent.
@@ -483,8 +475,7 @@ uint16_t BigInteger::DivideModuloIntBigInteger(const BigInteger &other)
     return result;
 }
 
-template<typename S>
-static int SizeInHexChars(S number)
+template <typename S> static int SizeInHexChars(S number)
 {
     int result = 0;
     while (number != 0) {
@@ -510,8 +501,8 @@ std::string BigInteger::ToHexString() const
         return "0";
     }
     // We add 1 for the terminating '\0' character.
-    const int neededChars = (BigIntegerLength() - 1) * HEX_CHARS_PER_BIGIT +
-        SizeInHexChars(RawBigit(usedData_ - 1)) + 1;
+    const int neededChars =
+        (BigIntegerLength() - 1) * HEX_CHARS_PER_BIGIT + SizeInHexChars(RawBigit(usedData_ - 1)) + 1;
 
     char *buffer = new char[neededChars];
 
@@ -674,8 +665,7 @@ void BigInteger::SubtractTimes(const BigInteger &other, const int factor)
         const DoubleLimbType remove = borrow + product;
         const LimbType difference = RawBigit(i + exponentDiff) - (remove & DATA_MASK);
         RawBigit(i + exponentDiff) = difference & DATA_MASK;
-        borrow = static_cast<LimbType>((difference >> (TYPE_SIZE - 1)) +
-            (remove >> DATA_SIZE));
+        borrow = static_cast<LimbType>((difference >> (TYPE_SIZE - 1)) + (remove >> DATA_SIZE));
     }
     for (int i = other.usedData_ + exponentDiff; i < usedData_; ++i) {
         if (borrow == 0) {
@@ -687,4 +677,4 @@ void BigInteger::SubtractTimes(const BigInteger &other, const int factor)
     }
     Clamp();
 }
-}
+} // namespace omniruntime::type

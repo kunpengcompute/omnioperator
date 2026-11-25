@@ -20,15 +20,16 @@
 #include "hash_builder.h"
 #include "lookup_join.h"
 
-
 static constexpr int8_t BUFFER_SIZE = 8;
 
 using namespace omniruntime::vec;
 namespace omniruntime::op {
 
 void LookupJoinOperatorFactory::CommonInitActions(const type::DataTypes &probeTypes, int32_t *probeOutputCols,
-    int32_t probeOutputColsCount, int32_t *probeHashCols, int32_t probeHashColsCount, int32_t *buildOutputCols,
-    int32_t buildOutputColsCount, const type::DataTypes &buildOutputTypes, int32_t *outputList)
+                                                  int32_t probeOutputColsCount, int32_t *probeHashCols,
+                                                  int32_t probeHashColsCount, int32_t *buildOutputCols,
+                                                  int32_t buildOutputColsCount, const type::DataTypes &buildOutputTypes,
+                                                  int32_t *outputList)
 {
     int32_t tempProbeHashColTypes[probeHashColsCount];
     auto probeTypeIds = probeTypes.GetIds();
@@ -36,14 +37,14 @@ void LookupJoinOperatorFactory::CommonInitActions(const type::DataTypes &probeTy
         tempProbeHashColTypes[i] = probeTypeIds[probeHashCols[i]];
     }
     if (probeOutputCols != nullptr) {
-    	this->probeOutputCols = std::vector<int>(probeOutputCols, probeOutputCols + probeOutputColsCount);
+        this->probeOutputCols = std::vector<int>(probeOutputCols, probeOutputCols + probeOutputColsCount);
     }
     this->probeHashCols = std::vector<int>(probeHashCols, probeHashCols + probeHashColsCount);
     if (buildOutputCols != nullptr) {
         this->buildOutputCols = std::vector<int>(buildOutputCols, buildOutputCols + buildOutputColsCount);
     }
     if (outputList != nullptr) {
-    	this->outputList = std::vector<int>(outputList, outputList + buildOutputColsCount + probeOutputColsCount);
+        this->outputList = std::vector<int>(outputList, outputList + buildOutputColsCount + probeOutputColsCount);
     }
     this->probeHashColTypes = std::vector<int32_t>(tempProbeHashColTypes, tempProbeHashColTypes + probeHashColsCount);
     this->rowSize = OperatorUtil::GetOutputRowSize(probeTypes.Get(), probeOutputCols, probeOutputColsCount);
@@ -52,35 +53,31 @@ void LookupJoinOperatorFactory::CommonInitActions(const type::DataTypes &probeTy
     }
 }
 
-LookupJoinOperatorFactory::LookupJoinOperatorFactory(const type::DataTypes &probeTypes, int32_t *probeOutputCols,
-    int32_t probeOutputColsCount, int32_t *probeHashCols, int32_t probeHashColsCount, int32_t *buildOutputCols,
-    int32_t buildOutputColsCount, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
-    omniruntime::expressions::Expr *filterExpr, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig)
-    : probeTypes(probeTypes),
-      buildOutputTypes(buildOutputTypes),
-      hashTables(hashTables),
-      isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan),
-      originalProbeColsCount(probeTypes.GetSize())
+LookupJoinOperatorFactory::LookupJoinOperatorFactory(
+    const type::DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *probeHashCols,
+    int32_t probeHashColsCount, int32_t *buildOutputCols, int32_t buildOutputColsCount,
+    const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, omniruntime::expressions::Expr *filterExpr,
+    bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig)
+    : probeTypes(probeTypes), buildOutputTypes(buildOutputTypes), hashTables(hashTables),
+      isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan), originalProbeColsCount(probeTypes.GetSize())
 {
     CommonInitActions(probeTypes, probeOutputCols, probeOutputColsCount, probeHashCols, probeHashColsCount,
-        buildOutputCols, buildOutputColsCount, buildOutputTypes);
+                      buildOutputCols, buildOutputColsCount, buildOutputTypes);
     std::visit([&](auto &&arg) { arg.SetProbeTypes(&(this->probeTypes)); }, *hashTables);
     JoinFilterCodeGen(filterExpr, overflowConfig);
 }
 
-LookupJoinOperatorFactory::LookupJoinOperatorFactory(const type::DataTypes &probeTypes, int32_t *probeOutputCols,
-    int32_t probeOutputColsCount, int32_t *probeHashCols, int32_t probeHashColsCount, int32_t *buildOutputCols,
-    int32_t buildOutputColsCount, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
-    omniruntime::expressions::Expr *filterExpr, int32_t originalProbeColsCount,
-    bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig, int32_t *outputList)
-    : probeTypes(probeTypes),
-      buildOutputTypes(buildOutputTypes),
-      hashTables(hashTables),
-      isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan),
-      originalProbeColsCount(originalProbeColsCount)
+LookupJoinOperatorFactory::LookupJoinOperatorFactory(
+    const type::DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *probeHashCols,
+    int32_t probeHashColsCount, int32_t *buildOutputCols, int32_t buildOutputColsCount,
+    const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, omniruntime::expressions::Expr *filterExpr,
+    int32_t originalProbeColsCount, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig,
+    int32_t *outputList)
+    : probeTypes(probeTypes), buildOutputTypes(buildOutputTypes), hashTables(hashTables),
+      isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan), originalProbeColsCount(originalProbeColsCount)
 {
     CommonInitActions(probeTypes, probeOutputCols, probeOutputColsCount, probeHashCols, probeHashColsCount,
-        buildOutputCols, buildOutputColsCount, buildOutputTypes, outputList);
+                      buildOutputCols, buildOutputColsCount, buildOutputTypes, outputList);
     std::visit([&](auto &&arg) { arg.SetProbeTypes(&(this->probeTypes)); }, *hashTables);
     JoinFilterCodeGen(filterExpr, overflowConfig);
 }
@@ -91,37 +88,39 @@ LookupJoinOperatorFactory::~LookupJoinOperatorFactory()
     simpleFilter = nullptr;
 }
 
-LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(const DataTypes &probeTypes,
-    int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *probeHashCols, int32_t probeHashColsCount,
-    int32_t *buildOutputCols, int32_t buildOutputColsCount, const DataTypes &buildOutputTypes,
-    int64_t hashBuilderFactoryAddr, omniruntime::expressions::Expr *filterExpr,
+LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+    const DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *probeHashCols,
+    int32_t probeHashColsCount, int32_t *buildOutputCols, int32_t buildOutputColsCount,
+    const DataTypes &buildOutputTypes, int64_t hashBuilderFactoryAddr, omniruntime::expressions::Expr *filterExpr,
     bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig)
 {
     auto hashBuilderFactory = reinterpret_cast<HashBuilderOperatorFactory *>(hashBuilderFactoryAddr);
-    auto pOperatorFactory = new LookupJoinOperatorFactory(probeTypes, probeOutputCols, probeOutputColsCount,
-        probeHashCols, probeHashColsCount, buildOutputCols, buildOutputColsCount, buildOutputTypes,
-        hashBuilderFactory->GetHashTablesVariants(), filterExpr, isShuffleExchangeBuildPlan, overflowConfig);
-    return pOperatorFactory;
-}
-
-LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(const DataTypes &probeTypes,
-    int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *probeHashCols, int32_t probeHashColsCount,
-    int32_t *buildOutputCols, int32_t buildOutputColsCount, const DataTypes &buildOutputTypes,
-    int64_t hashBuilderFactoryAddr, omniruntime::expressions::Expr *filterExpr,
-    int32_t originalProbeColsCount, bool isShuffleExchangeBuildPlan,
-    OverflowConfig *overflowConfig, int32_t *outputList)
-{
-    auto hashBuilderFactory = reinterpret_cast<HashBuilderOperatorFactory *>(hashBuilderFactoryAddr);
-    auto pOperatorFactory = new LookupJoinOperatorFactory(probeTypes, probeOutputCols, probeOutputColsCount,
-        probeHashCols, probeHashColsCount, buildOutputCols, buildOutputColsCount, buildOutputTypes,
-        hashBuilderFactory->GetHashTablesVariants(), filterExpr,
-        originalProbeColsCount, isShuffleExchangeBuildPlan, overflowConfig, outputList);
+    auto pOperatorFactory = new LookupJoinOperatorFactory(
+        probeTypes, probeOutputCols, probeOutputColsCount, probeHashCols, probeHashColsCount, buildOutputCols,
+        buildOutputColsCount, buildOutputTypes, hashBuilderFactory->GetHashTablesVariants(), filterExpr,
+        isShuffleExchangeBuildPlan, overflowConfig);
     return pOperatorFactory;
 }
 
 LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
-    std::shared_ptr<const HashJoinNode> planNode, HashBuilderOperatorFactory *hashBuilderOperatorFactory,
-    const config::QueryConfig &queryConfig)
+    const DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *probeHashCols,
+    int32_t probeHashColsCount, int32_t *buildOutputCols, int32_t buildOutputColsCount,
+    const DataTypes &buildOutputTypes, int64_t hashBuilderFactoryAddr, omniruntime::expressions::Expr *filterExpr,
+    int32_t originalProbeColsCount, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig,
+    int32_t *outputList)
+{
+    auto hashBuilderFactory = reinterpret_cast<HashBuilderOperatorFactory *>(hashBuilderFactoryAddr);
+    auto pOperatorFactory = new LookupJoinOperatorFactory(
+        probeTypes, probeOutputCols, probeOutputColsCount, probeHashCols, probeHashColsCount, buildOutputCols,
+        buildOutputColsCount, buildOutputTypes, hashBuilderFactory->GetHashTablesVariants(), filterExpr,
+        originalProbeColsCount, isShuffleExchangeBuildPlan, overflowConfig, outputList);
+    return pOperatorFactory;
+}
+
+LookupJoinOperatorFactory *
+LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(std::shared_ptr<const HashJoinNode> planNode,
+                                                           HashBuilderOperatorFactory *hashBuilderOperatorFactory,
+                                                           const config::QueryConfig &queryConfig)
 {
     // Extract necessary information from planNode
     auto joinType = planNode->GetJoinType();
@@ -154,20 +153,18 @@ LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFa
         auto fieldKey = dynamic_cast<FieldExpr *>(key);
         probeHashCols.emplace_back(fieldKey->colVal);
     }
-    auto probeHashColsCount = (int32_t) probeHashCols.size();
+    auto probeHashColsCount = (int32_t)probeHashCols.size();
 
     auto filter = planNode->Filter();
     auto isShuffle = planNode->IsShuffle();
 
-    auto overflowConfig = queryConfig.IsOverFlowASNull()
-                              ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
-                              : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
+    auto overflowConfig = queryConfig.IsOverFlowASNull() ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
+                                                         : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
 
-    auto pLookupJoinOperatorFactory = new LookupJoinOperatorFactory(*probeOutputTypes, probeOutputCols.data(), probeOutputColsCount,
-        probeHashCols.data(), probeHashColsCount, buildOutputCols.data(),
-        buildOutputColsCount, *buildOutputTypes,
-        hashBuilderOperatorFactory->GetHashTablesVariants(),
-        filter, isShuffle, overflowConfig);
+    auto pLookupJoinOperatorFactory = new LookupJoinOperatorFactory(
+        *probeOutputTypes, probeOutputCols.data(), probeOutputColsCount, probeHashCols.data(), probeHashColsCount,
+        buildOutputCols.data(), buildOutputColsCount, *buildOutputTypes,
+        hashBuilderOperatorFactory->GetHashTablesVariants(), filter, isShuffle, overflowConfig);
 
     delete overflowConfig;
     overflowConfig = nullptr;
@@ -176,9 +173,9 @@ LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFa
 
 Operator *LookupJoinOperatorFactory::CreateOperator()
 {
-    auto pLookupJoinOperator = new LookupJoinOperator(probeTypes, probeOutputCols, probeHashCols, probeHashColTypes,
-        buildOutputCols, buildOutputTypes, hashTables, simpleFilter,
-        originalProbeColsCount, rowSize, isShuffleExchangeBuildPlan, outputList);
+    auto pLookupJoinOperator = new LookupJoinOperator(
+        probeTypes, probeOutputCols, probeHashCols, probeHashColTypes, buildOutputCols, buildOutputTypes, hashTables,
+        simpleFilter, originalProbeColsCount, rowSize, isShuffleExchangeBuildPlan, outputList);
     return pLookupJoinOperator;
 }
 
@@ -197,18 +194,14 @@ void LookupJoinOperatorFactory::JoinFilterCodeGen(Expr *filterExpr, OverflowConf
 }
 
 LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
-    std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
-    const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
-    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan)
-    : probeTypes(probeTypes),
-      probeOutputCols(probeOutputCols),
-      probeHashCols(probeHashCols),
-      probeHashColTypes(probeHashColTypes),
-      buildOutputCols(buildOutputCols),
-      buildOutputTypes(buildOutputTypes),
-      hashTables(hashTables),
-      simpleFilter(simpleFilter),
-      originalProbeColsCount(originalProbeColsCount),
+                                       std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes,
+                                       std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes,
+                                       HashTableVariants *hashTables, SimpleFilter *simpleFilter,
+                                       int32_t originalProbeColsCount, int32_t outputRowSize,
+                                       bool isShuffleExchangeBuildPlan)
+    : probeTypes(probeTypes), probeOutputCols(probeOutputCols), probeHashCols(probeHashCols),
+      probeHashColTypes(probeHashColTypes), buildOutputCols(buildOutputCols), buildOutputTypes(buildOutputTypes),
+      hashTables(hashTables), simpleFilter(simpleFilter), originalProbeColsCount(originalProbeColsCount),
       isShuffleExchangeBuildPlan(isShuffleExchangeBuildPlan)
 {
     std::vector<DataTypePtr> tmpProbeOutputTypesVec;
@@ -217,8 +210,8 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
     }
     this->probeOutputTypes = DataTypes(tmpProbeOutputTypesVec);
 
-    this->outputBuilder = std::make_unique<LookupJoinOutputBuilder>(probeOutputCols, probeOutputTypes.GetIds(),
-        buildOutputCols, buildOutputTypes.GetIds(), outputRowSize);
+    this->outputBuilder = std::make_unique<LookupJoinOutputBuilder>(
+        probeOutputCols, probeOutputTypes.GetIds(), buildOutputCols, buildOutputTypes.GetIds(), outputRowSize);
     this->probeHashColumns = new BaseVector *[probeHashCols.size()]();     // 2D array
     this->probeOutputColumns = new BaseVector *[probeOutputCols.size()](); // 2D array
     SetOperatorName(opNameForLookUpJoin);
@@ -254,15 +247,18 @@ LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::v
 }
 
 LookupJoinOperator::LookupJoinOperator(const type::DataTypes &probeTypes, std::vector<int32_t> &probeOutputCols,
-    std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes, std::vector<int32_t> &buildOutputCols,
-    const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, SimpleFilter *simpleFilter,
-    int32_t originalProbeColsCount, int32_t outputRowSize, bool isShuffleExchangeBuildPlan, std::vector<int32_t> &outputList)
-    : LookupJoinOperator(probeTypes, probeOutputCols, probeHashCols, probeHashColTypes, buildOutputCols, buildOutputTypes,
-    hashTables, simpleFilter, originalProbeColsCount, outputRowSize, isShuffleExchangeBuildPlan)
+                                       std::vector<int32_t> &probeHashCols, std::vector<int32_t> &probeHashColTypes,
+                                       std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes,
+                                       HashTableVariants *hashTables, SimpleFilter *simpleFilter,
+                                       int32_t originalProbeColsCount, int32_t outputRowSize,
+                                       bool isShuffleExchangeBuildPlan, std::vector<int32_t> &outputList)
+    : LookupJoinOperator(probeTypes, probeOutputCols, probeHashCols, probeHashColTypes, buildOutputCols,
+                         buildOutputTypes, hashTables, simpleFilter, originalProbeColsCount, outputRowSize,
+                         isShuffleExchangeBuildPlan)
 {
-	this->outputBuilder = std::make_unique<LookupJoinOutputBuilder>(probeOutputCols, probeOutputTypes.GetIds(),
-																	buildOutputCols, buildOutputTypes.GetIds(),
-																    outputRowSize, outputList);
+    this->outputBuilder =
+        std::make_unique<LookupJoinOutputBuilder>(probeOutputCols, probeOutputTypes.GetIds(), buildOutputCols,
+                                                  buildOutputTypes.GetIds(), outputRowSize, outputList);
 }
 
 LookupJoinOperator::~LookupJoinOperator()
@@ -277,9 +273,9 @@ LookupJoinOperator::~LookupJoinOperator()
     delete[] buildFilterTypeIds;
 }
 
-BlockingReason LookupJoinOperator::IsBlocked(ContinueFuture* future)
+BlockingReason LookupJoinOperator::IsBlocked(ContinueFuture *future)
 {
-    OmniStatus tableStatus = std::visit([&](auto&& arg) { return arg.GetStatus(); }, *hashTables);
+    OmniStatus tableStatus = std::visit([&](auto &&arg) { return arg.GetStatus(); }, *hashTables);
     if (tableStatus == OmniStatus::OMNI_STATUS_NORMAL) {
         return BlockingReason::kWaitForJoinBuild;
     }
@@ -301,7 +297,7 @@ void LookupJoinOperator::PrepareCurrentProbe()
     }
     probeSimd =
         isSingleHT &&
-        std::visit([&](auto&& arg) { return arg.CanProbeSIMD(probeHashColumns, probeHashCols.size(), partitionMask); },
+        std::visit([&](auto &&arg) { return arg.CanProbeSIMD(probeHashColumns, probeHashCols.size(), partitionMask); },
                    *hashTables);
     if (isSingleHT && !probeSimd) {
         curProbeNulls.resize(curInputBatch->GetRowCount());
@@ -508,15 +504,17 @@ void LookupJoinOperator::InitFirst()
     isSingleHT = hashTableCount == 1;
 
     if (simpleFilter != nullptr) {
-        std::visit([&](
-            auto &&arg) { arg.InitBuildFilterCols(buildFilterCols, originalProbeColsCount, tableBuildFilterColPtrs); },
+        std::visit(
+            [&](auto &&arg) {
+                arg.InitBuildFilterCols(buildFilterCols, originalProbeColsCount, tableBuildFilterColPtrs);
+            },
             *hashTables);
     }
 }
 
 template <typename T, bool hasJoinFilter, JoinType joinType, bool hasNull>
-void LookupJoinOperator::ArrayJoinProbe(BaseVector*** buildColumns, size_t probeHashColsCount, T&& arg,
-                                        ExecutionContext* contextPtr)
+void LookupJoinOperator::ArrayJoinProbe(BaseVector ***buildColumns, size_t probeHashColsCount, T &&arg,
+                                        ExecutionContext *contextPtr)
 {
     int32_t probePosition = curProbePosition;
     int32_t numProbeRows = curInputBatch->GetRowCount();
@@ -753,8 +751,8 @@ void LookupJoinOperator::DealWithProbeMatchResultNeon(KeyType *hashes, KeyType *
     }
 }
 
-void Int16ArrayCompareNeon(int16_t *originKey, int16_t *keyResult, int16_t *cmpResult,
-                           int16x8_t vMin, int16x8_t vMax, int16_t minValue, int16_t maxValue)
+void Int16ArrayCompareNeon(int16_t *originKey, int16_t *keyResult, int16_t *cmpResult, int16x8_t vMin, int16x8_t vMax,
+                           int16_t minValue, int16_t maxValue)
 {
     int16x8x3_t vCmp;
     int16x8x3_t vecKey;
@@ -793,8 +791,8 @@ void Int16ArrayCompareNeon(int16_t *originKey, int16_t *keyResult, int16_t *cmpR
     vst3q_s16(cmpResult + 8, vCmp);
 }
 
-void Int32ArrayCompareNeon(int32_t *originKey, int32_t *keyResult, int32_t *cmpResult,
-                           int32x4_t vMin, int32x4_t vMax, int32_t minValue, int32_t maxValue)
+void Int32ArrayCompareNeon(int32_t *originKey, int32_t *keyResult, int32_t *cmpResult, int32x4_t vMin, int32x4_t vMax,
+                           int32_t minValue, int32_t maxValue)
 {
     int32x4x3_t vCmp;
     int32x4x3_t vecKey;
@@ -825,8 +823,8 @@ void Int32ArrayCompareNeon(int32_t *originKey, int32_t *keyResult, int32_t *cmpR
     vst3q_s32(cmpResult + 4, vCmp);
 }
 
-void Int64ArrayCompareNeon(int64_t *originKey, int64_t *keyResult, int64_t *cmpResult,
-                           int64x2_t vMin, int64x2_t vMax, int64_t minValue, int64_t maxValue)
+void Int64ArrayCompareNeon(int64_t *originKey, int64_t *keyResult, int64_t *cmpResult, int64x2_t vMin, int64x2_t vMax,
+                           int64_t minValue, int64_t maxValue)
 {
     int64x2x3_t vCmp;
     int64x2x3_t vecKey;
@@ -996,7 +994,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                     if (keyValue != cacheKeyValue) {
                         cacheKeyValue = keyValue;
                         auto result = arg.Find(probeSerializers, contextPtr, probeHashColumns, probeHashColsCount,
-                            probePosition, partition);
+                                               probePosition, partition);
                         isInsert = result.IsInsert();
                         if (!isInsert) {
                             continue;
@@ -1009,7 +1007,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                     }
                 } else {
                     auto result = arg.Find(probeSerializers, contextPtr, probeHashColumns, probeHashColsCount,
-                        probePosition, partition);
+                                           probePosition, partition);
                     isInsert = result.IsInsert();
                     if (!isInsert) {
                         continue;
@@ -1081,7 +1079,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                 }
                 bool hasProduceRow = false;
                 auto result = arg.Find(probeSerializers, contextPtr, probeHashColumns, probeHashColsCount,
-                    probePosition, partition);
+                                       probePosition, partition);
                 if (result.IsInsert()) {
                     // probe matched in hash table
                     auto it = result.GetValue()->Begin();
@@ -1152,7 +1150,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                     }
 
                     auto result = arg.Find(probeSerializers, contextPtr, probeHashColumns, probeHashColsCount,
-                        probePosition, partition);
+                                           probePosition, partition);
                     if (result.IsInsert()) {
                         auto it = result.GetValue()->Begin();
                         ProbeJoinPosition<hasJoinFilter>(probePosition);
@@ -1287,7 +1285,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                 }
 
                 auto result = arg.Find(probeSerializers, contextPtr, probeHashColumns, probeHashColsCount,
-                    probePosition, partition);
+                                       probePosition, partition);
                 if (!result.IsInsert()) {
                     continue;
                 }
@@ -1353,7 +1351,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
                 }
                 bool hasProduceRow = false;
                 auto result = arg.Find(probeSerializers, contextPtr, probeHashColumns, probeHashColsCount,
-                    probePosition, partition);
+                                       probePosition, partition);
                 if (result.IsInsert()) {
                     // probe matched in hash table
                     auto it = result.GetValue()->Begin();
@@ -1447,8 +1445,7 @@ template <bool hasJoinFilter, bool singleHT> void LookupJoinOperator::ProbeBatch
         *hashTables);
 }
 
-template <bool hasJoinFilter>
-void ALWAYS_INLINE LookupJoinOperator::ProbeJoinPosition(int32_t probePosition)
+template <bool hasJoinFilter> void ALWAYS_INLINE LookupJoinOperator::ProbeJoinPosition(int32_t probePosition)
 {
     if constexpr (hasJoinFilter) {
         for (size_t j = 0; j < probeFilterColsSize; ++j) {
@@ -1456,14 +1453,13 @@ void ALWAYS_INLINE LookupJoinOperator::ProbeJoinPosition(int32_t probePosition)
             auto probeVec = probeFilterColumns[j];
             nulls[colIdx] = probeVec->IsNull(probePosition);
             values[colIdx] =
-                OperatorUtil::GetValuePtrAndLength(probeVec,
-                probePosition, lengths + colIdx, probeFilterTypeIds[j]);
+                OperatorUtil::GetValuePtrAndLength(probeVec, probePosition, lengths + colIdx, probeFilterTypeIds[j]);
         }
     }
 }
 
-bool ALWAYS_INLINE LookupJoinOperator::BuildJoinPosition(
-    uint32_t partition, uint32_t buildRowIdx, uint32_t buildBatchIdx, ExecutionContext *contextPtr)
+bool ALWAYS_INLINE LookupJoinOperator::BuildJoinPosition(uint32_t partition, uint32_t buildRowIdx,
+                                                         uint32_t buildBatchIdx, ExecutionContext *contextPtr)
 {
     for (size_t j = 0; j < buildFilterColsSize; ++j) {
         uint32_t colIdx = buildFilterCols[j];
@@ -1562,7 +1558,7 @@ void CalculateColVarcharHashes(BaseVector *vec, int32_t rowCount, int64_t *hashe
             }
             auto varcharValue = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vec)->GetValue(i);
             hash = HashUtil::HashValue(reinterpret_cast<int8_t *>(const_cast<char *>(varcharValue.data())),
-                static_cast<int32_t>(varcharValue.length()));
+                                       static_cast<int32_t>(varcharValue.length()));
             hashes[i] = HashUtil::CombineHash(hashes[i], hash);
         }
     } else {
@@ -1573,7 +1569,7 @@ void CalculateColVarcharHashes(BaseVector *vec, int32_t rowCount, int64_t *hashe
             }
             auto varcharValue = static_cast<Vector<DictionaryContainer<std::string_view>> *>(vec)->GetValue(i);
             hash = HashUtil::HashValue(reinterpret_cast<int8_t *>(const_cast<char *>(varcharValue.data())),
-                static_cast<int32_t>(varcharValue.length()));
+                                       static_cast<int32_t>(varcharValue.length()));
             hashes[i] = HashUtil::CombineHash(hashes[i], hash);
         }
     }
@@ -1615,8 +1611,7 @@ void ALWAYS_INLINE LookupJoinOperator::PopulateProbeHashes()
             case omniruntime::type::OMNI_CHAR:
                 CalculateColVarcharHashes(hashCol, rowCount, hashes, curProbeNulls);
                 break;
-            default:
-                break;
+            default: break;
         }
     }
 }
@@ -1636,13 +1631,12 @@ void ALWAYS_INLINE LookupJoinOperator::PopulateProbeNulls()
 }
 
 LookupJoinOutputBuilder::LookupJoinOutputBuilder(std::vector<int32_t> &probeOutputCols, const int32_t *probeOutputTypes,
-    std::vector<int32_t> &buildOutputCols, const int32_t *buildOutputTypes, int32_t outputRowSize)
-    : probeOutputCols(probeOutputCols),
-      probeOutputTypes(probeOutputTypes),
-      buildOutputCols(buildOutputCols),
+                                                 std::vector<int32_t> &buildOutputCols, const int32_t *buildOutputTypes,
+                                                 int32_t outputRowSize)
+    : probeOutputCols(probeOutputCols), probeOutputTypes(probeOutputTypes), buildOutputCols(buildOutputCols),
       buildOutputTypes(buildOutputTypes)
 {
-    // if the probe and build do not have output columns, the row size is setted to DEFAULT_ROW_SIZE
+    // if the probe and build do not have output columns, the row size is set to DEFAULT_ROW_SIZE
     this->maxRowCount = OperatorUtil::GetMaxRowCount((outputRowSize != 0) ? outputRowSize : DEFAULT_ROW_SIZE);
     if (!probeOutputCols.empty() || !buildOutputCols.empty()) {
         probeBuildIndex.reserve(maxRowCount);
@@ -1650,14 +1644,12 @@ LookupJoinOutputBuilder::LookupJoinOutputBuilder(std::vector<int32_t> &probeOutp
 }
 
 LookupJoinOutputBuilder::LookupJoinOutputBuilder(std::vector<int32_t> &probeOutputCols, const int32_t *probeOutputTypes,
-    std::vector<int32_t> &buildOutputCols, const int32_t *buildOutputTypes, int32_t outputRowSize, std::vector<int32_t> &outputList)
-    : probeOutputCols(probeOutputCols),
-      probeOutputTypes(probeOutputTypes),
-      buildOutputCols(buildOutputCols),
-      buildOutputTypes(buildOutputTypes),
-      outputList(outputList)
+                                                 std::vector<int32_t> &buildOutputCols, const int32_t *buildOutputTypes,
+                                                 int32_t outputRowSize, std::vector<int32_t> &outputList)
+    : probeOutputCols(probeOutputCols), probeOutputTypes(probeOutputTypes), buildOutputCols(buildOutputCols),
+      buildOutputTypes(buildOutputTypes), outputList(outputList)
 {
-    // if the probe and build do not have output columns, the row size is setted to DEFAULT_ROW_SIZE
+    // if the probe and build do not have output columns, the row size is set to DEFAULT_ROW_SIZE
     this->maxRowCount = OperatorUtil::GetMaxRowCount((outputRowSize != 0) ? outputRowSize : DEFAULT_ROW_SIZE);
     if (!probeOutputCols.empty() || !buildOutputCols.empty()) {
         probeBuildIndex.reserve(maxRowCount);
@@ -1675,9 +1667,9 @@ void NO_INLINE LookupJoinOutputBuilder::AppendRow(int32_t probePosition, BaseVec
 }
 
 template <typename T, bool isInnerJoin, bool isShuffleExchangeBuildPlan>
-static NO_INLINE BaseVector *ConstructBuildColumn(
-    const std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t> *buildTemp, uint32_t outputCol, int32_t numRows,
-    int8_t parallelism)
+static NO_INLINE BaseVector *
+ConstructBuildColumn(const std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t> *buildTemp, uint32_t outputCol,
+                     int32_t numRows, int8_t parallelism)
 {
     auto ret = std::make_unique<Vector<T>>(numRows);
     T value;
@@ -1789,8 +1781,9 @@ static NO_INLINE BaseVector *ConstructBuildColumn(
 }
 
 template <typename T, bool isInnerJoin, bool isShuffleExchangeBuildPlan>
-static NO_INLINE BaseVector *ConstructBuildColumn(
-    const std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t> *buildTemp, uint32_t outputCol, int32_t numRows)
+static NO_INLINE BaseVector *
+ConstructBuildColumn(const std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t> *buildTemp, uint32_t outputCol,
+                     int32_t numRows)
 {
     auto ret = new Vector<T>(numRows);
     T value;
@@ -1823,9 +1816,10 @@ static NO_INLINE BaseVector *ConstructBuildColumn(
     return ret;
 }
 
-template<bool isInnerJoin, bool isShuffleExchangeBuildPlan>
-static NO_INLINE BaseVector *ConstructBuildVarcharColumn(
-    const std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t> *buildTemp, uint32_t outputCol, int32_t numRows)
+template <bool isInnerJoin, bool isShuffleExchangeBuildPlan>
+static NO_INLINE BaseVector *
+ConstructBuildVarcharColumn(const std::tuple<int32_t, BaseVector ***, uint32_t, uint32_t> *buildTemp,
+                            uint32_t outputCol, int32_t numRows)
 {
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
     using DictionaryVector = Vector<DictionaryContainer<std::string_view>>;
@@ -1861,7 +1855,7 @@ static NO_INLINE BaseVector *ConstructBuildVarcharColumn(
 }
 
 void NO_INLINE LookupJoinOutputBuilder::ConstructProbeColumns(VectorBatch *vectorBatch, BaseVector **probeOutputColumns,
-    int32_t rowCount)
+                                                              int32_t rowCount)
 {
     bool isSequentialProbeIndices = true;
     if (rowCount > 1) { // <= 1 must be sequential
@@ -1899,44 +1893,48 @@ void NO_INLINE LookupJoinOutputBuilder::ConstructBuildColumns(VectorBatch *vecto
             case OMNI_LONG:
             case OMNI_TIMESTAMP:
             case OMNI_DECIMAL64:
-                buildColumn = ConstructBuildColumn<int64_t, isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount, OMNI_LANES(int64_t));
+                buildColumn = ConstructBuildColumn<int64_t, isInnerJoin, isShuffleExchangeBuildPlan>(
+                    buildTemp, outputCol, rowCount, OMNI_LANES(int64_t));
                 break;
             case OMNI_INT:
             case OMNI_DATE32:
-                buildColumn = ConstructBuildColumn<int32_t, isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount, OMNI_LANES(int32_t));
+                buildColumn = ConstructBuildColumn<int32_t, isInnerJoin, isShuffleExchangeBuildPlan>(
+                    buildTemp, outputCol, rowCount, OMNI_LANES(int32_t));
                 break;
             case OMNI_VARCHAR:
             case OMNI_CHAR:
-                buildColumn = ConstructBuildVarcharColumn<isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount);
+                buildColumn = ConstructBuildVarcharColumn<isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol,
+                                                                                                   rowCount);
                 break;
             case OMNI_DECIMAL128:
-                buildColumn = ConstructBuildColumn<Decimal128, isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount);
+                buildColumn = ConstructBuildColumn<Decimal128, isInnerJoin, isShuffleExchangeBuildPlan>(
+                    buildTemp, outputCol, rowCount);
                 break;
             case OMNI_SHORT:
-                buildColumn = ConstructBuildColumn<int16_t, isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount);
+                buildColumn = ConstructBuildColumn<int16_t, isInnerJoin, isShuffleExchangeBuildPlan>(
+                    buildTemp, outputCol, rowCount);
                 break;
             case OMNI_DOUBLE:
-                buildColumn = ConstructBuildColumn<double, isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount);
+                buildColumn = ConstructBuildColumn<double, isInnerJoin, isShuffleExchangeBuildPlan>(
+                    buildTemp, outputCol, rowCount);
                 break;
             case OMNI_BOOLEAN:
-                buildColumn = ConstructBuildColumn<bool, isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount);
+                buildColumn =
+                    ConstructBuildColumn<bool, isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount);
                 break;
             case OMNI_BYTE:
-                buildColumn = ConstructBuildColumn<int8_t, isInnerJoin, isShuffleExchangeBuildPlan>(buildTemp, outputCol, rowCount);
+                buildColumn = ConstructBuildColumn<int8_t, isInnerJoin, isShuffleExchangeBuildPlan>(
+                    buildTemp, outputCol, rowCount);
                 break;
-            default:
-                break;
+            default: break;
         }
         vectorBatch->Append(buildColumn);
     }
 }
 
-void LookupJoinOutputBuilder::BuildOutput(
-    BaseVector **probeOutputColumns,
-    JoinType joinType,
-    bool isShuffleExchangeBuildPlan,
-    VectorBatch **outputVecBatch,
-    BuildSide buildSide)
+void LookupJoinOutputBuilder::BuildOutput(BaseVector **probeOutputColumns, JoinType joinType,
+                                          bool isShuffleExchangeBuildPlan, VectorBatch **outputVecBatch,
+                                          BuildSide buildSide)
 {
     auto rowCount = std::min(probeRowCount, maxRowCount);
     auto output = std::make_unique<VectorBatch>(rowCount);
@@ -1967,35 +1965,34 @@ void LookupJoinOutputBuilder::BuildOutput(
         }
     }
     if (buildSide == OMNI_BUILD_LEFT) {
-    	BaseVector **pVector = output->GetVectors();
-    	std::rotate(pVector, pVector + probeOutputCols.size(), pVector + output->GetVectorCount());
+        BaseVector **pVector = output->GetVectors();
+        std::rotate(pVector, pVector + probeOutputCols.size(), pVector + output->GetVectorCount());
     }
     std::vector<int32_t> tmpVec(outputList);
     if (!tmpVec.empty()) {
-    	BaseVector **pVector = output->GetVectors();
-    	for (int i =0; i < tmpVec.size(); i++) {
-    		if (tmpVec[i] != i) {
-    			auto temp = pVector[i];
-    			int src = tmpVec[i];
-    			int dst = i;
-    			do {
-    				pVector[dst] = pVector[src];
-    				tmpVec[dst] = dst;
-    				dst = src;
-    				src = tmpVec[dst];
-    			} while (src != i);
-    			pVector[dst] = temp;
-    			tmpVec[dst] = dst;
-    		}
-    	}
+        BaseVector **pVector = output->GetVectors();
+        for (int i = 0; i < tmpVec.size(); i++) {
+            if (tmpVec[i] != i) {
+                auto temp = pVector[i];
+                int src = tmpVec[i];
+                int dst = i;
+                do {
+                    pVector[dst] = pVector[src];
+                    tmpVec[dst] = dst;
+                    dst = src;
+                    src = tmpVec[dst];
+                } while (src != i);
+                pVector[dst] = temp;
+                tmpVec[dst] = dst;
+            }
+        }
     }
     probeRowOffset += rowCount;
     probeRowCount -= rowCount;
     *outputVecBatch = output.release();
 }
 
-template<bool isMatched>
-void ALWAYS_INLINE LookupJoinOutputBuilder::AppendExistenceRow(int32_t probePosition)
+template <bool isMatched> void ALWAYS_INLINE LookupJoinOutputBuilder::AppendExistenceRow(int32_t probePosition)
 {
     probeRowCount++;
     if (probeOutputCols.size() > 0) {
@@ -2012,4 +2009,4 @@ void NO_INLINE LookupJoinOutputBuilder::ConstructExistenceColumn(VectorBatch *ve
     std::copy(existJoinBuildIndex.begin(), existJoinBuildIndex.end(), values);
     vectorBatch->Append(ret);
 }
-} // end of omniruntime
+} // namespace omniruntime::op

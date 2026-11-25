@@ -27,7 +27,7 @@ const int BITMAP_INDEX = 3;
 const int OFFSETS_INDEX = 4;
 const int EXECUTION_CONTEXT_IDX = 5;
 const int DICTIONARY_VECTORS_IDX = 6;
-}
+} // namespace
 
 intptr_t FilterCodeGen::GetFunction(const DataTypes &inputDataTypes)
 {
@@ -41,7 +41,7 @@ intptr_t FilterCodeGen::GetFunction(const DataTypes &inputDataTypes)
 intptr_t FilterCodeGen::CreateWrapper()
 {
     // The args indicates the type of the function parameter list.
-    std::vector<Type *> args {
+    std::vector<Type *> args{
         llvmTypes->I64PtrType(), // data address array
         llvmTypes->I32Type(),    // the num of rows
         llvmTypes->I32PtrType(), // output array
@@ -182,4 +182,4 @@ intptr_t FilterCodeGen::CreateWrapper()
 
     return Compile();
 }
-}
+} // namespace omniruntime::codegen

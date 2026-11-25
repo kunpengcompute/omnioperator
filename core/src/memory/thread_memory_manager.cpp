@@ -41,7 +41,7 @@ ThreadMemoryManager::~ThreadMemoryManager() noexcept
 void ThreadMemoryManager::DeleteScope(const std::string &scope)
 {
     std::unordered_map<std::string, int64_t, std::hash<std::string>, std::equal_to<std::string>,
-        MemoryManagerAllocator<std::pair<std::string, int64_t>>>
+                       MemoryManagerAllocator<std::pair<std::string, int64_t>>>
         map = currentMemoryManager->GetScopeMap();
     if (map.find(scope) != map.end()) {
         int64_t size = map.find(scope)->second;
@@ -59,13 +59,7 @@ void ThreadMemoryManager::Clear()
     }
 }
 
-int64_t ThreadMemoryManager::GetUntrackedMemory() const
-{
-    return untrackedMemory;
-}
+int64_t ThreadMemoryManager::GetUntrackedMemory() const { return untrackedMemory; }
 
-int64_t ThreadMemoryManager::GetThreadAccountedMemory()
-{
-    return currentMemoryManager->GetMemoryAmount();
-}
-}
+int64_t ThreadMemoryManager::GetThreadAccountedMemory() { return currentMemoryManager->GetMemoryAmount(); }
+} // namespace omniruntime::mem

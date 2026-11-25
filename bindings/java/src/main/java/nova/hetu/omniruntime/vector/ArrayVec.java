@@ -179,5 +179,3 @@ public class ArrayVec extends ComplexVec {
 
     protected static native void addOffsetsNative(long nativeVector, int[] offsets);
 }
-
-

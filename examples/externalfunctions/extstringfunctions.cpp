@@ -12,7 +12,6 @@
  */
 #include "extstringfunctions.h"
 
-
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
@@ -20,7 +19,6 @@
 #endif
 
 using namespace std;
-
 
 extern "C" DLLEXPORT int32_t LengthStr(int64_t s)
 {

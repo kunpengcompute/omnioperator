@@ -17,7 +17,8 @@ namespace omniruntime {
 namespace mem {
 Chunk::Chunk(Allocator *allocator, void *address, uint64_t sizeInBytes)
     : address(address), sizeInBytes(sizeInBytes), allocator(allocator)
-{}
+{
+}
 
 Chunk::~Chunk()
 {
@@ -30,14 +31,8 @@ Chunk::~Chunk()
     address = nullptr;
 }
 
-void *Chunk::GetAddress() const
-{
-    return address;
-}
+void *Chunk::GetAddress() const { return address; }
 
-uint64_t Chunk::GetSizeInBytes()
-{
-    return sizeInBytes;
-}
+uint64_t Chunk::GetSizeInBytes() { return sizeInBytes; }
 } // namespace mem
 } // namespace omniruntime

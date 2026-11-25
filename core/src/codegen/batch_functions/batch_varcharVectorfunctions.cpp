@@ -20,7 +20,7 @@ using namespace omniruntime::vec;
 
 namespace omniruntime::codegen::function {
 extern "C" DLLEXPORT int32_t BatchWrapVarcharVector(int64_t vectorAddr, uint8_t **data, int32_t *dataLen,
-    int32_t rowCnt)
+                                                    int32_t rowCnt)
 {
     auto *varcharVectorPtr = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(vectorAddr);
     for (int i = 0; i < rowCnt; ++i) {
@@ -47,4 +47,4 @@ extern "C" DLLEXPORT void BatchBitsToNullArray(bool *dstArray, int32_t *srcBits,
         dstArray[i] = BitUtil::IsBitSet(srcBits, rowIdxArray[i]);
     }
 }
-}
+} // namespace omniruntime::codegen::function

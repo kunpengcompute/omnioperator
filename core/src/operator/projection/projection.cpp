@@ -34,8 +34,8 @@ int32_t ProjectionOperator::AddInput(VectorBatch *vecBatch)
     return 0;
 }
 
-OperatorFactory *CreateProjectOperatorFactory(
-    std::shared_ptr<const ProjectNode> projectNode, const config::QueryConfig &queryConfig)
+OperatorFactory *CreateProjectOperatorFactory(std::shared_ptr<const ProjectNode> projectNode,
+                                              const config::QueryConfig &queryConfig)
 {
     auto projections = projectNode->GetProjections();
     auto sourceTypes = *(projectNode->Sources()[0]->OutputType());

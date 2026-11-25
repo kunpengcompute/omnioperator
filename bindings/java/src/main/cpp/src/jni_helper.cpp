@@ -15,8 +15,8 @@
 #include "jni_helper.h"
 #include "operator/hash_util.h"
 
-JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_utils_ShuffleHashHelper_computePartitionIds(JNIEnv *env,
-    jclass jClass, jlongArray vecAddrArray, jint partitionNum, jint rowCount)
+JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_utils_ShuffleHashHelper_computePartitionIds(
+    JNIEnv *env, jclass jClass, jlongArray vecAddrArray, jint partitionNum, jint rowCount)
 {
     if (partitionNum == 0) {
         env->ThrowNew(omniRuntimeExceptionClass, "PartitionNum should not be 0");

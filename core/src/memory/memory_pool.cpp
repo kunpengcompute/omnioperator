@@ -59,10 +59,8 @@ public:
         }
         // jemalloc alloc
         if (zeroFill) {
-            *buffer = static_cast<uint8_t *>(mallocx(
-                static_cast<size_t>(size),
-                MALLOCX_ALIGN(alignment) | MALLOCX_ZERO
-            ));
+            *buffer =
+                static_cast<uint8_t *>(mallocx(static_cast<size_t>(size), MALLOCX_ALIGN(alignment) | MALLOCX_ZERO));
         } else {
             *buffer = static_cast<uint8_t *>(mallocx(static_cast<size_t>(size), MALLOCX_ALIGN(alignment)));
         }
@@ -86,17 +84,11 @@ public:
         Allocator::Allocate(size, buffer, zeroFill);
     }
 
-    void Release(uint8_t *buffer) override
-    {
-        Allocator::Release(buffer);
-    }
+    void Release(uint8_t *buffer) override { Allocator::Release(buffer); }
 
     ~BaseMemoryPoolImpl() override = default;
 
-    uint64_t GetPreferredSize(uint64_t size) override
-    {
-        return size;
-    }
+    uint64_t GetPreferredSize(uint64_t size) override { return size; }
 };
 
 class SimpleMemoryPool : public BaseMemoryPoolImpl<SimpleAllocator> {
@@ -157,14 +149,11 @@ public:
 };
 
 #ifdef COVERAGE
-        static omniruntime::mem::SimpleMemoryPool g_memoryPoolInstance;
+static omniruntime::mem::SimpleMemoryPool g_memoryPoolInstance;
 #else
-        static omniruntime::mem::JemallocMemoryPool g_memoryPoolInstance;
+static omniruntime::mem::JemallocMemoryPool g_memoryPoolInstance;
 #endif
 
-MemoryPool *GetMemoryPool()
-{
-    return &g_memoryPoolInstance;
-}
-}
-}
+MemoryPool *GetMemoryPool() { return &g_memoryPoolInstance; }
+} // namespace mem
+} // namespace omniruntime

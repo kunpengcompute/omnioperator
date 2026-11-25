@@ -17,6 +17,6 @@
 
 JNIEXPORT jstring JNICALL Java_nova_hetu_omniruntime_OmniLibs_getVersion(JNIEnv *env, jclass ignore)
 {
-    return (*env).NewStringUTF(
-        "Product Name: Kunpeng BoostKit\nProduct Version: 26.1.0\nComponent Name: BoostKit-omniop\nComponent Version: 2.2.0");
+    return (*env).NewStringUTF("Product Name: Kunpeng BoostKit\nProduct Version: 26.1.0\nComponent Name: "
+                               "BoostKit-omniop\nComponent Version: 2.2.0");
 }

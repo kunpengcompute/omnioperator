@@ -43,15 +43,12 @@ bool RootSpillTracker::CheckIfExceedAndReserve(uint64_t bytes)
     return false;
 }
 
-void InitRootSpillTracker(uint64_t maxSize)
-{
-    GetRootSpillTracker().SetMaxBytes(maxSize);
-}
+void InitRootSpillTracker(uint64_t maxSize) { GetRootSpillTracker().SetMaxBytes(maxSize); }
 
 RootSpillTracker &GetRootSpillTracker()
 {
     static RootSpillTracker rootSpillTracker;
     return rootSpillTracker;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

@@ -117,34 +117,18 @@ uint64_t Spiller::CollectVecBatchSize(vec::VectorBatch *vectorBatch)
     for (int32_t i = 0; i < vecCount; i++) {
         auto vector = vectorBatch->Get(i);
         switch (dataTypes.GetType(i)->GetId()) {
-            case OMNI_BOOLEAN:
-                result += CollectVectorSize<bool>(vector);
-                break;
+            case OMNI_BOOLEAN: result += CollectVectorSize<bool>(vector); break;
             case OMNI_INT:
-            case OMNI_DATE32:
-                result += CollectVectorSize<int32_t>(vector);
-                break;
-            case OMNI_SHORT:
-                result += CollectVectorSize<int16_t>(vector);
-                break;
+            case OMNI_DATE32: result += CollectVectorSize<int32_t>(vector); break;
+            case OMNI_SHORT: result += CollectVectorSize<int16_t>(vector); break;
             case OMNI_LONG:
             case OMNI_DECIMAL64:
-            case OMNI_TIMESTAMP:
-                result += CollectVectorSize<int64_t>(vector);
-                break;
-            case OMNI_DOUBLE:
-                result += CollectVectorSize<double>(vector);
-                break;
-            case OMNI_DECIMAL128:
-                result += CollectVectorSize<Decimal128>(vector);
-                break;
+            case OMNI_TIMESTAMP: result += CollectVectorSize<int64_t>(vector); break;
+            case OMNI_DOUBLE: result += CollectVectorSize<double>(vector); break;
+            case OMNI_DECIMAL128: result += CollectVectorSize<Decimal128>(vector); break;
             case OMNI_VARCHAR:
-            case OMNI_CHAR:
-                result += CollectVectorSize<std::string_view>(vector);
-                break;
-            case OMNI_BYTE:
-                result += CollectVectorSize<int8_t>(vector);
-                break;
+            case OMNI_CHAR: result += CollectVectorSize<std::string_view>(vector); break;
+            case OMNI_BYTE: result += CollectVectorSize<int8_t>(vector); break;
             default: {
                 break;
             }
@@ -181,7 +165,7 @@ ErrorCode SpillWriter::CreateTempFile()
     auto tid = static_cast<uint32_t>(pthread_self());
     LogDebug("Spill writer create temp file at dir: %s.", dirPathChars);
     if (snprintf_s(filePathChars, fileNameLen, fileNameLen, "%s/%d-%u-%s", dirPathChars, pid, tid,
-        SPILL_TEMPLATE_CHARS) < 0) {
+                   SPILL_TEMPLATE_CHARS) < 0) {
         auto errorNum = errno;
         char errorBuf[ERROR_BUFFER_SIZE];
         GetErrorMsg(errorNum, errorBuf, ERROR_BUFFER_SIZE);
@@ -265,34 +249,18 @@ ErrorCode SpillWriter::WriteVecBatchToBuffer(vec::VectorBatch *vectorBatch)
         auto vector = vectorBatch->Get(i);
         auto result = ErrorCode::SUCCESS;
         switch (dataTypes.GetType(i)->GetId()) {
-            case OMNI_BOOLEAN:
-                result = WriteVectorToBuffer<bool>(vector, rowCount, writeOffset);
-                break;
+            case OMNI_BOOLEAN: result = WriteVectorToBuffer<bool>(vector, rowCount, writeOffset); break;
             case OMNI_INT:
-            case OMNI_DATE32:
-                result = WriteVectorToBuffer<int32_t>(vector, rowCount, writeOffset);
-                break;
-            case OMNI_SHORT:
-                result = WriteVectorToBuffer<int16_t>(vector, rowCount, writeOffset);
-                break;
+            case OMNI_DATE32: result = WriteVectorToBuffer<int32_t>(vector, rowCount, writeOffset); break;
+            case OMNI_SHORT: result = WriteVectorToBuffer<int16_t>(vector, rowCount, writeOffset); break;
             case OMNI_LONG:
             case OMNI_DECIMAL64:
-            case OMNI_TIMESTAMP:
-                result = WriteVectorToBuffer<int64_t>(vector, rowCount, writeOffset);
-                break;
-            case OMNI_DOUBLE:
-                result = WriteVectorToBuffer<double>(vector, rowCount, writeOffset);
-                break;
-            case OMNI_DECIMAL128:
-                result = WriteVectorToBuffer<Decimal128>(vector, rowCount, writeOffset);
-                break;
+            case OMNI_TIMESTAMP: result = WriteVectorToBuffer<int64_t>(vector, rowCount, writeOffset); break;
+            case OMNI_DOUBLE: result = WriteVectorToBuffer<double>(vector, rowCount, writeOffset); break;
+            case OMNI_DECIMAL128: result = WriteVectorToBuffer<Decimal128>(vector, rowCount, writeOffset); break;
             case OMNI_VARCHAR:
-            case OMNI_CHAR:
-                result = WriteVectorToBuffer<std::string_view>(vector, rowCount, writeOffset);
-                break;
-            case OMNI_BYTE:
-                result = WriteVectorToBuffer<int8_t>(vector, rowCount, writeOffset);
-                break;
+            case OMNI_CHAR: result = WriteVectorToBuffer<std::string_view>(vector, rowCount, writeOffset); break;
+            case OMNI_BYTE: result = WriteVectorToBuffer<int8_t>(vector, rowCount, writeOffset); break;
             default: {
                 result = ErrorCode::WRITE_FAILED;
                 break;
@@ -377,34 +345,18 @@ ErrorCode SpillWriter::WriteVecBatchToFile(vec::VectorBatch *vectorBatch)
         auto vector = vectorBatch->Get(i);
         auto result = ErrorCode::SUCCESS;
         switch (dataTypes.GetType(i)->GetId()) {
-            case OMNI_BOOLEAN:
-                result = WriteVector<bool>(vector, rowCount);
-                break;
+            case OMNI_BOOLEAN: result = WriteVector<bool>(vector, rowCount); break;
             case OMNI_INT:
-            case OMNI_DATE32:
-                result = WriteVector<int32_t>(vector, rowCount);
-                break;
-            case OMNI_SHORT:
-                result = WriteVector<int16_t>(vector, rowCount);
-                break;
+            case OMNI_DATE32: result = WriteVector<int32_t>(vector, rowCount); break;
+            case OMNI_SHORT: result = WriteVector<int16_t>(vector, rowCount); break;
             case OMNI_LONG:
             case OMNI_DECIMAL64:
-            case OMNI_TIMESTAMP:
-                result = WriteVector<int64_t>(vector, rowCount);
-                break;
-            case OMNI_DOUBLE:
-                result = WriteVector<double>(vector, rowCount);
-                break;
-            case OMNI_DECIMAL128:
-                result = WriteVector<Decimal128>(vector, rowCount);
-                break;
+            case OMNI_TIMESTAMP: result = WriteVector<int64_t>(vector, rowCount); break;
+            case OMNI_DOUBLE: result = WriteVector<double>(vector, rowCount); break;
+            case OMNI_DECIMAL128: result = WriteVector<Decimal128>(vector, rowCount); break;
             case OMNI_VARCHAR:
-            case OMNI_CHAR:
-                result = WriteVector<std::string_view>(vector, rowCount);
-                break;
-            case OMNI_BYTE:
-                result = WriteVector<int8_t>(vector, rowCount);
-                break;
+            case OMNI_CHAR: result = WriteVector<std::string_view>(vector, rowCount); break;
+            case OMNI_BYTE: result = WriteVector<int8_t>(vector, rowCount); break;
             default: {
                 result = ErrorCode::WRITE_FAILED;
                 break;
@@ -478,7 +430,7 @@ ErrorCode SpillWriter::Write(void *buf, size_t length)
             char errorBuf[ERROR_BUFFER_SIZE];
             GetErrorMsg(errorNum, errorBuf, ERROR_BUFFER_SIZE);
             LogError("Write to %s failed since %s, expect write bytes is %lld but actual write bytes is %lld.",
-                filePath.c_str(), errorBuf, expectBytes, actualBytes);
+                     filePath.c_str(), errorBuf, expectBytes, actualBytes);
             return ErrorCode::WRITE_FAILED;
         }
         bytesWritten += actualBytes;
@@ -501,5 +453,5 @@ ErrorCode SpillWriter::Close()
     close(fd);
     return result;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

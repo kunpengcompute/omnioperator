@@ -88,7 +88,6 @@ extern "C" DLLEXPORT void BatchCastDoubleToInt64Down(double *x, bool *resIsNull,
     }
 }
 
-
 extern "C" DLLEXPORT void BatchAddDouble(double *left, double *right, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; i++) {
@@ -216,7 +215,7 @@ extern "C" DLLEXPORT void BatchMultiplyInt64(int64_t *left, int64_t *right, int3
 }
 
 extern "C" DLLEXPORT void BatchDivideInt64(int64_t contextPtr, int64_t *left, int64_t *right, int32_t rowCnt,
-    bool *isNull)
+                                           bool *isNull)
 {
     for (int i = 0; i < rowCnt; i++) {
         if (isNull[i]) {
@@ -231,7 +230,7 @@ extern "C" DLLEXPORT void BatchDivideInt64(int64_t contextPtr, int64_t *left, in
 }
 
 extern "C" DLLEXPORT void BatchModulusInt64(int64_t contextPtr, int64_t *left, int64_t *right, int32_t rowCnt,
-    bool *isNull)
+                                            bool *isNull)
 {
     for (int i = 0; i < rowCnt; i++) {
         if (isNull[i]) {
@@ -309,7 +308,7 @@ extern "C" DLLEXPORT void BatchMultiplyInt32(int32_t *left, int32_t *right, int3
 }
 
 extern "C" DLLEXPORT void BatchDivideInt32(int64_t contextPtr, int32_t *left, int32_t *right, int32_t rowCnt,
-    bool *isNull)
+                                           bool *isNull)
 {
     for (int i = 0; i < rowCnt; i++) {
         if (isNull[i]) {
@@ -324,7 +323,7 @@ extern "C" DLLEXPORT void BatchDivideInt32(int64_t contextPtr, int32_t *left, in
 }
 
 extern "C" DLLEXPORT void BatchModulusInt32(int64_t contextPtr, int32_t *left, int32_t *right, int32_t rowCnt,
-    bool *isNull)
+                                            bool *isNull)
 {
     for (int i = 0; i < rowCnt; i++) {
         if (isNull[i]) {
@@ -405,10 +404,10 @@ extern "C" DLLEXPORT void BatchPmod(int32_t *x, int32_t *y, bool *isAnyNull, int
 }
 
 extern "C" DLLEXPORT void BatchRoundLong(int64_t *num, int32_t *decimals, bool *isAnyNull, int64_t *output,
-    int32_t rowCnt)
+                                         int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         output[i] = RoundOperator(num[i], decimals[i]);
     }
 }
-}
+} // namespace omniruntime::codegen::function

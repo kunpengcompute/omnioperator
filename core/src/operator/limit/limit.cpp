@@ -32,13 +32,12 @@ LimitOperatorFactory *LimitOperatorFactory::CreateLimitOperatorFactory(std::shar
     return new LimitOperatorFactory(planNode->Count(), planNode->Offset());
 }
 
-Operator *LimitOperatorFactory::CreateOperator()
-{
-    return new LimitOperator(limit, offset);
-}
+Operator *LimitOperatorFactory::CreateOperator() { return new LimitOperator(limit, offset); }
 
 LimitOperator::LimitOperator(int32_t limit, int32_t offset)
-    : remainingLimit(limit), remainingOffset(offset), outputVecBatch(nullptr) {}
+    : remainingLimit(limit), remainingOffset(offset), outputVecBatch(nullptr)
+{
+}
 
 LimitOperator::~LimitOperator() {}
 
@@ -69,7 +68,7 @@ int32_t LimitOperator::AddInput(VectorBatch *vecBatch)
     // 3. the maximum number of rows that can be output this time
     int32_t take;
     if (remainingLimit < 0) {
-        take = rowsAfterOffset;  // unlimited
+        take = rowsAfterOffset; // unlimited
     } else {
         take = rowsAfterOffset < remainingLimit ? rowsAfterOffset : remainingLimit;
         remainingLimit -= take;
@@ -123,5 +122,5 @@ OmniStatus LimitOperator::Close()
 
     return OMNI_STATUS_NORMAL;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

@@ -20,8 +20,8 @@ using namespace omniruntime::type;
 
 std::vector<Function> ContextFunctionRegistry::GetFunctions()
 {
-    std::vector<Function> contextFnRegistry = { Function(reinterpret_cast<void *>(ArenaAllocatorMalloc),
-        "ArenaAllocatorMalloc", {}, { OMNI_LONG, OMNI_INT }, OMNI_CHAR) };
+    std::vector<Function> contextFnRegistry = {Function(reinterpret_cast<void *>(ArenaAllocatorMalloc),
+                                                        "ArenaAllocatorMalloc", {}, {OMNI_LONG, OMNI_INT}, OMNI_CHAR)};
     return contextFnRegistry;
 }
-}
+} // namespace omniruntime::codegen

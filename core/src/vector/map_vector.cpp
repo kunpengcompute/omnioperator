@@ -1,5 +1,5 @@
 /*
-* Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  * OmniOperator is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan
  * PSL v2.
@@ -70,4 +70,4 @@ MapVector *MapVector::CopyPositions(const int *positions, int positionOffset, in
     }
     return newMapVector;
 }
-}
+} // namespace omniruntime::vec

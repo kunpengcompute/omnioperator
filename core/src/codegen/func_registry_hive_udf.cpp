@@ -25,10 +25,11 @@ using namespace codegen::function;
 
 std::vector<Function> HiveUdfRegistry::GetFunctions()
 {
-    std::vector<Function> hiveUdfFunctions = { Function(reinterpret_cast<void *>(EvaluateHiveUdfSingle),
-        "EvaluateHiveUdfSingle", {}, std::vector<DataTypeId> {}, OMNI_INT),
-        Function(reinterpret_cast<void *>(EvaluateHiveUdfBatch), "EvaluateHiveUdfBatch", {}, std::vector<DataTypeId> {},
-        OMNI_INT) };
+    std::vector<Function> hiveUdfFunctions = {
+        Function(reinterpret_cast<void *>(EvaluateHiveUdfSingle), "EvaluateHiveUdfSingle", {},
+                 std::vector<DataTypeId>{}, OMNI_INT),
+        Function(reinterpret_cast<void *>(EvaluateHiveUdfBatch), "EvaluateHiveUdfBatch", {}, std::vector<DataTypeId>{},
+                 OMNI_INT)};
     return hiveUdfFunctions;
 }
 
@@ -77,4 +78,4 @@ void HiveUdfRegistry::GenerateHiveUdfMap(std::unordered_map<std::string, std::st
     }
     file.close();
 }
-}
+} // namespace omniruntime::codegen

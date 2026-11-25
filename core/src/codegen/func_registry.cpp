@@ -81,14 +81,14 @@ vector<unique_ptr<BaseFunctionRegistry>> FunctionRegistry::GetRowFunctionRegistr
         policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_SUPPORT) {
         functionRegistries.push_back(make_unique<StringFunctionRegistrySupportNegativeAndZeroIndex>());
     } else if (policy->GetNegativeStartIndexOutOfBoundsRule() == NegativeStartIndexOutOfBoundsRule::EMPTY_STRING &&
-        policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_SUPPORT) {
+               policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_SUPPORT) {
         functionRegistries.push_back(make_unique<StringFunctionRegistrySupportNotNegativeAndZeroIndex>());
     } else if (policy->GetNegativeStartIndexOutOfBoundsRule() ==
-        NegativeStartIndexOutOfBoundsRule::INTERCEPT_FROM_BEYOND &&
-        policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_NOT_SUPPORT) {
+                   NegativeStartIndexOutOfBoundsRule::INTERCEPT_FROM_BEYOND &&
+               policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_NOT_SUPPORT) {
         functionRegistries.push_back(make_unique<StringFunctionRegistrySupportNegativeAndNotZeroIndex>());
     } else if (policy->GetNegativeStartIndexOutOfBoundsRule() == NegativeStartIndexOutOfBoundsRule::EMPTY_STRING &&
-        policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_NOT_SUPPORT) {
+               policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_NOT_SUPPORT) {
         functionRegistries.push_back(make_unique<StringFunctionRegistrySupportNotNegativeAndNotZeroIndex>());
     }
 
@@ -144,14 +144,14 @@ vector<unique_ptr<BaseFunctionRegistry>> FunctionRegistry::GetBatchFunctionRegis
         policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_SUPPORT) {
         functionRegistries.push_back(make_unique<BatchStringFunctionRegistrySupportNegativeAndZeroIndex>());
     } else if (policy->GetNegativeStartIndexOutOfBoundsRule() == NegativeStartIndexOutOfBoundsRule::EMPTY_STRING &&
-        policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_SUPPORT) {
+               policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_SUPPORT) {
         functionRegistries.push_back(make_unique<BatchStringFunctionRegistrySupportNotNegativeAndZeroIndex>());
     } else if (policy->GetNegativeStartIndexOutOfBoundsRule() ==
-        NegativeStartIndexOutOfBoundsRule::INTERCEPT_FROM_BEYOND &&
-        policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_NOT_SUPPORT) {
+                   NegativeStartIndexOutOfBoundsRule::INTERCEPT_FROM_BEYOND &&
+               policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_NOT_SUPPORT) {
         functionRegistries.push_back(make_unique<BatchStringFunctionRegistrySupportNegativeAndNotZeroIndex>());
     } else if (policy->GetNegativeStartIndexOutOfBoundsRule() == NegativeStartIndexOutOfBoundsRule::EMPTY_STRING &&
-        policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_NOT_SUPPORT) {
+               policy->GetZeroStartIndexSupportRule() == ZeroStartIndexSupportRule::IS_NOT_SUPPORT) {
         functionRegistries.push_back(make_unique<BatchStringFunctionRegistrySupportNotNegativeAndNotZeroIndex>());
     }
 
@@ -169,7 +169,7 @@ std::vector<Function> FunctionRegistry::InitializeRowFunc()
         std::make_unique<std::unordered_map<const FunctionSignature *, const Function *, Hash, Equals>>();
 
     auto registries = GetRowFunctionRegistries();
-    for (auto const & registry : registries) {
+    for (auto const &registry : registries) {
         auto functions = registry->GetFunctions();
         allFunctions.insert(std::end(allFunctions), functions.begin(), functions.end());
     }
@@ -201,7 +201,7 @@ std::vector<Function> FunctionRegistry::InitializeBatchFunc()
         std::make_unique<std::unordered_map<const FunctionSignature *, const Function *, Hash, Equals>>();
 
     auto registries = GetBatchFunctionRegistries();
-    for (auto const & registry : registries) {
+    for (auto const &registry : registries) {
         auto functions = registry->GetFunctions();
         allFunctions.insert(std::end(allFunctions), functions.begin(), functions.end());
     }
@@ -236,7 +236,7 @@ const Function *FunctionRegistry::LookupFunction(FunctionSignature *signature)
 bool FunctionRegistry::LookupNullFunction(FunctionSignature *signature)
 {
     auto signatureNull = FunctionSignature(signature->GetName() + "_null", signature->GetParams(),
-        signature->GetReturnType(), signature->GetFunctionAddress());
+                                           signature->GetReturnType(), signature->GetFunctionAddress());
     auto result = functionNullRegistry->find(&signatureNull);
     return result != functionNullRegistry->end();
 }
@@ -246,15 +246,12 @@ bool FunctionRegistry::LookupNullFunction(FunctionSignature *signature)
 bool FunctionRegistry::IsNullExecutionContextSet(FunctionSignature *signature)
 {
     auto signatureNull = FunctionSignature(signature->GetName() + "_null", signature->GetParams(),
-        signature->GetReturnType(), signature->GetFunctionAddress());
+                                           signature->GetReturnType(), signature->GetFunctionAddress());
     auto result = functionNullRegistry->find(&signatureNull);
     return result->second->IsExecutionContextSet();
 }
 
-void FunctionRegistry::InitHiveUdfMap()
-{
-    HiveUdfRegistry::GenerateHiveUdfMap(*(hiveUdfMap.get()));
-}
+void FunctionRegistry::InitHiveUdfMap() { HiveUdfRegistry::GenerateHiveUdfMap(*(hiveUdfMap.get())); }
 
 const std::string &FunctionRegistry::LookupHiveUdf(const std::string &udfName)
 {
@@ -266,13 +263,7 @@ const std::string &FunctionRegistry::LookupHiveUdf(const std::string &udfName)
     return result->second;
 }
 
-std::vector<Function> &FunctionRegistry::GetRowFunctions()
-{
-    return registeredRowFunctions;
-}
+std::vector<Function> &FunctionRegistry::GetRowFunctions() { return registeredRowFunctions; }
 
-std::vector<Function> &FunctionRegistry::GetBatchFunctions()
-{
-    return registeredBatchFunctions;
-}
-}
+std::vector<Function> &FunctionRegistry::GetBatchFunctions() { return registeredBatchFunctions; }
+} // namespace omniruntime::codegen

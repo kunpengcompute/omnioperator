@@ -36,8 +36,8 @@ HashBuilderWithExprOperatorFactory *HashBuilderWithExprOperatorFactory::CreateHa
     const std::vector<omniruntime::expressions::Expr *> &buildHashKeys, int32_t hashTableCount,
     OverflowConfig *overflowConfig)
 {
-    return new HashBuilderWithExprOperatorFactory(joinType, buildSide, buildTypes,
-                                                  buildHashKeys, hashTableCount, overflowConfig);
+    return new HashBuilderWithExprOperatorFactory(joinType, buildSide, buildTypes, buildHashKeys, hashTableCount,
+                                                  overflowConfig);
 }
 
 HashBuilderWithExprOperatorFactory *HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(
@@ -48,44 +48,43 @@ HashBuilderWithExprOperatorFactory *HashBuilderWithExprOperatorFactory::CreateHa
     auto buildTypes = planNode->RightOutputType();
     auto buildKeys = planNode->RightKeys();
 
-    auto overflowConfig = queryConfig.IsOverFlowASNull()
-                          ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
-                          : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
-    auto hashBuilderWithExprOperatorFactory = new HashBuilderWithExprOperatorFactory(joinType, buildSide, *buildTypes, buildKeys, 1, overflowConfig);
+    auto overflowConfig = queryConfig.IsOverFlowASNull() ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
+                                                         : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
+    auto hashBuilderWithExprOperatorFactory =
+        new HashBuilderWithExprOperatorFactory(joinType, buildSide, *buildTypes, buildKeys, 1, overflowConfig);
 
     delete overflowConfig;
     overflowConfig = nullptr;
     return hashBuilderWithExprOperatorFactory;
 }
 
-HashBuilderWithExprOperatorFactory::HashBuilderWithExprOperatorFactory(JoinType joinType,
-    const type::DataTypes &buildTypes, const std::vector<omniruntime::expressions::Expr *> &buildHashKeys,
-    int32_t hashTableCount, OverflowConfig *overflowConfig)
+HashBuilderWithExprOperatorFactory::HashBuilderWithExprOperatorFactory(
+    JoinType joinType, const type::DataTypes &buildTypes,
+    const std::vector<omniruntime::expressions::Expr *> &buildHashKeys, int32_t hashTableCount,
+    OverflowConfig *overflowConfig)
 {
     std::vector<DataTypePtr> newBuildTypes;
     OperatorUtil::CreateProjections(buildTypes, buildHashKeys, newBuildTypes, this->projections, this->buildHashCols,
-        overflowConfig);
+                                    overflowConfig);
     this->buildTypes = std::make_unique<DataTypes>(newBuildTypes);
-    this->operatorFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(joinType, *(this->buildTypes),
-        this->buildHashCols.data(), buildHashKeys.size(), hashTableCount);
+    this->operatorFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
+        joinType, *(this->buildTypes), this->buildHashCols.data(), buildHashKeys.size(), hashTableCount);
 }
 
-HashBuilderWithExprOperatorFactory::HashBuilderWithExprOperatorFactory(JoinType joinType, BuildSide buildSide,
-    const type::DataTypes &buildTypes, const std::vector<omniruntime::expressions::Expr *> &buildHashKeys,
-    int32_t hashTableCount, OverflowConfig *overflowConfig)
+HashBuilderWithExprOperatorFactory::HashBuilderWithExprOperatorFactory(
+    JoinType joinType, BuildSide buildSide, const type::DataTypes &buildTypes,
+    const std::vector<omniruntime::expressions::Expr *> &buildHashKeys, int32_t hashTableCount,
+    OverflowConfig *overflowConfig)
 {
     std::vector<DataTypePtr> newBuildTypes;
     OperatorUtil::CreateProjections(buildTypes, buildHashKeys, newBuildTypes, this->projections, this->buildHashCols,
-        overflowConfig);
+                                    overflowConfig);
     this->buildTypes = std::make_unique<DataTypes>(newBuildTypes);
-    this->operatorFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(joinType, buildSide,
-        *(this->buildTypes), this->buildHashCols.data(), buildHashKeys.size(), hashTableCount);
+    this->operatorFactory = HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(
+        joinType, buildSide, *(this->buildTypes), this->buildHashCols.data(), buildHashKeys.size(), hashTableCount);
 }
 
-HashBuilderWithExprOperatorFactory::~HashBuilderWithExprOperatorFactory()
-{
-    delete this->operatorFactory;
-}
+HashBuilderWithExprOperatorFactory::~HashBuilderWithExprOperatorFactory() { delete this->operatorFactory; }
 
 Operator *HashBuilderWithExprOperatorFactory::CreateOperator()
 {
@@ -94,16 +93,14 @@ Operator *HashBuilderWithExprOperatorFactory::CreateOperator()
 }
 
 HashBuilderWithExprOperator::HashBuilderWithExprOperator(const DataTypes &buildTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, HashBuilderOperator *hashBuilderOperator)
+                                                         std::vector<std::unique_ptr<Projection>> &projections,
+                                                         HashBuilderOperator *hashBuilderOperator)
     : buildTypes(buildTypes), projections(projections), hashBuilderOperator(hashBuilderOperator)
 {
     SetOperatorName(opNameForHashBuilder);
 }
 
-HashBuilderWithExprOperator::~HashBuilderWithExprOperator()
-{
-    delete this->hashBuilderOperator;
-}
+HashBuilderWithExprOperator::~HashBuilderWithExprOperator() { delete this->hashBuilderOperator; }
 
 int32_t HashBuilderWithExprOperator::AddInput(VectorBatch *vecBatch)
 {
@@ -133,5 +130,5 @@ OmniStatus HashBuilderWithExprOperator::Close()
     hashBuilderOperator->Close();
     return OMNI_STATUS_NORMAL;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

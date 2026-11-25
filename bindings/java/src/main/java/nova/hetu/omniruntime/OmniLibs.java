@@ -101,7 +101,7 @@ public class OmniLibs {
     }
 
     /**
-     * Geting the version
+     * Getting the version
      *
      * @return the version string
      */

@@ -27,15 +27,9 @@ inline jobject oplogObj;
 inline int g_logLevel;
 inline bool g_isDebugEnable = false;
 
-int GetLogLevel()
-{
-    return g_logLevel;
-}
+int GetLogLevel() { return g_logLevel; }
 
-bool IsDebugEnable()
-{
-    return g_isDebugEnable;
-}
+bool IsDebugEnable() { return g_isDebugEnable; }
 
 void Log(const std::string &logStr, LogType logLev)
 {
@@ -63,8 +57,7 @@ void Log(const std::string &logStr, LogType logLev)
             tmpEnv->CallVoidMethod(oplogObj, logErrorId, tmpEnv->NewStringUTF(logStr.data()));
             break;
         }
-        default:
-            break;
+        default: break;
     }
 }
 

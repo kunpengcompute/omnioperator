@@ -47,8 +47,8 @@ uint32_t HashUtil::HashArraySize(uint32_t expected, float f)
     }
 }
 
-std::unique_ptr<omniruntime::vec::Vector<int32_t>> HashUtil::ComputePartitionIds(
-    std::vector<omniruntime::vec::BaseVector *> &vecs, int32_t partitionNum, int32_t rowCount)
+std::unique_ptr<omniruntime::vec::Vector<int32_t>>
+HashUtil::ComputePartitionIds(std::vector<omniruntime::vec::BaseVector *> &vecs, int32_t partitionNum, int32_t rowCount)
 {
     auto colCount = vecs.size();
     std::vector<uint32_t> partitionIds(rowCount, MM3HASH_SEED);
@@ -57,29 +57,18 @@ std::unique_ptr<omniruntime::vec::Vector<int32_t>> HashUtil::ComputePartitionIds
             case type::OMNI_BYTE:
             case type::OMNI_SHORT:
             case type::OMNI_INT:
-            case type::OMNI_DATE32:
-                Mm3Int(vecs[col], rowCount, partitionIds);
-                break;
+            case type::OMNI_DATE32: Mm3Int(vecs[col], rowCount, partitionIds); break;
             case type::OMNI_LONG:
             case type::OMNI_TIMESTAMP:
             case type::OMNI_DECIMAL64:
-            case type::OMNI_DOUBLE:
-                Mm3Long(vecs[col], rowCount, partitionIds);
-                break;
+            case type::OMNI_DOUBLE: Mm3Long(vecs[col], rowCount, partitionIds); break;
             case type::OMNI_CHAR:
-            case type::OMNI_VARCHAR:
-                Mm3String(vecs[col], rowCount, partitionIds);
-                break;
-            case type::OMNI_DECIMAL128:
-                Mm3Decimal128(vecs[col], rowCount, partitionIds);
-                break;
-            case type::OMNI_BOOLEAN:
-                Mm3Boolean(vecs[col], rowCount, partitionIds);
-                break;
+            case type::OMNI_VARCHAR: Mm3String(vecs[col], rowCount, partitionIds); break;
+            case type::OMNI_DECIMAL128: Mm3Decimal128(vecs[col], rowCount, partitionIds); break;
+            case type::OMNI_BOOLEAN: Mm3Boolean(vecs[col], rowCount, partitionIds); break;
             default:
                 std::string omniExceptionInfo =
-                    "Error in shuffle hash, not support type: " +
-                    std::to_string(vecs[col]->GetTypeId());
+                    "Error in shuffle hash, not support type: " + std::to_string(vecs[col]->GetTypeId());
                 throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
         }
     }
@@ -91,5 +80,5 @@ std::unique_ptr<omniruntime::vec::Vector<int32_t>> HashUtil::ComputePartitionIds
     return ret;
 }
 
-}
-}
+} // namespace op
+} // namespace omniruntime

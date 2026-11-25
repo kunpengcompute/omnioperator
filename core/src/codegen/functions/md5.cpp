@@ -45,28 +45,16 @@
 namespace omniruntime::codegen::function {
 using Fun = unsigned int (*)(unsigned int, unsigned int, unsigned int);
 
-static inline unsigned int Fun1(unsigned int x, unsigned int y, unsigned int z)
-{
-    return z ^ (x & (y ^ z));
-}
+static inline unsigned int Fun1(unsigned int x, unsigned int y, unsigned int z) { return z ^ (x & (y ^ z)); }
 
-static inline unsigned int Fun2(unsigned int x, unsigned int y, unsigned int z)
-{
-    return Fun1(z, x, y);
-}
+static inline unsigned int Fun2(unsigned int x, unsigned int y, unsigned int z) { return Fun1(z, x, y); }
 
-static inline unsigned int Fun3(unsigned int x, unsigned int y, unsigned int z)
-{
-    return x ^ y ^ z;
-}
+static inline unsigned int Fun3(unsigned int x, unsigned int y, unsigned int z) { return x ^ y ^ z; }
 
-static inline unsigned int Fun4(unsigned int x, unsigned int y, unsigned int z)
-{
-    return y ^ (x | ~z);
-}
+static inline unsigned int Fun4(unsigned int x, unsigned int y, unsigned int z) { return y ^ (x | ~z); }
 
-static inline void Md5Fun(Fun f, unsigned int &w, unsigned int x, unsigned int y, unsigned int z,
-    unsigned int data, unsigned int s)
+static inline void Md5Fun(Fun f, unsigned int &w, unsigned int x, unsigned int y, unsigned int z, unsigned int data,
+                          unsigned int s)
 {
     w += f(x, y, z) + data;
     w = w << s | w >> (32 - s);
@@ -77,7 +65,7 @@ static inline void Md5Fun(Fun f, unsigned int &w, unsigned int x, unsigned int y
  * The core of the MD5 algorithm, this alters an existing MD5 hash to
  * reflect the addition of 16 long words of new data.  MD5Update blocks
  * the data and converts bytes into long words for this routine.
-*/
+ */
 static void MD5Transform(unsigned int buf[4], const unsigned int in[16])
 {
     unsigned int b1 = buf[0];
@@ -264,4 +252,4 @@ void Md5Function::DigestToBase16(const unsigned char *digest, char *zBuf)
         zBuf[j++] = HEX_CODES[a & 0xf];
     }
 }
-}
+} // namespace omniruntime::codegen::function

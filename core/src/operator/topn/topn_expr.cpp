@@ -16,20 +16,23 @@
 
 namespace omniruntime::op {
 TopNWithExprOperatorFactory::TopNWithExprOperatorFactory(const type::DataTypes &sourceDataTypes, int32_t limit,
-    int32_t offset, const std::vector<omniruntime::expressions::Expr *> &sortKeys, int32_t *sortAsc,
-    int32_t *sortNullFirsts, int32_t sortKeyCount, OverflowConfig *overflowConfig)
+                                                         int32_t offset,
+                                                         const std::vector<omniruntime::expressions::Expr *> &sortKeys,
+                                                         int32_t *sortAsc, int32_t *sortNullFirsts,
+                                                         int32_t sortKeyCount, OverflowConfig *overflowConfig)
 {
     std::vector<DataTypePtr> newSourceTypes;
     OperatorUtil::CreateProjections(sourceDataTypes, sortKeys, newSourceTypes, this->projections, this->sortCols,
-        overflowConfig);
+                                    overflowConfig);
 
     this->sourceTypes = std::make_unique<DataTypes>(newSourceTypes);
-    this->topNOperatorFactory = std::make_unique<TopNOperatorFactory>(*sourceTypes,
-    limit, offset, this->sortCols.data(), sortAsc, sortNullFirsts, sortKeyCount);
+    this->topNOperatorFactory = std::make_unique<TopNOperatorFactory>(
+        *sourceTypes, limit, offset, this->sortCols.data(), sortAsc, sortNullFirsts, sortKeyCount);
 }
 
-TopNWithExprOperatorFactory *TopNWithExprOperatorFactory::CreateTopNWithExprOperatorFactory(
-    std::shared_ptr<const TopNNode> planNode, const config::QueryConfig &queryConfig)
+TopNWithExprOperatorFactory *
+TopNWithExprOperatorFactory::CreateTopNWithExprOperatorFactory(std::shared_ptr<const TopNNode> planNode,
+                                                               const config::QueryConfig &queryConfig)
 {
     auto dataTypes = planNode->GetSourceTypes();
     int32_t cnt = planNode->Count();
@@ -38,9 +41,9 @@ TopNWithExprOperatorFactory *TopNWithExprOperatorFactory::CreateTopNWithExprOper
     auto sortNullFirsts = planNode->GetNullFirsts();
     size_t sortColCnt = sortCols.size();
     auto overflowConfig = queryConfig.IsOverFlowASNull() == true ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
-                                                                         : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
+                                                                 : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
     auto pOperatorFactory = new TopNWithExprOperatorFactory(*dataTypes.get(), cnt, 0, sortCols, sortAscending.data(),
-                                                    sortNullFirsts.data(), sortColCnt, overflowConfig);
+                                                            sortNullFirsts.data(), sortColCnt, overflowConfig);
     return pOperatorFactory;
 }
 
@@ -54,14 +57,13 @@ Operator *TopNWithExprOperatorFactory::CreateOperator()
 }
 
 TopNWithExprOperator::TopNWithExprOperator(const type::DataTypes &sourceTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, TopNOperator *topNOperator)
+                                           std::vector<std::unique_ptr<Projection>> &projections,
+                                           TopNOperator *topNOperator)
     : sourceTypes(sourceTypes), projections(projections), topNOperator(topNOperator)
-{}
-
-TopNWithExprOperator::~TopNWithExprOperator()
 {
-    delete topNOperator;
 }
+
+TopNWithExprOperator::~TopNWithExprOperator() { delete topNOperator; }
 
 int32_t TopNWithExprOperator::AddInput(VectorBatch *inputVecBatch)
 {
@@ -94,4 +96,4 @@ OmniStatus TopNWithExprOperator::Close()
     topNOperator->Close();
     return OMNI_STATUS_NORMAL;
 }
-}
+} // namespace omniruntime::op

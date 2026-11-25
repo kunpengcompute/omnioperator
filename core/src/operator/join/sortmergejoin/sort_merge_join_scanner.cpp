@@ -21,22 +21,15 @@ using namespace omniruntime::vec;
 namespace omniruntime {
 namespace op {
 SortMergeJoinScanner::SortMergeJoinScanner(const DataTypes &streamedTableKeysTypes, int32_t *streamedTableKeysCols,
-    int32_t keyColsCount, DynamicPagesIndex *streamedTablePagesIndex, const DataTypes &bufferedTableKeysTypes,
-    int32_t *bufferedTableKeysCols, DynamicPagesIndex *bufferedTablePagesIndex, JoinType joinType,
-    bool onlyBufferedFirstMatch)
-    : streamedTableKeysTypes(streamedTableKeysTypes),
-      joinType(joinType),
-      streamedTableKeysCols(streamedTableKeysCols),
-      bufferedTableKeysCols(bufferedTableKeysCols),
-      keyColsCount(keyColsCount),
-      onlyBufferedFirstMatch(onlyBufferedFirstMatch),
-      streamedPagesIndexPosition(-1),
-      bufferedPagesIndexPosition(0),
-      streamedPagesIndex(streamedTablePagesIndex),
-      bufferedPagesIndex(bufferedTablePagesIndex),
-      preStreamedValueAddress(-1),
-      preStreamedPagesIndexPosition(-1),
-      preStatus(std::make_unique<InitialJoinStatus>())
+                                           int32_t keyColsCount, DynamicPagesIndex *streamedTablePagesIndex,
+                                           const DataTypes &bufferedTableKeysTypes, int32_t *bufferedTableKeysCols,
+                                           DynamicPagesIndex *bufferedTablePagesIndex, JoinType joinType,
+                                           bool onlyBufferedFirstMatch)
+    : streamedTableKeysTypes(streamedTableKeysTypes), joinType(joinType), streamedTableKeysCols(streamedTableKeysCols),
+      bufferedTableKeysCols(bufferedTableKeysCols), keyColsCount(keyColsCount),
+      onlyBufferedFirstMatch(onlyBufferedFirstMatch), streamedPagesIndexPosition(-1), bufferedPagesIndexPosition(0),
+      streamedPagesIndex(streamedTablePagesIndex), bufferedPagesIndex(bufferedTablePagesIndex),
+      preStreamedValueAddress(-1), preStreamedPagesIndexPosition(-1), preStatus(std::make_unique<InitialJoinStatus>())
 {
     switch (joinType) {
         case JoinType::OMNI_JOIN_TYPE_INNER:
@@ -51,36 +44,22 @@ SortMergeJoinScanner::SortMergeJoinScanner(const DataTypes &streamedTableKeysTyp
         case JoinType::OMNI_JOIN_TYPE_LEFT_ANTI:
             scanFindNextRow = &SortMergeJoinScanner::LeftOuterJoin<OMNI_JOIN_TYPE_LEFT_ANTI>;
             break;
-        case JoinType::OMNI_JOIN_TYPE_FULL:
-            scanFindNextRow = &SortMergeJoinScanner::FullOuterJoin;
-            break;
-        default:
-            scanFindNextRow = &SortMergeJoinScanner::ErrorJoin;
-            break;
+        case JoinType::OMNI_JOIN_TYPE_FULL: scanFindNextRow = &SortMergeJoinScanner::FullOuterJoin; break;
+        default: scanFindNextRow = &SortMergeJoinScanner::ErrorJoin; break;
     }
 
     keyCompareFuncs.resize(streamedTableKeysTypes.GetSize());
     for (int i = 0; i < streamedTableKeysTypes.GetSize(); ++i) {
         auto colTypeId = streamedTableKeysTypes.GetIds()[i];
         switch (colTypeId) {
-            case OMNI_BOOLEAN:
-                keyCompareFuncs[i] = (OperatorUtil::CompareValue<bool, true, false, true>);
-                break;
+            case OMNI_BOOLEAN: keyCompareFuncs[i] = (OperatorUtil::CompareValue<bool, true, false, true>); break;
             case OMNI_INT:
-            case OMNI_DATE32:
-                keyCompareFuncs[i] = (OperatorUtil::CompareValue<int32_t, true, false, true>);
-                break;
-            case OMNI_SHORT:
-                keyCompareFuncs[i] = (OperatorUtil::CompareValue<int16_t, true, false, true>);
-                break;
+            case OMNI_DATE32: keyCompareFuncs[i] = (OperatorUtil::CompareValue<int32_t, true, false, true>); break;
+            case OMNI_SHORT: keyCompareFuncs[i] = (OperatorUtil::CompareValue<int16_t, true, false, true>); break;
             case OMNI_LONG:
             case OMNI_TIMESTAMP:
-            case OMNI_DECIMAL64:
-                keyCompareFuncs[i] = (OperatorUtil::CompareValue<int64_t, true, false, true>);
-                break;
-            case OMNI_DOUBLE:
-                keyCompareFuncs[i] = (OperatorUtil::CompareValue<double, true, false, true>);
-                break;
+            case OMNI_DECIMAL64: keyCompareFuncs[i] = (OperatorUtil::CompareValue<int64_t, true, false, true>); break;
+            case OMNI_DOUBLE: keyCompareFuncs[i] = (OperatorUtil::CompareValue<double, true, false, true>); break;
             case OMNI_VARCHAR:
             case OMNI_CHAR:
                 keyCompareFuncs[i] = (OperatorUtil::CompareValue<std::string_view, true, false, true>);
@@ -88,12 +67,10 @@ SortMergeJoinScanner::SortMergeJoinScanner(const DataTypes &streamedTableKeysTyp
             case OMNI_DECIMAL128:
                 keyCompareFuncs[i] = (OperatorUtil::CompareValue<Decimal128, true, false, true>);
                 break;
-            case OMNI_BYTE:
-                keyCompareFuncs[i] = (OperatorUtil::CompareValue<int8_t, true, false, true>);
-                break;
+            case OMNI_BYTE: keyCompareFuncs[i] = (OperatorUtil::CompareValue<int8_t, true, false, true>); break;
             default:
                 throw omniruntime::exception::OmniException("sort merge join scanner",
-                    "unsupport compare funct in smj");
+                                                            "unsupported compare function in smj");
         }
     }
 }
@@ -107,16 +84,17 @@ int64_t SortMergeJoinScanner::FindNextJoinRows()
 }
 
 int32_t SortMergeJoinScanner::GetMatchedValueAddresses(std::vector<int8_t> &isMatched,
-    std::vector<int64_t> &streamedTblValueAddresses, std::vector<int64_t> &bufferedTblValueAddresses,
-    std::vector<int8_t> &isBufferedKeyMatched)
+                                                       std::vector<int64_t> &streamedTblValueAddresses,
+                                                       std::vector<int64_t> &bufferedTblValueAddresses,
+                                                       std::vector<int8_t> &isBufferedKeyMatched)
 {
     isMatched.insert(isMatched.end(), isPreKeyMatched.begin(), isPreKeyMatched.end());
     streamedTblValueAddresses.insert(streamedTblValueAddresses.end(), streamedValueAddress.begin(),
-        streamedValueAddress.end());
+                                     streamedValueAddress.end());
     bufferedTblValueAddresses.insert(bufferedTblValueAddresses.end(), bufferedValueAddress.begin(),
-        bufferedValueAddress.end());
+                                     bufferedValueAddress.end());
     isBufferedKeyMatched.insert(isBufferedKeyMatched.end(), isSameBufferedKeyMatched.begin(),
-        isSameBufferedKeyMatched.end());
+                                isSameBufferedKeyMatched.end());
     isPreKeyMatched.clear();
     streamedValueAddress.clear();
     bufferedValueAddress.clear();
@@ -784,7 +762,7 @@ template <JoinType templateJoinType> int32_t SortMergeJoinScanner::FindNextMatch
     auto compare = CompareCurRowKeys();
     auto cur = streamedPagesIndexPosition;
     while ((compare > 0 && AdvancedBufferedToRowWithNullFreeJoinKey()) ||
-        (compare < 0 && AdvancedStreamedWithNullFreeJoinKey())) {
+           (compare < 0 && AdvancedStreamedWithNullFreeJoinKey())) {
         compare = CompareCurRowKeys();
         // cur-stream-key duplicate with pre-key, also save although buffer not match cur-stream-key
         if (compare != 0 && (streamedPagesIndexPosition > cur) && PreKeyMatched()) {
@@ -825,12 +803,12 @@ template <JoinType templateJoinType> void SortMergeJoinScanner::SavePrevMatching
     auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
     auto matchedRowCount = preBufferedValueAddress.size();
     bufferedValueAddress.insert(bufferedValueAddress.end(), preBufferedValueAddress.begin(),
-        preBufferedValueAddress.end());
+                                preBufferedValueAddress.end());
     streamedValueAddress.insert(streamedValueAddress.end(), matchedRowCount, streamedValueAddr);
     isPreKeyMatched.insert(isPreKeyMatched.end(), matchedRowCount, isMatched);
     if constexpr (templateJoinType == OMNI_JOIN_TYPE_LEFT_SEMI || templateJoinType == OMNI_JOIN_TYPE_LEFT_ANTI) {
         isSameBufferedKeyMatched.insert(isSameBufferedKeyMatched.end(), preBufferedKeyMatched.begin(),
-            preBufferedKeyMatched.end());
+                                        preBufferedKeyMatched.end());
     }
 }
 
@@ -838,7 +816,7 @@ template <JoinType templateJoinType> void SortMergeJoinScanner::SavePrevMatching
 void SortMergeJoinScanner::SavePrevMatchingRowsForFullOuter(int64_t inValueAddress, int8_t isMatched)
 {
     bufferedValueAddress.insert(bufferedValueAddress.end(), preBufferedValueAddress.begin(),
-        preBufferedValueAddress.end());
+                                preBufferedValueAddress.end());
     streamedValueAddress.insert(streamedValueAddress.end(), preBufferedValueAddress.size(), inValueAddress);
     isPreKeyMatched.insert(isPreKeyMatched.end(), preBufferedValueAddress.size(), isMatched);
 }
@@ -861,5 +839,5 @@ bool SortMergeJoinScanner::NeedBufferedData()
     }
     return false;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

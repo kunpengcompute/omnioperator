@@ -41,10 +41,7 @@ OmniStatus AggregationOperatorFactory::Init()
     return CreateAggregatorFactories(aggregatorFactories, aggFuncTypesVector, GetMaskColumns());
 }
 
-OmniStatus AggregationOperatorFactory::Close()
-{
-    return OMNI_STATUS_NORMAL;
-}
+OmniStatus AggregationOperatorFactory::Close() { return OMNI_STATUS_NORMAL; }
 
 Operator *AggregationOperatorFactory::CreateOperator()
 {
@@ -72,10 +69,10 @@ Operator *AggregationOperatorFactory::CreateOperator()
         auto inputTypes = DataTypes(inputDataTypesPtr).Instance();
         auto outputTypes = aggsOutputTypes[i].Instance();
         auto aggregator = aggregatorFactories[i]->CreateAggregator(*inputTypes, *outputTypes, aggInputColIdxVec,
-            inputRaws[i], outputPartials[i], isOverflowAsNull);
+                                                                   inputRaws[i], outputPartials[i], isOverflowAsNull);
         if (UNLIKELY(aggregator == nullptr)) {
             throw OmniException("OPERATOR_RUNTIME_ERROR", "Unable to create aggregator " + std::to_string(i) + " / " +
-                std::to_string(this->aggregatorFactories.size()));
+                                                              std::to_string(this->aggregatorFactories.size()));
         }
         aggregator->SetStatisticalAggregate(isStatisticalAggregate);
         aggs.push_back(std::move(aggregator));
@@ -164,5 +161,5 @@ int AggregationOperator::GetOutput(VectorBatch **outputVecBatch)
     SetStatus(OMNI_STATUS_FINISHED);
     return OMNI_STATUS_FINISHED;
 }
-}
-}
+} // namespace op
+} // namespace omniruntime

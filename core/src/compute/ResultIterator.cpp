@@ -15,4 +15,4 @@
 
 namespace omniruntime {
 
-} // namespace gluten
+} // namespace omniruntime

@@ -28,7 +28,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
 #include "driver.h"
 #include "codegen/time_util.h"
 #include <memory>
@@ -36,15 +36,9 @@
 namespace omniruntime::compute {
 std::atomic_uint64_t BlockingState::numBlockdDrivers_{0};
 
-BlockingState::BlockingState(
-    std::shared_ptr<OmniDriver> driver,
-    ContinueFuture &&future,
-    omniruntime::op::Operator *op,
-    BlockingReason reason)
-    : driver_(std::move(driver)),
-      future_(std::move(future)),
-      operator_(op),
-      reason_(reason)
+BlockingState::BlockingState(std::shared_ptr<OmniDriver> driver, ContinueFuture &&future, omniruntime::op::Operator *op,
+                             BlockingReason reason)
+    : driver_(std::move(driver)), future_(std::move(future)), operator_(op), reason_(reason)
 {
     numBlockdDrivers_++;
 }
@@ -82,25 +76,22 @@ void OmniDriver::close()
 
 // Call an Operator method. record silenced throws, but not a query
 // terminating throw. Annotate exceptions with Operator info.
-#define CALL_OPERATOR(call, operatorPtr, operatorId, operatorMethod)                                    \
-        opCallStatus_.Start(operatorId, operatorMethod);                                                \
-        call;                                                                                           \
-        opCallStatus_.TimeSegmentStatistic(operatorPtr, operatorMethod);                                \
-        opCallStatus_.Stop();                                                                           \
+#define CALL_OPERATOR(call, operatorPtr, operatorId, operatorMethod)                                                   \
+    opCallStatus_.Start(operatorId, operatorMethod);                                                                   \
+    call;                                                                                                              \
+    opCallStatus_.TimeSegmentStatistic(operatorPtr, operatorMethod);                                                   \
+    opCallStatus_.Stop();
 
-void OpCallStatus::Start(int32_t operatorId, const char* operatorMethod)
+void OpCallStatus::Start(int32_t operatorId, const char *operatorMethod)
 {
     opId = operatorId;
     method = operatorMethod;
     cpuTimeStartNs = ThreadCpuNanos();
 }
 
-void OpCallStatus::Stop()
-{
-    cpuTimeStartNs = 0;
-}
+void OpCallStatus::Stop() { cpuTimeStartNs = 0; }
 
-CpuWallTiming OmniDriver::processLazyIoStats(op::Operator& op, const CpuWallTiming& timing)
+CpuWallTiming OmniDriver::processLazyIoStats(op::Operator &op, const CpuWallTiming &timing)
 {
     if (&op == operators_[0].get()) {
         return timing;
@@ -111,9 +102,7 @@ CpuWallTiming OmniDriver::processLazyIoStats(op::Operator& op, const CpuWallTimi
     uint64_t inputBytesDelta = 0;
     wallDelta = std::min<int64_t>(wallDelta, timing.wallNanos);
     lockStats = operators_[0]->stats();
-    lockStats.getOutputTime.Add(CpuWallTiming{
-        1, wallDelta, 0
-    });
+    lockStats.getOutputTime.Add(CpuWallTiming{1, wallDelta, 0});
     lockStats.inputBytes += inputBytesDelta;
     lockStats.outputBytes += inputBytesDelta;
     return CpuWallTiming{
@@ -123,7 +112,7 @@ CpuWallTiming OmniDriver::processLazyIoStats(op::Operator& op, const CpuWallTimi
     };
 }
 
-void OpCallStatus::TimeSegmentStatistic(op::Operator* op, const char* operatorMethod) const
+void OpCallStatus::TimeSegmentStatistic(op::Operator *op, const char *operatorMethod) const
 {
     const int64_t cpuTimeSegment = ThreadCpuNanos() - cpuTimeStartNs;
     std::string_view opMethod(operatorMethod);
@@ -141,10 +130,8 @@ void OpCallStatus::TimeSegmentStatistic(op::Operator* op, const char* operatorMe
     }
 }
 
-StopReason OmniDriver::RunInternal(
-    std::shared_ptr<OmniDriver> &self,
-    std::shared_ptr<BlockingState> &blockingState,
-    vec::VectorBatch **result)
+StopReason OmniDriver::RunInternal(std::shared_ptr<OmniDriver> &self, std::shared_ptr<BlockingState> &blockingState,
+                                   vec::VectorBatch **result)
 {
     try {
         const uint32_t numOperators = operators_.size();
@@ -180,7 +167,8 @@ StopReason OmniDriver::RunInternal(
                                 resultBytes = intermediateResult->CalculateTotalSize();
                                 {
                                     auto &lockedStats = op->stats();
-                                    lockedStats.AddOutputVector(resultBytes, intermediateResult->GetVectorCount(), intermediateResult->GetRowCount());
+                                    lockedStats.AddOutputVector(resultBytes, intermediateResult->GetVectorCount(),
+                                                                intermediateResult->GetRowCount());
                                 }
                             }
                         });
@@ -188,7 +176,8 @@ StopReason OmniDriver::RunInternal(
                             withDeltaCpuWallTimer(nextOp, &OperatorStats::addInputTime, [&]() {
                                 {
                                     auto &lockedStats = nextOp->stats();
-                                    lockedStats.AddInputVector(resultBytes, intermediateResult->GetVectorCount(), intermediateResult->GetRowCount());
+                                    lockedStats.AddInputVector(resultBytes, intermediateResult->GetVectorCount(),
+                                                               intermediateResult->GetRowCount());
                                 }
                                 CALL_OPERATOR(nextOp->AddInput(intermediateResult), nextOp, curOperatorId_ + 1,
                                               kOpMethodAddInput);
@@ -215,11 +204,12 @@ StopReason OmniDriver::RunInternal(
                         if (*result != nullptr) {
                             {
                                 auto &lockedStats = op->stats();
-                                lockedStats.AddOutputVector((*result)->CalculateTotalSize(), (*result)->GetVectorCount(), (*result)->GetRowCount());
+                                lockedStats.AddOutputVector((*result)->CalculateTotalSize(),
+                                                            (*result)->GetVectorCount(), (*result)->GetRowCount());
                             }
                         }
                     });
-                    if (*result != nullptr  && !op->isFinished()) {
+                    if (*result != nullptr && !op->isFinished()) {
                         blockingReason_ = BlockingReason::kWaitForConsumer;
                         return StopReason::kBlock;
                     }
@@ -239,21 +229,17 @@ StopReason OmniDriver::RunInternal(
 }
 #undef CALL_OPERATOR
 
-StopReason OmniDriver::BlockDriver(
-    const std::shared_ptr<OmniDriver> &self,
-    size_t blockedOperatorId,
-    ContinueFuture &&future,
-    std::shared_ptr<BlockingState> &blockingState)
+StopReason OmniDriver::BlockDriver(const std::shared_ptr<OmniDriver> &self, size_t blockedOperatorId,
+                                   ContinueFuture &&future, std::shared_ptr<BlockingState> &blockingState)
 {
     auto *op = operators_[blockedOperatorId].get();
     blockedOperatorId_ = blockedOperatorId;
-    blockingState = std::make_shared<BlockingState>(
-        self, std::move(future), op, blockingReason_);
+    blockingState = std::make_shared<BlockingState>(self, std::move(future), op, blockingReason_);
     return StopReason::kBlock;
 }
 
 template <typename Func>
-void OmniDriver::withDeltaCpuWallTimer(op::Operator* op, TimingMemberPtr opTimingMember, Func&& opFunction)
+void OmniDriver::withDeltaCpuWallTimer(op::Operator *op, TimingMemberPtr opTimingMember, Func &&opFunction)
 {
     // If 'trackOperatorCpuUsage_' is true, create and initialize the timer object
     // to track cpu and wall time of the opFunction.
@@ -265,7 +251,7 @@ void OmniDriver::withDeltaCpuWallTimer(op::Operator* op, TimingMemberPtr opTimin
     // The delta CpuWallTiming object would be recorded to the corresponding
     // 'opTimingMember' upon destruction of the timer when withDeltaCpuWallTimer
     // ends. The timer is created on the stack to avoid heap allocation
-    auto f = [op, opTimingMember, this](const CpuWallTiming& elapsedTime) {
+    auto f = [op, opTimingMember, this](const CpuWallTiming &elapsedTime) {
         auto elapsedSelfTime = processLazyIoStats(*op, elapsedTime);
         (op->stats().*opTimingMember).Add(elapsedSelfTime);
     };
@@ -273,4 +259,4 @@ void OmniDriver::withDeltaCpuWallTimer(op::Operator* op, TimingMemberPtr opTimin
 
     opFunction();
 }
-} // end of omniruntime
+} // namespace omniruntime::compute

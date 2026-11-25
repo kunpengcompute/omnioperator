@@ -15,13 +15,12 @@
 #include "codegen/time_util.h"
 
 namespace omniruntime::compute {
- 
-vec::VectorBatch* OmniTask::Next(ContinueFuture* future)
+
+vec::VectorBatch *OmniTask::Next(ContinueFuture *future)
 {
     if (drivers_.empty()) {
         taskStats_.executionStartTimeMs = static_cast<uint64_t>(ThreadCpuNanos());
-        LocalPlanner::plan(
-            planFragment_, &drivers_, &operatorFactories_, queryConfig_);
+        LocalPlanner::plan(planFragment_, &drivers_, &operatorFactories_, queryConfig_);
         std::reverse(drivers_.begin(), drivers_.end());
     }
     const auto numDrivers = drivers_.size();
@@ -33,19 +32,19 @@ vec::VectorBatch* OmniTask::Next(ContinueFuture* future)
                 // This driver has finished processing.
                 continue;
             }
- 
+
             ++runableDrivers;
- 
+
             ContinueFuture driverFuture = OmniFuture::makeEmpty();
             StopReason stopReason = StopReason::kNone;
             auto result = drivers_[i]->Next(&driverFuture, &stopReason);
             if (result) {
                 return result;
             }
- 
+
             futures[i] = std::move(driverFuture);
         }
- 
+
         if (runableDrivers == 0) {
             return nullptr;
         }
@@ -61,14 +60,14 @@ TaskStats OmniTask::GetTaskStats() const
     taskStats.numTotalDrivers = drivers_.size();
     LogDebug("total driver num is %d", taskStats.numTotalDrivers);
     // Add stats of the drivers (their operators) that are still running.
-    for (const auto& driver : drivers_) {
+    for (const auto &driver : drivers_) {
         // Driver can be null.
         if (driver == nullptr) {
             ++taskStats.numCompletedDrivers;
             continue;
         }
         auto operators = driver->operators();
-        for (auto& op : *operators) {
+        for (auto &op : *operators) {
             auto opStatsCopy = op->stats(false);
             int32_t pipelineId = opStatsCopy.pipelineId;
             int32_t operatorId = opStatsCopy.operatorId;
@@ -79,11 +78,9 @@ TaskStats OmniTask::GetTaskStats() const
             if (taskStats.pipelineStats[pipelineId].operatorStats.size() <= static_cast<size_t>(operatorId)) {
                 taskStats.pipelineStats[pipelineId].operatorStats.resize(operatorId + 1);
             }
-            taskStats.pipelineStats[pipelineId]
-                .operatorStats[operatorId]
-                .Add(opStatsCopy);
+            taskStats.pipelineStats[pipelineId].operatorStats[operatorId].Add(opStatsCopy);
         }
     }
     return taskStats;
 }
-} // end of omniruntime
+} // namespace omniruntime::compute

@@ -154,7 +154,7 @@ static std::vector<CompareFunc> compareFromFlatFuncs = {
 
 template <typename type::DataTypeId typeId>
 static BaseVector *ConstructColumnWithoutNullIndex(BaseVector **outputColumns, uint64_t *outputAddresses,
-    int32_t *outputIndexes, int32_t probeRowCount)
+                                                   int32_t *outputIndexes, int32_t probeRowCount)
 {
     if constexpr (typeId == OMNI_VARCHAR) {
         using DictionaryVector = Vector<DictionaryContainer<std::string_view>>;
@@ -206,7 +206,7 @@ static BaseVector *ConstructColumnWithoutNullIndex(BaseVector **outputColumns, u
 
 template <typename type::DataTypeId typeId>
 static BaseVector *ConstructColumnWithNullIndex(BaseVector **outputColumns, uint64_t *outputAddresses,
-    int32_t *outputIndexes, int32_t probeRowCount)
+                                                int32_t *outputIndexes, int32_t probeRowCount)
 {
     if constexpr (typeId == OMNI_VARCHAR) {
         using DictionaryVector = Vector<DictionaryContainer<std::string_view>>;
@@ -284,7 +284,8 @@ template <typename type::DataTypeId typeId> static BaseVector *ConstructNullColu
 }
 
 void SortMergeJoinOperatorV3::ConfigStreamInfo(const DataTypes &streamTypes, const std::vector<int32_t> &streamJoinCols,
-    const std::vector<int32_t> &streamOutputCols, int32_t originalStreamColCount)
+                                               const std::vector<int32_t> &streamOutputCols,
+                                               int32_t originalStreamColCount)
 {
     this->streamTypes = streamTypes;
     this->streamJoinCols = streamJoinCols;
@@ -313,7 +314,8 @@ void SortMergeJoinOperatorV3::ConfigStreamInfo(const DataTypes &streamTypes, con
 }
 
 void SortMergeJoinOperatorV3::ConfigBufferInfo(const DataTypes &bufferTypes, const std::vector<int32_t> &bufferJoinCols,
-    const std::vector<int32_t> &bufferOutputCols, int32_t originalBufferColCount)
+                                               const std::vector<int32_t> &bufferOutputCols,
+                                               int32_t originalBufferColCount)
 {
     this->bufferTypes = bufferTypes;
     this->bufferJoinCols = bufferJoinCols;
@@ -475,7 +477,7 @@ void SortMergeJoinOperatorV3::PrepareForStream()
     streamPagesIndex->Prepare();
     auto streamRowCount = streamPagesIndex->GetRowCount();
     streamPagesIndex->Sort(streamJoinCols.data(), streamSortAscendings, streamSortNullFirsts, streamJoinColCount, 0,
-        streamRowCount);
+                           streamRowCount);
 
     // second step prepare join columns, filter columns
     auto streamAddresses = streamPagesIndex->GetValueAddresses();
@@ -530,7 +532,7 @@ void SortMergeJoinOperatorV3::PrepareForBuffer()
     bufferPagesIndex->Prepare();
     auto bufferRowCount = bufferPagesIndex->GetRowCount();
     bufferPagesIndex->Sort(bufferJoinCols.data(), bufferSortAscendings, bufferSortNullFirsts, bufferJoinColCount, 0,
-        bufferRowCount);
+                           bufferRowCount);
 
     // second step prepare join columns, filter columns
     auto bufferAddresses = bufferPagesIndex->GetValueAddresses();
@@ -580,7 +582,7 @@ void SortMergeJoinOperatorV3::PrepareForBuffer()
 }
 
 void SortMergeJoinOperatorV3::DivideRanges(vec::BaseVector **joinRows, std::vector<int32_t> &rowIdxes,
-    int32_t joinColCount, std::vector<IndexRange> &ranges)
+                                           int32_t joinColCount, std::vector<IndexRange> &ranges)
 {
     auto rowCount = rowIdxes.size();
     size_t pos = 0;
@@ -633,7 +635,7 @@ void SortMergeJoinOperatorV3::DivideRanges(vec::BaseVector **joinRows, std::vect
 }
 
 void SortMergeJoinOperatorV3::DivideRanges(PagesIndex *pagesIndex, BaseVector ***joinColumns, int32_t joinColCount,
-    std::vector<IndexRange> &ranges)
+                                           std::vector<IndexRange> &ranges)
 {
     auto rowCount = pagesIndex->GetRowCount();
     auto addresses = pagesIndex->GetValueAddresses();
@@ -793,7 +795,7 @@ OmniStatus SortMergeJoinOperatorV3::ProbeNullRange()
         }
         default:
             throw OmniException("OPERATOR_RUNTIME_ERROR",
-                "Unsupported the join type " + std::to_string(joinType) + " currently.");
+                                "Unsupported the join type " + std::to_string(joinType) + " currently.");
     }
     return resultStatus;
 }
@@ -845,7 +847,7 @@ OmniStatus SortMergeJoinOperatorV3::ProbeNonNullRanges(bool hasFilter)
         }
         default:
             throw OmniException("OPERATOR_RUNTIME_ERROR",
-                "Unsupported the join type " + std::to_string(joinType) + " currently.");
+                                "Unsupported the join type " + std::to_string(joinType) + " currently.");
     }
 }
 
@@ -944,7 +946,7 @@ void SortMergeJoinOperatorV3::HandleMatch(uint64_t *streamAddresses, uint64_t *b
         HandleMatchForLeftAntiJoin<hasJoinFilter>(streamAddresses, bufferAddresses);
     } else {
         throw OmniException("OPERATOR_RUNTIME_ERROR",
-            "Unsupported the join type " + std::to_string(joinType) + " currently.");
+                            "Unsupported the join type " + std::to_string(joinType) + " currently.");
     }
 }
 
@@ -1252,16 +1254,16 @@ void SortMergeJoinOperatorV3::ConstructResultColumns(bool isStream, VectorBatch 
         for (int32_t colIdx = 0; colIdx < outputColCount; colIdx++) {
             auto givenColumns = outputColumns[colIdx];
             auto resultColumn = DYNAMIC_TYPE_DISPATCH(ConstructColumnWithNullIndex, outputTypeIds[colIdx], givenColumns,
-                outputAddresses, outputIndexes, rowCount);
+                                                      outputAddresses, outputIndexes, rowCount);
             output->Append(resultColumn);
         }
     } else {
         for (int32_t colIdx = 0; colIdx < outputColCount; colIdx++) {
             auto givenColumns = outputColumns[colIdx];
             auto resultColumn = DYNAMIC_TYPE_DISPATCH(ConstructColumnWithoutNullIndex, outputTypeIds[colIdx],
-                givenColumns, outputAddresses, outputIndexes, rowCount);
+                                                      givenColumns, outputAddresses, outputIndexes, rowCount);
             output->Append(resultColumn);
         }
     }
 }
-}
+} // namespace omniruntime::op

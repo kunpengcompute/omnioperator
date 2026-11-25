@@ -40,8 +40,8 @@ extern "C" DLLEXPORT void BatchCountChar(uint8_t **str, int32_t *strLen, uint8_t
 }
 
 extern "C" DLLEXPORT void BatchSplitIndex(uint8_t **str, int32_t *strLen, uint8_t **target, int32_t targetWidth,
-                                         int32_t *targetLen, int32_t *index, bool *isAnyNull, uint8_t **output,
-                                         int32_t *outLen, int32_t rowCnt)
+                                          int32_t *targetLen, int32_t *index, bool *isAnyNull, uint8_t **output,
+                                          int32_t *outLen, int32_t rowCnt)
 {
     for (int j = 0; j < rowCnt; ++j) {
         if (isAnyNull[j]) {
@@ -73,7 +73,7 @@ extern "C" DLLEXPORT void BatchSplitIndex(uint8_t **str, int32_t *strLen, uint8_
 }
 
 extern "C" DLLEXPORT void BatchStrCompare(uint8_t **ap, int32_t *apLen, uint8_t **bp, int32_t *bpLen, int32_t *res,
-    int32_t rowCnt)
+                                          int32_t rowCnt)
 {
     int min = 0, result = 0;
     for (int i = 0; i < rowCnt; ++i) {
@@ -92,7 +92,7 @@ extern "C" DLLEXPORT void BatchStrCompare(uint8_t **ap, int32_t *apLen, uint8_t 
 }
 
 extern "C" DLLEXPORT void BatchLessThanStr(uint8_t **ap, int32_t *apLen, uint8_t **bp, int32_t *bpLen, bool *res,
-    int32_t rowCnt)
+                                           int32_t rowCnt)
 {
     auto tmp = new int32_t[rowCnt];
     BatchStrCompare(ap, apLen, bp, bpLen, tmp, rowCnt);
@@ -103,7 +103,7 @@ extern "C" DLLEXPORT void BatchLessThanStr(uint8_t **ap, int32_t *apLen, uint8_t
 }
 
 extern "C" DLLEXPORT void BatchLessThanEqualStr(uint8_t **ap, int32_t *apLen, uint8_t **bp, int32_t *bpLen, bool *res,
-    int32_t rowCnt)
+                                                int32_t rowCnt)
 {
     auto tmp = new int32_t[rowCnt];
     BatchStrCompare(ap, apLen, bp, bpLen, tmp, rowCnt);
@@ -114,7 +114,7 @@ extern "C" DLLEXPORT void BatchLessThanEqualStr(uint8_t **ap, int32_t *apLen, ui
 }
 
 extern "C" DLLEXPORT void BatchGreaterThanStr(uint8_t **ap, int32_t *apLen, uint8_t **bp, int32_t *bpLen, bool *res,
-    int32_t rowCnt)
+                                              int32_t rowCnt)
 {
     auto tmp = new int32_t[rowCnt];
     BatchStrCompare(ap, apLen, bp, bpLen, tmp, rowCnt);
@@ -125,7 +125,7 @@ extern "C" DLLEXPORT void BatchGreaterThanStr(uint8_t **ap, int32_t *apLen, uint
 }
 
 extern "C" DLLEXPORT void BatchGreaterThanEqualStr(uint8_t **ap, int32_t *apLen, uint8_t **bp, int32_t *bpLen,
-    bool *res, int32_t rowCnt)
+                                                   bool *res, int32_t rowCnt)
 {
     auto tmp = new int32_t[rowCnt];
     BatchStrCompare(ap, apLen, bp, bpLen, tmp, rowCnt);
@@ -136,7 +136,7 @@ extern "C" DLLEXPORT void BatchGreaterThanEqualStr(uint8_t **ap, int32_t *apLen,
 }
 
 extern "C" DLLEXPORT void BatchEqualStr(uint8_t **ap, int32_t *apLen, uint8_t **bp, int32_t *bpLen, bool *res,
-    int32_t rowCnt)
+                                        int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; i++) {
         if (apLen[i] != bpLen[i]) {
@@ -148,7 +148,7 @@ extern "C" DLLEXPORT void BatchEqualStr(uint8_t **ap, int32_t *apLen, uint8_t **
 }
 
 extern "C" DLLEXPORT void BatchNotEqualStr(uint8_t **ap, int32_t *apLen, uint8_t **bp, int32_t *bpLen, bool *res,
-    int32_t rowCnt)
+                                           int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; i++) {
         if (apLen[i] != bpLen[i]) {
@@ -160,7 +160,8 @@ extern "C" DLLEXPORT void BatchNotEqualStr(uint8_t **ap, int32_t *apLen, uint8_t
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDateNotAllowReducePrecison(int64_t contextPtr, uint8_t **str,
-    int32_t *strLen, bool *isAnyNull, int32_t *output, int32_t rowCnt)
+                                                                      int32_t *strLen, bool *isAnyNull, int32_t *output,
+                                                                      int32_t rowCnt)
 {
     // Date is in the format 1996-02-28
     // Doesn't account for leap seconds or daylight savings
@@ -183,12 +184,12 @@ extern "C" DLLEXPORT void BatchCastStringToDateNotAllowReducePrecison(int64_t co
             SetError(contextPtr, "Value cannot be cast to date: " + s);
             continue;
         }
-        output[i] = static_cast<int32_t >(result);
+        output[i] = static_cast<int32_t>(result);
     }
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDateAllowReducePrecison(int64_t contextPtr, uint8_t **str, int32_t *strLen,
-    bool *isAnyNull, int32_t *output, int32_t rowCnt)
+                                                                   bool *isAnyNull, int32_t *output, int32_t rowCnt)
 {
     // Date is in the format 1996-02-28
     // Doesn't account for leap seconds or daylight savings
@@ -206,12 +207,12 @@ extern "C" DLLEXPORT void BatchCastStringToDateAllowReducePrecison(int64_t conte
             SetError(contextPtr, "Value cannot be cast to date: " + s);
             continue;
         }
-        output[i] = static_cast<int32_t >(result);
+        output[i] = static_cast<int32_t>(result);
     }
 }
 
 extern "C" DLLEXPORT void BatchCastIntToString(int64_t contextPtr, int32_t *value, bool *isAnyNull, uint8_t **output,
-    int32_t *outLen, int32_t rowCnt)
+                                               int32_t *outLen, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -238,7 +239,7 @@ extern "C" DLLEXPORT void BatchCastIntToString(int64_t contextPtr, int32_t *valu
 }
 
 extern "C" DLLEXPORT void BatchCastLongToString(int64_t contextPtr, int64_t *value, bool *isAnyNull, uint8_t **output,
-    int32_t *outLen, int32_t rowCnt)
+                                                int32_t *outLen, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -265,17 +266,17 @@ extern "C" DLLEXPORT void BatchCastLongToString(int64_t contextPtr, int64_t *val
 }
 
 extern "C" DLLEXPORT void BatchCastDoubleToString(int64_t contextPtr, double *value, bool *isAnyNull, uint8_t **output,
-    int32_t *outLen, int32_t rowCnt)
+                                                  int32_t *outLen, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         auto ret = ArenaAllocatorMalloc(contextPtr, MAX_DATA_LENGTH);
-        outLen[i] = static_cast<int32_t >(DoubleToString::DoubleToStringConverter(value[i], ret));
+        outLen[i] = static_cast<int32_t>(DoubleToString::DoubleToStringConverter(value[i], ret));
         output[i] = reinterpret_cast<uint8_t *>(ret);
     }
 }
 
 extern "C" DLLEXPORT void BatchCastDecimal64ToString(int64_t contextPtr, int64_t *x, int32_t precision, int32_t scale,
-    bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                     bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -302,7 +303,8 @@ extern "C" DLLEXPORT void BatchCastDecimal64ToString(int64_t contextPtr, int64_t
 }
 
 extern "C" DLLEXPORT void BatchCastDecimal128ToString(int64_t contextPtr, Decimal128 *x, int32_t precision,
-    int32_t scale, bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                      int32_t scale, bool *isAnyNull, uint8_t **output, int32_t *outLen,
+                                                      int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -329,7 +331,8 @@ extern "C" DLLEXPORT void BatchCastDecimal128ToString(int64_t contextPtr, Decima
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDecimal64(int64_t contextPtr, uint8_t **str, int32_t *strLen,
-    bool *isAnyNull, int64_t *output, int32_t outPrecision, int32_t outScale, int32_t rowCnt)
+                                                     bool *isAnyNull, int64_t *output, int32_t outPrecision,
+                                                     int32_t outScale, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -340,16 +343,16 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal64(int64_t contextPtr, uint8_t
         StringUtil::TrimString(s);
         if (!regex_match(s, g_decimalRegex)) {
             std::ostringstream errorMessage;
-            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale <<
-                "). Value too large.";
+            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale
+                         << "). Value too large.";
             SetError(contextPtr, errorMessage.str());
             continue;
         }
         Decimal64 result(s);
         if (result.IsOverflow(outPrecision) != OpStatus::SUCCESS) {
             std::ostringstream errorMessage;
-            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale <<
-                "). Value too large.";
+            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale
+                         << "). Value too large.";
             SetError(contextPtr, errorMessage.str());
             output[i] = 0;
             continue;
@@ -359,7 +362,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal64(int64_t contextPtr, uint8_t
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDecimal128(int64_t contextPtr, uint8_t **str, int32_t *strLen,
-    bool *isAnyNull, Decimal128 *output, int32_t outPrecision, int32_t outScale, int32_t rowCnt)
+                                                      bool *isAnyNull, Decimal128 *output, int32_t outPrecision,
+                                                      int32_t outScale, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -369,8 +373,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal128(int64_t contextPtr, uint8_
         std::string s = std::string(reinterpret_cast<const char *>(str[i]), strLen[i]);
         if (!regex_match(s, g_decimalRegex)) {
             std::ostringstream errorMessage;
-            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale <<
-                "). Value too large.";
+            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale
+                         << "). Value too large.";
             SetError(contextPtr, errorMessage.str());
             continue;
         }
@@ -379,8 +383,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal128(int64_t contextPtr, uint8_
         result.ReScale(outScale);
         if (result.IsOverflow(outPrecision) != OpStatus::SUCCESS) {
             std::ostringstream errorMessage;
-            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale <<
-                "). Value too large.";
+            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale
+                         << "). Value too large.";
             SetError(contextPtr, errorMessage.str());
             continue;
         }
@@ -389,7 +393,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal128(int64_t contextPtr, uint8_
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDecimal64RoundUp(int64_t contextPtr, uint8_t **str, int32_t *strLen,
-    bool *isAnyNull, int64_t *output, int32_t outPrecision, int32_t outScale, int32_t rowCnt)
+                                                            bool *isAnyNull, int64_t *output, int32_t outPrecision,
+                                                            int32_t outScale, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -400,16 +405,16 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal64RoundUp(int64_t contextPtr, 
         StringUtil::TrimString(s);
         if (!regex_match(s, g_decimalRegex)) {
             std::ostringstream errorMessage;
-            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale <<
-                         "). Value too large.";
+            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale
+                         << "). Value too large.";
             SetError(contextPtr, errorMessage.str());
             continue;
         }
         Decimal64<true> result(s);
         if (result.IsOverflow(outPrecision) != OpStatus::SUCCESS) {
             std::ostringstream errorMessage;
-            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale <<
-                         "). Value too large.";
+            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale
+                         << "). Value too large.";
             SetError(contextPtr, errorMessage.str());
             output[i] = 0;
             continue;
@@ -419,7 +424,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal64RoundUp(int64_t contextPtr, 
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDecimal128RoundUp(int64_t contextPtr, uint8_t **str, int32_t *strLen,
-    bool *isAnyNull, Decimal128 *output, int32_t outPrecision, int32_t outScale, int32_t rowCnt)
+                                                             bool *isAnyNull, Decimal128 *output, int32_t outPrecision,
+                                                             int32_t outScale, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -429,8 +435,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal128RoundUp(int64_t contextPtr,
         std::string s = std::string(reinterpret_cast<const char *>(str[i]), strLen[i]);
         if (!regex_match(s, g_decimalRegex)) {
             std::ostringstream errorMessage;
-            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale <<
-                         "). Value too large.";
+            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale
+                         << "). Value too large.";
             SetError(contextPtr, errorMessage.str());
             continue;
         }
@@ -439,8 +445,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal128RoundUp(int64_t contextPtr,
         result.ReScale(outScale);
         if (result.IsOverflow(outPrecision) != OpStatus::SUCCESS) {
             std::ostringstream errorMessage;
-            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale <<
-                         "). Value too large.";
+            errorMessage << "Cannot cast VARCHAR '" << s << "' to DECIMAL(" << outPrecision << ", " << outScale
+                         << "). Value too large.";
             SetError(contextPtr, errorMessage.str());
             continue;
         }
@@ -449,7 +455,7 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal128RoundUp(int64_t contextPtr,
 }
 
 extern "C" DLLEXPORT void BatchCastStringToInt(int64_t contextPtr, uint8_t **str, int32_t *strLen, bool *isAnyNull,
-    int32_t *output, int32_t rowCnt)
+                                               int32_t *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -472,7 +478,7 @@ extern "C" DLLEXPORT void BatchCastStringToInt(int64_t contextPtr, uint8_t **str
 }
 
 extern "C" DLLEXPORT void BatchCastStringToLong(int64_t contextPtr, uint8_t **str, int32_t *strLen, bool *isAnyNull,
-    int64_t *output, int32_t rowCnt)
+                                                int64_t *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -496,7 +502,7 @@ extern "C" DLLEXPORT void BatchCastStringToLong(int64_t contextPtr, uint8_t **st
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDouble(int64_t contextPtr, uint8_t **str, int32_t *strLen, bool *isAnyNull,
-    double *output, int32_t rowCnt)
+                                                  double *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -524,7 +530,8 @@ extern "C" DLLEXPORT void BatchCastStringToDouble(int64_t contextPtr, uint8_t **
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDateRetNullNotAllowReducePrecison(bool *isNull, uint8_t **str,
-    int32_t *strLen, int32_t *output, int32_t rowCnt)
+                                                                             int32_t *strLen, int32_t *output,
+                                                                             int32_t rowCnt)
 {
     // Date is in the format 1996-02-28
     // Doesn't account for leap seconds or daylight savings
@@ -543,13 +550,13 @@ extern "C" DLLEXPORT void BatchCastStringToDateRetNullNotAllowReducePrecison(boo
             isNull[i] = true;
             continue;
         }
-        output[i] = static_cast<int32_t >(result);
+        output[i] = static_cast<int32_t>(result);
         isNull[i] = false;
     }
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDateRetNullAllowReducePrecison(bool *isNull, uint8_t **str, int32_t *strLen,
-    int32_t *output, int32_t rowCnt)
+                                                                          int32_t *output, int32_t rowCnt)
 {
     // Date is in the format 1996-02-28
     // Doesn't account for leap seconds or daylight savings
@@ -563,13 +570,13 @@ extern "C" DLLEXPORT void BatchCastStringToDateRetNullAllowReducePrecison(bool *
             isNull[i] = true;
             continue;
         }
-        output[i] = static_cast<int32_t >(result);
+        output[i] = static_cast<int32_t>(result);
         isNull[i] = false;
     }
 }
 
 extern "C" DLLEXPORT void BatchCastIntToStringRetNull(bool *isNull, int64_t contextPtr, int32_t *value,
-    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                      uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         std::string str = std::to_string(value[i]);
@@ -587,7 +594,7 @@ extern "C" DLLEXPORT void BatchCastIntToStringRetNull(bool *isNull, int64_t cont
 }
 
 extern "C" DLLEXPORT void BatchCastLongToStringRetNull(bool *isNull, int64_t contextPtr, int64_t *value,
-    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                       uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         std::string str = std::to_string(value[i]);
@@ -605,18 +612,19 @@ extern "C" DLLEXPORT void BatchCastLongToStringRetNull(bool *isNull, int64_t con
 }
 
 extern "C" DLLEXPORT void BatchCastDoubleToStringRetNull(bool *isNull, int64_t contextPtr, double *value,
-    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                         uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         auto ret = ArenaAllocatorMalloc(contextPtr, MAX_DATA_LENGTH);
-        outLen[i] = static_cast<int32_t >(DoubleToString::DoubleToStringConverter(value[i], ret));
+        outLen[i] = static_cast<int32_t>(DoubleToString::DoubleToStringConverter(value[i], ret));
         isNull[i] = false;
         output[i] = reinterpret_cast<uint8_t *>(ret);
     }
 }
 
 extern "C" DLLEXPORT void BatchCastDecimal64ToStringRetNull(bool *isNull, int64_t contextPtr, int64_t *x,
-    int32_t precision, int32_t scale, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                            int32_t precision, int32_t scale, uint8_t **output,
+                                                            int32_t *outLen, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         std::string str = Decimal64(x[i]).SetScale(scale).ToString();
@@ -639,7 +647,8 @@ extern "C" DLLEXPORT void BatchCastDecimal64ToStringRetNull(bool *isNull, int64_
 }
 
 extern "C" DLLEXPORT void BatchCastDecimal128ToStringRetNull(bool *isNull, int64_t contextPtr, Decimal128 *inputDecimal,
-    int32_t precision, int32_t scale, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                             int32_t precision, int32_t scale, uint8_t **output,
+                                                             int32_t *outLen, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         std::string stringDecimal = Decimal128Wrapper(inputDecimal[i]).SetScale(scale).ToString();
@@ -662,7 +671,8 @@ extern "C" DLLEXPORT void BatchCastDecimal128ToStringRetNull(bool *isNull, int64
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDecimal64RetNull(bool *isNull, uint8_t **str, int32_t *strLen,
-    int64_t *output, int32_t outPrecision, int32_t outScale, int32_t rowCnt)
+                                                            int64_t *output, int32_t outPrecision, int32_t outScale,
+                                                            int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         std::string s = std::string(reinterpret_cast<const char *>(str[i]), strLen[i]);
@@ -685,7 +695,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal64RetNull(bool *isNull, uint8_
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDecimal128RetNull(bool *isNull, uint8_t **str, int32_t *strLen,
-    Decimal128 *output, int32_t outPrecision, int32_t outScale, int32_t rowCnt)
+                                                             Decimal128 *output, int32_t outPrecision, int32_t outScale,
+                                                             int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         std::string s = std::string(reinterpret_cast<const char *>(str[i]), strLen[i]);
@@ -707,7 +718,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal128RetNull(bool *isNull, uint8
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDecimal64RoundUpRetNull(bool *isNull, uint8_t **str, int32_t *strLen,
-    int64_t *output, int32_t outPrecision, int32_t outScale, int32_t rowCnt)
+                                                                   int64_t *output, int32_t outPrecision,
+                                                                   int32_t outScale, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         std::string s = std::string(reinterpret_cast<const char *>(str[i]), strLen[i]);
@@ -730,7 +742,8 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal64RoundUpRetNull(bool *isNull,
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDecimal128RoundUpRetNull(bool *isNull, uint8_t **str, int32_t *strLen,
-    Decimal128 *output, int32_t outPrecision, int32_t outScale, int32_t rowCnt)
+                                                                    Decimal128 *output, int32_t outPrecision,
+                                                                    int32_t outScale, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         std::string s = std::string(reinterpret_cast<const char *>(str[i]), strLen[i]);
@@ -752,11 +765,10 @@ extern "C" DLLEXPORT void BatchCastStringToDecimal128RoundUpRetNull(bool *isNull
 }
 
 extern "C" DLLEXPORT void BatchCastStringToIntRetNull(bool *isNull, uint8_t **str, int32_t *strLen, int32_t *output,
-    int32_t rowCnt)
+                                                      int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
-        Status status = ConvertStringToInteger<int32_t>(output[i], reinterpret_cast<const char *>(str[i]),
-            strLen[i]);
+        Status status = ConvertStringToInteger<int32_t>(output[i], reinterpret_cast<const char *>(str[i]), strLen[i]);
         isNull[i] = status != Status::CONVERT_SUCCESS;
         if (isNull[i]) {
             output[i] = 0;
@@ -765,11 +777,10 @@ extern "C" DLLEXPORT void BatchCastStringToIntRetNull(bool *isNull, uint8_t **st
 }
 
 extern "C" DLLEXPORT void BatchCastStringToLongRetNull(bool *isNull, uint8_t **str, int32_t *strLen, int64_t *output,
-    int32_t rowCnt)
+                                                       int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
-        Status status = ConvertStringToInteger<int64_t>(output[i], reinterpret_cast<const char *>(str[i]),
-            strLen[i]);
+        Status status = ConvertStringToInteger<int64_t>(output[i], reinterpret_cast<const char *>(str[i]), strLen[i]);
         isNull[i] = status != Status::CONVERT_SUCCESS;
         if (isNull[i]) {
             output[i] = 0;
@@ -778,7 +789,7 @@ extern "C" DLLEXPORT void BatchCastStringToLongRetNull(bool *isNull, uint8_t **s
 }
 
 extern "C" DLLEXPORT void BatchCastStringToDoubleRetNull(bool *isNull, uint8_t **str, int32_t *strLen, double *output,
-    int32_t rowCnt)
+                                                         int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         double result;
@@ -794,7 +805,7 @@ extern "C" DLLEXPORT void BatchCastStringToDoubleRetNull(bool *isNull, uint8_t *
 }
 
 extern "C" DLLEXPORT void BatchToUpperStr(int64_t contextPtr, uint8_t **str, int32_t *strLen, bool *isAnyNull,
-    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                          uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     char *ret;
     for (int j = 0; j < rowCnt; ++j) {
@@ -817,13 +828,13 @@ extern "C" DLLEXPORT void BatchToUpperStr(int64_t contextPtr, uint8_t **str, int
 }
 
 extern "C" DLLEXPORT void BatchToUpperChar(int64_t contextPtr, uint8_t **str, int32_t width, int32_t *strLen,
-    bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                           bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     BatchToUpperStr(contextPtr, str, strLen, isAnyNull, output, outLen, rowCnt);
 }
 
 extern "C" DLLEXPORT void BatchToLowerStr(int64_t contextPtr, uint8_t **str, int32_t *strLen, bool *isAnyNull,
-    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                          uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     char *ret;
     char currItem;
@@ -848,19 +859,20 @@ extern "C" DLLEXPORT void BatchToLowerStr(int64_t contextPtr, uint8_t **str, int
 }
 
 extern "C" DLLEXPORT void BatchToLowerChar(int64_t contextPtr, uint8_t **str, int32_t width, int32_t *strLen,
-    bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                           bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     BatchToLowerStr(contextPtr, str, strLen, isAnyNull, output, outLen, rowCnt);
 }
 
 extern "C" DLLEXPORT void BatchJsonSplitStr(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
-    bool *jsonStrIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                            bool *jsonStrIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen,
+                                            int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
         bool rowOutIsNull = false;
         int32_t rowOutLen = 0;
-        const char *result = JsonSplitScalar(contextPtr,
-            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i], &rowOutIsNull, &rowOutLen);
+        const char *result = JsonSplitScalar(contextPtr, reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i],
+                                             jsonStrIsNull[i], &rowOutIsNull, &rowOutLen);
         outIsNull[i] = rowOutIsNull;
         outLen[i] = rowOutLen;
         output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(result));
@@ -868,44 +880,45 @@ extern "C" DLLEXPORT void BatchJsonSplitStr(int64_t contextPtr, uint8_t **jsonSt
 }
 
 extern "C" DLLEXPORT void BatchJsonSplitChar(int64_t contextPtr, uint8_t **jsonStr, int32_t jsonStrWidth,
-    int32_t *jsonStrLen, bool *jsonStrIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                             int32_t *jsonStrLen, bool *jsonStrIsNull, bool *outIsNull,
+                                             uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     static_cast<void>(jsonStrWidth);
     BatchJsonSplitStr(contextPtr, jsonStr, jsonStrLen, jsonStrIsNull, outIsNull, output, outLen, rowCnt);
 }
 
 extern "C" DLLEXPORT void BatchJsonValue(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
-    bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
-    bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                         bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth,
+                                         int32_t *pathStrLen, bool *pathStrIsNull, bool *outIsNull, uint8_t **output,
+                                         int32_t *outLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
         bool rowOutIsNull = false;
         int32_t rowOutLen = 0;
-        const char *result = JsonValueRetNull(contextPtr,
-            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
-            reinterpret_cast<const char *>(pathStr[i]), pathStrWidth, pathStrLen[i], pathStrIsNull[i],
-            &rowOutIsNull, &rowOutLen);
+        const char *result = JsonValueRetNull(contextPtr, reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i],
+                                              jsonStrIsNull[i], reinterpret_cast<const char *>(pathStr[i]),
+                                              pathStrWidth, pathStrLen[i], pathStrIsNull[i], &rowOutIsNull, &rowOutLen);
         outIsNull[i] = rowOutIsNull;
         outLen[i] = rowOutLen;
         output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(result));
     }
 }
 
-extern "C" DLLEXPORT void BatchJsonValueWithBehaviors(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
-    bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
-    int32_t *emptyBehavior, bool *emptyBehaviorIsNull, uint8_t **defaultOnEmpty, int32_t *defaultOnEmptyLen,
-    bool *defaultOnEmptyIsNull, int32_t *errorBehavior, bool *errorBehaviorIsNull, uint8_t **defaultOnError,
-    int32_t *defaultOnErrorLen, bool *defaultOnErrorIsNull, bool *outIsNull, uint8_t **output, int32_t *outLen,
-    int32_t rowCnt)
+extern "C" DLLEXPORT void BatchJsonValueWithBehaviors(
+    int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen, bool *jsonStrIsNull, uint8_t **pathStr,
+    int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull, int32_t *emptyBehavior, bool *emptyBehaviorIsNull,
+    uint8_t **defaultOnEmpty, int32_t *defaultOnEmptyLen, bool *defaultOnEmptyIsNull, int32_t *errorBehavior,
+    bool *errorBehaviorIsNull, uint8_t **defaultOnError, int32_t *defaultOnErrorLen, bool *defaultOnErrorIsNull,
+    bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
         bool rowOutIsNull = false;
         int32_t rowOutLen = 0;
-        const char *result = JsonValueWithBehaviors(contextPtr,
-            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
-            reinterpret_cast<const char *>(pathStr[i]), pathStrWidth, pathStrLen[i], pathStrIsNull[i],
-            emptyBehavior[i], emptyBehaviorIsNull[i], reinterpret_cast<const char *>(defaultOnEmpty[i]),
-            defaultOnEmptyLen[i], defaultOnEmptyIsNull[i], errorBehavior[i], errorBehaviorIsNull[i],
+        const char *result = JsonValueWithBehaviors(
+            contextPtr, reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
+            reinterpret_cast<const char *>(pathStr[i]), pathStrWidth, pathStrLen[i], pathStrIsNull[i], emptyBehavior[i],
+            emptyBehaviorIsNull[i], reinterpret_cast<const char *>(defaultOnEmpty[i]), defaultOnEmptyLen[i],
+            defaultOnEmptyIsNull[i], errorBehavior[i], errorBehaviorIsNull[i],
             reinterpret_cast<const char *>(defaultOnError[i]), defaultOnErrorLen[i], defaultOnErrorIsNull[i],
             &rowOutIsNull, &rowOutLen);
         outIsNull[i] = rowOutIsNull;
@@ -915,36 +928,37 @@ extern "C" DLLEXPORT void BatchJsonValueWithBehaviors(int64_t contextPtr, uint8_
 }
 
 extern "C" DLLEXPORT void BatchJsonQuery(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen,
-    bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
-    bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                         bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth,
+                                         int32_t *pathStrLen, bool *pathStrIsNull, bool *outIsNull, uint8_t **output,
+                                         int32_t *outLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
         bool rowOutIsNull = false;
         int32_t rowOutLen = 0;
-        const char *result = JsonQueryRetNull(contextPtr,
-            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
-            reinterpret_cast<const char *>(pathStr[i]), pathStrWidth, pathStrLen[i], pathStrIsNull[i],
-            &rowOutIsNull, &rowOutLen);
+        const char *result = JsonQueryRetNull(contextPtr, reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i],
+                                              jsonStrIsNull[i], reinterpret_cast<const char *>(pathStr[i]),
+                                              pathStrWidth, pathStrLen[i], pathStrIsNull[i], &rowOutIsNull, &rowOutLen);
         outIsNull[i] = rowOutIsNull;
         outLen[i] = rowOutLen;
         output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(result));
     }
 }
 
-extern "C" DLLEXPORT void BatchJsonQueryWithWrapperAndBehavior(int64_t contextPtr, uint8_t **jsonStr,
-    int32_t *jsonStrLen, bool *jsonStrIsNull, uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen,
-    bool *pathStrIsNull, int32_t *wrapperBehavior, bool *wrapperBehaviorIsNull, int32_t *emptyBehavior,
-    bool *emptyBehaviorIsNull, int32_t *errorBehavior, bool *errorBehaviorIsNull, bool *outIsNull,
-    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+extern "C" DLLEXPORT void
+BatchJsonQueryWithWrapperAndBehavior(int64_t contextPtr, uint8_t **jsonStr, int32_t *jsonStrLen, bool *jsonStrIsNull,
+                                     uint8_t **pathStr, int32_t pathStrWidth, int32_t *pathStrLen, bool *pathStrIsNull,
+                                     int32_t *wrapperBehavior, bool *wrapperBehaviorIsNull, int32_t *emptyBehavior,
+                                     bool *emptyBehaviorIsNull, int32_t *errorBehavior, bool *errorBehaviorIsNull,
+                                     bool *outIsNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
         bool rowOutIsNull = false;
         int32_t rowOutLen = 0;
-        const char *result = JsonQueryWithWrapperAndBehavior(contextPtr,
-            reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
+        const char *result = JsonQueryWithWrapperAndBehavior(
+            contextPtr, reinterpret_cast<const char *>(jsonStr[i]), jsonStrLen[i], jsonStrIsNull[i],
             reinterpret_cast<const char *>(pathStr[i]), pathStrWidth, pathStrLen[i], pathStrIsNull[i],
-            wrapperBehavior[i], wrapperBehaviorIsNull[i], emptyBehavior[i], emptyBehaviorIsNull[i],
-            errorBehavior[i], errorBehaviorIsNull[i], &rowOutIsNull, &rowOutLen);
+            wrapperBehavior[i], wrapperBehaviorIsNull[i], emptyBehavior[i], emptyBehaviorIsNull[i], errorBehavior[i],
+            errorBehaviorIsNull[i], &rowOutIsNull, &rowOutLen);
         outIsNull[i] = rowOutIsNull;
         outLen[i] = rowOutLen;
         output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(result));
@@ -952,7 +966,7 @@ extern "C" DLLEXPORT void BatchJsonQueryWithWrapperAndBehavior(int64_t contextPt
 }
 
 extern "C" DLLEXPORT void BatchLikeStr(uint8_t **str, int32_t *strLen, uint8_t **regexToMatch, int32_t *regexLen,
-    bool *isAnyNull, bool *output, int32_t rowCnt)
+                                       bool *isAnyNull, bool *output, int32_t rowCnt)
 {
     std::string s;
     for (int32_t i = 0; i < rowCnt; i++) {
@@ -968,7 +982,7 @@ extern "C" DLLEXPORT void BatchLikeStr(uint8_t **str, int32_t *strLen, uint8_t *
 }
 
 extern "C" DLLEXPORT void BatchLikeChar(uint8_t **str, int32_t strWidth, int32_t *strLen, uint8_t **regexToMatch,
-    int32_t *regexLen, bool *isAnyNull, bool *output, int32_t rowCnt)
+                                        int32_t *regexLen, bool *isAnyNull, bool *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; i++) {
         if (isAnyNull[i]) {
@@ -988,7 +1002,8 @@ extern "C" DLLEXPORT void BatchLikeChar(uint8_t **str, int32_t strWidth, int32_t
 }
 
 extern "C" DLLEXPORT void BatchConcatStrStr(int64_t contextPtr, uint8_t **ap, int32_t *apLen, uint8_t **bp,
-    int32_t *bpLen, bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                            int32_t *bpLen, bool *isAnyNull, uint8_t **output, int32_t *outLen,
+                                            int32_t rowCnt)
 {
     bool hasErr;
     for (int i = 0; i < rowCnt; i++) {
@@ -998,8 +1013,9 @@ extern "C" DLLEXPORT void BatchConcatStrStr(int64_t contextPtr, uint8_t **ap, in
             continue;
         }
         hasErr = false;
-        auto ret = StringUtil::ConcatStrDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), apLen[i],
-            reinterpret_cast<const char *>(bp[i]), bpLen[i], &hasErr, outLen + i);
+        auto ret =
+            StringUtil::ConcatStrDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), apLen[i],
+                                            reinterpret_cast<const char *>(bp[i]), bpLen[i], &hasErr, outLen + i);
         if (hasErr) {
             SetError(contextPtr, CONCAT_ERR_MSG);
             continue;
@@ -1009,17 +1025,20 @@ extern "C" DLLEXPORT void BatchConcatStrStr(int64_t contextPtr, uint8_t **ap, in
 }
 
 extern "C" DLLEXPORT void BatchConcatStrStrRetNull(bool *isNull, int64_t contextPtr, uint8_t **ap, int32_t *apLen,
-    uint8_t **bp, int32_t *bpLen, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                   uint8_t **bp, int32_t *bpLen, uint8_t **output, int32_t *outLen,
+                                                   int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; i++) {
-        auto ret = StringUtil::ConcatStrDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), apLen[i],
-            reinterpret_cast<const char *>(bp[i]), bpLen[i], isNull + i, outLen + i);
+        auto ret =
+            StringUtil::ConcatStrDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), apLen[i],
+                                            reinterpret_cast<const char *>(bp[i]), bpLen[i], isNull + i, outLen + i);
         output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(ret));
     }
 }
 
 extern "C" DLLEXPORT void BatchConcatCharChar(int64_t contextPtr, uint8_t **ap, int32_t aWidth, int32_t *apLen,
-    uint8_t **bp, int32_t bWidth, int32_t *bpLen, bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                              uint8_t **bp, int32_t bWidth, int32_t *bpLen, bool *isAnyNull,
+                                              uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     bool hasErr;
     for (int32_t i = 0; i < rowCnt; i++) {
@@ -1030,8 +1049,9 @@ extern "C" DLLEXPORT void BatchConcatCharChar(int64_t contextPtr, uint8_t **ap, 
         }
 
         hasErr = false;
-        auto ret = StringUtil::ConcatCharDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), aWidth, apLen[i],
-            reinterpret_cast<const char *>(bp[i]), bpLen[i], &hasErr, outLen + i);
+        auto ret =
+            StringUtil::ConcatCharDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), aWidth, apLen[i],
+                                             reinterpret_cast<const char *>(bp[i]), bpLen[i], &hasErr, outLen + i);
         if (hasErr) {
             SetError(contextPtr, CONCAT_ERR_MSG);
             continue;
@@ -1041,17 +1061,20 @@ extern "C" DLLEXPORT void BatchConcatCharChar(int64_t contextPtr, uint8_t **ap, 
 }
 
 extern "C" DLLEXPORT void BatchConcatCharCharRetNull(bool *isNull, int64_t contextPtr, uint8_t **ap, int32_t aWidth,
-    int32_t *apLen, uint8_t **bp, int32_t bWidth, int32_t *bpLen, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                     int32_t *apLen, uint8_t **bp, int32_t bWidth, int32_t *bpLen,
+                                                     uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; i++) {
-        auto ret = StringUtil::ConcatCharDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), aWidth, apLen[i],
-            reinterpret_cast<const char *>(bp[i]), bpLen[i], isNull + i, outLen + i);
+        auto ret =
+            StringUtil::ConcatCharDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), aWidth, apLen[i],
+                                             reinterpret_cast<const char *>(bp[i]), bpLen[i], isNull + i, outLen + i);
         output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(ret));
     }
 }
 
 extern "C" DLLEXPORT void BatchConcatCharStr(int64_t contextPtr, uint8_t **ap, int32_t aWidth, int32_t *apLen,
-    uint8_t **bp, int32_t *bpLen, bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                             uint8_t **bp, int32_t *bpLen, bool *isAnyNull, uint8_t **output,
+                                             int32_t *outLen, int32_t rowCnt)
 {
     bool hasErr;
     for (int i = 0; i < rowCnt; i++) {
@@ -1061,8 +1084,9 @@ extern "C" DLLEXPORT void BatchConcatCharStr(int64_t contextPtr, uint8_t **ap, i
             continue;
         }
         hasErr = false;
-        auto ret = StringUtil::ConcatCharDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), aWidth, apLen[i],
-            reinterpret_cast<const char *>(bp[i]), bpLen[i], &hasErr, outLen + i);
+        auto ret =
+            StringUtil::ConcatCharDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), aWidth, apLen[i],
+                                             reinterpret_cast<const char *>(bp[i]), bpLen[i], &hasErr, outLen + i);
         if (hasErr) {
             SetError(contextPtr, CONCAT_ERR_MSG);
             continue;
@@ -1072,18 +1096,21 @@ extern "C" DLLEXPORT void BatchConcatCharStr(int64_t contextPtr, uint8_t **ap, i
 }
 
 extern "C" DLLEXPORT void BatchConcatCharStrRetNull(bool *isNull, int64_t contextPtr, uint8_t **ap, int32_t aWidth,
-    int32_t *apLen, uint8_t **bp, int32_t *bpLen, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                    int32_t *apLen, uint8_t **bp, int32_t *bpLen, uint8_t **output,
+                                                    int32_t *outLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; i++) {
-        auto ret = StringUtil::ConcatCharDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), aWidth, apLen[i],
-            reinterpret_cast<const char *>(bp[i]), bpLen[i], isNull + i, outLen + i);
+        auto ret =
+            StringUtil::ConcatCharDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), aWidth, apLen[i],
+                                             reinterpret_cast<const char *>(bp[i]), bpLen[i], isNull + i, outLen + i);
 
         output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(ret));
     }
 }
 
 extern "C" DLLEXPORT void BatchConcatStrChar(int64_t contextPtr, uint8_t **ap, int32_t *apLen, uint8_t **bp,
-    int32_t bWidth, int32_t *bpLen, bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                             int32_t bWidth, int32_t *bpLen, bool *isAnyNull, uint8_t **output,
+                                             int32_t *outLen, int32_t rowCnt)
 {
     bool hasErr;
     for (int32_t i = 0; i < rowCnt; i++) {
@@ -1093,8 +1120,9 @@ extern "C" DLLEXPORT void BatchConcatStrChar(int64_t contextPtr, uint8_t **ap, i
             continue;
         }
         hasErr = false;
-        auto ret = StringUtil::ConcatStrDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), apLen[i],
-            reinterpret_cast<const char *>(bp[i]), bpLen[i], &hasErr, outLen + i);
+        auto ret =
+            StringUtil::ConcatStrDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), apLen[i],
+                                            reinterpret_cast<const char *>(bp[i]), bpLen[i], &hasErr, outLen + i);
         if (hasErr) {
             SetError(contextPtr, CONCAT_ERR_MSG);
             continue;
@@ -1104,17 +1132,20 @@ extern "C" DLLEXPORT void BatchConcatStrChar(int64_t contextPtr, uint8_t **ap, i
 }
 
 extern "C" DLLEXPORT void BatchConcatStrCharRetNull(bool *isNull, int64_t contextPtr, uint8_t **ap, int32_t *apLen,
-    uint8_t **bp, int32_t bWidth, int32_t *bpLen, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                    uint8_t **bp, int32_t bWidth, int32_t *bpLen, uint8_t **output,
+                                                    int32_t *outLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; i++) {
-        auto ret = StringUtil::ConcatStrDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), apLen[i],
-            reinterpret_cast<const char *>(bp[i]), bpLen[i], isNull + i, outLen + i);
+        auto ret =
+            StringUtil::ConcatStrDiffWidths(contextPtr, reinterpret_cast<const char *>(ap[i]), apLen[i],
+                                            reinterpret_cast<const char *>(bp[i]), bpLen[i], isNull + i, outLen + i);
         output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(ret));
     }
 }
 
 extern "C" DLLEXPORT void BatchCastStrWithDiffWidths(int64_t contextPtr, uint8_t **str, int32_t srcWidth,
-    int32_t *strLen, bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t dstWidth, int32_t rowCnt)
+                                                     int32_t *strLen, bool *isAnyNull, uint8_t **output,
+                                                     int32_t *outLen, int32_t dstWidth, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; i++) {
         if (isAnyNull[i]) {
@@ -1124,7 +1155,7 @@ extern "C" DLLEXPORT void BatchCastStrWithDiffWidths(int64_t contextPtr, uint8_t
         }
         bool hasErr = false;
         const char *ret = StringUtil::CastStrStr(&hasErr, reinterpret_cast<const char *>(str[i]), srcWidth, strLen[i],
-            outLen + i, dstWidth);
+                                                 outLen + i, dstWidth);
         if (hasErr) {
             std::ostringstream errorMessage;
             errorMessage << "cast varchar[" << srcWidth << "] to varchar[" << dstWidth << "] failed.";
@@ -1136,17 +1167,18 @@ extern "C" DLLEXPORT void BatchCastStrWithDiffWidths(int64_t contextPtr, uint8_t
 }
 
 extern "C" DLLEXPORT void BatchCastStrWithDiffWidthsRetNull(bool *isNull, int64_t contextPtr, uint8_t **srcStr,
-    int32_t srcWidth, int32_t *strLen, uint8_t **output, int32_t *outLen, int32_t dstWidth, int32_t rowCnt)
+                                                            int32_t srcWidth, int32_t *strLen, uint8_t **output,
+                                                            int32_t *outLen, int32_t dstWidth, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
         auto ret = StringUtil::CastStrStr(isNull + i, reinterpret_cast<const char *>(srcStr[i]), srcWidth, strLen[i],
-            outLen + i, dstWidth);
+                                          outLen + i, dstWidth);
         output[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(ret));
     }
 }
 
 extern "C" DLLEXPORT void BatchLengthChar(uint8_t **str, const int32_t width, int32_t *strLen, bool *isAnyNull,
-    int64_t *output, int32_t rowCnt)
+                                          int64_t *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         output[i] = width;
@@ -1154,7 +1186,7 @@ extern "C" DLLEXPORT void BatchLengthChar(uint8_t **str, const int32_t width, in
 }
 
 extern "C" DLLEXPORT void BatchLengthCharReturnInt32(uint8_t **str, const int32_t width, int32_t *strLen,
-    bool *isAnyNull, int32_t *output, int32_t rowCnt)
+                                                     bool *isAnyNull, int32_t *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         output[i] = width;
@@ -1162,7 +1194,7 @@ extern "C" DLLEXPORT void BatchLengthCharReturnInt32(uint8_t **str, const int32_
 }
 
 extern "C" DLLEXPORT void BatchLengthStr(uint8_t **str, int32_t *strLen, bool *isAnyNull, int64_t *output,
-    int32_t rowCnt)
+                                         int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -1174,7 +1206,7 @@ extern "C" DLLEXPORT void BatchLengthStr(uint8_t **str, int32_t *strLen, bool *i
 }
 
 extern "C" DLLEXPORT void BatchLengthStrReturnInt32(uint8_t **str, int32_t *strLen, bool *isAnyNull, int32_t *output,
-    int32_t rowCnt)
+                                                    int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -1186,53 +1218,61 @@ extern "C" DLLEXPORT void BatchLengthStrReturnInt32(uint8_t **str, int32_t *strL
 }
 
 extern "C" DLLEXPORT void BatchReplaceStrStrStrWithRepNotReplace(int64_t contextPtr, uint8_t **str, int32_t *strLen,
-    uint8_t **searchStr, int32_t *searchLen, uint8_t **replaceStr, int32_t *replaceLen, bool *isAnyNull,
-    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                                 uint8_t **searchStr, int32_t *searchLen,
+                                                                 uint8_t **replaceStr, int32_t *replaceLen,
+                                                                 bool *isAnyNull, uint8_t **output, int32_t *outLen,
+                                                                 int32_t rowCnt)
 {
     ReplaceWithReplaceNotEmpty(contextPtr, str, strLen, searchStr, searchLen, replaceStr, replaceLen, isAnyNull, output,
-        outLen, rowCnt, [str, strLen, outLen](bool *hasErr, int32_t i) -> uint8_t * {
-            outLen[i] = strLen[i];
-            return str[i];
-        });
+                               outLen, rowCnt, [str, strLen, outLen](bool *hasErr, int32_t i) -> uint8_t * {
+                                   outLen[i] = strLen[i];
+                                   return str[i];
+                               });
 }
 
 extern "C" DLLEXPORT void BatchReplaceStrStrWithoutRepNotReplace(int64_t contextPtr, uint8_t **str, int32_t *strLen,
-    uint8_t **searchStr, int32_t *searchLen, bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                                 uint8_t **searchStr, int32_t *searchLen,
+                                                                 bool *isAnyNull, uint8_t **output, int32_t *outLen,
+                                                                 int32_t rowCnt)
 {
     ReplaceWithReplaceEmpty(contextPtr, str, strLen, searchStr, searchLen, isAnyNull, output, outLen, rowCnt,
-        [str, strLen, outLen](bool *hasErr, int32_t index) -> uint8_t * {
-            outLen[index] = strLen[index];
-            return str[index];
-        });
+                            [str, strLen, outLen](bool *hasErr, int32_t index) -> uint8_t * {
+                                outLen[index] = strLen[index];
+                                return str[index];
+                            });
 }
 
 extern "C" DLLEXPORT void BatchReplaceStrStrStrWithRepReplace(int64_t contextPtr, uint8_t **str, int32_t *strLen,
-    uint8_t **searchStr, int32_t *searchLen, uint8_t **replaceStr, int32_t *replaceLen, bool *isAnyNull,
-    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                              uint8_t **searchStr, int32_t *searchLen,
+                                                              uint8_t **replaceStr, int32_t *replaceLen,
+                                                              bool *isAnyNull, uint8_t **output, int32_t *outLen,
+                                                              int32_t rowCnt)
 {
-    ReplaceWithReplaceNotEmpty(contextPtr, str, strLen, searchStr, searchLen, replaceStr, replaceLen, isAnyNull, output,
-        outLen, rowCnt,
+    ReplaceWithReplaceNotEmpty(
+        contextPtr, str, strLen, searchStr, searchLen, replaceStr, replaceLen, isAnyNull, output, outLen, rowCnt,
         [contextPtr, str, strLen, replaceStr, replaceLen, outLen](bool *hasErr, int32_t index) -> uint8_t * {
-            auto result = StringUtil::ReplaceWithSearchEmpty(contextPtr, reinterpret_cast<const char *>(str[index]),
-                strLen[index], reinterpret_cast<const char *>(replaceStr[index]), replaceLen[index], hasErr,
-                outLen + index);
+            auto result = StringUtil::ReplaceWithSearchEmpty(
+                contextPtr, reinterpret_cast<const char *>(str[index]), strLen[index],
+                reinterpret_cast<const char *>(replaceStr[index]), replaceLen[index], hasErr, outLen + index);
             return reinterpret_cast<uint8_t *>(const_cast<char *>(result));
         });
 }
 
 extern "C" DLLEXPORT void BatchReplaceStrStrWithoutRepReplace(int64_t contextPtr, uint8_t **str, int32_t *strLen,
-    uint8_t **searchStr, int32_t *searchLen, bool *isAnyNull, uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                                              uint8_t **searchStr, int32_t *searchLen, bool *isAnyNull,
+                                                              uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     ReplaceWithReplaceEmpty(contextPtr, str, strLen, searchStr, searchLen, isAnyNull, output, outLen, rowCnt,
-        [contextPtr, str, strLen, outLen](bool *hasErr, int32_t index) -> uint8_t * {
-            auto result = StringUtil::ReplaceWithSearchEmpty(contextPtr, reinterpret_cast<const char *>(str[index]),
-                strLen[index], reinterpret_cast<const char *>(EMPTY), 0, hasErr, outLen + index);
-            return reinterpret_cast<uint8_t *>(const_cast<char *>(result));
-        });
+                            [contextPtr, str, strLen, outLen](bool *hasErr, int32_t index) -> uint8_t * {
+                                auto result = StringUtil::ReplaceWithSearchEmpty(
+                                    contextPtr, reinterpret_cast<const char *>(str[index]), strLen[index],
+                                    reinterpret_cast<const char *>(EMPTY), 0, hasErr, outLen + index);
+                                return reinterpret_cast<uint8_t *>(const_cast<char *>(result));
+                            });
 }
 
 extern "C" DLLEXPORT void BatchInStr(char **srcStrs, int32_t *srcLens, char **subStrs, int32_t *subLens,
-    bool *isAnyNull, int32_t *output, int32_t rowCnt)
+                                     bool *isAnyNull, int32_t *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         auto srcLen = srcLens[i];
@@ -1263,7 +1303,7 @@ extern "C" DLLEXPORT void BatchInStr(char **srcStrs, int32_t *srcLens, char **su
 }
 
 extern "C" DLLEXPORT void BatchStartsWithStr(char **srcStrs, int32_t *srcLens, char **matchStrs, int32_t *matchLens,
-    bool *isAnyNull, bool *output, int32_t rowCnt)
+                                             bool *isAnyNull, bool *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         auto srcLen = srcLens[i];
@@ -1281,7 +1321,7 @@ extern "C" DLLEXPORT void BatchStartsWithStr(char **srcStrs, int32_t *srcLens, c
 }
 
 extern "C" DLLEXPORT void BatchEndsWithStr(char **srcStrs, int32_t *srcLens, char **matchStrs, int32_t *matchLens,
-    bool *isAnyNull, bool *output, int32_t rowCnt)
+                                           bool *isAnyNull, bool *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         auto srcLen = srcLens[i];
@@ -1299,7 +1339,7 @@ extern "C" DLLEXPORT void BatchEndsWithStr(char **srcStrs, int32_t *srcLens, cha
 }
 
 extern "C" DLLEXPORT void BatchMd5Str(int64_t contextPtr, uint8_t **str, int32_t *strLen, bool *isAnyNull,
-    uint8_t **output, int32_t *outLen, int32_t rowCnt)
+                                      uint8_t **output, int32_t *outLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; i++) {
         if (isAnyNull[i]) {
@@ -1316,7 +1356,7 @@ extern "C" DLLEXPORT void BatchMd5Str(int64_t contextPtr, uint8_t **str, int32_t
 }
 
 extern "C" DLLEXPORT void BatchEmptyToNull(char **str, int32_t *strLen, bool *isAnyNull, char **output, int32_t *outLen,
-    int32_t rowCnt)
+                                           int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; i++) {
         if (strLen[i] == 0 || isAnyNull[i]) {
@@ -1330,7 +1370,7 @@ extern "C" DLLEXPORT void BatchEmptyToNull(char **str, int32_t *strLen, bool *is
 }
 
 extern "C" DLLEXPORT void BatchContainsStr(char **srcStrs, int32_t *srcLens, char **matchStrs, int32_t *matchLens,
-    bool *isAnyNull, bool *output, int32_t rowCnt)
+                                           bool *isAnyNull, bool *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; ++i) {
         auto srcLen = srcLens[i];
@@ -1348,7 +1388,8 @@ extern "C" DLLEXPORT void BatchContainsStr(char **srcStrs, int32_t *srcLens, cha
 }
 
 extern "C" DLLEXPORT void BatchGreatestStr(uint8_t **xStr, int32_t *xStrLen, bool *xIsNull, uint8_t **yStr,
-    int32_t *yStrLen, bool *yIsNull, bool *retIsNull, uint8_t **outStr, int32_t *outStrLen, int32_t rowCnt)
+                                           int32_t *yStrLen, bool *yIsNull, bool *retIsNull, uint8_t **outStr,
+                                           int32_t *outStrLen, int32_t rowCnt)
 {
     int32_t cmpRet;
     for (int i = 0; i < rowCnt; ++i) {
@@ -1377,7 +1418,8 @@ extern "C" DLLEXPORT void BatchGreatestStr(uint8_t **xStr, int32_t *xStrLen, boo
 }
 
 extern "C" DLLEXPORT void BatchStaticInvokeVarcharTypeWriteSideCheck(int64_t contextPtr, char **str, int32_t *strLen,
-    int32_t limit, bool *isAnyNull, char **outputStr, int32_t *outputLen, int32_t rowCnt)
+                                                                     int32_t limit, bool *isAnyNull, char **outputStr,
+                                                                     int32_t *outputLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -1422,8 +1464,9 @@ extern "C" DLLEXPORT void BatchStaticInvokeVarcharTypeWriteSideCheck(int64_t con
     }
 }
 
-extern "C" DLLEXPORT void BatchStaticInvokeCharReadPadding(int64_t contextPtr, char **str,
-    int32_t *strLen, int32_t limit, bool *isAnyNull, char **outputStr, int32_t *outputLen, int32_t rowCnt)
+extern "C" DLLEXPORT void BatchStaticInvokeCharReadPadding(int64_t contextPtr, char **str, int32_t *strLen,
+                                                           int32_t limit, bool *isAnyNull, char **outputStr,
+                                                           int32_t *outputLen, int32_t rowCnt)
 {
     for (int32_t i = 0; i < rowCnt; ++i) {
         if (isAnyNull[i]) {
@@ -1463,4 +1506,4 @@ extern "C" DLLEXPORT void BatchStaticInvokeCharReadPadding(int64_t contextPtr, c
         outputStr[i] = padded;
     }
 }
-}
+} // namespace omniruntime::codegen::function

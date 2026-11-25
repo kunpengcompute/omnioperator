@@ -23,10 +23,12 @@ using namespace omniruntime::vec;
 
 SortMergeJoinOperator::SortMergeJoinOperator(JoinType joinType, std::string &filter)
     : joinType(joinType), filter(filter)
-{}
+{
+}
 
-SortMergeJoinOperator::SortMergeJoinOperator(JoinType joinType, Expr* filter) : joinType(joinType), filterExpr(filter)
-{}
+SortMergeJoinOperator::SortMergeJoinOperator(JoinType joinType, Expr *filter) : joinType(joinType), filterExpr(filter)
+{
+}
 
 SortMergeJoinOperator::~SortMergeJoinOperator()
 {
@@ -39,8 +41,9 @@ SortMergeJoinOperator::~SortMergeJoinOperator()
 }
 
 void SortMergeJoinOperator::ConfigStreamedTblInfo(const type::DataTypes &streamedDataTypes,
-    const std::vector<int32_t> &streamedKeysCols, const std::vector<int32_t> &streamedOutputCols,
-    int32_t originalInputStreamedColsCount)
+                                                  const std::vector<int32_t> &streamedKeysCols,
+                                                  const std::vector<int32_t> &streamedOutputCols,
+                                                  int32_t originalInputStreamedColsCount)
 {
     this->streamedTypes = &streamedDataTypes;
     this->streamedKeysCols = streamedKeysCols;
@@ -49,8 +52,9 @@ void SortMergeJoinOperator::ConfigStreamedTblInfo(const type::DataTypes &streame
 }
 
 void SortMergeJoinOperator::ConfigBufferedTblInfo(const type::DataTypes &bufferedDataTypes,
-    std::vector<int32_t> &bufferedKeysCols, std::vector<int32_t> &bufferedOutputCols,
-    int32_t originalInputBufferedColsCount)
+                                                  std::vector<int32_t> &bufferedKeysCols,
+                                                  std::vector<int32_t> &bufferedOutputCols,
+                                                  int32_t originalInputBufferedColsCount)
 {
     this->bufferedTypes = &bufferedDataTypes;
     this->bufferedKeysCols = bufferedKeysCols;
@@ -63,11 +67,11 @@ void SortMergeJoinOperator::InitScannerAndResultBuilder(OverflowConfig *overflow
     streamedTblPagesIndex = new DynamicPagesIndex(*streamedTypes, streamedKeysCols.data(), streamedKeysCols.size());
     bufferedTblPagesIndex = new DynamicPagesIndex(*bufferedTypes, bufferedKeysCols.data(), bufferedKeysCols.size());
     bool onlyBufferedFirstMatch =
-            (joinType == OMNI_JOIN_TYPE_LEFT_SEMI || joinType == OMNI_JOIN_TYPE_LEFT_ANTI) && filter.empty();
+        (joinType == OMNI_JOIN_TYPE_LEFT_SEMI || joinType == OMNI_JOIN_TYPE_LEFT_ANTI) && filter.empty();
 
     smjScanner = new SortMergeJoinScanner(*streamedTypes, streamedKeysCols.data(), streamedKeysCols.size(),
-        streamedTblPagesIndex, *bufferedTypes, bufferedKeysCols.data(), bufferedTblPagesIndex, joinType,
-        onlyBufferedFirstMatch);
+                                          streamedTblPagesIndex, *bufferedTypes, bufferedKeysCols.data(),
+                                          bufferedTblPagesIndex, joinType, onlyBufferedFirstMatch);
 
     std::vector<DataTypePtr> streamedOutputTypes;
     for (auto col : streamedOutputCols) {
@@ -78,21 +82,22 @@ void SortMergeJoinOperator::InitScannerAndResultBuilder(OverflowConfig *overflow
     for (auto col : bufferedOutputCols) {
         bufferedOutputTypes.emplace_back(bufferedTypes->GetType(col));
     }
-    joinResultBuilder = new JoinResultBuilder(streamedOutputTypes, streamedOutputCols.data(), streamedOutputCols.size(),
-        originalStreamedColsCount, streamedTblPagesIndex, bufferedOutputTypes, bufferedOutputCols.data(),
-        bufferedOutputCols.size(), originalBufferedColsCount, bufferedTblPagesIndex, filter, joinType, overflowConfig);
+    joinResultBuilder = new JoinResultBuilder(
+        streamedOutputTypes, streamedOutputCols.data(), streamedOutputCols.size(), originalStreamedColsCount,
+        streamedTblPagesIndex, bufferedOutputTypes, bufferedOutputCols.data(), bufferedOutputCols.size(),
+        originalBufferedColsCount, bufferedTblPagesIndex, filter, joinType, overflowConfig);
 }
 
-void SortMergeJoinOperator::InitScannerAndResultBuilderWithFilterExpr(OverflowConfig* overflowConfig)
+void SortMergeJoinOperator::InitScannerAndResultBuilderWithFilterExpr(OverflowConfig *overflowConfig)
 {
     streamedTblPagesIndex = new DynamicPagesIndex(*streamedTypes, streamedKeysCols.data(), streamedKeysCols.size());
     bufferedTblPagesIndex = new DynamicPagesIndex(*bufferedTypes, bufferedKeysCols.data(), bufferedKeysCols.size());
-    bool onlyBufferedFirstMatch = (joinType == OMNI_JOIN_TYPE_LEFT_SEMI || joinType == OMNI_JOIN_TYPE_LEFT_ANTI) &&
-                                  filterExpr == nullptr;
+    bool onlyBufferedFirstMatch =
+        (joinType == OMNI_JOIN_TYPE_LEFT_SEMI || joinType == OMNI_JOIN_TYPE_LEFT_ANTI) && filterExpr == nullptr;
 
     smjScanner = new SortMergeJoinScanner(*streamedTypes, streamedKeysCols.data(), streamedKeysCols.size(),
-        streamedTblPagesIndex, *bufferedTypes, bufferedKeysCols.data(), bufferedTblPagesIndex, joinType,
-        onlyBufferedFirstMatch);
+                                          streamedTblPagesIndex, *bufferedTypes, bufferedKeysCols.data(),
+                                          bufferedTblPagesIndex, joinType, onlyBufferedFirstMatch);
 
     std::vector<DataTypePtr> streamedOutputTypes;
     for (auto col : streamedOutputCols) {
@@ -103,13 +108,15 @@ void SortMergeJoinOperator::InitScannerAndResultBuilderWithFilterExpr(OverflowCo
     for (auto col : bufferedOutputCols) {
         bufferedOutputTypes.emplace_back(bufferedTypes->GetType(col));
     }
-    joinResultBuilder = new JoinResultBuilder(streamedOutputTypes, streamedOutputCols.data(), streamedOutputCols.size(),
-        originalStreamedColsCount, streamedTblPagesIndex, bufferedOutputTypes, bufferedOutputCols.data(),
-        bufferedOutputCols.size(), originalBufferedColsCount, bufferedTblPagesIndex, filterExpr, joinType, overflowConfig);
+    joinResultBuilder = new JoinResultBuilder(
+        streamedOutputTypes, streamedOutputCols.data(), streamedOutputCols.size(), originalStreamedColsCount,
+        streamedTblPagesIndex, bufferedOutputTypes, bufferedOutputCols.data(), bufferedOutputCols.size(),
+        originalBufferedColsCount, bufferedTblPagesIndex, filterExpr, joinType, overflowConfig);
 }
 
 int32_t HandleSortMergeJoinNoResultSituation(DynamicPagesIndex *streamedTblPagesIndex,
-    DynamicPagesIndex *bufferedTblPagesIndex, JoinType joinType, int32_t resultCode)
+                                             DynamicPagesIndex *bufferedTblPagesIndex, JoinType joinType,
+                                             int32_t resultCode)
 {
     switch (joinType) {
         case JoinType::OMNI_JOIN_TYPE_INNER:
@@ -189,9 +196,9 @@ int32_t SortMergeJoinOperator::GetJoinResult()
     // 1)put matched rows to result builder, and cache the result
     auto matchResultRet = DecodeJoinResult(joinScannerRet);
     if (static_cast<JoinResultCode>(matchResultRet) == JoinResultCode::HAS_RESULT) {
-        smjScanner->GetMatchedValueAddresses(joinResultBuilder->GetPreKeyMatched(),
-            joinResultBuilder->GetStreamedTableValueAddresses(), joinResultBuilder->GetBufferedTableValueAddresses(),
-            joinResultBuilder->GetSameBufferedKeyMatched());
+        smjScanner->GetMatchedValueAddresses(
+            joinResultBuilder->GetPreKeyMatched(), joinResultBuilder->GetStreamedTableValueAddresses(),
+            joinResultBuilder->GetBufferedTableValueAddresses(), joinResultBuilder->GetSameBufferedKeyMatched());
         auto joinResultBuilderRet = joinResultBuilder->AddJoinValueAddresses();
         if (joinResultBuilderRet == 1) {
             joinResultBuilder->GetOutput(&returnVectorBatch);
@@ -257,10 +264,7 @@ int32_t SortMergeJoinOperator::AddBufferedTableInput(omniruntime::vec::VectorBat
     return joinResult;
 }
 
-int32_t SortMergeJoinOperator::AddInput(omniruntime::vec::VectorBatch *vecBatch)
-{
-    return -1;
-}
+int32_t SortMergeJoinOperator::AddInput(omniruntime::vec::VectorBatch *vecBatch) { return -1; }
 
 int32_t SortMergeJoinOperator::GetOutput(omniruntime::vec::VectorBatch **outputVecBatch)
 {

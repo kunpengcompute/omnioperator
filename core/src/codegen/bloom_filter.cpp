@@ -25,19 +25,16 @@ using namespace omniruntime::type;
 
 BloomFilter::BloomFilter(int8_t *in, int32_t versionJava) : version(versionJava)
 {
-    int32_t versionIn = (reinterpret_cast<int32_t *>(in))[0]; // version 4 Bytes
-    if (version != versionIn) {
+    int32_t inputVersion = (reinterpret_cast<int32_t *>(in))[0]; // version 4 Bytes
+    if (version != inputVersion) {
         throw omniruntime::exception::OmniException("ILLEGAL_INPUT", "wrong version for bloom filter");
     }
 
     numHashFunctions = (reinterpret_cast<int32_t *>(in))[1]; // numHashFunctions 4 Bytes
-    bits = new BitArray(in + 8);                    // offset is 8 Bytes
+    bits = new BitArray(in + 8);                             // offset is 8 Bytes
 }
 
-BloomFilter::~BloomFilter()
-{
-    delete bits;
-}
+BloomFilter::~BloomFilter() { delete bits; }
 
 /*
  * @Func : put long data into BloomFilter struct
@@ -86,10 +83,7 @@ bool BloomFilter::MightContainLong(int64_t item)
     return true;
 }
 
-int32_t BloomFilter::GetNumHashFunctions()
-{
-    return numHashFunctions;
-}
+int32_t BloomFilter::GetNumHashFunctions() { return numHashFunctions; }
 
 // function implements for class BloomFilterOperatorFactory
 BloomFilterOperatorFactory::BloomFilterOperatorFactory(int32_t version) : version(version) {}
@@ -147,9 +141,6 @@ int32_t BloomFilterOperator::GetOutput(VectorBatch **blOutPut)
     return 0;
 }
 
-OmniStatus BloomFilterOperator::Close()
-{
-    return OMNI_STATUS_NORMAL;
-}
-} // end of op
-} // end of omniruntime
+OmniStatus BloomFilterOperator::Close() { return OMNI_STATUS_NORMAL; }
+} // namespace op
+} // namespace omniruntime

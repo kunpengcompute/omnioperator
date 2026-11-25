@@ -18,31 +18,27 @@
 namespace omniruntime {
 namespace op {
 static std::unordered_map<ErrorCode, std::pair<std::string, std::string>> errorMessages = {
-        { ErrorCode::SUCCESS,{ "SUCCESS", "" } },
-        { ErrorCode::EMPTY_PATH, { "EMPTY_PATH", "Enable spill but do not config spill path." } },
-        { ErrorCode::INVALID_PATH, { "INVALID_PATH", "The path is invalid." } },
-        { ErrorCode::PATH_EXIST, { "PATH_EXIST", "It is dangerous to use existed path to spill." } },
-        { ErrorCode::MKDIR_FAILED, { "MKDIR_FAILED", "Create spill directory failed." } },
-        { ErrorCode::DISK_STAT_FAILED, { "DISK_STAT_FAILED", "Get disk space failed." } },
-        { ErrorCode::DISK_SPACE_NOT_ENOUGH,{ "DISK_SPACE_NOT_ENOUGH", "The disk available size is smaller "
-            "than the max spill size." } },
-        { ErrorCode::MKSTEMP_FAILED, { "MKSTEMP_FAILED", "Create template file failed." } },
-        { ErrorCode::UNLINK_FAILED, { "UNLINK_FAILED", "Unlink file failed." } },
-        { ErrorCode::WRITE_FAILED, { "WRITE_FAILED", "Write data to file failed." } },
-        { ErrorCode::EXCEED_SPILL_THRESHOLD,{ "EXCEED_SPILL_THRESHOLD", "Current the data size of spill "
-            "exceeds the limit." } },
-        { ErrorCode::READ_FAILED, { "READ_FAILED", "Read data from file failed." } },
-        { ErrorCode::LOAD_LAZY_VECTOR_FAILED, { "LOAD_LAZY_VECTOR_FAILED", "Load lazy vector failed."} },
-        { ErrorCode::MEM_CAP_EXCEEDED, { "MEM_CAP_EXCEEDED", "Exceeded memory cap of MB:"} } };
+    {ErrorCode::SUCCESS, {"SUCCESS", ""}},
+    {ErrorCode::EMPTY_PATH, {"EMPTY_PATH", "Enable spill but do not config spill path."}},
+    {ErrorCode::INVALID_PATH, {"INVALID_PATH", "The path is invalid."}},
+    {ErrorCode::PATH_EXIST, {"PATH_EXIST", "It is dangerous to use existed path to spill."}},
+    {ErrorCode::MKDIR_FAILED, {"MKDIR_FAILED", "Create spill directory failed."}},
+    {ErrorCode::DISK_STAT_FAILED, {"DISK_STAT_FAILED", "Get disk space failed."}},
+    {ErrorCode::DISK_SPACE_NOT_ENOUGH,
+     {"DISK_SPACE_NOT_ENOUGH", "The disk available size is smaller "
+                               "than the max spill size."}},
+    {ErrorCode::MKSTEMP_FAILED, {"MKSTEMP_FAILED", "Create template file failed."}},
+    {ErrorCode::UNLINK_FAILED, {"UNLINK_FAILED", "Unlink file failed."}},
+    {ErrorCode::WRITE_FAILED, {"WRITE_FAILED", "Write data to file failed."}},
+    {ErrorCode::EXCEED_SPILL_THRESHOLD,
+     {"EXCEED_SPILL_THRESHOLD", "Current the data size of spill "
+                                "exceeds the limit."}},
+    {ErrorCode::READ_FAILED, {"READ_FAILED", "Read data from file failed."}},
+    {ErrorCode::LOAD_LAZY_VECTOR_FAILED, {"LOAD_LAZY_VECTOR_FAILED", "Load lazy vector failed."}},
+    {ErrorCode::MEM_CAP_EXCEEDED, {"MEM_CAP_EXCEEDED", "Exceeded memory cap of MB:"}}};
 
-std::string &GetErrorCode(const ErrorCode &errorCode)
-{
-    return errorMessages[errorCode].first;
-}
+std::string &GetErrorCode(const ErrorCode &errorCode) { return errorMessages[errorCode].first; }
 
-std::string &GetErrorMessage(const ErrorCode &errorCode)
-{
-    return errorMessages[errorCode].second;
-}
-}
-}
+std::string &GetErrorMessage(const ErrorCode &errorCode) { return errorMessages[errorCode].second; }
+} // namespace op
+} // namespace omniruntime

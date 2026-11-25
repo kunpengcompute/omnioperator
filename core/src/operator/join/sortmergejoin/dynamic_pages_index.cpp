@@ -22,14 +22,11 @@ using namespace omniruntime::vec;
 
 // function implements for class PagesIndex
 DynamicPagesIndex::DynamicPagesIndex(const omniruntime::type::DataTypes &types, int32_t *computeCols,
-    int32_t computeColsCount)
-    : typesCount(types.GetSize()),
-      computeCols(computeCols),
-      computeColsCount(computeColsCount),
-      positionCount(0),
-      finishAddData(false),
-      dataTypes(types)
-{}
+                                     int32_t computeColsCount)
+    : typesCount(types.GetSize()), computeCols(computeCols), computeColsCount(computeColsCount), positionCount(0),
+      finishAddData(false), dataTypes(types)
+{
+}
 
 std::vector<bool> DynamicPagesIndex::CalculateNullsFromRawVectorBatch(VectorBatch *vectorBatch)
 {
@@ -110,5 +107,5 @@ void DynamicPagesIndex::FreeAllRemainingVecBatch()
 }
 
 DynamicPagesIndex::~DynamicPagesIndex() = default;
-}
-}
+} // namespace op
+} // namespace omniruntime

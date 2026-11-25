@@ -36,7 +36,7 @@ public class OmniHashAggregationOperatorFactory
     /**
      * Instantiates a new Omni hash aggregation operator factory.
      *
-     * @param groupByChanel the group by chanel
+     * @param groupByChanel the grouping channels
      * @param groupByTypes the group by types
      * @param aggChannels the agg channels
      * @param aggTypes the agg types
@@ -56,7 +56,7 @@ public class OmniHashAggregationOperatorFactory
     /**
      * Instantiates a new Omni hash aggregation operator factory.
      *
-     * @param groupByChanel the group by chanel
+     * @param groupByChanel the grouping channels
      * @param groupByTypes the group by types
      * @param aggChannels the agg channels
      * @param aggTypes the agg types
@@ -78,7 +78,7 @@ public class OmniHashAggregationOperatorFactory
      * Instantiates a new Omni hash aggregation operator factory with jit
      * default.
      *
-     * @param groupByChanel the group by chanel
+     * @param groupByChanel the grouping channels
      * @param groupByTypes the group by types
      * @param aggChannels the agg channels
      * @param aggTypes the agg types
@@ -98,7 +98,7 @@ public class OmniHashAggregationOperatorFactory
      * Instantiates a new Omni hash aggregation operator factory with jit
      * default.
      *
-     * @param groupByChanel the group by chanel
+     * @param groupByChanel the grouping channels
      * @param groupByTypes the group by types
      * @param aggChannels the agg channels
      * @param aggTypes the agg types
@@ -159,7 +159,7 @@ public class OmniHashAggregationOperatorFactory
         /**
          * Instantiates a new Context.
          *
-         * @param groupByChanel the group by chanel
+         * @param groupByChanel the grouping channels
          * @param groupByTypes the group by types
          * @param aggChannels the agg channels
          * @param aggTypes the agg types
@@ -188,7 +188,7 @@ public class OmniHashAggregationOperatorFactory
         /**
          * Instantiates a new Context.
          *
-         * @param groupByChanel the group by chanel
+         * @param groupByChanel the grouping channels
          * @param groupByTypes the group by types
          * @param aggChannels the agg channels
          * @param aggTypes the agg types

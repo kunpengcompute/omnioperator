@@ -83,7 +83,7 @@ bool EqualPartitionValueTemplate(BaseVector *leftVec, int32_t leftPos, BaseVecto
 
 template <type::DataTypeId typeId>
 void SetPartitionValueFromFlat(vec::BaseVector *inputVec, int32_t inputPos, vec::BaseVector *outputVec,
-    int32_t outputPos)
+                               int32_t outputPos)
 {
     if (inputVec->IsNull(inputPos)) {
         if constexpr (typeId == OMNI_VARCHAR || typeId == OMNI_CHAR) {
@@ -108,7 +108,7 @@ void SetPartitionValueFromFlat(vec::BaseVector *inputVec, int32_t inputPos, vec:
 
 template <type::DataTypeId typeId>
 void SetPartitionValueFromDictionary(vec::BaseVector *inputVec, int32_t inputPos, vec::BaseVector *outputVec,
-    int32_t outputPos)
+                                     int32_t outputPos)
 {
     if (inputVec->IsNull(inputPos)) {
         if constexpr (typeId == OMNI_VARCHAR || typeId == OMNI_CHAR) {
@@ -307,7 +307,7 @@ static std::vector<CompareFunc> compareFromDictionaryFuncs = {
     CompareValueFromDictionary<OMNI_VARCHAR>,    // OMNI_VARCHAR
     CompareValueFromDictionary<OMNI_CHAR>,       // OMNI_CHAR,
     nullptr,                                     // OMNI_CONTAINER,
-    CompareValueFromDictionary<OMNI_BYTE>     // OMNI_VARCHAR
+    CompareValueFromDictionary<OMNI_BYTE>        // OMNI_VARCHAR
 };
 
 static std::vector<EqualFunc> equalFromFlatFuncs = {
@@ -421,17 +421,14 @@ static std::vector<SetValueFunc> setValueFromDictionaryFuncs = {
 };
 
 WindowGroupLimitOperator::WindowGroupLimitOperator(const type::DataTypes &sourceTypes, int32_t n,
-    const std::string funcName, const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
-    const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts)
-    : sourceTypes(sourceTypes),
-      n(n),
-      funcName(funcName),
-      partitionCols(partitionCols),
-      partitionColNum(static_cast<int32_t>(partitionCols.size())),
-      sortCols(sortCols),
-      sortColNum(static_cast<int32_t>(sortCols.size())),
-      sortAscendings(sortAscendings),
-      sortNullFirsts(sortNullFirsts)
+                                                   const std::string funcName,
+                                                   const std::vector<int32_t> &partitionCols,
+                                                   const std::vector<int32_t> &sortCols,
+                                                   const std::vector<int32_t> &sortAscendings,
+                                                   const std::vector<int32_t> &sortNullFirsts)
+    : sourceTypes(sourceTypes), n(n), funcName(funcName), partitionCols(partitionCols),
+      partitionColNum(static_cast<int32_t>(partitionCols.size())), sortCols(sortCols),
+      sortColNum(static_cast<int32_t>(sortCols.size())), sortAscendings(sortAscendings), sortNullFirsts(sortNullFirsts)
 {
     auto sourceTypeIds = sourceTypes.GetIds();
     for (int32_t i = 0; i < sortColNum; i++) {
@@ -459,7 +456,8 @@ WindowGroupLimitOperator::WindowGroupLimitOperator(const type::DataTypes &source
 }
 
 type::StringRef WindowGroupLimitOperator::GenerateWindowPartitionKey(BaseVector **partitionVectors,
-    int32_t partitionColNum, int32_t rowIdx, mem::SimpleArenaAllocator &arenaAllocator)
+                                                                     int32_t partitionColNum, int32_t rowIdx,
+                                                                     mem::SimpleArenaAllocator &arenaAllocator)
 {
     type::StringRef key;
     for (int32_t colIdx = 0; colIdx < partitionColNum; colIdx++) {
@@ -471,7 +469,8 @@ type::StringRef WindowGroupLimitOperator::GenerateWindowPartitionKey(BaseVector 
 }
 
 int32_t WindowGroupLimitOperator::FindInsertPositionOptimize(void *ptr, int32_t length,
-    std::vector<VectorBatch *> &vecBatches, std::vector<int32_t> &rowIndexes, int32_t position)
+                                                             std::vector<VectorBatch *> &vecBatches,
+                                                             std::vector<int32_t> &rowIndexes, int32_t position)
 {
     while (position >= 0) {
         auto left = vecBatches[position];
@@ -487,7 +486,8 @@ int32_t WindowGroupLimitOperator::FindInsertPositionOptimize(void *ptr, int32_t 
 }
 
 int32_t WindowGroupLimitOperator::FindInsertPosition(BaseVector **insertSortVectors, int32_t insertRowIdx,
-    std::vector<VectorBatch *> &vecBatches, std::vector<int32_t> &rowIndexes, int32_t position)
+                                                     std::vector<VectorBatch *> &vecBatches,
+                                                     std::vector<int32_t> &rowIndexes, int32_t position)
 {
     while (position >= 0) {
         auto left = vecBatches[position];
@@ -538,7 +538,7 @@ void WindowGroupLimitOperator::InsertNewPartition(StringRef &key, VectorBatch *i
 }
 
 void WindowGroupLimitOperator::InsertNewValueOptimize(LimitPartitionValue &value, vec::VectorBatch *inputVecBatch,
-    vec::BaseVector **sortVectors, int32_t inputRowIdx)
+                                                      vec::BaseVector **sortVectors, int32_t inputRowIdx)
 {
     auto sortVector = sortVectors[0];
     int32_t length;
@@ -561,7 +561,7 @@ void WindowGroupLimitOperator::InsertNewValueOptimize(LimitPartitionValue &value
 }
 
 void WindowGroupLimitOperator::InsertNewValue(LimitPartitionValue &value, VectorBatch *inputVecBatch,
-    BaseVector **sortVectors, int32_t inputRowIdx)
+                                              BaseVector **sortVectors, int32_t inputRowIdx)
 {
     auto &vecBatches = value.vecBatches;
     auto &rowIndexes = value.rowIndexes;
@@ -581,7 +581,7 @@ void WindowGroupLimitOperator::InsertNewValue(LimitPartitionValue &value, Vector
 }
 
 void WindowGroupLimitOperator::UpdatePartitionValueOptimizeRank(LimitPartitionValue &value, VectorBatch *inputVecBatch,
-    BaseVector **sortVectors, int32_t inputRowIdx)
+                                                                BaseVector **sortVectors, int32_t inputRowIdx)
 {
     auto sortVector = sortVectors[0];
     int32_t length;
@@ -628,7 +628,8 @@ void WindowGroupLimitOperator::UpdatePartitionValueOptimizeRank(LimitPartitionVa
 }
 
 void WindowGroupLimitOperator::UpdatePartitionValueOptimizeRowNumber(LimitPartitionValue &value,
-    VectorBatch *inputVecBatch, BaseVector **sortVectors, int32_t inputRowIdx)
+                                                                     VectorBatch *inputVecBatch,
+                                                                     BaseVector **sortVectors, int32_t inputRowIdx)
 {
     auto sortVector = sortVectors[0];
     int32_t length;
@@ -655,7 +656,7 @@ void WindowGroupLimitOperator::UpdatePartitionValueOptimizeRowNumber(LimitPartit
 }
 
 void WindowGroupLimitOperator::UpdatePartitionValueRank(LimitPartitionValue &value, VectorBatch *inputVecBatch,
-    BaseVector **sortVectors, int32_t inputRowIdx)
+                                                        BaseVector **sortVectors, int32_t inputRowIdx)
 {
     auto &vecBatches = value.vecBatches;
     auto &rowIndexes = value.rowIndexes;
@@ -698,7 +699,7 @@ void WindowGroupLimitOperator::UpdatePartitionValueRank(LimitPartitionValue &val
 }
 
 void WindowGroupLimitOperator::UpdatePartitionValueRowNumber(LimitPartitionValue &value, VectorBatch *inputVecBatch,
-    BaseVector **sortVectors, int32_t inputRowIdx)
+                                                             BaseVector **sortVectors, int32_t inputRowIdx)
 {
     auto &vecBatches = value.vecBatches;
     auto &rowIndexes = value.rowIndexes;

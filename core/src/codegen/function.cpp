@@ -19,8 +19,8 @@ using namespace omniruntime::type;
 
 namespace omniruntime::codegen {
 Function::Function(void *address, const std::string &name, const std::vector<std::string> &aliases,
-    const std::vector<DataTypeId> &paramTypes, const DataTypeId &retType, NullableResultType nullableResultType,
-    bool setExecutionContext)
+                   const std::vector<DataTypeId> &paramTypes, const DataTypeId &retType,
+                   NullableResultType nullableResultType, bool setExecutionContext)
 {
     this->address = address;
     this->nullableResultType = nullableResultType;
@@ -35,38 +35,17 @@ Function::Function(void *address, const std::string &name, const std::vector<std
 
 Function::~Function() = default;
 
-const std::vector<FunctionSignature> &Function::GetSignatures() const
-{
-    return this->signatures;
-}
+const std::vector<FunctionSignature> &Function::GetSignatures() const { return this->signatures; }
 
-std::string Function::GetId() const
-{
-    return this->signatures.at(0).ToString();
-}
+std::string Function::GetId() const { return this->signatures.at(0).ToString(); }
 
-DataTypeId Function::GetReturnType() const
-{
-    return this->signatures.at(0).GetReturnType();
-}
+DataTypeId Function::GetReturnType() const { return this->signatures.at(0).GetReturnType(); }
 
-const std::vector<DataTypeId> &Function::GetParamTypes() const
-{
-    return this->signatures.at(0).GetParams();
-}
+const std::vector<DataTypeId> &Function::GetParamTypes() const { return this->signatures.at(0).GetParams(); }
 
-const void *Function::GetAddress() const
-{
-    return this->address;
-}
+const void *Function::GetAddress() const { return this->address; }
 
-const NullableResultType Function::GetNullableResultType() const
-{
-    return this->nullableResultType;
-}
+const NullableResultType Function::GetNullableResultType() const { return this->nullableResultType; }
 
-bool Function::IsExecutionContextSet() const
-{
-    return this->isExecContextSet;
-}
-}
+bool Function::IsExecutionContextSet() const { return this->isExecContextSet; }
+} // namespace omniruntime::codegen

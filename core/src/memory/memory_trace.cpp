@@ -50,10 +50,7 @@ void MemoryTrace::SubArenaMemory(uintptr_t ptr, int64_t size)
 
 MemoryTrace::MemoryTrace() {}
 
-MemoryTrace::~MemoryTrace()
-{
-    threadMemoryTraceSet.clear();
-}
+MemoryTrace::~MemoryTrace() { threadMemoryTraceSet.clear(); }
 
 void MemoryTrace::AddThreadMemoryTrace(ThreadMemoryTrace *threadMemoryTrace)
 {
@@ -67,14 +64,8 @@ void MemoryTrace::SubThreadMemoryTrace(ThreadMemoryTrace *threadMemoryTrace)
     threadMemoryTraceSet.erase(threadMemoryTrace);
 }
 
-const std::unordered_set<ThreadMemoryTrace *> &MemoryTrace::GetThreadMemoryTraceSet()
-{
-    return threadMemoryTraceSet;
-}
+const std::unordered_set<ThreadMemoryTrace *> &MemoryTrace::GetThreadMemoryTraceSet() { return threadMemoryTraceSet; }
 
 static MemoryTrace g_globalMemoryTrace;
-MemoryTrace *GetMemoryTrace()
-{
-    return &g_globalMemoryTrace;
-}
-}
+MemoryTrace *GetMemoryTrace() { return &g_globalMemoryTrace; }
+} // namespace omniruntime::mem

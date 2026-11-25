@@ -37,7 +37,7 @@ public class OmniHashAggregationWithExprOperatorFactory
     /**
      * Instantiates a new Omni hash aggregation with expression operator factory.
      *
-     * @param groupByChanel the group by chanel
+     * @param groupByChanel the grouping channels
      * @param aggChannels the agg channels
      * @param aggChannelsFilter the agg filter Expr
      * @param sourceTypes the source types
@@ -58,7 +58,7 @@ public class OmniHashAggregationWithExprOperatorFactory
     /**
      * Instantiates a new Omni hash aggregation with expression operator factory.
      *
-     * @param groupByChanel the group by chanel
+     * @param groupByChanel the grouping channels
      * @param aggChannels the agg channels
      * @param aggChannelsFilter the agg filter Expr
      * @param sourceTypes the source types
@@ -81,7 +81,7 @@ public class OmniHashAggregationWithExprOperatorFactory
      * Instantiates a new Omni hash aggregation with expression operator factory
      * with jit default.
      *
-     * @param groupByChanel the group by chanel
+     * @param groupByChanel the grouping channels
      * @param aggChannels the agg channels
      * @param aggChannelsFilter the agg filter Expr
      * @param sourceTypes the source types
@@ -142,7 +142,7 @@ public class OmniHashAggregationWithExprOperatorFactory
         /**
          * Instantiates a new Context.
          *
-         * @param groupByChanel the group by chanel
+         * @param groupByChanel the grouping channels
          * @param aggChannels the agg channels
          * @param aggChannelsFilter the agg filter Expr
          * @param sourceTypes the source types
@@ -172,7 +172,7 @@ public class OmniHashAggregationWithExprOperatorFactory
         /**
          * Instantiates a new Context.
          *
-         * @param groupByChanel the group by chanel
+         * @param groupByChanel the grouping channels
          * @param aggChannels the agg channels
          * @param aggChannelsFilter the agg filter Expr
          * @param sourceTypes the source types
