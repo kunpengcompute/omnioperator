@@ -1166,6 +1166,129 @@ TEST(MathFunctionsExtendedTest, RoundDoubleWithScale) {
     TestBinaryRoundOperation<double, OMNI_DOUBLE>("round", leftData, rightData, expectedResults, 1e-10);
 }
 
+TEST(MathFunctionsExtendedTest, BRoundHalfEven) {
+    std::vector<double> values = {2.5, 3.5, -2.5, -3.5, -0.35, 1.25, 1.35, 0.5, 1.5, 45.0, 35.0};
+    std::vector<int32_t> scales = {0, 0, 0, 0, 1, 1, 1, 0, 0, -1, -1};
+    std::vector<double> expected = {2.0, 4.0, -2.0, -4.0, -0.4, 1.2, 1.4, 0.0, 2.0, 40.0, 40.0};
+    TestBinaryRoundOperation<double, OMNI_DOUBLE>("bround", values, scales, expected, 1e-12);
+
+    std::vector<int32_t> ints = {45, 35, -35, -25, 15, 44, 78, 5};
+    std::vector<int32_t> intScales = {-1, -1, -1, -1, -1, -1, 1, -1};
+    std::vector<int32_t> intExpected = {40, 40, -40, -20, 20, 40, 78, 0};
+    TestBinaryRoundOperation<int32_t, OMNI_INT>("bround", ints, intScales, intExpected, 0);
+}
+
+TEST(MathFunctionsExtendedTest, BRoundFloatingEdgeCases) {
+    std::string rounded;
+    ASSERT_TRUE(HalfEvenDecimalText("9", -23, rounded));
+    EXPECT_EQ(rounded, "0");
+    ASSERT_TRUE(HalfEvenDecimalText("9.0", -23, rounded));
+    EXPECT_EQ(rounded, "0");
+    ASSERT_TRUE(HalfEvenDecimalText("6e-16", 0, rounded));
+    EXPECT_EQ(rounded, "0");
+    ASSERT_TRUE(HalfEvenDecimalText("7", -1000000000, rounded));
+    EXPECT_EQ(rounded, "0");
+    ASSERT_TRUE(HalfEvenDecimalText("1.5", std::numeric_limits<int32_t>::min(), rounded));
+    EXPECT_EQ(rounded, "0");
+    ASSERT_TRUE(HalfEvenDecimalText("-9", -23, rounded));
+    EXPECT_EQ(rounded, "0");
+    ASSERT_TRUE(HalfEvenDecimalText("6", -1, rounded));
+    EXPECT_EQ(rounded, "10");
+    ASSERT_TRUE(HalfEvenDecimalText("5", -1, rounded));
+    EXPECT_EQ(rounded, "0");
+    ASSERT_TRUE(HalfEvenDecimalText("15", -1, rounded));
+    EXPECT_EQ(rounded, "20");
+    ASSERT_TRUE(HalfEvenDecimalText("25", -1, rounded));
+    EXPECT_EQ(rounded, "20");
+    ASSERT_TRUE(HalfEvenDecimalText("1.255", 2, rounded));
+    EXPECT_EQ(rounded, "1.26");
+    ASSERT_TRUE(HalfEvenDecimalText("6e19", -20, rounded));
+    EXPECT_EQ(rounded, "1" + std::string(20, '0'));
+    ASSERT_TRUE(HalfEvenDecimalText("5e19", -20, rounded));
+    EXPECT_EQ(rounded, "0");
+    EXPECT_FALSE(HalfEvenDecimalText("6e99999", -100000, rounded));
+
+    const double negativeZero = BRoundFloating(-9.0, -23);
+    EXPECT_EQ(negativeZero, 0.0);
+    EXPECT_FALSE(std::signbit(negativeZero));
+    EXPECT_EQ(BRoundFloating(9.0, -23), 0.0);
+    EXPECT_EQ(BRoundFloating(6e-16, 0), 0.0);
+    EXPECT_EQ(BRoundFloating(7.0, -1000000000), 0.0);
+    EXPECT_EQ(BRoundFloating(1.5, std::numeric_limits<int32_t>::min()), 0.0);
+    EXPECT_EQ(BRoundFloating(9.0, -309), 0.0);
+    EXPECT_NEAR(BRoundFloating(6.0, -1), 10.0, 1e-9);
+    EXPECT_TRUE(std::isinf(BRoundFloating(std::numeric_limits<double>::max(), -308)));
+
+    // Spark BigDecimal.valueOf(float) is Double.toString of the widened value.
+    // Float.toString("2.675") would HALF_EVEN to 2.68; Spark returns 2.67.
+    const float roundedFloat = BRoundFloating(2.675f, 2);
+    EXPECT_NEAR(roundedFloat, 2.67f, 1e-5f);
+    EXPECT_GT(std::fabs(roundedFloat - 2.68f), 1e-3f);
+    EXPECT_NEAR(BRoundFloating(-0.35f, 1), -0.3f, 1e-5f);
+    EXPECT_NEAR(BRoundFloating(2.5f, 0), 2.0f, 1e-5f);
+    EXPECT_NEAR(BRoundFloating(3.5f, 0), 4.0f, 1e-5f);
+    EXPECT_EQ(BRoundFloating(2.675f, std::numeric_limits<int32_t>::min()), 0.0f);
+}
+
+template <typename T, DataTypeId typeId>
+static void TestBRoundIntegralRows(const std::vector<T> &values, const std::vector<int32_t> &scales,
+    const std::vector<bool> &expectNull, const std::vector<T> &expected)
+{
+    const int32_t rowSize = static_cast<int32_t>(values.size());
+    BaseVector *leftVec = VectorHelper::CreateFlatVector(typeId, rowSize);
+    auto *leftVector = static_cast<Vector<T> *>(leftVec);
+    BaseVector *rightVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    auto *rightVector = static_cast<Vector<int32_t> *>(rightVec);
+    for (int32_t i = 0; i < rowSize; ++i) {
+        leftVector->SetValue(i, values[i]);
+        leftVector->SetNotNull(i);
+        rightVector->SetValue(i, scales[i]);
+        rightVector->SetNotNull(i);
+    }
+    std::vector<DataTypeId> argTypes = {typeId, OMNI_INT};
+    auto signature = std::make_shared<FunctionSignature>("bround", argTypes, typeId);
+    auto vectorFunction = VectorFunction::Find(signature);
+    ASSERT_NE(vectorFunction, nullptr);
+    ExecutionContext context;
+    context.SetResultRowSize(rowSize);
+    std::stack<BaseVector *> args;
+    args.push(leftVec);
+    args.push(rightVec);
+    BaseVector *result = nullptr;
+    vectorFunction->Apply(args, std::make_shared<DataType>(typeId), result, &context);
+    ASSERT_NE(result, nullptr);
+    auto *resultVector = static_cast<Vector<T> *>(result);
+    for (int32_t i = 0; i < rowSize; ++i) {
+        if (expectNull[i]) {
+            EXPECT_TRUE(result->IsNull(i)) << "row " << i;
+        } else {
+            EXPECT_FALSE(result->IsNull(i)) << "row " << i;
+            EXPECT_EQ(resultVector->GetValue(i), expected[i]) << "row " << i;
+        }
+    }
+    delete result;
+}
+
+TEST(MathFunctionsExtendedTest, BRoundIntegralOverflowIsNull) {
+    TestBRoundIntegralRows<int8_t, OMNI_BYTE>(
+        {127, -128, 120}, {-1, -1, -1}, {true, true, false}, {0, 0, 120});
+    TestBRoundIntegralRows<int64_t, OMNI_LONG>(
+        {std::numeric_limits<int64_t>::max(), 45}, {-1, -1}, {true, false}, {0, 40});
+    // scale -19 rounds to 10^19. |value| > 5e18 is ±1e19 and does not fit.
+    // Exactly 5e18 is halfway; HALF_EVEN stays at 0. scale <= -20 is always 0.
+    TestBRoundIntegralRows<int64_t, OMNI_LONG>(
+        {5000000000000000000LL, 5000000000000000001LL, -5000000000000000001LL,
+            std::numeric_limits<int64_t>::max(), std::numeric_limits<int64_t>::min(), 45},
+        {-19, -19, -19, -19, -19, -20},
+        {false, true, true, true, true, false},
+        {0, 0, 0, 0, 0, 0});
+    TestBRoundIntegralRows<int32_t, OMNI_INT>(
+        {45, std::numeric_limits<int32_t>::max()},
+        {std::numeric_limits<int32_t>::min(), -19},
+        {false, false},
+        {0, 0});
+}
+
 // Test csc function
 TEST(MathFunctionsTest, CscDouble) {
     std::vector<double> inputData = {1.0, -1.0, M_PI / 2.0, M_PI / 4.0, M_PI / 3.0, M_PI / 6.0};

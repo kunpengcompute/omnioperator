@@ -7,9 +7,13 @@
 #pragma once
 #include "util/compiler_util.h"
 #include "vectorization/Status.h"
+#include <cctype>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <random>
+#include <string>
 #include <utility>
 #include <limits>
 #include "type/decimal128.h"
@@ -598,6 +602,329 @@ using namespace omniruntime::type;
         }
     };
 
+    inline void IncrementDecimalDigits(std::string &digits)
+    {
+        int index = static_cast<int>(digits.size()) - 1;
+        while (index >= 0 && digits[static_cast<size_t>(index)] == '9') {
+            digits[static_cast<size_t>(index)] = '0';
+            --index;
+        }
+        if (index >= 0) {
+            digits[static_cast<size_t>(index)] =
+                static_cast<char>(digits[static_cast<size_t>(index)] + 1);
+        } else {
+            digits.insert(digits.begin(), '1');
+        }
+    }
+
+    // Digits produced for one finite binary value. Zero-fill beyond this is refused
+    // instead of allocating a scale-sized string.
+    constexpr int64_t kMaxBRoundZeroPad = 768;
+    // Exponents outside this range cannot be a finite double. Parsing stops before
+    // `exp * 10` overflows, and the later place-value subtraction stays in int64.
+    constexpr int64_t kMaxParsedDecimalExponent = 1000000;
+
+    // Shortest decimal text, then HALF_EVEN at `scale` places. Spark builds that
+    // text with Double.toString (BigDecimal.valueOf). Float inputs are widened to
+    // double first, so this is not Float.toString: bround(2.675f, 2) is 2.67.
+    inline bool HalfEvenDecimalText(std::string_view text, int32_t scale, std::string &rounded)
+    {
+        if (text.empty()) {
+            return false;
+        }
+        bool negative = false;
+        size_t pos = 0;
+        if (text[pos] == '+' || text[pos] == '-') {
+            negative = text[pos] == '-';
+            ++pos;
+        }
+        std::string digits;
+        int64_t exponent = 0;
+        int64_t fractionDigits = 0;
+        bool seenDot = false;
+        bool seenDigit = false;
+        for (; pos < text.size(); ++pos) {
+            const char c = text[pos];
+            if (c == 'e' || c == 'E') {
+                ++pos;
+                int expSign = 1;
+                if (pos < text.size() && (text[pos] == '+' || text[pos] == '-')) {
+                    if (text[pos] == '-') {
+                        expSign = -1;
+                    }
+                    ++pos;
+                }
+                int64_t expValue = 0;
+                for (; pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos])); ++pos) {
+                    const int digit = text[pos] - '0';
+                    if (expValue > (kMaxParsedDecimalExponent - digit) / 10) {
+                        return false;
+                    }
+                    expValue = expValue * 10 + digit;
+                }
+                exponent += static_cast<int64_t>(expSign) * expValue;
+                break;
+            }
+            if (c == '.') {
+                seenDot = true;
+                continue;
+            }
+            if (!std::isdigit(static_cast<unsigned char>(c))) {
+                return false;
+            }
+            digits.push_back(c);
+            seenDigit = true;
+            if (seenDot) {
+                ++fractionDigits;
+            }
+        }
+        if (!seenDigit || fractionDigits > kMaxParsedDecimalExponent) {
+            return false;
+        }
+        const int64_t lastExponent = exponent - fractionDigits;
+        // Negating scale as int32 is undefined when scale == INT32_MIN.
+        const int64_t scalePlaces = -static_cast<int64_t>(scale);
+        const int64_t digitsToDrop = scalePlaces - lastExponent;
+        if (digitsToDrop <= 0) {
+            rounded.assign(text);
+            return true;
+        }
+        // Every stored digit is strictly below the rounding digit, so that digit
+        // is an implicit 0 and the value rounds to 0. Treating the leading digit
+        // as the rounding digit turns bround(9, -23) into 1e23.
+        if (static_cast<uint64_t>(digitsToDrop) > digits.size()) {
+            rounded = "0";
+            return true;
+        }
+
+        const size_t drop = static_cast<size_t>(digitsToDrop);
+        std::string kept = digits.substr(0, digits.size() - drop);
+        const std::string dropped = digits.substr(digits.size() - drop);
+        bool roundUp = false;
+        if (!dropped.empty()) {
+            const char first = dropped[0];
+            bool nonzeroTail = false;
+            for (size_t i = 1; i < dropped.size(); ++i) {
+                if (dropped[i] != '0') {
+                    nonzeroTail = true;
+                    break;
+                }
+            }
+            if (first > '5' || (first == '5' && nonzeroTail)) {
+                roundUp = true;
+            } else if (first == '5') {
+                const char lastKept = kept.empty() ? '0' : kept.back();
+                if (((lastKept - '0') & 1) != 0) {
+                    roundUp = true;
+                }
+            }
+        }
+        if (roundUp) {
+            if (kept.empty()) {
+                kept = "0";
+            }
+            IncrementDecimalDigits(kept);
+        }
+        if (kept.empty()) {
+            rounded = "0";
+            return true;
+        }
+        size_t nonzero = 0;
+        while (nonzero + 1 < kept.size() && kept[nonzero] == '0') {
+            ++nonzero;
+        }
+        kept.erase(0, nonzero);
+        if (kept == "0") {
+            rounded = "0";
+            return true;
+        }
+        // scalePlaces == lastExponent + digitsToDrop. A negative scale of -N
+        // asks for N trailing zeros; refuse instead of allocating them.
+        std::string body;
+        if (scalePlaces >= 0) {
+            if (scalePlaces > kMaxBRoundZeroPad) {
+                return false;
+            }
+            body = kept;
+            body.append(static_cast<size_t>(scalePlaces), '0');
+        } else {
+            const int64_t frac = -scalePlaces;
+            if (frac > kMaxBRoundZeroPad) {
+                return false;
+            }
+            if (static_cast<int64_t>(kept.size()) > frac) {
+                body = kept;
+                body.insert(body.size() - static_cast<size_t>(frac), 1, '.');
+            } else {
+                const int64_t zeros = frac - static_cast<int64_t>(kept.size());
+                body = "0.";
+                body.append(static_cast<size_t>(zeros), '0');
+                body += kept;
+            }
+        }
+        if (negative) {
+            body.insert(body.begin(), '-');
+        }
+        rounded = std::move(body);
+        return true;
+    }
+
+    inline bool WriteShortestDecimal(double value, char *buffer, size_t bufferSize, int &written)
+    {
+        int bestPrecision = -1;
+        int low = 1;
+        int high = std::numeric_limits<double>::max_digits10;
+        while (low <= high) {
+            const int precision = (low + high) / 2;
+            const int length = std::snprintf(buffer, bufferSize, "%.*g", precision, value);
+            if (length <= 0 || static_cast<size_t>(length) >= bufferSize) {
+                return false;
+            }
+            char *end = nullptr;
+            const double back = std::strtod(buffer, &end);
+            if (end != buffer && back == value) {
+                bestPrecision = precision;
+                high = precision - 1;
+            } else {
+                low = precision + 1;
+            }
+        }
+        if (bestPrecision < 0) {
+            return false;
+        }
+        written = std::snprintf(buffer, bufferSize, "%.*g", bestPrecision, value);
+        return written > 0 && static_cast<size_t>(written) < bufferSize;
+    }
+
+    template <typename TFloat>
+    inline bool TryBRoundFloatingFast(double asDouble, int32_t scale, TFloat &result)
+    {
+        if (scale > 22 || scale < -22) {
+            return false;
+        }
+        const double factor = std::pow(10.0, static_cast<double>(scale));
+        const double scaled = asDouble * factor;
+        if (!std::isfinite(scaled)) {
+            return false;
+        }
+        const double absScaled = std::fabs(scaled);
+        constexpr double kExactIntegerLimit = 9007199254740992.0;
+        if (absScaled > kExactIntegerLimit) {
+            return false;
+        }
+        const double intPart = std::floor(absScaled);
+        const double frac = absScaled - intPart;
+        // An exact integer has nothing left to round. Values merely close to 0, 0.5, or 1
+        // can be a rounding artifact of the multiply, so those still use the decimal text.
+        if (frac != 0.0) {
+            const double dist = std::min(frac, std::min(std::fabs(frac - 0.5), 1.0 - frac));
+            const double bound = 8.0 * std::numeric_limits<double>::epsilon() * std::max(1.0, absScaled);
+            if (dist <= bound) {
+                return false;
+            }
+        }
+        const double rounded = frac > 0.5 ? intPart + 1.0 : intPart;
+        if (factor == 0.0) {
+            return false;
+        }
+        double signedResult = std::copysign(rounded / factor, asDouble);
+        if (signedResult == 0.0) {
+            signedResult = 0.0;
+        }
+        result = static_cast<TFloat>(signedResult);
+        return true;
+    }
+
+    template <typename TFloat>
+    inline TFloat BRoundFloating(TFloat value, int32_t scale)
+    {
+        if (!std::isfinite(value)) {
+            return value;
+        }
+        // A finite value is below 5 * 10^308, so rounding to 10^309 or coarser is 0.
+        // Compare in int64: negating INT32_MIN as int32 is undefined.
+        if (static_cast<int64_t>(scale) <
+            -static_cast<int64_t>(std::numeric_limits<double>::max_exponent10)) {
+            return static_cast<TFloat>(0);
+        }
+        // Spark's BigDecimal.valueOf widens float and uses Double.toString.
+        const double asDouble = static_cast<double>(value);
+        TFloat fast{};
+        if (TryBRoundFloatingFast(asDouble, scale, fast)) {
+            return fast;
+        }
+        char buffer[128];
+        int written = 0;
+        if (!WriteShortestDecimal(asDouble, buffer, sizeof(buffer), written)) {
+            return value;
+        }
+        std::string rounded;
+        if (!HalfEvenDecimalText(std::string_view(buffer, static_cast<size_t>(written)), scale, rounded)) {
+            return value;
+        }
+        char *parseEnd = nullptr;
+        const double parsed = std::strtod(rounded.c_str(), &parseEnd);
+        if (parseEnd == rounded.c_str()) {
+            return value;
+        }
+        TFloat result = static_cast<TFloat>(parsed);
+        if (result == static_cast<TFloat>(0)) {
+            result = static_cast<TFloat>(0);
+        }
+        return result;
+    }
+
+    template <typename TInput>
+    inline bool BRoundIntegral(TInput value, int32_t scale, TInput &result)
+    {
+        if (scale >= 0) {
+            result = value;
+            return true;
+        }
+        // Do not negate scale: INT32_MIN negation is undefined.
+        // 10^20 and coarser: the half-unit is at least 5e19, past every int64, so the
+        // result is 0. Scale -19 rounds to 10^19. |value| > 5e18 goes to ±1e19, which
+        // does not fit in int64; report overflow the same way as scales [-18, -1].
+        // Exactly 5e18 is halfway and HALF_EVEN keeps 0.
+        if (scale < -19) {
+            result = static_cast<TInput>(0);
+            return true;
+        }
+        if (scale == -19) {
+            constexpr int64_t kHalfOf10To19 = 5000000000000000000LL;
+            const int64_t number = static_cast<int64_t>(value);
+            if (number > kHalfOf10To19 || number < -kHalfOf10To19) {
+                return false;
+            }
+            result = static_cast<TInput>(0);
+            return true;
+        }
+        const int places = -scale;
+        int64_t factor = 1;
+        for (int i = 0; i < places; ++i) {
+            factor *= 10;
+        }
+        if (factor == 0) {
+            return false;
+        }
+        const int64_t number = static_cast<int64_t>(value);
+        int64_t quotient = number / factor;
+        const int64_t remainder = number % factor;
+        const int64_t absRemainder = remainder < 0 ? -remainder : remainder;
+        const int64_t half = factor / 2;
+        if (absRemainder > half || (absRemainder == half && (quotient & 1))) {
+            quotient += number >= 0 ? 1 : -1;
+        }
+        int64_t product = 0;
+        if (__builtin_mul_overflow(quotient, factor, &product) ||
+            product > static_cast<int64_t>(std::numeric_limits<TInput>::max()) ||
+            product < static_cast<int64_t>(std::numeric_limits<TInput>::min())) {
+            return false;
+        }
+        result = static_cast<TInput>(product);
+        return true;
+    }
+
     // Round function: round(expr) default scale=0; round(expr, scale). byte/short/int/long/float/double only.
     template <typename T>
     struct RoundFunction {
@@ -618,6 +945,30 @@ using namespace omniruntime::type;
                 if (result == static_cast<TInput>(0)) {
                     result = static_cast<TInput>(0);
                 }
+            }
+            return Status::OK();
+        }
+    };
+
+    // bround(expr) / bround(expr, scale): HALF_EVEN. Same numeric overloads as round.
+    // Integral scale >= 0 is unchanged. Negative scale rounds to a power of ten.
+    template <typename T>
+    struct BRoundFunction {
+        template <typename TInput>
+        ALWAYS_INLINE Status call(TInput &result, const TInput &a)
+        {
+            return call(result, a, 0);
+        }
+
+        template <typename TInput>
+        ALWAYS_INLINE Status call(TInput &result, const TInput &a, const int32_t &scale)
+        {
+            if constexpr (std::is_integral_v<TInput>) {
+                if (!BRoundIntegral(a, scale, result)) {
+                    return Status::UserError("bround result out of range");
+                }
+            } else {
+                result = BRoundFloating(a, scale);
             }
             return Status::OK();
         }
