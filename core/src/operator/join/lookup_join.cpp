@@ -106,14 +106,14 @@ LookupJoinOperatorFactory *LookupJoinOperatorFactory::CreateLookupJoinOperatorFa
     const DataTypes &probeTypes, int32_t *probeOutputCols, int32_t probeOutputColsCount, int32_t *probeHashCols,
     int32_t probeHashColsCount, int32_t *buildOutputCols, int32_t buildOutputColsCount,
     const DataTypes &buildOutputTypes, int64_t hashBuilderFactoryAddr, omniruntime::expressions::Expr *filterExpr,
-    int32_t originalProbeColsCount, bool isShuffleExchangeBuildPlan, OverflowConfig *overflowConfig,
+    int32_t originalProbeColumnCount, bool usesShuffleExchangeBuildPlan, OverflowConfig *overflowConfig,
     int32_t *outputList)
 {
     auto hashBuilderFactory = reinterpret_cast<HashBuilderOperatorFactory *>(hashBuilderFactoryAddr);
     auto pOperatorFactory = new LookupJoinOperatorFactory(
         probeTypes, probeOutputCols, probeOutputColsCount, probeHashCols, probeHashColsCount, buildOutputCols,
         buildOutputColsCount, buildOutputTypes, hashBuilderFactory->GetHashTablesVariants(), filterExpr,
-        originalProbeColsCount, isShuffleExchangeBuildPlan, overflowConfig, outputList);
+        originalProbeColumnCount, usesShuffleExchangeBuildPlan, overflowConfig, outputList);
     return pOperatorFactory;
 }
 
