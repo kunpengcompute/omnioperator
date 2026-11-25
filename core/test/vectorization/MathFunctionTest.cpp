@@ -958,6 +958,100 @@ TEST(MathFunctionsTest, LnDouble) {
     TestUnaryMathOperation<double, OMNI_DOUBLE, OMNI_DOUBLE>("ln", inputData, expectedResults);
 }
 
+TEST(MathFunctionsTest, LnNonPositiveIsNull) {
+    const double posInf = std::numeric_limits<double>::infinity();
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const int32_t rowSize = 7;
+    auto *input = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize));
+    const double values[] = {1.0, 0.0, -1.0, -0.0, posInf, nan, 4.0};
+    for (int32_t i = 0; i < rowSize; ++i) {
+        input->SetValue(i, values[i]);
+        input->SetNotNull(i);
+    }
+    input->SetNull(6);
+
+    std::vector<DataTypeId> argTypes = {OMNI_DOUBLE};
+    auto signature = std::make_shared<FunctionSignature>("ln", argTypes, OMNI_DOUBLE);
+    auto vectorFunction = VectorFunction::Find(signature);
+    ASSERT_NE(vectorFunction, nullptr);
+    ExecutionContext context;
+    context.SetResultRowSize(rowSize);
+    std::stack<BaseVector *> args;
+    args.push(input);
+    BaseVector *result = nullptr;
+    vectorFunction->Apply(args, std::make_shared<DataType>(OMNI_DOUBLE), result, &context);
+    ASSERT_NE(result, nullptr);
+    auto *out = static_cast<Vector<double> *>(result);
+    EXPECT_FALSE(result->IsNull(0));
+    EXPECT_NEAR(out->GetValue(0), 0.0, 1e-12);
+    EXPECT_TRUE(result->IsNull(1));
+    EXPECT_TRUE(result->IsNull(2));
+    EXPECT_TRUE(result->IsNull(3));
+    EXPECT_FALSE(result->IsNull(4));
+    EXPECT_TRUE(std::isinf(out->GetValue(4)) && out->GetValue(4) > 0);
+    EXPECT_FALSE(result->IsNull(5));
+    EXPECT_TRUE(std::isnan(out->GetValue(5)));
+    EXPECT_TRUE(result->IsNull(6));
+    delete result;
+}
+
+TEST(MathFunctionsTest, LnDictionaryAndConst) {
+    auto *base = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, 3));
+    base->SetValue(0, 1.0);
+    base->SetValue(1, std::exp(1.0));
+    base->SetValue(2, 0.0);
+    base->SetNotNull(0);
+    base->SetNotNull(1);
+    base->SetNotNull(2);
+    int32_t ids[] = {0, 1, 2, 1};
+    auto *dict = CreateDictionary<OMNI_DOUBLE>(base, ids, 4);
+
+    std::vector<DataTypeId> argTypes = {OMNI_DOUBLE};
+    auto signature = std::make_shared<FunctionSignature>("ln", argTypes, OMNI_DOUBLE);
+    auto vectorFunction = VectorFunction::Find(signature);
+    ASSERT_NE(vectorFunction, nullptr);
+    ExecutionContext context;
+    context.SetResultRowSize(4);
+    std::stack<BaseVector *> args;
+    args.push(dict);
+    BaseVector *result = nullptr;
+    vectorFunction->Apply(args, std::make_shared<DataType>(OMNI_DOUBLE), result, &context);
+    ASSERT_NE(result, nullptr);
+    auto *out = static_cast<Vector<double> *>(result);
+    EXPECT_NEAR(out->GetValue(0), 0.0, 1e-12);
+    EXPECT_NEAR(out->GetValue(1), 1.0, 1e-12);
+    EXPECT_TRUE(result->IsNull(2));
+    EXPECT_NEAR(out->GetValue(3), 1.0, 1e-12);
+    delete result;
+    delete base;
+
+    auto *constant = new ConstVector<double>(std::exp(1.0), OMNI_DOUBLE, 2);
+    ExecutionContext constContext;
+    constContext.SetResultRowSize(2);
+    std::stack<BaseVector *> constArgs;
+    constArgs.push(constant);
+    BaseVector *constResult = nullptr;
+    vectorFunction->Apply(constArgs, std::make_shared<DataType>(OMNI_DOUBLE), constResult, &constContext);
+    ASSERT_NE(constResult, nullptr);
+    auto *constOut = static_cast<Vector<double> *>(constResult);
+    EXPECT_NEAR(constOut->GetValue(0), 1.0, 1e-12);
+    EXPECT_NEAR(constOut->GetValue(1), 1.0, 1e-12);
+    delete constResult;
+
+    auto *nullConst = new ConstVector<double>(1.0, OMNI_DOUBLE, 2);
+    nullConst->SetNull(0);
+    ExecutionContext nullContext;
+    nullContext.SetResultRowSize(2);
+    std::stack<BaseVector *> nullArgs;
+    nullArgs.push(nullConst);
+    BaseVector *nullResult = nullptr;
+    vectorFunction->Apply(nullArgs, std::make_shared<DataType>(OMNI_DOUBLE), nullResult, &nullContext);
+    ASSERT_NE(nullResult, nullptr);
+    EXPECT_TRUE(nullResult->IsNull(0));
+    EXPECT_TRUE(nullResult->IsNull(1));
+    delete nullResult;
+}
+
 
 // Test log1p function
 TEST(MathFunctionsTest, Log1pDouble) {
