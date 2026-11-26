@@ -100,6 +100,11 @@ void RegisterMathFunctions(const std::string &prefix)
     RegisterUnaryFloatingPoint<RoundFunction>(prefix + "round");
     RegisterRoundNumericWithScale<RoundFunction>(prefix + "round");
 
+    // bround uses HALF_EVEN.
+    RegisterUnaryIntegralNumeric<BRoundFunction>(prefix + "bround");
+    RegisterUnaryFloatingPoint<BRoundFunction>(prefix + "bround");
+    RegisterRoundNumericWithScale<BRoundFunction>(prefix + "bround");
+
     // Register truncate: truncate(expr) default scale=0, truncate(expr, scale).
     // Mirrors Flink TRUNCATE(numeric, integer): truncates toward zero (DOWN) to `scale` decimals.
     // Same overload set as round (byte/short/int/long/float/double); DECIMAL not yet supported.
