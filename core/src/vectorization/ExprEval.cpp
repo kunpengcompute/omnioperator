@@ -385,6 +385,9 @@ void ExprEval::Visit(const FieldExpr &e)
             case OMNI_LONG:
             case OMNI_TIMESTAMP:
             case OMNI_INTERVAL_DAY_TIME:
+            case OMNI_TIME_WITHOUT_TIME_ZONE:
+            case OMNI_TIMESTAMP_WITHOUT_TIME_ZONE:
+            case OMNI_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
                 inputValues_.push(ColumnProjectionCopyPositionsHelper<int64_t>(colVec, selectRow, selectSize));
                 break;
             case OMNI_DECIMAL64:
@@ -450,6 +453,9 @@ void ExprEval::Visit(const FieldExpr &e)
         case OMNI_LONG:
         case OMNI_TIMESTAMP:
         case OMNI_INTERVAL_DAY_TIME:
+        case OMNI_TIME_WITHOUT_TIME_ZONE:
+        case OMNI_TIMESTAMP_WITHOUT_TIME_ZONE:
+        case OMNI_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
             inputValues_.push(ColumnProjectionHelper<int64_t>(colVec, rowSize));
             break;
         case OMNI_DECIMAL64:
