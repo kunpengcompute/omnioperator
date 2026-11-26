@@ -2,18 +2,17 @@
  * Â© 2018 and later: Unicode, Inc. and others.
  * Copyright 2010 the V8 project authors. All rights reserved.
  *
- * Project license notice for OmniOperator
- * Existing file-specific copyright and license terms continue to apply.
- *
  * OmniOperator is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan
  * PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
- *     http://license.coscl.org.cn/MulanPSL2
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ *         http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PSL v2 for more details.
+ *
+ * This project notice identifies the OmniOperator project license.
+ * Existing third-party license terms continue to apply.
  *
  * Third-party license and source notices
  *

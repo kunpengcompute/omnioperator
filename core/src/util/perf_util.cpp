@@ -1,21 +1,21 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
- * Copyright 1999-2016 Randy Heit
- * Copyright 2019-2020 Christoph Oelckers
- * All rights reserved.
- *
- * Project license notice for OmniOperator
- * Existing file-specific copyright and license terms continue to apply.
- *
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd.
  * OmniOperator is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan
  * PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
- *     http://license.coscl.org.cn/MulanPSL2
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ *         http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PSL v2 for more details.
+ *
+ * Existing third-party copyright and license terms continue to apply.
+ *
+ * Copyright 1999-2016 Randy Heit
+ * Copyright 2019-2020 Christoph Oelckers
+ * All rights reserved.
+ *
+ *
  *
  * Third-party license and source notices
  *
@@ -47,6 +47,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * ---------------------------------------------------------------------------
  */
+
 #include "perf_util.h"
 #include <libboundscheck/include/securec.h>
 #include <cstdio>
