@@ -3,6 +3,7 @@
  * Description: ToTimestamp and ToUnixTimestamp functions unit tests
  */
 
+#include <ctime>
 #include <gtest/gtest.h>
 #include <vector>
 #include <cmath>
@@ -13,6 +14,7 @@
 #include "test/util/test_util.h"
 #include "vectorization/registration/Register.h"
 #include "vectorization/functions/ToTimestamp.h"
+#include "vectorization/functions/Cast.h"
 #include "vectorization/VectorFunction.h"
 #include "codegen/func_signature.h"
 #include "vector/vector_helper.h"
@@ -201,6 +203,54 @@ TEST(ToTimestampTest, GetTimestamp_WithMilliseconds) {
 
     EXPECT_FALSE(resultVec->IsNull(1));
     EXPECT_EQ(resultTyped->GetValue(1), 200000LL);
+
+    delete resultVec;
+}
+
+TEST(ToTimestampTest, GetTimestamp_ShortFractionPadsZeros) {
+    std::vector<std::string> inputs = {
+        "1970-01-01 00:00:00.123",
+        "1970-01-01 00:00:00.12",
+        "1970-01-01 00:00:00.1",
+        "1970-01-01 00:00:00.010",
+        "1970-01-01 00:00:00.1",
+        "1970-01-01 00:00:00.12",
+        "1970-01-01 00:00:00.123",
+        "1970-01-01 00:00:00.123456",
+        "1970-01-01 00:00:00.1234567"
+    };
+    std::vector<std::string> formats = {
+        "yyyy-MM-dd HH:mm:ss.SSS",
+        "yyyy-MM-dd HH:mm:ss.SSS",
+        "yyyy-MM-dd HH:mm:ss.SSS",
+        "yyyy-MM-dd HH:mm:ss.SSS",
+        "yyyy-MM-dd HH:mm:ss.S",
+        "yyyy-MM-dd HH:mm:ss.S",
+        "yyyy-MM-dd HH:mm:ss.S",
+        "yyyy-MM-dd HH:mm:ss.SSSSSS",
+        "yyyy-MM-dd HH:mm:ss.SSSSSS"
+    };
+    const std::vector<int64_t> expected = {
+        123000LL, 120000LL, 100000LL, 10000LL, 100000LL, 120000LL, 123000LL, 123000LL, 123000LL};
+
+    BaseVector* inputVec = ToTimestampTestHelper::CreateStringVector(inputs);
+    BaseVector* formatVec = ToTimestampTestHelper::CreateStringVector(formats);
+
+    std::stack<BaseVector*> args;
+    args.push(inputVec);
+    args.push(formatVec);
+
+    BaseVector* resultVec = nullptr;
+    ToTimestampTestHelper::ExecuteFunction("get_timestamp",
+        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_TIMESTAMP, args, resultVec);
+
+    ASSERT_NE(resultVec, nullptr);
+    auto* resultTyped = dynamic_cast<Vector<int64_t>*>(resultVec);
+    ASSERT_NE(resultTyped, nullptr);
+    for (size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_FALSE(resultVec->IsNull(static_cast<int32_t>(i)));
+        EXPECT_EQ(resultTyped->GetValue(static_cast<int32_t>(i)), expected[i]);
+    }
 
     delete resultVec;
 }
@@ -692,4 +742,103 @@ TEST(ToTimestampTest, ToUnixTimestamp_NegativeTimestamp) {
     EXPECT_EQ(resultTyped->GetValue(0), -1LL);
 
     delete resultVec;
+}
+
+TEST(ToTimestampTest, GetTimestamp_WholeStringAndFraction) {
+    std::vector<std::string> inputs = {
+        "2016-12-31T00:12:00",
+        "2016-12-31 00:12:00.123456",
+        "2016-02-31",
+        "2016-12-31 00:12:00",
+        "2016-12-31 00:12:00Z",
+        "2016-12-31 00:12:00+08:00",
+        "2016-12-31",
+        "2016-12-31 00:12:00.123456",
+        "2016-12-31 00:12:00.1",
+        "2016-12-31 00:12:00.1234567",
+        "2016-12-31 00:12:00 ",
+        "2016-12-31 25:00:00",
+        "2016-12-31 00:12:00.1234567"
+    };
+    std::vector<std::string> formats = {
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss.SSSSSS",
+        "yyyy-MM-dd",
+        "yyyy-MM-dd",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss.SSSSSS"
+    };
+    BaseVector* inputVec = ToTimestampTestHelper::CreateStringVector(inputs);
+    BaseVector* formatVec = ToTimestampTestHelper::CreateStringVector(formats);
+
+    std::stack<BaseVector*> args;
+    args.push(inputVec);
+    args.push(formatVec);
+
+    BaseVector* resultVec = nullptr;
+    ToTimestampTestHelper::ExecuteFunction("get_timestamp",
+        {OMNI_VARCHAR, OMNI_VARCHAR}, OMNI_TIMESTAMP, args, resultVec);
+
+    ASSERT_NE(resultVec, nullptr);
+    auto* resultTyped = dynamic_cast<Vector<int64_t>*>(resultVec);
+    ASSERT_NE(resultTyped, nullptr);
+
+    auto at = [](int year, int month, int day, int hour, int minute, int second, int64_t fraction) {
+        std::tm timeInfo{};
+        timeInfo.tm_year = year - 1900;
+        timeInfo.tm_mon = month - 1;
+        timeInfo.tm_mday = day;
+        timeInfo.tm_hour = hour;
+        timeInfo.tm_min = minute;
+        timeInfo.tm_sec = second;
+        timeInfo.tm_isdst = -1;
+        return Timestamp::calendarUtcToEpoch(timeInfo) * Timestamp::kMicrosecondsInSecond + fraction;
+    };
+    const int64_t wall = at(2016, 12, 31, 0, 12, 0, 0);
+
+    EXPECT_TRUE(resultVec->IsNull(0));
+    EXPECT_EQ(resultTyped->GetValue(1), wall + 123000LL);
+    EXPECT_EQ(resultTyped->GetValue(2), at(2016, 2, 31, 0, 0, 0, 0));
+    EXPECT_TRUE(resultVec->IsNull(3));
+    EXPECT_TRUE(resultVec->IsNull(4));
+    EXPECT_TRUE(resultVec->IsNull(5));
+    EXPECT_EQ(resultTyped->GetValue(6), at(2016, 12, 31, 0, 0, 0, 0));
+    EXPECT_EQ(resultTyped->GetValue(7), wall + 123456LL);
+    EXPECT_EQ(resultTyped->GetValue(8), wall + 100000LL);
+    EXPECT_EQ(resultTyped->GetValue(9), wall + 123456LL);
+    EXPECT_EQ(resultTyped->GetValue(10), wall);
+    EXPECT_TRUE(resultVec->IsNull(11));
+    EXPECT_EQ(resultTyped->GetValue(12), wall + 123000LL);
+
+    delete resultVec;
+}
+
+TEST(ToTimestampTest, CastVarcharToTimestampTimeOnlyAndZulu) {
+    auto function = std::make_shared<CastFunction>(VarcharType(), TimestampType());
+    std::vector<std::string> inputs = {
+        "2016-12-31 00:12:00",
+        "2016-12-31 00:12:00Z",
+        "00:12:00"
+    };
+    BaseVector* input = ToTimestampTestHelper::CreateStringVector(inputs);
+    ExecutionContext context;
+    context.SetResultRowSize(static_cast<int32_t>(inputs.size()));
+    std::stack<BaseVector*> args;
+    args.push(input);
+    BaseVector* result = nullptr;
+    ASSERT_NO_THROW(function->Apply(args, TimestampType(), result, &context));
+
+    auto* typed = dynamic_cast<Vector<int64_t>*>(result);
+    ASSERT_NE(typed, nullptr);
+    EXPECT_FALSE(result->IsNull(0));
+    EXPECT_EQ(typed->GetValue(1), typed->GetValue(0));
+    EXPECT_TRUE(result->IsNull(2));
+    delete result;
 }

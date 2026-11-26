@@ -21,14 +21,31 @@ CastHooks::CastHooks(const config::QueryConfig &config)
     }
 }
 
+namespace {
+bool isTimeOnlyTimestamp(const std::string_view &view)
+{
+    if (view.empty() || view.find(':') == std::string_view::npos || view.find('-') != std::string_view::npos) {
+        return false;
+    }
+    const char first = view.front();
+    return first != '+' && first != '-';
+}
+}
+
 Expected<int64_t> CastHooks::castStringToTimestamp(const std::string_view &view) const
 {
-    auto conversionResult = util::fromTimestampWithTimezoneString(view.data(), view.size());
+    const tz::TimeZone *sessionTimezone = timestampToStringOptions_.timeZone;
+    const char *text = view.data();
+    size_t textLen = view.size();
+    if (isTimeOnlyTimestamp(view)) {
+        return folly::makeUnexpected(Status::UserError(
+            "Time-only timestamp strings are not converted with the system date"));
+    }
+    auto conversionResult = util::fromTimestampWithTimezoneString(text, textLen);
     if (conversionResult.hasError()) {
         return folly::makeUnexpected(conversionResult.error());
     }
 
-    auto sessionTimezone = config_.SessionTimezone().empty() ? nullptr : tz::locateZone(config_.SessionTimezone());
     return util::fromParsedTimestampWithTimeZone(conversionResult.value(), sessionTimezone).toMicros();
 }
 

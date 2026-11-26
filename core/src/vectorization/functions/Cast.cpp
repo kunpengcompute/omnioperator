@@ -1216,6 +1216,22 @@ void CastFunction::CastToTimestamp(BaseVector* input, BaseVector*& result, Execu
                 timestampValue = timestamp.toMicros();
                 break;
             }
+            case OMNI_CHAR:
+            case OMNI_VARCHAR:
+            {
+                if (input->IsNull(0)) {
+                    result->SetNulls(0, true, size);
+                    return;
+                }
+                const auto str = static_cast<ConstVector<std::string_view> *>(input)->GetConstValue();
+                const auto resultValue = hooks_->castStringToTimestamp(str);
+                if (resultValue.hasError()) {
+                    result->SetNulls(0, true, size);
+                    return;
+                }
+                timestampValue = resultValue.value();
+                break;
+            }
             default:
                 OMNI_THROW("Cast function Error", "Unsupported cast to timestamp from " + TypeUtil::TypeToString(fromType_->GetId()));
         }
@@ -1239,6 +1255,18 @@ void CastFunction::CastToTimestamp(BaseVector* input, BaseVector*& result, Execu
                         timestamp.toGMT(*timeZone);
                     }
                     timestampValue = timestamp.toMicros();
+                    break;
+                }
+                case OMNI_CHAR:
+                case OMNI_VARCHAR:
+                {
+                    const auto str = VectorHelper::GetStringValueFromVector(input, row);
+                    const auto resultValue = hooks_->castStringToTimestamp(str);
+                    if (resultValue.hasError()) {
+                        result->SetNull(row);
+                        continue;
+                    }
+                    timestampValue = resultValue.value();
                     break;
                 }
                 default:
