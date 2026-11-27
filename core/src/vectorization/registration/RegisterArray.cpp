@@ -32,12 +32,20 @@ namespace omniruntime::vectorization {
 
 void RegisterArrayFunctions(const std::string &prefix)
 {
-    std::vector<DataTypeId> supportValueTypes = {OMNI_BOOLEAN, OMNI_BYTE, OMNI_SHORT, OMNI_INT, OMNI_LONG, OMNI_FLOAT,
-        OMNI_DOUBLE, OMNI_VARCHAR, OMNI_DATE32, OMNI_TIMESTAMP, OMNI_DECIMAL64, OMNI_DECIMAL128};
-
-    for (auto &valueType : supportValueTypes) {
-        VectorFunction::RegisterVectorFunction("element_at", {OMNI_ARRAY, OMNI_INT}, valueType,
-            std::make_shared<SubscriptImpl>());
+    // element_at / try_element_at(array, index). Spark rewrites try_element_at to
+    // ElementAt(failOnError = false) before execution, and Gluten calls element_at.
+    // try_element_at is registered too so a direct lookup has the same semantics:
+    // 1-based index, negative index from the end, index 0 throws, out of range is NULL.
+    std::vector<DataTypeId> elementAtTypes = {OMNI_BOOLEAN, OMNI_BYTE, OMNI_SHORT, OMNI_INT, OMNI_LONG, OMNI_FLOAT,
+        OMNI_DOUBLE, OMNI_VARCHAR, OMNI_CHAR, OMNI_VARBINARY, OMNI_DATE32, OMNI_TIMESTAMP, OMNI_DECIMAL64,
+        OMNI_DECIMAL128, OMNI_ARRAY, OMNI_MAP, OMNI_ROW};
+    std::vector<DataTypeId> elementAtIndexTypes = {OMNI_INT, OMNI_LONG};
+    for (auto elementType : elementAtTypes) {
+        for (auto indexType : elementAtIndexTypes) {
+            auto impl = std::make_shared<SubscriptImpl>();
+            VectorFunction::RegisterVectorFunction("element_at", {OMNI_ARRAY, indexType}, elementType, impl);
+            VectorFunction::RegisterVectorFunction("try_element_at", {OMNI_ARRAY, indexType}, elementType, impl);
+        }
     }
 
     // get(array(E), index) -> E. Spark accepts any array element type and any integral index.

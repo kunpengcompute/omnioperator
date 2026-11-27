@@ -10,6 +10,7 @@
 
 #include "../../src/vector/vector_helper.h"
 #include "test/util/test_util.h"
+#include "util/omni_exception.h"
 #include "vectorization/registration/Register.h"
 #include "vectorization/ExprEval.h"
 #include "expression/expressions.h"
@@ -72,12 +73,18 @@ BaseVector *EvalGet(VectorBatch *input, Expr *expr)
 {
     auto *context = new ExecutionContext();
     context->SetResultRowSize(input->GetRowCount());
-    ExprEval evaluator(input, context);
-    evaluator.VisitExpr(*expr);
-    auto *result = evaluator.GetResult();
-    delete context;
-    delete expr;
-    return result;
+    try {
+        ExprEval evaluator(input, context);
+        evaluator.VisitExpr(*expr);
+        auto *result = evaluator.GetResult();
+        delete context;
+        delete expr;
+        return result;
+    } catch (...) {
+        delete context;
+        delete expr;
+        throw;
+    }
 }
 
 ArrayVector *IntArray(const std::vector<int32_t> &values, const std::vector<int32_t> &offsets, int32_t nullRow = -1)
@@ -380,4 +387,78 @@ TEST(ArrayFunctionTest, MapFromArraysTest)
     delete context;
     delete input;
     delete result;
+}
+
+TEST(ArrayFunctionTest, TryElementAtArray)
+{
+    auto intType = IntType();
+    // [10, 20, 30], [40], [], null array. Indexes 2, -1, 1, 1.
+    auto *arrays = IntArray({10, 20, 30, 40}, {0, 3, 4, 4, 4}, 3);
+    auto *index = new Vector<int32_t>(4);
+    index->SetValue(0, 2);
+    index->SetValue(1, -1);
+    index->SetValue(2, 1);
+    index->SetValue(3, 1);
+    auto *batch = BatchOf(arrays, index);
+    auto *result = EvalGet(batch, new FuncExpr("try_element_at", {
+        new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY)),
+        new FieldExpr(1, intType)
+    }, intType));
+    EXPECT_EQ(VectorHelper::GetValueFromVector<int32_t>(result, 0), 20);
+    EXPECT_EQ(VectorHelper::GetValueFromVector<int32_t>(result, 1), 40);
+    EXPECT_TRUE(result->IsNull(2));
+    EXPECT_TRUE(result->IsNull(3));
+    delete result;
+    delete batch;
+
+    auto *pastEnd = new Vector<int32_t>(1);
+    pastEnd->SetValue(0, -4);
+    auto *pastBatch = BatchOf(IntArray({1, 2, 3}, {0, 3}), pastEnd);
+    auto *bounds = EvalGet(pastBatch, new FuncExpr("try_element_at", {
+        new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY)),
+        new FieldExpr(1, intType)
+    }, intType));
+    EXPECT_TRUE(bounds->IsNull(0));
+    delete bounds;
+    delete pastBatch;
+
+    auto *zeroIndex = new Vector<int32_t>(1);
+    zeroIndex->SetValue(0, 0);
+    auto *input = BatchOf(IntArray({1, 2, 3}, {0, 3}), zeroIndex);
+    auto *expr = new FuncExpr("try_element_at", {
+        new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY)),
+        new FieldExpr(1, intType)
+    }, intType);
+    EXPECT_THROW(EvalGet(input, expr), omniruntime::exception::OmniException);
+    delete input;
+}
+
+TEST(ArrayFunctionTest, TryElementAtMap)
+{
+    auto intType = IntType();
+    auto keyVec = std::shared_ptr<BaseVector>(VectorHelper::CreateFlatVector(OMNI_INT, 3));
+    auto valVec = std::shared_ptr<BaseVector>(VectorHelper::CreateFlatVector(OMNI_INT, 3));
+    static_cast<Vector<int32_t> *>(keyVec.get())->SetValue(0, 1);
+    static_cast<Vector<int32_t> *>(keyVec.get())->SetValue(1, 2);
+    static_cast<Vector<int32_t> *>(keyVec.get())->SetValue(2, 7);
+    static_cast<Vector<int32_t> *>(valVec.get())->SetValue(0, 10);
+    static_cast<Vector<int32_t> *>(valVec.get())->SetValue(1, 20);
+    static_cast<Vector<int32_t> *>(valVec.get())->SetValue(2, 70);
+    auto *maps = new MapVector(2, keyVec, valVec);
+    maps->SetOffset(0, 0);
+    maps->SetSize(0, 2);
+    maps->SetSize(1, 1);
+
+    auto *keys = new Vector<int32_t>(2);
+    keys->SetValue(0, 2);
+    keys->SetValue(1, 9);
+    auto *batch = BatchOf(maps, keys);
+    auto *result = EvalGet(batch, new FuncExpr("try_element_at", {
+        new FieldExpr(0, std::make_shared<DataType>(OMNI_MAP)),
+        new FieldExpr(1, intType)
+    }, intType));
+    EXPECT_EQ(VectorHelper::GetValueFromVector<int32_t>(result, 0), 20);
+    EXPECT_TRUE(result->IsNull(1));
+    delete result;
+    delete batch;
 }
