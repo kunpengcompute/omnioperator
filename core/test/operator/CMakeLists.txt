@@ -1,8 +1,9 @@
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR} OP_TESTS_LIST)
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR}/sortings_coverage OP_SORTINGS_COVERAGE_TESTS)
 
-# test of aggregator will spend too much time especially link stage
-SET(ENABLE_AGG_TEST ON)
+# Keep the regular test build complete while allowing the join-specific gate
+# to avoid unrelated aggregator test compilation.
+option(ENABLE_AGG_TEST "Build aggregator operator tests" ON)
 if(ENABLE_AGG_TEST)
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR}/aggregator OP_AGG_TEST_TARGET)
 endif()

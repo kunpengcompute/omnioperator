@@ -66,7 +66,7 @@ public:
 
     template <typename T>
     static BaseVector* CreateNumericVector(const std::vector<T>& values, DataTypeId typeId) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, typeId, values.size());
         vec->SetIsField(true);
         auto* typed = static_cast<Vector<T>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
@@ -87,7 +87,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr) << "Locate function not found";
         auto outputType = std::make_shared<DataType>(outputTypeId);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(subStringVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(subStringVec);

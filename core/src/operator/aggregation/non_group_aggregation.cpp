@@ -36,7 +36,7 @@ OmniStatus AggregationOperatorFactory::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-Operator *AggregationOperatorFactory::CreateOperator()
+Operator *AggregationOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     std::vector<std::unique_ptr<Aggregator>> aggs;
 
@@ -68,10 +68,12 @@ Operator *AggregationOperatorFactory::CreateOperator()
                 std::to_string(this->aggregatorFactories.size()));
         }
         aggregator->SetStatisticalAggregate(isStatisticalAggregate);
+        // Bind per-task pool so result Vector<T> allocations route through it.
+        aggregator->SetPool(pool);
         aggs.push_back(std::move(aggregator));
     }
 
-    return new AggregationOperator(std::move(aggs), aggsOutputTypes, inputRaws, outputPartials, hasAggFilters);
+    return new AggregationOperator(pool, std::move(aggs), aggsOutputTypes, inputRaws, outputPartials, hasAggFilters);
 }
 
 int32_t AggregationOperator::AddInput(VectorBatch *vecBatch)
@@ -105,7 +107,8 @@ int32_t AggregationOperator::AddInput(VectorBatch *vecBatch)
     return 0;
 }
 
-static ALWAYS_INLINE void GenerateAggVector(VectorBatch *vectorBatch, std::vector<DataTypes> &aggsOutputTypes, int size)
+static ALWAYS_INLINE void GenerateAggVector(VectorBatch *vectorBatch, std::vector<DataTypes> &aggsOutputTypes, int size,
+    omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     // one AggregateExec has multi aggregators, every aggregator may have multi output; create one vector per output column.
     for (auto &outputTypes : aggsOutputTypes) {
@@ -115,10 +118,10 @@ static ALWAYS_INLINE void GenerateAggVector(VectorBatch *vectorBatch, std::vecto
             if (typeId == OMNI_ARRAY || typeId == OMNI_MAP || typeId == OMNI_ROW) {
                 // OMNI_ARRAY = 30, OMNI_MAP = 31, OMNI_ROW = 32
                 auto &newFunc = newUniqueComplexVectorFunctions[typeId - OMNI_ARRAY];
-                newFunc(outputTypes.GetType(i), vectorBatch, size);
+                newFunc(outputTypes.GetType(i), vectorBatch, size, pool);
             } else {
                 auto &newFunc = newUniqueVectorFunctions[typeId];
-                newFunc(vectorBatch, size);
+                newFunc(vectorBatch, size, pool);
             }
         }
     }
@@ -138,7 +141,7 @@ int AggregationOperator::GetOutput(VectorBatch **outputVecBatch)
     }
     auto output = std::make_unique<VectorBatch>(1);
     auto outputPtr = output.get();
-    GenerateAggVector(outputPtr, aggsOutputTypes, 1);
+    GenerateAggVector(outputPtr, aggsOutputTypes, 1, this->pool());
 
     // set result value
     int32_t aggOutputColsStart = 0;

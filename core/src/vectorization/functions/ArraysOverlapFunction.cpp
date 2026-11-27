@@ -84,7 +84,7 @@ void ArraysOverlapFunction::Apply(std::stack<BaseVector *> &args, const DataType
 
     int32_t rowSize = context->GetResultRowSize();
 
-    result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowSize);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, rowSize);
     if (!result) {
         delete leftArg;
         delete rightArg;

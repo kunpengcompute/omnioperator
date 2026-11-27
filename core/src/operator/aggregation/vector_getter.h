@@ -52,32 +52,39 @@ template <type::DataTypeId OmniId> const int32_t *GetIdsFromDict(BaseVector *vec
     return unsafe::UnsafeDictionaryVector::GetIds(dictVector);
 }
 
-using NewUniqueVectorFunction = std::function<void(VectorBatch *, int)>;
+// The trailing per-task pool is threaded from AggregationOperator::GetOutput so the
+// freshly-built output vectors are charged to the operator's pool (pool-bound ctors,
+// never the [[deprecated]] no-pool bridges).
+using NewUniqueVectorFunction = std::function<void(VectorBatch *, int, omniruntime::mem::OmniTaskMemoryPool *)>;
 
-using NewUniqueComplexVectorFunction = std::function<void(DataTypePtr, VectorBatch *, int)>;
+using NewUniqueComplexVectorFunction =
+    std::function<void(DataTypePtr, VectorBatch *, int, omniruntime::mem::OmniTaskMemoryPool *)>;
 
-template <type::DataTypeId OmniId> ALWAYS_INLINE void NewUniqueVector(VectorBatch *vectorBatch, int size)
+template <type::DataTypeId OmniId>
+ALWAYS_INLINE void NewUniqueVector(VectorBatch *vectorBatch, int size, omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     if (OmniId == OMNI_CONTAINER) {
-        auto doubleVector = new Vector<double>(size);
-        auto longVector = new Vector<int64_t>(size);
+        auto doubleVector = new Vector<double>(size, pool);
+        auto longVector = new Vector<int64_t>(size, pool);
         // container is used in average final stage , the inputs only include doubleVector and longVector
         std::vector<int64_t> vectorAddresses(AVG_VECTOR_COUNT);
         vectorAddresses[0] = reinterpret_cast<int64_t>(doubleVector);
         vectorAddresses[1] = reinterpret_cast<int64_t>(longVector);
         std::vector<DataTypePtr> dataTypes{ DoubleType(), LongType() };
-        auto containerVector = std::make_unique<ContainerVector>(size, vectorAddresses, dataTypes);
+        auto containerVector = std::make_unique<ContainerVector>(size, vectorAddresses, dataTypes, pool);
         vectorBatch->Append(containerVector.release());
     } else {
-        auto vector = VectorHelper::CreateVector(OMNI_FLAT, OmniId, size);
+        auto vector = VectorHelper::CreateVector(pool, OMNI_FLAT, OmniId, size);
         vectorBatch->Append(vector);
     }
 }
 
-template <type::DataTypeId OmniId> ALWAYS_INLINE void NewUniqueComplexVector(DataTypePtr datatType, VectorBatch *vectorBatch, int size)
+template <type::DataTypeId OmniId>
+ALWAYS_INLINE void NewUniqueComplexVector(DataTypePtr datatType, VectorBatch *vectorBatch, int size,
+    omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     // COMPLEX TYPE: ARRAY, MAP, ROW
-    auto vector = VectorHelper::CreateComplexVector(datatType.get(), size);
+    auto vector = VectorHelper::CreateComplexVector(pool, datatType.get(), size);
     vectorBatch->Append(vector);
 }
 

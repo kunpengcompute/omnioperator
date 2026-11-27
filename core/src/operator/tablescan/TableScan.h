@@ -30,7 +30,9 @@ public:
 
     ~TableScanOperatorFactory() override;
 
-    omniruntime::op::Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     static TableScanOperatorFactory *
     CreateTableScanOperatorFactory(const std::shared_ptr<const TableScanNode> tableScanNode,
@@ -44,7 +46,9 @@ private:
 
 class TableScanOperator : public Operator {
 public:
-    TableScanOperator(const std::shared_ptr<const TableScanNode> tableScanNode, const uint64_t maxRowCount,
+    // Pool-bound ctor chains Operator(pool)
+    TableScanOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        const std::shared_ptr<const TableScanNode> tableScanNode, const uint64_t maxRowCount,
         std::shared_ptr <SplitsStore> splitsStore);
 
     ~TableScanOperator() override;

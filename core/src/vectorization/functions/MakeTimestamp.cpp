@@ -139,7 +139,7 @@ public:
         }
         const auto size = context->GetResultRowSize();
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
 
         // Args are pushed in call order (year, month, day, hour, min, sec), so stack top = sec; pop order = sec, min, hour, day, month, year

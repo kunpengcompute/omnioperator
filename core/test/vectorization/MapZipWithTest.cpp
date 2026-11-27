@@ -90,7 +90,7 @@ TEST(MapZipWithTest, SameKeys)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -153,7 +153,7 @@ TEST(MapZipWithTest, PartialOverlap)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -229,7 +229,7 @@ TEST(MapZipWithTest, NullMapInput)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -297,7 +297,7 @@ TEST(MapZipWithTest, EmptyMaps)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -364,7 +364,7 @@ TEST(MapZipWithTest, AllNullMaps)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -413,7 +413,7 @@ TEST(MapZipWithTest, DisjointKeys)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_MAP));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);

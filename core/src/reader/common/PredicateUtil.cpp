@@ -394,7 +394,8 @@ namespace common {
     }
 
     bool GetFlatBaseVectorsFromBitMark(std::vector<BaseVector *> &baseVectors, std::vector<BaseVector *> &result,
-        uint8_t *bitMark, int32_t vectorSize, const std::set<int32_t>& isNullSet, const std::set<int32_t>& isNotNullSet) {
+        uint8_t *bitMark, int32_t vectorSize, const std::set<int32_t>& isNullSet, const std::set<int32_t>& isNotNullSet,
+        omniruntime::mem::OmniTaskMemoryPool *pool) {
         int32_t resultSize = BitUtil::CountBits(reinterpret_cast<const uint64_t *>(bitMark), 0, vectorSize);
         if (resultSize == vectorSize) {
             // all selected, filtering is not required.
@@ -429,8 +430,10 @@ namespace common {
                     continue;
                 }
                 default: {
+                    // Route through the pool-bound CreateVector 5-arg overload
+                    // (vector_helper.h:115).
                     selectedBaseVector =
-                        VectorHelper::CreateVector(OMNI_FLAT, dataType, static_cast<int32_t>(resultSize));
+                        VectorHelper::CreateVector(pool, OMNI_FLAT, dataType, static_cast<int32_t>(resultSize));
                 }
             }
             switch (dataType) {

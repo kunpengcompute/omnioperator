@@ -27,4 +27,15 @@ public interface VecBatchSerializer {
      * @return vec batch
      */
     VecBatch deserialize(byte[] bytes);
+
+    /**
+     * deserialize vecbatch with a per-task pool handle (0L = no pool).
+     *
+     * @param bytes serialized vecbatch
+     * @param nmmHandle per-task OmniTaskMemoryPool address (0 = no pool)
+     * @return vec batch
+     */
+    default VecBatch deserialize(byte[] bytes, long nmmHandle) {
+        return deserialize(bytes);
+    }
 }

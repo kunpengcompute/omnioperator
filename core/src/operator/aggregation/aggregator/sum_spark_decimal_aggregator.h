@@ -516,7 +516,7 @@ public:
         // opt: if InRawType and ResultType are same type, directly setValue
         if constexpr (std::is_same_v<InRawType, ResultType>) {
             auto sumVector = VectorHelper::SliceVector(originVector, 0, rowCount);
-            auto emptyVector = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowCount));
+            auto emptyVector = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_BOOLEAN, rowCount));
             if (nullMap == nullptr) {
                 bool *valueAddr = reinterpret_cast<bool *>(GetValuesFromVector<OMNI_BOOLEAN>(emptyVector));
                 std::fill_n(valueAddr, rowCount, false);
@@ -547,8 +547,8 @@ public:
         const std::shared_ptr<NullsHelper> nullMap)
     {
         int rowCount = originVector->GetSize();
-        auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(OutDecimalId, rowCount));
-        auto emptyVector = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowCount));
+        auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(this->pool_, OutDecimalId, rowCount));
+        auto emptyVector = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_BOOLEAN, rowCount));
         auto vector = reinterpret_cast<T *>(originVector);
         if (nullMap != nullptr) {
             for (int index = 0; index < rowCount; ++index) {

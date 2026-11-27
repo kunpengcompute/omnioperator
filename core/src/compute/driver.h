@@ -111,6 +111,11 @@ public:
 
     void close();
 
+    void HoldLifetime(std::shared_ptr<void> guard)
+    {
+        lifetimeGuard_ = std::move(guard);
+    }
+
     std::vector<std::shared_ptr<omniruntime::op::Operator>>* operators()
     {
         return &operators_;
@@ -175,6 +180,7 @@ private:
  
     std::vector<std::shared_ptr<omniruntime::op::Operator>> operators_;
     std::vector<OperatorFactory*> operatorFactories_;
+    std::shared_ptr<void> lifetimeGuard_;
  
     BlockingReason blockingReason_;
     size_t blockedOperatorId_;

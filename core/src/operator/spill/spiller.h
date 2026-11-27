@@ -21,15 +21,11 @@ public:
         : dataTypes(dataTypes), dirPath(dirPath), writeBufferSize(writeBufferSize), writeBufferOffset(0),
           IsSpillCompressEnabled(IsSpillCompressEnabled)
     {
-        if (writeBufferSize != 0) {
-            writeBuffer = new char[writeBufferSize];
-        }
+        // The write buffer is allocated on first write and released by Close(): a Spiller keeps
+        // every closed writer for its file metadata, one per spill run.
     }
 
-    ~SpillWriter()
-    {
-        delete[] writeBuffer;
-    }
+    ~SpillWriter();
 
     ErrorCode WriteVecBatch(vec::VectorBatch *vectorBatch, uint64_t vectorBatchSize);
 
@@ -134,21 +130,29 @@ public:
         return spillFiles;
     }
 
-    SpillMerger *CreateSpillMerger(const std::vector<SpillFileInfo> &spillFiles, bool isSpillCompressEnabled)
+    SpillMerger *CreateSpillMerger(const std::vector<SpillFileInfo> &spillFiles, bool compressEnabled,
+        omniruntime::mem::OmniTaskMemoryPool *pool)
     {
-        auto merger = SpillMerger::Create(dataTypes, sortCols, sortOrders, spillTracker, spillFiles, isSpillCompressEnabled);
+        auto merger = SpillMerger::Create(dataTypes, sortCols, sortOrders, spillTracker, spillFiles, compressEnabled, pool);
         return merger;
     }
 
-    SpillMerger *CreateSpillMerger(const std::vector<SpillFileInfo> &spillFiles, bool spillCompressEnabled, bool comapreWithHashVal)
+    SpillMerger *CreateSpillMerger(const std::vector<SpillFileInfo> &spillFiles, bool spillCompressEnabled,
+        bool comapreWithHashVal, omniruntime::mem::OmniTaskMemoryPool *pool)
     {
-        auto merger = SpillMerger::Create(dataTypes, sortCols, sortOrders, spillTracker, spillFiles, spillCompressEnabled, comapreWithHashVal);
+        auto merger = SpillMerger::Create(dataTypes, sortCols, sortOrders, spillTracker, spillFiles, spillCompressEnabled, pool, comapreWithHashVal);
         return merger;
     }
 
     uint64_t GetSpilledBytes()
     {
         return spillTracker->GetSpilledBytes();
+    }
+
+    // Largest write batch built by Spill(); reported in operator stats only.
+    uint64_t ScratchPeakBytes() const
+    {
+        return scratchPeakBytes_;
     }
 
     SpillTracker *GetSpillTracker() const
@@ -167,18 +171,25 @@ public:
 
     bool isSpillCompressEnable() const;
 
-    static uint64_t CollectVecBatchSize(const type::DataTypes &dataTypes, vec::VectorBatch *vectorBatch);
+    /// Logical serialized size consumed by SpillWriter for one batch.
+    /// Shared by regular spill and operators that write batches directly.
+    static uint64_t CollectVecBatchSize(
+        const type::DataTypes &dataTypes, vec::VectorBatch *vectorBatch);
 
 private:
     template <typename T> static uint64_t CollectVectorSize(vec::BaseVector *vector);
 
-    static uint64_t CollectComplexVectorSize(const DataTypePtr &dataType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectComplexVectorSize(
+        const DataTypePtr &dataType, vec::BaseVector *vector, int32_t rowCount);
 
-    static uint64_t CollectArrayVectorSize(const DataTypePtr &arrayType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectArrayVectorSize(
+        const DataTypePtr &arrayType, vec::BaseVector *vector, int32_t rowCount);
 
-    static uint64_t CollectMapVectorSize(const DataTypePtr &mapType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectMapVectorSize(
+        const DataTypePtr &mapType, vec::BaseVector *vector, int32_t rowCount);
 
-    static uint64_t CollectRowVectorSize(const DataTypePtr &rowType, vec::BaseVector *vector, int32_t rowCount);
+    static uint64_t CollectRowVectorSize(
+        const DataTypePtr &rowType, vec::BaseVector *vector, int32_t rowCount);
 
     DataTypes dataTypes;
     std::vector<int32_t> sortCols;
@@ -186,7 +197,11 @@ private:
     std::vector<std::string> dirPaths;
     std::vector<int32_t> outputCols;
     int32_t maxRowCountPerBatch;
+    // Write batch for one Spill() call. It is built without a task pool: spills usually run inside
+    // Spark-driven reclaim when the task has no headroom, and this batch is released before
+    // Spill() returns, long before the spilled state frees far more.
     std::unique_ptr<vec::VectorBatch> spillVecBatch = nullptr;
+    uint64_t scratchPeakBytes_ = 0;
     std::vector<SpillWriter *> writers;
     SpillTracker *spillTracker = nullptr;
     uint64_t writeBufferSize = 0;

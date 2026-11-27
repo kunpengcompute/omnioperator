@@ -10,7 +10,6 @@
 #include "operator/operator_factory.h"
 #include "operator/projection/projection.h"
 #include "operator/join/lookup_join.h"
-#include "operator/join/join_spill_state.h"
 #include "operator/join/hash_builder_expr.h"
 #include "type/data_types.h"
 #include "operator/status.h"
@@ -44,16 +43,13 @@ public:
 
     ~LookupJoinWithExprOperatorFactory() override;
 
-    omniruntime::op::Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
-    void SetJoinSpillPolicy(bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg = {})
+    void SetEagerReleaseBuildState(bool enabled)
     {
-        operatorFactory->SetJoinSpillPolicy(joinSpillEnabled, joinSubPartCfg);
-    }
-
-    void SetJoinSpillState(std::shared_ptr<JoinSpillState> joinSpillState)
-    {
-        operatorFactory->SetJoinSpillState(std::move(joinSpillState));
+        operatorFactory->SetEagerReleaseBuildState(enabled);
     }
 
 private:
@@ -67,8 +63,10 @@ private:
 
 class LookupJoinWithExprOperator : public Operator {
 public:
-    LookupJoinWithExprOperator(const type::DataTypes &probeTypes, std::vector<std::unique_ptr<Projection>> &projections,
-        LookupJoinOperator *lookupJoinOperator, const config::QueryConfig &queryConfig);
+    // Pool-bound ctor chains Operator(pool)
+    LookupJoinWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &probeTypes,
+        std::vector<std::unique_ptr<Projection>> &projections, LookupJoinOperator *lookupJoinOperator,
+        const config::QueryConfig &queryConfig);
 
     ~LookupJoinWithExprOperator() override;
 
@@ -109,11 +107,6 @@ public:
 
     bool needsInput() override;
 
-    LookupJoinOperator *GetLookupJoinOperator() const
-    {
-        return lookupJoinOperator;
-    }
-
     void noMoreInput() override
     {
         noMoreInput_ = true;
@@ -124,6 +117,11 @@ public:
     {
         noMoreInput_ = noMoreInput;
         lookupJoinOperator->setNoMoreInput(noMoreInput);
+    }
+
+    LookupJoinOperator *GetLookupJoinOperator() const
+    {
+        return lookupJoinOperator;
     }
 
 private:

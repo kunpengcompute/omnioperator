@@ -4,8 +4,140 @@
 
 #include "unsafe_vector.h"
 #include "vector_batch.h"
+#include "array_vector.h"
+#include "map_vector.h"
+#include "row_vector.h"
+
+#include <algorithm>
+#include <limits>
 
 namespace omniruntime::vec {
+namespace {
+constexpr uint64_t kMaxEstimate = std::numeric_limits<uint64_t>::max();
+
+uint64_t SaturatingAdd(uint64_t left, uint64_t right)
+{
+    return left > kMaxEstimate - right ? kMaxEstimate : left + right;
+}
+
+uint64_t SaturatingMultiply(uint64_t left, uint64_t right)
+{
+    return right != 0 && left > kMaxEstimate / right ? kMaxEstimate : left * right;
+}
+
+uint64_t FixedWidth(DataTypeId type)
+{
+    switch (type) {
+        case OMNI_BYTE:
+        case OMNI_BOOLEAN:
+            return sizeof(int8_t);
+        case OMNI_SHORT:
+            return sizeof(int16_t);
+        case OMNI_INT:
+        case OMNI_FLOAT:
+        case OMNI_DATE32:
+        case OMNI_TIME32:
+        case OMNI_INTERVAL_MONTHS:
+            return sizeof(int32_t);
+        case OMNI_DECIMAL128:
+        case OMNI_INTERVAL_DAY_TIME:
+            return sizeof(type::Decimal128);
+        case OMNI_LONG:
+        case OMNI_DOUBLE:
+        case OMNI_DECIMAL64:
+        case OMNI_DATE64:
+        case OMNI_TIME64:
+        case OMNI_TIMESTAMP:
+        case OMNI_TIME_WITHOUT_TIME_ZONE:
+        case OMNI_TIMESTAMP_WITHOUT_TIME_ZONE:
+        case OMNI_TIMESTAMP_WITH_TIME_ZONE:
+        case OMNI_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+        case OMNI_CONTAINER:
+            return sizeof(int64_t);
+        default:
+            return 0;
+    }
+}
+
+bool IsStringType(DataTypeId type)
+{
+    return type == OMNI_VARCHAR || type == OMNI_CHAR || type == OMNI_VARBINARY;
+}
+
+uint64_t EstimateStringPayload(BaseVector *vector)
+{
+    const int32_t size = std::max(vector->GetSize(), 0);
+    if (vector->GetEncoding() == OMNI_FLAT) {
+        auto *strings = static_cast<Vector<LargeStringContainer<std::string_view>> *>(vector);
+        return unsafe::UnsafeStringVector::GetContainer(strings)->GetCapacityInBytes();
+    }
+    if (vector->GetEncoding() == OMNI_DICTIONARY) {
+        auto *strings = static_cast<Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *>(vector);
+        const auto dictionary = unsafe::UnsafeDictionaryContainer::GetStringDictionaryOriginal(
+            unsafe::UnsafeDictionaryVector::GetDictionaryOriginal(strings).get());
+        // Flattening a dictionary can repeat values. Keep this O(1) by using
+        // the larger of its retained payload and Omni's standard variable-width
+        // row estimate instead of scanning every input row.
+        constexpr uint64_t kDefaultVariableWidth = 200;
+        return std::max<uint64_t>(dictionary->GetCapacityInBytes(),
+            SaturatingMultiply(static_cast<uint64_t>(size), kDefaultVariableWidth));
+    }
+    if (vector->GetEncoding() == OMNI_ENCODING_CONST) {
+        auto *constant = static_cast<ConstVector<std::string_view> *>(vector);
+        const uint64_t nonNullRows = static_cast<uint64_t>(size - vector->GetNullCount());
+        return SaturatingMultiply(nonNullRows, constant->GetConstValueRef().size());
+    }
+    // Unknown string encodings still need a non-zero byte estimate.
+    return SaturatingMultiply(static_cast<uint64_t>(size), sizeof(std::string_view));
+}
+
+uint64_t EstimateFlatVectorSize(BaseVector *vector)
+{
+    if (vector == nullptr) {
+        return 0;
+    }
+
+    const uint64_t size = static_cast<uint64_t>(std::max(vector->GetSize(), 0));
+    uint64_t bytes = static_cast<uint64_t>(NullsBuffer::CalculateNbytes(static_cast<int32_t>(size)));
+    const auto type = vector->GetTypeId();
+
+    if (const uint64_t width = FixedWidth(type); width != 0) {
+        return SaturatingAdd(bytes, SaturatingMultiply(size, width));
+    }
+    if (IsStringType(type)) {
+        bytes = SaturatingAdd(bytes, SaturatingMultiply(size + 1, sizeof(int32_t)));
+        return SaturatingAdd(bytes, EstimateStringPayload(vector));
+    }
+    if (type == OMNI_ARRAY && vector->GetEncoding() == OMNI_ENCODING_ARRAY) {
+        auto *array = static_cast<ArrayVector *>(vector);
+        bytes = SaturatingAdd(bytes, SaturatingMultiply(size + 1, sizeof(int64_t)));
+        return SaturatingAdd(bytes, EstimateFlatVectorSize(array->GetElementVector().get()));
+    }
+    if (type == OMNI_MAP && vector->GetEncoding() == OMNI_ENCODING_MAP) {
+        auto *map = static_cast<MapVector *>(vector);
+        bytes = SaturatingAdd(bytes, SaturatingMultiply(size + 1, sizeof(int64_t)));
+        bytes = SaturatingAdd(bytes, EstimateFlatVectorSize(map->GetKeyVector().get()));
+        return SaturatingAdd(bytes, EstimateFlatVectorSize(map->GetValueVector().get()));
+    }
+    if (type == OMNI_ROW && vector->GetEncoding() == OMNI_ENCODING_STRUCT) {
+        auto *row = static_cast<RowVector *>(vector);
+        if (!row->Children().empty()) {
+            for (auto &child : row->Children()) {
+                bytes = SaturatingAdd(bytes, EstimateFlatVectorSize(child.get()));
+            }
+        } else {
+            for (auto *child : row->GetRawChildren()) {
+                bytes = SaturatingAdd(bytes, EstimateFlatVectorSize(child));
+            }
+        }
+        return bytes;
+    }
+
+    // Preserve a conservative byte estimate for extension/unknown encodings.
+    return SaturatingAdd(bytes, SaturatingMultiply(size, sizeof(int64_t)));
+}
+} // namespace
+
 /**
  * @param rowCnt
  */
@@ -119,5 +251,14 @@ uint64_t VectorBatch::CalculateTotalSize() const
     }
 
     return totalSize;
+}
+
+uint64_t VectorBatch::EstimateFlatSize() const
+{
+    uint64_t totalBytes = 0;
+    for (auto *vector : vectors) {
+        totalBytes = SaturatingAdd(totalBytes, EstimateFlatVectorSize(vector));
+    }
+    return totalBytes;
 }
 }

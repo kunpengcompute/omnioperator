@@ -5,6 +5,9 @@
 #include <vector>
 #include <iostream>
 #include <chrono>
+#include <stdexcept>
+#include <functional>
+#include "operator/reclaim_context.h"
 
 #include "gtest/gtest.h"
 #include "operator/window/window.h"
@@ -13,6 +16,8 @@
 #include "vector/unsafe_vector.h"
 #include "perf_util.h"
 #include "util/config_util.h"
+#include "memory/omni_task_memory_pool.h"
+#include "memory/pool_listener.h"
 
 using namespace std;
 using namespace omniruntime::vec;
@@ -24,6 +29,37 @@ const int32_t DATA_SIZE = 6;
 const int32_t VEC_BATCH_NUM = 10;
 const int32_t ROW_PER_VEC_BATCH = 100;
 const uint64_t MAX_SPILL_BYTES = (5L << 20);
+
+class RejectNextPositiveAllocationListener final : public omniruntime::mem::PoolListener {
+public:
+    std::function<void()> sortReservationCallback;
+
+    void allocationChanged(int64_t diff) override
+    {
+        const auto request = CurrentReservationRequest();
+        if (diff > 0 && sortReservationCallback && request.site != nullptr &&
+            std::string(request.site) == "WindowOperator::ReserveForSort") {
+            auto invoke = std::move(sortReservationCallback);
+            sortReservationCallback = nullptr;
+            invoke();
+        }
+        if (diff > 0 && rejectNext_) {
+            rejectNext_ = false;
+            rejected_ = true;
+            throw omniruntime::mem::ReservationDenied("test speculative reservation denied");
+        }
+        current_ += diff;
+    }
+
+    void rejectNext() { rejectNext_ = true; }
+    bool rejected() const { return rejected_; }
+    int64_t currentBytes() override { return current_; }
+
+private:
+    bool rejectNext_{false};
+    bool rejected_{false};
+    int64_t current_{0};
+};
 
 BaseVector *BuildVectorInput(const DataTypePtr sourceType, int32_t rowPerVecBatch)
 {
@@ -2881,9 +2917,13 @@ TEST(NativeOmniWindowOperatorTest, testWindowSpillWithInvalidConfig)
         windowFunctionTypes, 1, partitionCols, 1, preGroupedCols, 0, sortCols, ascendings, nullFirsts, 1,
         preSortedChannelPrefix, expectedPositions, allTypes, argumentChannels, 0, windowFrameTypes,
         windowFrameStartTypes, windowFrameStartChannels, windowFrameEndTypes, windowFrameEndChannels, operatorConfig1);
-    auto operator1 = operatorFactory1->CreateOperator();
+    omniruntime::mem::OmniTaskMemoryPool pool1(nullptr);
+    auto operator1 = dynamic_cast<WindowOperator *>(operatorFactory1->CreateOperator(&pool1));
+    operator1->setNoMoreInput(false);
     auto vecBatch1 = CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4);
-    EXPECT_THROW(operator1->AddInput(vecBatch1), omniruntime::exception::OmniException);
+    EXPECT_NO_THROW(operator1->AddInput(vecBatch1));
+    ASSERT_GT(operator1->reclaimableBytes(), 0);
+    EXPECT_THROW(operator1->reclaim(1), omniruntime::exception::OmniException);
     omniruntime::op::Operator::DeleteOperator(operator1);
     delete operatorFactory1;
 
@@ -2893,9 +2933,13 @@ TEST(NativeOmniWindowOperatorTest, testWindowSpillWithInvalidConfig)
         windowFunctionTypes, 1, partitionCols, 1, preGroupedCols, 0, sortCols, ascendings, nullFirsts, 1,
         preSortedChannelPrefix, expectedPositions, allTypes, argumentChannels, 0, windowFrameTypes,
         windowFrameStartTypes, windowFrameStartChannels, windowFrameEndTypes, windowFrameEndChannels, operatorConfig2);
-    auto operator2 = operatorFactory2->CreateOperator();
+    omniruntime::mem::OmniTaskMemoryPool pool2(nullptr);
+    auto operator2 = dynamic_cast<WindowOperator *>(operatorFactory2->CreateOperator(&pool2));
+    operator2->setNoMoreInput(false);
     auto vecBatch2 = CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4);
-    EXPECT_THROW(operator2->AddInput(vecBatch2), omniruntime::exception::OmniException);
+    EXPECT_NO_THROW(operator2->AddInput(vecBatch2));
+    ASSERT_GT(operator2->reclaimableBytes(), 0);
+    EXPECT_THROW(operator2->reclaim(1), omniruntime::exception::OmniException);
     omniruntime::op::Operator::DeleteOperator(operator2);
     delete operatorFactory2;
     rmdir("/opt/+-ab23");
@@ -2906,9 +2950,13 @@ TEST(NativeOmniWindowOperatorTest, testWindowSpillWithInvalidConfig)
         windowFunctionTypes, 1, partitionCols, 1, preGroupedCols, 0, sortCols, ascendings, nullFirsts, 1,
         preSortedChannelPrefix, expectedPositions, allTypes, argumentChannels, 0, windowFrameTypes,
         windowFrameStartTypes, windowFrameStartChannels, windowFrameEndTypes, windowFrameEndChannels, operatorConfig3);
-    auto operator3 = operatorFactory3->CreateOperator();
+    omniruntime::mem::OmniTaskMemoryPool pool3(nullptr);
+    auto operator3 = dynamic_cast<WindowOperator *>(operatorFactory3->CreateOperator(&pool3));
+    operator3->setNoMoreInput(false);
     auto vecBatch3 = CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4);
-    EXPECT_THROW(operator3->AddInput(vecBatch3), omniruntime::exception::OmniException);
+    EXPECT_NO_THROW(operator3->AddInput(vecBatch3));
+    ASSERT_GT(operator3->reclaimableBytes(), 0);
+    EXPECT_THROW(operator3->reclaim(1), omniruntime::exception::OmniException);
     omniruntime::op::Operator::DeleteOperator(operator3);
     delete operatorFactory3;
 }
@@ -2971,6 +3019,157 @@ TEST(NativeOmniWindowOperatorTest, testWindowSpillWithRowNumberPartition)
     delete operatorFactory;
     VectorHelper::FreeVecBatch(expectVecBatch);
     VectorHelper::FreeVecBatch(outputVecBatch);
+}
+
+void RunWindowPressureReclaimLifecycle(bool reclaimDuringSortReservation)
+{
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType() }));
+    constexpr int32_t inputRows = 4096;
+    int32_t outputCols[1] = {0};
+    int32_t sortCols[1] = {0};
+    int32_t ascendings[1] = {true};
+    int32_t nullFirsts[1] = {false};
+    int32_t functionTypes[1] = {OMNI_WINDOW_TYPE_ROW_NUMBER};
+    int32_t frameTypes[1] = {OMNI_FRAME_TYPE_RANGE};
+    int32_t frameStartTypes[1] = {OMNI_FRAME_BOUND_UNBOUNDED_PRECEDING};
+    int32_t frameStartChannels[1] = {-1};
+    int32_t frameEndTypes[1] = {OMNI_FRAME_BOUND_CURRENT_ROW};
+    int32_t frameEndChannels[1] = {-1};
+    DataTypes allTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
+
+    // Keep the legacy row-count trigger dormant: this test exercises the
+    // pressure-reclaim eligibility boundary, not threshold-based self-spill.
+    SparkSpillConfig spillConfig(GenerateSpillPath(), MAX_SPILL_BYTES, 1000);
+    OperatorConfig operatorConfig(spillConfig);
+    auto *factory = WindowOperatorFactory::CreateWindowOperatorFactory(sourceTypes, outputCols, 1,
+        functionTypes, 1, nullptr, 0, nullptr, 0, sortCols, ascendings, nullFirsts, 1, 0, 10000,
+        allTypes, nullptr, 0, frameTypes, frameStartTypes, frameStartChannels, frameEndTypes,
+        frameEndChannels, operatorConfig);
+    RejectNextPositiveAllocationListener listener;
+    omniruntime::mem::OmniTaskMemoryPool pool(&listener);
+    const auto makeInput = [&](int32_t base) {
+        auto *batch = new VectorBatch(inputRows);
+        auto *keys = new Vector<int32_t>(inputRows, &pool);
+        for (int32_t row = 0; row < inputRows; ++row) {
+            keys->SetValue(row, base + inputRows - row - 1);
+        }
+        batch->Append(keys);
+        return batch;
+    };
+    auto *vecBatch = makeInput(0);
+    auto *moreInput = makeInput(inputRows);
+    auto *window = dynamic_cast<WindowOperator *>(factory->CreateOperator(&pool));
+    ASSERT_NE(window, nullptr); // CreateOperator already initializes the operator.
+
+    window->setNoMoreInput(false);
+    EXPECT_EQ(window->reclaimableBytes(), 0);
+    window->AddInput(vecBatch);
+    EXPECT_GT(window->reclaimableBytes(), 0);
+    listener.rejectNext();
+    EXPECT_NO_THROW(window->AddInput(moreInput));
+    EXPECT_TRUE(listener.rejected());
+    EXPECT_EQ(listener.currentBytes(), std::max(pool.currentBytes(), pool.reservedBytes()));
+    {
+        omniruntime::op::Operator::NonReclaimableSection outputOrMutation(window);
+        EXPECT_TRUE(window->isInNonReclaimableSection());
+        EXPECT_EQ(window->reclaim(1), 0);
+    }
+    window->noMoreInput();
+    EXPECT_GT(window->reclaimableBytes(), 0);
+    bool reservationReclaimed = false;
+    if (reclaimDuringSortReservation) {
+        pool.releaseUnusedReservation();
+        listener.sortReservationCallback = [&]() {
+            reservationReclaimed = true;
+            EXPECT_GT(window->reclaimableBytes(), 0);
+            EXPECT_GT(window->reclaim(1), 0);
+        };
+    } else {
+        EXPECT_GT(window->reclaim(1), 0);
+    }
+    int outputRows = 0;
+    for (int attempt = 0; attempt < 100 && outputRows < 2 * inputRows; ++attempt) {
+        VectorBatch *output = nullptr;
+        {
+            omniruntime::op::Operator::NonReclaimableSection driverGuard(window);
+            window->GetOutput(&output);
+        }
+        EXPECT_EQ(window->reclaimableBytes(), 0);
+        if (output == nullptr) continue;
+        auto *keys = static_cast<Vector<int32_t> *>(output->Get(0));
+        auto *ranks = static_cast<Vector<int64_t> *>(output->Get(1));
+        for (int row = 0; row < output->GetRowCount(); ++row) {
+            EXPECT_EQ(keys->GetValue(row), outputRows);
+            EXPECT_EQ(ranks->GetValue(row), outputRows + 1);
+            ++outputRows;
+        }
+        VectorHelper::FreeVecBatch(output);
+    }
+    EXPECT_EQ(outputRows, 2 * inputRows);
+
+    EXPECT_EQ(reservationReclaimed, reclaimDuringSortReservation);
+    listener.sortReservationCallback = nullptr;
+    omniruntime::op::Operator::DeleteOperator(window);
+    delete factory;
+    EXPECT_EQ(pool.currentBytes(), 0);
+    pool.releaseUnusedReservation();
+    EXPECT_EQ(listener.currentBytes(), 0);
+}
+
+TEST(NativeOmniWindowOperatorTest, testWindowPressureReclaimLifecycle)
+{
+    RunWindowPressureReclaimLifecycle(false);
+}
+
+TEST(NativeOmniWindowOperatorTest, testWindowSortReservationReclaimsUnderDriverGuard)
+{
+    RunWindowPressureReclaimLifecycle(true);
+}
+
+TEST(NativeOmniWindowOperatorTest, testWindowReleasesUnusedReservationAfterInputPreparation)
+{
+    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType() }));
+    int32_t values[DATA_SIZE] = {5, 4, 3, 2, 1, 0};
+    auto *vecBatch = CreateVectorBatch(sourceTypes, DATA_SIZE, values);
+    int32_t outputCols[1] = {0};
+    int32_t sortCols[1] = {0};
+    int32_t ascendings[1] = {true};
+    int32_t nullFirsts[1] = {false};
+    int32_t functionTypes[1] = {OMNI_WINDOW_TYPE_ROW_NUMBER};
+    int32_t frameTypes[1] = {OMNI_FRAME_TYPE_RANGE};
+    int32_t frameStartTypes[1] = {OMNI_FRAME_BOUND_UNBOUNDED_PRECEDING};
+    int32_t frameStartChannels[1] = {-1};
+    int32_t frameEndTypes[1] = {OMNI_FRAME_BOUND_CURRENT_ROW};
+    int32_t frameEndChannels[1] = {-1};
+    int32_t partitionCols[0] = {};
+    int32_t preGroupedCols[0] = {};
+    int32_t argumentChannels[0] = {};
+    DataTypes allTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
+
+    SparkSpillConfig spillConfig(GenerateSpillPath(), MAX_SPILL_BYTES, 1000);
+    OperatorConfig operatorConfig(spillConfig);
+    auto *factory = WindowOperatorFactory::CreateWindowOperatorFactory(sourceTypes, outputCols, 1,
+        functionTypes, 1, partitionCols, 0, preGroupedCols, 0, sortCols, ascendings, nullFirsts, 1, 0, 10000,
+        allTypes, argumentChannels, 0, frameTypes, frameStartTypes, frameStartChannels, frameEndTypes,
+        frameEndChannels, operatorConfig);
+    RejectNextPositiveAllocationListener listener;
+    omniruntime::mem::OmniTaskMemoryPool pool(&listener);
+    auto *window = dynamic_cast<WindowOperator *>(factory->CreateOperator(&pool));
+
+    ASSERT_TRUE(pool.maybeReserve(1));
+    window->AddInput(vecBatch);
+    ASSERT_GT(pool.availableReservation(), 0);
+
+    window->noMoreInput();
+    VectorBatch *output = nullptr;
+    ASSERT_NO_THROW(window->GetOutput(&output));
+    EXPECT_NE(output, nullptr);
+    EXPECT_EQ(pool.availableReservation(), 0);
+
+    VectorHelper::FreeVecBatch(output);
+    omniruntime::op::Operator::DeleteOperator(window);
+    delete factory;
+    EXPECT_EQ(listener.currentBytes(), 0);
 }
 
 TEST(NativeOmniWindowOperatorTest, testWindowSpillRowNumber)

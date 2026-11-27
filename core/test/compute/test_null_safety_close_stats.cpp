@@ -60,7 +60,7 @@ private:
 /// omniruntime::expressions::Operator and llvm::Operator.
 class NullSafetyTestOperator : public omniruntime::op::Operator {
 public:
-    NullSafetyTestOperator()
+    NullSafetyTestOperator() : omniruntime::op::Operator(nullptr)
     {
         setNoMoreInput(false);
     }

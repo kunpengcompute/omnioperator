@@ -83,7 +83,7 @@ TEST_F(FactorialTest, FactorialBasicValid) {
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);
@@ -126,7 +126,7 @@ TEST_F(FactorialTest, FactorialOutOfRange) {
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);
@@ -164,7 +164,7 @@ TEST_F(FactorialTest, FactorialWithNullInput) {
     input->Get(0)->SetNull(0);
     input->Get(0)->SetNull(2);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);
@@ -204,7 +204,7 @@ TEST_F(FactorialTest, FactorialMixedInputs) {
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);
@@ -259,7 +259,7 @@ TEST_F(FactorialTest, FactorialBoundaryValues) {
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);
@@ -294,7 +294,7 @@ TEST_F(FactorialTest, FactorialVectorFunction) {
     int32_t rowSize = 5;
     
     // Create input vector
-    BaseVector* rawInput = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    BaseVector* rawInput = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     auto* inputVector = static_cast<Vector<int32_t>*>(rawInput);
     std::vector<int32_t> inputData = {0, 5, 10, 15, 20};
     for (int32_t i = 0; i < rowSize; ++i) {
@@ -308,7 +308,7 @@ TEST_F(FactorialTest, FactorialVectorFunction) {
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function factorial not found";
     
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     
     std::stack<BaseVector*> args;

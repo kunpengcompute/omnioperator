@@ -77,7 +77,7 @@ void CastFunction::DispatchCast(BaseVector* input, BaseVector*& result, Executio
 
 void CastFunction::CastToBoolean(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, size);
     auto* resultVec = static_cast<Vector<bool>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         bool boolValue = false;
@@ -198,7 +198,7 @@ void CastFunction::CastToBoolean(BaseVector* input, BaseVector*& result, Executi
 
 void CastFunction::CastToByte(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_BYTE, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BYTE, size);
     auto* resultVec = static_cast<Vector<int8_t>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         int8_t byteValue;
@@ -346,7 +346,7 @@ void CastFunction::CastToByte(BaseVector* input, BaseVector*& result, ExecutionC
 
 void CastFunction::CastToShort(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_SHORT, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_SHORT, size);
     auto* resultVec = static_cast<Vector<int16_t>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         int16_t shortValue;
@@ -494,7 +494,7 @@ void CastFunction::CastToShort(BaseVector* input, BaseVector*& result, Execution
 
 void CastFunction::CastToInt(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_INT, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_INT, size);
     auto* resultVec = static_cast<Vector<int32_t>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         int32_t intValue;
@@ -642,7 +642,7 @@ void CastFunction::CastToInt(BaseVector* input, BaseVector*& result, ExecutionCo
 
 void CastFunction::CastToLong(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_LONG, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_LONG, size);
     auto* resultVec = static_cast<Vector<int64_t>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         int64_t longValue;
@@ -790,7 +790,7 @@ void CastFunction::CastToLong(BaseVector* input, BaseVector*& result, ExecutionC
 
 void CastFunction::CastToFloat(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_FLOAT, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_FLOAT, size);
     auto* resultVec = static_cast<Vector<float>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         float floatValue;
@@ -934,7 +934,7 @@ void CastFunction::CastToFloat(BaseVector* input, BaseVector*& result, Execution
 
 void CastFunction::CastToDouble(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_DOUBLE, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_DOUBLE, size);
     auto* resultVec = static_cast<Vector<double>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         double doubleValue;
@@ -1122,7 +1122,7 @@ void CastFunction::CastToString(BaseVector* input, BaseVector*& result, Executio
 
 void CastFunction::CastStringViewToOmniVarchar(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_VARCHAR, size);
     auto *out = static_cast<Vector<LargeStringContainer<std::string_view>> *>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         if (input->IsNull(0)) {
@@ -1156,7 +1156,7 @@ void CastFunction::CastStringViewToOmniVarchar(BaseVector* input, BaseVector*& r
 template<typename T>
 void CastFunction::CastNumericToString(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(toType_->GetId(), size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), toType_->GetId(), size);
     auto* resultVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         auto *constVec = static_cast<ConstVector<T> *>(input);
@@ -1215,7 +1215,7 @@ template void CastFunction::CastNumericToString<double>(BaseVector*, BaseVector*
 
 void CastFunction::CastDateToString(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_VARCHAR, size);
     auto* resultVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         std::string strValue = type::util::ToIso8601(static_cast<ConstVector<int32_t> *>(input)->GetConstValue());
@@ -1240,7 +1240,7 @@ void CastFunction::CastDateToString(BaseVector* input, BaseVector*& result, Exec
 void CastFunction::CastTimestampToString(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto options = hooks_->timestampToStringOptions();
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_VARCHAR, size);
     auto* resultVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         Timestamp inputValue = Timestamp::fromMicros(static_cast<ConstVector<int64_t> *>(input)->GetConstValue());
@@ -1276,7 +1276,7 @@ void CastFunction::CastTimestampToString(BaseVector* input, BaseVector*& result,
 void CastFunction::CastDecimal64ToString(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto dataType = static_cast<DecimalDataType *>(fromType_.get());
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_VARCHAR, size);
     auto* resultVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         std::string str = Decimal64(static_cast<ConstVector<int64_t> *>(input)->GetConstValue()).SetScale(dataType->GetScale()).ToString();
@@ -1301,7 +1301,7 @@ void CastFunction::CastDecimal64ToString(BaseVector* input, BaseVector*& result,
 void CastFunction::CastDecimal128ToString(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     auto dataType = static_cast<DecimalDataType *>(fromType_.get());
     auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_VARCHAR, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_VARCHAR, size);
     auto* resultVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         Decimal128 value(static_cast<ConstVector<std::string_view> *>(input)->GetConstValue());
@@ -1326,7 +1326,7 @@ void CastFunction::CastDecimal128ToString(BaseVector* input, BaseVector*& result
 
 void CastFunction::CastToDate(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     const auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_DATE32, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_DATE32, size);
     auto* resultVec = static_cast<Vector<int32_t>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         int32_t dateValue;
@@ -1403,7 +1403,7 @@ void CastFunction::CastToDate(BaseVector* input, BaseVector*& result, ExecutionC
 
 void CastFunction::CastToTimestamp(BaseVector* input, BaseVector*& result, ExecutionContext* context) const {
     const auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_TIMESTAMP, size);
     auto* resultVec = static_cast<Vector<int64_t>*>(result);
     const auto parseString = [this](const std::string_view inputValue) -> std::optional<int64_t> {
         try {
@@ -1509,7 +1509,7 @@ void CastFunction::CastToDecimal64(BaseVector* input, BaseVector*& result, Execu
     auto toDataType = static_cast<DecimalDataType *>(toType_.get());
     int toPrecision = toDataType->GetPrecision();
     int toScale = toDataType->GetScale();
-    result = VectorHelper::CreateFlatVector(OMNI_DECIMAL64, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_DECIMAL64, size);
     auto* resultVec = static_cast<Vector<int64_t>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         int64_t decimal64Value;
@@ -1792,7 +1792,7 @@ void CastFunction::CastToDecimal128(BaseVector* input, BaseVector*& result, Exec
     auto toDataType = static_cast<DecimalDataType *>(toType_.get());
     int toPrecision = toDataType->GetPrecision();
     int toScale = toDataType->GetScale();
-    result = VectorHelper::CreateFlatVector(OMNI_DECIMAL128, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_DECIMAL128, size);
     auto* resultVec = static_cast<Vector<Decimal128>*>(result);
     if (input->GetEncoding() == OMNI_ENCODING_CONST) {
         int128_t decimal128Value;
@@ -2103,7 +2103,7 @@ template <typename TInput>
 void CastFunction::CastIntegerToBinary(BaseVector* input, BaseVector*& result, ExecutionContext* context) const
 {
     const auto size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_VARBINARY, size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_VARBINARY, size);
     auto *out = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(result);
 
     // Keep consistent with CastExpr::applyIntToBinaryCast: encode in big-endian.

@@ -92,11 +92,13 @@ public:
             offsets.push_back(static_cast<int32_t>(allKeys.size()));
         }
 
-        result = new MapVector(rowSize);
+        result = new MapVector(rowSize, context->GetPool());
         auto *mapResult = static_cast<MapVector *>(result);
 
-        auto keyVector = std::make_shared<Vector<LargeStringContainer<std::string_view>>>(allKeys.size());
-        auto valueVector = std::make_shared<Vector<LargeStringContainer<std::string_view>>>(allValues.size());
+        auto keyVector =
+            std::make_shared<Vector<LargeStringContainer<std::string_view>>>(allKeys.size(), context->GetPool());
+        auto valueVector =
+            std::make_shared<Vector<LargeStringContainer<std::string_view>>>(allValues.size(), context->GetPool());
 
         for (int32_t i = 0; i < static_cast<int32_t>(allKeys.size()); ++i) {
             keyVector->SetValue(i, allKeys[i]);

@@ -107,9 +107,15 @@ void ValidateStringViewInputBatch(
 
 class FilterAndProjectOperator : public Operator {
 public:
-    explicit FilterAndProjectOperator(std::shared_ptr<ExpressionEvaluator> &exprEvaluator,
+    FilterAndProjectOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::shared_ptr<ExpressionEvaluator> &exprEvaluator,
         std::vector<int32_t> stringViewValidationFields = {})
-        : projectedVecs(nullptr), exprEvaluator(exprEvaluator),
+        // selectedRowsBuffer is the recurring per-batch filter-mask buffer. Bind it to
+        // the pool-bound Allocator (from the base ExecutionContext, which is constructed
+        // by Operator(pool) above and is valid even when pool==nullptr) so AllocateReuse()
+        // routes through per-task accounting instead of the no-pool bridge.
+        : Operator(pool), selectedRowsBuffer(0, executionContext->GetAllocator()),
+          projectedVecs(nullptr), exprEvaluator(exprEvaluator),
           stringViewValidationFields(std::move(stringViewValidationFields))
     {
         SetOperatorName(metricsNameFilter);
@@ -174,7 +180,9 @@ public:
 
     ~FilterAndProjectOperatorFactory() override = default;
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // W2b-03: pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::shared_ptr<ExpressionEvaluator> exprEvaluator;

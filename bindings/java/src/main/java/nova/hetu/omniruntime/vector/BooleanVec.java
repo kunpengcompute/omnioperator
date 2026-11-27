@@ -18,6 +18,10 @@ public class BooleanVec extends FixedWidthVec {
         super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, BooleanDataType.BOOLEAN);
     }
 
+    public BooleanVec(int size, long nmmHandle) {
+        super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, BooleanDataType.BOOLEAN, nmmHandle);
+    }
+
     public BooleanVec(long nativeVector) {
         super(nativeVector, BooleanDataType.BOOLEAN, BYTES);
     }

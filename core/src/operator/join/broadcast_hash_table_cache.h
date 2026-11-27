@@ -1,18 +1,19 @@
 /*
- * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
- * @Description: Executor-level cache for BHJ (Broadcast Hash Join) hash tables.
- *               Ensures the hash table is built only once per executor per broadcast relation,
- *               and shared across all tasks that join against the same broadcast.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ * Executor-local broadcast hash table cache.
  */
 #pragma once
 
 #include <condition_variable>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 
+#include "broadcast_hash_table_cache_control.h"
 #include "join_hash_table_variants.h"
 
 namespace omniruntime {
@@ -20,72 +21,115 @@ namespace op {
 
 class HashBuilderOperatorFactory;
 
-/**
- * Executor-level singleton cache for broadcast hash tables.
- *
- * Lifecycle:
- *   1. First task for a given buildHashTableId calls tryClaimBuild() → returns true.
- *      It builds the hash table normally, then calls publish() to share it.
- *   2. Concurrent tasks for the same id call tryClaimBuild() → returns false.
- *      They call waitAndGet() which blocks until the first task finishes publishing.
- *   3. When the Spark broadcast is unpersisted (via JNI), invalidate() is called to
- *      free the hash table and remove the cache entry.
- *
- * Thread safety: all public methods are thread-safe.
- */
 class BroadcastHashTableCache {
+private:
+    struct Payload;
+    struct Entry;
+
 public:
+    // A reader keeps the table and pinned build metadata alive after
+    // invalidate() removes the entry from the cache index.
+    class Lease {
+    public:
+        Lease() = default;
+        HashTableVariants* get() const;
+        explicit operator bool() const { return payload_ != nullptr; }
+
+    private:
+        friend class BroadcastHashTableCache;
+        explicit Lease(std::shared_ptr<Payload> payload) : payload_(std::move(payload)) {}
+        std::shared_ptr<Payload> payload_;
+    };
+
+    // The first arriving task owns this token until it publishes or fails.
+    // Abandoning a token wakes waiters and permits a fresh builder to claim.
+    class BuildTicket {
+    public:
+        ~BuildTicket();
+        BuildTicket(const BuildTicket&) = delete;
+        BuildTicket& operator=(const BuildTicket&) = delete;
+
+        // Allocate the owning handle while the factory still owns the table.
+        // publish() then performs only non-allocating ownership transfers.
+        Lease prepare();
+        mem::OmniTaskMemoryPool* pool();
+        void publish(Lease& prepared, HashTableVariants* variants,
+            HashBuilderOperatorFactory* pinningFactory);
+        void fail();
+
+    private:
+        friend class BroadcastHashTableCache;
+        BuildTicket(BroadcastHashTableCache* cache, std::shared_ptr<Entry> entry)
+            : cache_(cache), entry_(std::move(entry)) {}
+        BroadcastHashTableCache* cache_;
+        std::shared_ptr<Entry> entry_;
+        bool active_{true};
+    };
+
+    struct Acquisition {
+        std::shared_ptr<BuildTicket> builder;
+        Lease reader;
+        bool retired{false};
+    };
+
     static BroadcastHashTableCache& getInstance();
 
     BroadcastHashTableCache(const BroadcastHashTableCache&) = delete;
     BroadcastHashTableCache& operator=(const BroadcastHashTableCache&) = delete;
 
-    /**
-     * Try to claim the build right for the given id.
-     * @return true  if this caller should build the hash table (first arrival).
-     *         false if another task is already building or the table is ready.
-     */
-    bool tryClaimBuild(const std::string& buildHashTableId);
-
-    /**
-     * Publish a completed hash table into the cache.
-     * Transfers ownership of `variants` to the cache; the caller must NOT delete it.
-     * `pinningFactory` is kept alive until invalidate() so hash table metadata
-     * (buildTypes/buildHashCols referenced by variants) remains valid.
-     */
-    void publish(const std::string& buildHashTableId, HashTableVariants* variants,
-        HashBuilderOperatorFactory* pinningFactory);
-
-    /**
-     * Block until the hash table for `buildHashTableId` is ready, then return it.
-     * Returns nullptr if the id has never been registered (non-BHJ path or invalidated
-     * before this call). The returned pointer is owned by the cache; do NOT delete it.
-     */
-    HashTableVariants* waitAndGet(const std::string& buildHashTableId);
-
-    /**
-     * Called via JNI when Spark unpersists the broadcast relation.
-     * Frees the hash table memory and removes the cache entry.
-     */
-    void invalidate(const std::string& buildHashTableId);
-
-    // Visible for testing.
-    size_t size();
+    // One atomic claim-or-wait operation. There is no raw-pointer handoff.
+    Acquisition acquire(const std::string& id);
+    using MemoryFactory = BroadcastEntryMemoryFactory;
+    void configureMemoryFactory(MemoryFactory factory);
+    void invalidate(const std::string& id);
+    // The broadcast relation owns all table signatures for its exchange key.
+    void invalidatePrefix(const std::string& exchangeKey);
+    void retireAll();
+    size_t size() const;
+    using Stats = BroadcastCacheStats;
+    Stats stats() const;
 
 private:
     BroadcastHashTableCache() = default;
 
-    enum class EntryState { IN_PROGRESS, READY };
+    struct Payload {
+        ~Payload();
 
-    struct CacheEntry {
-        EntryState state = EntryState::IN_PROGRESS;
-        HashTableVariants* variants = nullptr; // owned by cache once published
+        // Destruction is in reverse order: table, then pinned metadata.
+        std::shared_ptr<BroadcastEntryMemory> memory;
         std::unique_ptr<HashBuilderOperatorFactory> pinningFactory;
+        std::unique_ptr<HashTableVariants> variants;
     };
 
-    std::mutex mutex_;
+    enum class EntryState { BUILDING, READY, FAILED, RETIRED };
+    struct Entry {
+        Entry(std::string id, MemoryFactory factory)
+            : id(std::move(id)), memoryFactory(std::move(factory)) {}
+        std::string id;
+        EntryState state{EntryState::BUILDING};
+        MemoryFactory memoryFactory;
+        std::shared_ptr<BroadcastEntryMemory> memory;
+        std::shared_ptr<Payload> payload;
+    };
+
+    void publish(const std::shared_ptr<Entry>& entry, const Lease& prepared);
+    void fail(const std::shared_ptr<Entry>& entry);
+
+    mutable std::mutex mutex_;
     std::condition_variable cv_;
-    std::unordered_map<std::string, CacheEntry> cache_;
+    std::unordered_map<std::string, std::shared_ptr<Entry>> entries_;
+    std::unordered_set<std::string> retiredExchangeKeys_;
+    MemoryFactory memoryFactory_;
+    bool draining_{false};
+    uint64_t builds_{0};
+    uint64_t hits_{0};
+    uint64_t retirements_{0};
+};
+
+// Kept by a task's probe factory. The cache-owned builder factory holds only
+// a weak reference, avoiding a cycle through the pinned factory metadata.
+struct BroadcastCacheLeaseSlot {
+    BroadcastHashTableCache::Lease lease;
 };
 
 } // namespace op

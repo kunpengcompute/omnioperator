@@ -19,10 +19,11 @@ namespace op {
 class PagesIndex : public MemoryBuilder {
 public:
     explicit PagesIndex(const DataTypes &types, bool pdqSortEnabled, bool inplacePdqSortEnabled,
-        bool timSortEnabled);
-    
-    explicit PagesIndex(const DataTypes &types)
-        : PagesIndex(types, false, false, false)
+        bool timSortEnabled, omniruntime::mem::OmniTaskMemoryPool *ownerPool = nullptr);
+
+    explicit PagesIndex(const DataTypes &types,
+        omniruntime::mem::OmniTaskMemoryPool *ownerPool = nullptr)
+        : PagesIndex(types, false, false, false, ownerPool)
     {}
 
     ~PagesIndex() override;
@@ -43,12 +44,20 @@ public:
             auto col = vecBatch->Get(0);
             totalNullCount += col->GetNullCount();
             if (col->GetEncoding() == OMNI_DICTIONARY) {
-                vecBatch->SetVector(0, VectorHelper::DecodeDictionaryVector(col));
+                auto *decodePool = ownerPool_ != nullptr ? ownerPool_ : col->GetPool();
+                vecBatch->SetVector(0, VectorHelper::DecodeDictionaryVector(col, decodePool));
                 delete col;
             }
         }
 
-        inplaceSortColumn = VectorHelper::CreateFlatVector<typeId>(rowCount);
+        // A Sort-owned PagesIndex must allocate its preparation scratch from
+        // the same pool in which Sort reserved the scratch. Falling back to
+        // the source vector owner preserves the legacy behavior for PagesIndex
+        // users that do not provide an owner pool.
+        auto *sortColPool = ownerPool_ != nullptr
+            ? ownerPool_
+            : ((vecBatchCount > 0) ? inputVecBatches[0]->Get(0)->GetPool() : nullptr);
+        inplaceSortColumn = VectorHelper::CreateFlatVector<typeId>(sortColPool, rowCount);
         if (totalNullCount == 0) {
             // all batches have no null value
             PartitionNonNull<typeId>();
@@ -123,7 +132,10 @@ public:
         return inputVecBatches.size();
     }
 
+    ALWAYS_INLINE uint64_t GetRetainedBytes() const { return retainedBytes; }
+
 private:
+    omniruntime::mem::OmniTaskMemoryPool *ownerPool_{nullptr};
     void ColumnarSort(const int32_t *sortCols, const int32_t *sortAscendings, const int32_t *sortNullFirsts,
         int32_t sortColCount, int64_t *values, std::vector<uint32_t> &varcharLength, int32_t from, int32_t to,
         int32_t currentCol);
@@ -206,6 +218,7 @@ private:
 
     uint32_t typesCount;
     uint32_t rowCount = 0;
+    uint64_t retainedBytes = 0;
     uint32_t radixValueWidth;
     uint32_t radixRowWidth;
 

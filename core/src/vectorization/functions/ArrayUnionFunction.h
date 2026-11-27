@@ -33,10 +33,10 @@ public:
 private:
     template <typename T>
     void ProcessTyped(ArrayVector *leftArray, ArrayVector *rightArray,
-        ArrayVector *resultArray, int32_t rowSize) const;
+        ArrayVector *resultArray, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     void ProcessString(ArrayVector *leftArray, ArrayVector *rightArray,
-        ArrayVector *resultArray, int32_t rowSize) const;
+        ArrayVector *resultArray, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 };
 
 } // namespace omniruntime::vectorization

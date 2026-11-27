@@ -61,7 +61,7 @@ protected:
 
         BaseVector *resultVector = nullptr;
         auto intType = std::make_shared<DataType>(OMNI_INT);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(rowSize);
         std::stack<BaseVector *> args;
         args.push(rightVec);
@@ -97,7 +97,7 @@ protected:
         auto *rightStrVec = dynamic_cast<Vector<LargeStringContainer<std::string_view>> *>(rightVec);
         ASSERT_NE(rightStrVec, nullptr);
 
-        BaseVector *thresholdVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+        BaseVector *thresholdVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
         thresholdVec->SetIsField(true);
         auto *threshIntVec = dynamic_cast<Vector<int32_t> *>(thresholdVec);
         ASSERT_NE(threshIntVec, nullptr);
@@ -119,7 +119,7 @@ protected:
 
         BaseVector *resultVector = nullptr;
         auto intType = std::make_shared<DataType>(OMNI_INT);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(rowSize);
         std::stack<BaseVector *> args;
         args.push(leftVec);

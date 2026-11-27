@@ -31,7 +31,7 @@ HashBuilderWithExprOperatorFactory *HashBuilderWithExprOperatorFactory::CreateHa
 }
 
 HashBuilderWithExprOperatorFactory *HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(
-    std::shared_ptr<const HashJoinNode> planNode, const config::QueryConfig &queryConfig)
+    std::shared_ptr<const HashJoinNode> planNode, const config::QueryConfig &queryConfig, int32_t hashTableCount)
 {
     auto joinType = planNode->GetJoinType();
     auto buildSide = planNode->GetBuildSide();
@@ -41,7 +41,9 @@ HashBuilderWithExprOperatorFactory *HashBuilderWithExprOperatorFactory::CreateHa
     auto overflowConfig = queryConfig.IsOverFlowASNull()
                           ? new OverflowConfig(OVERFLOW_CONFIG_NULL)
                           : new OverflowConfig(OVERFLOW_CONFIG_EXCEPTION);
-    auto hashBuilderWithExprOperatorFactory = new HashBuilderWithExprOperatorFactory(joinType, buildSide, *buildTypes, buildKeys, 1, overflowConfig, queryConfig);
+    // hashTableCount comes from the planner (same spill gate as the field-key path).
+    auto hashBuilderWithExprOperatorFactory = new HashBuilderWithExprOperatorFactory(joinType, buildSide, *buildTypes,
+        buildKeys, hashTableCount, overflowConfig, queryConfig);
 
     delete overflowConfig;
     overflowConfig = nullptr;
@@ -90,16 +92,16 @@ HashBuilderWithExprOperatorFactory::~HashBuilderWithExprOperatorFactory()
     }
 }
 
-Operator *HashBuilderWithExprOperatorFactory::CreateOperator()
+Operator *HashBuilderWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto hashBuilderOperator = static_cast<HashBuilderOperator *>(operatorFactory->CreateOperator());
-    return new HashBuilderWithExprOperator(*buildTypes, projections, hashBuilderOperator, queryConfig_);
+    auto hashBuilderOperator = static_cast<HashBuilderOperator *>(operatorFactory->CreateOperator(pool));
+    return new HashBuilderWithExprOperator(pool, *buildTypes, projections, hashBuilderOperator, queryConfig_);
 }
 
-HashBuilderWithExprOperator::HashBuilderWithExprOperator(const DataTypes &buildTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, HashBuilderOperator *hashBuilderOperator
-    , const config::QueryConfig &queryConfig)
-    : buildTypes(buildTypes), projections(projections), hashBuilderOperator(hashBuilderOperator)
+HashBuilderWithExprOperator::HashBuilderWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const DataTypes &buildTypes, std::vector<std::unique_ptr<Projection>> &projections,
+    HashBuilderOperator *hashBuilderOperator, const config::QueryConfig &queryConfig)
+    : Operator(pool), buildTypes(buildTypes), projections(projections), hashBuilderOperator(hashBuilderOperator)
 {
     SetOperatorName(opNameForHashBuilder);
     executionContext->SetConfig(queryConfig);
@@ -117,10 +119,19 @@ int32_t HashBuilderWithExprOperator::AddInput(VectorBatch *vecBatch)
         ResetInputVecBatch();
         return 0;
     }
+    // Projection does not mutate the inner builder. Its allocations may reclaim
+    // resident build input; AddInput observes the resulting spill latch below.
+    // Projected batch becomes HashBuilder resident A; must be allocated pool-bound.
+    // Projection scratch in this shell executionContext is transient (S / separate acceptance),
+    // not part of Build A+B+C reclaimableBytes.
     auto *newInputVecBatch = OperatorUtil::ProjectVectors(vecBatch, buildTypes, projections, executionContext.get());
     VectorHelper::FreeVecBatch(vecBatch);
     ResetInputVecBatch();
 
+    Operator::NonReclaimableSection innerNrs(hashBuilderOperator);
+    if (innerNrsObserverForTests_) {
+        innerNrsObserverForTests_(hashBuilderOperator);
+    }
     hashBuilderOperator->AddInput(newInputVecBatch);
     SetStatus(hashBuilderOperator->GetStatus());
     return 0;
@@ -128,8 +139,13 @@ int32_t HashBuilderWithExprOperator::AddInput(VectorBatch *vecBatch)
 
 int32_t HashBuilderWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 {
+    Operator::NonReclaimableSection innerNrs(hashBuilderOperator);
+    if (innerNrsObserverForTests_) {
+        innerNrsObserverForTests_(hashBuilderOperator);
+    }
     hashBuilderOperator->GetOutput(outputVecBatch);
     SetStatus(hashBuilderOperator->GetStatus());
+    // Propagate inner build spill to this (collected) operator's stats_ → Spark UI Spill(disk).
     UpdateSpilledMetrics(hashBuilderOperator);
     return 0;
 }

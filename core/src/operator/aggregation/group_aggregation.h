@@ -5,6 +5,8 @@
 #ifndef GROUP_AGGREGATION_H
 #define GROUP_AGGREGATION_H
 
+#include <atomic>
+
 #include "definitions.h"
 #include "aggregation.h"
 #include "type/data_types.h"
@@ -22,6 +24,7 @@
 #include "operator/pages_index.h"
 #include "operator/spill/spiller.h"
 #include "group_aggregation_sort.h"
+#include "operator/spillable_operator.h"
 
 namespace omniruntime::op {
 using namespace vec;
@@ -30,14 +33,16 @@ class HashAggregationOperatorFactory;
 
 class HashAggregationOperator;
 
-class HashAggregationOperator : public AggregationCommonOperator {
+class HashAggregationOperator : public AggregationCommonOperator, public SpillableOperator {
 public:
-    HashAggregationOperator(std::vector<ColumnIndex> &groupByCols, std::vector<std::vector<int32_t>> &aggInputCols,
+    // Pool-bound ctor — forwards pool to AggregationCommonOperator(pool, ...).
+    HashAggregationOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::vector<ColumnIndex> &groupByCols, std::vector<std::vector<int32_t>> &aggInputCols,
         uint32_t aggInputColsSize, std::vector<DataTypes> &aggInputTypes, std::vector<DataTypes> &aggOutputTypes,
         std::vector<std::unique_ptr<Aggregator>> &&aggs, std::vector<bool> &inputRaws,
         std::vector<bool> &outputPartials, const std::vector<int8_t> &hasAggFilters,
         const OperatorConfig &operatorConfig, std::vector<uint32_t> aggFuncTypesVector, AggregationNode::Step step)
-        : AggregationCommonOperator(std::move(aggs), inputRaws, outputPartials),
+        : AggregationCommonOperator(pool, std::move(aggs), inputRaws, outputPartials),
           groupByCols(groupByCols),
           aggInputCols(aggInputCols),
           aggInputColsSize(aggInputColsSize),
@@ -47,11 +52,29 @@ public:
           operatorConfig(operatorConfig)
     {
         isStepPartials = isPartialOutput(step) && !groupByCols.empty();
-        for (auto i : aggFuncTypesVector) {
-            if (i == OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL || i == OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL
-                || i == OMNI_AGGREGATION_TYPE_LAST_IGNORENULL || i == OMNI_AGGREGATION_TYPE_LAST_INCLUDENULL) {
-                isStepPartials = false;
-                break;
+        // The memory-driven flush is eligible for a grouped partial step. A
+        // first/last aggregation (excluded from isStepPartials below) stays
+        // eligible only in the shape Spark's count-distinct rewrite produces,
+        // first/last(x, ignoreNulls) FILTER (gid = 0): there each group has
+        // one non-null candidate, so the order in which flushed states reach
+        // the final aggregation cannot change the result. For any other
+        // first/last a flush would let that order pick the value, and the
+        // shuffle writer does not keep flush order once it has spilled
+        // (in-memory batches are written before the older spilled segments).
+        partialFlushEligible_ = isStepPartials;
+        for (size_t aggIdx = 0; aggIdx < aggFuncTypesVector.size(); ++aggIdx) {
+            const auto i = aggFuncTypesVector[aggIdx];
+            const bool ignoreNull =
+                i == OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL || i == OMNI_AGGREGATION_TYPE_LAST_IGNORENULL;
+            const bool includeNull =
+                i == OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL || i == OMNI_AGGREGATION_TYPE_LAST_INCLUDENULL;
+            if (!ignoreNull && !includeNull) {
+                continue;
+            }
+            isStepPartials = false;
+            const bool filtered = aggIdx < hasAggFilters.size() && hasAggFilters[aggIdx] == 1;
+            if (!ignoreNull || !filtered) {
+                partialFlushEligible_ = false;
             }
         }
         for (auto hasFilter: hasAggFilters) {
@@ -61,7 +84,7 @@ public:
         }
     }
 
-    ~HashAggregationOperator() override = default;
+    ~HashAggregationOperator() override;
 
     int32_t AddInput(VectorBatch *data) override;
 
@@ -70,6 +93,15 @@ public:
     OmniStatus Init() override;
 
     OmniStatus Close() override;
+
+    uint64_t reclaimableBytes() const override;
+    int64_t reclaim(int64_t targetBytes) override;
+    bool isInNonReclaimableSection() const noexcept override
+    {
+        return Operator::isInNonReclaimableSection();
+    }
+    Operator *operatorBase() noexcept override { return this; }
+    const char *reclaimableName() const noexcept override { return "HashAggregationOperator"; }
 
     template<typename Serialize>
     void Emplace(Serialize &emplaceKey, VectorBatch *vecBatch, BaseVector **groupVectors, int32_t groupColNum);
@@ -107,6 +139,84 @@ public:
         return isStepPartials;
     }
 
+    /// Memory-driven partial flush, Velox HashAggregation semantics: once the
+    /// partial table holds more than maxBytes the operator stops taking input
+    /// (needsInput() == false), emits the table through GetOutput, resets it and
+    /// continues. maxExtendedBytes is the one-time larger cap granted after a
+    /// flush whose reduction was worth keeping. 0 disables the flush.
+    void SetPartialFlushMemory(uint64_t maxBytes, uint64_t maxExtendedBytes);
+
+    bool IsPartialFlushing() const
+    {
+        return partialFull_;
+    }
+
+    /// Whether this aggregation may flush mid-input at all (grouped partial step; a first/last
+    /// aggregation only in the count-distinct rewrite's shape, see the constructor).
+    bool PartialFlushEligible() const
+    {
+        return partialFlushEligible_;
+    }
+
+    /// Called by the wrapper when its row-ratio rule abandons partial
+    /// aggregation: the pending flush is dropped so the remaining table drains
+    /// through the normal finished-output path. Never called while a flush is
+    /// being emitted. The memory-driven flush itself never abandons; its cap
+    /// follows the reduction instead (CompletePartialFlush).
+    void CancelPartialFlush()
+    {
+        partialFull_ = false;
+    }
+
+    uint64_t PartialFlushTimes() const
+    {
+        return flushTimes_;
+    }
+
+    /// Growth of the flush cap: the first table of the operator may grow past
+    /// the cap up to limitBytes instead of being flushed, when the task can
+    /// reserve the growth plus the room its flush needs (TryGrowPartialCap).
+    /// SetPartialFlushMemory sets both values; these two override them.
+    void SetPartialGrowLimit(uint64_t limitBytes)
+    {
+        partialGrowLimit_ = limitBytes;
+    }
+
+    /// Room for the flush: a cap may grow only when the task can also reserve
+    /// drainPct percent of the new cap on top of the growth. The table stays
+    /// resident while its groups are copied into the operator downstream, so a
+    /// table that took all the free memory leaves none for that copy.
+    void SetPartialDrainPct(uint32_t drainPct)
+    {
+        partialDrainPct_ = drainPct;
+    }
+
+    uint64_t PartialGrowDenied() const
+    {
+        return growDenied_;
+    }
+
+    uint64_t PartialGrowTimes() const
+    {
+        return growTimes_;
+    }
+
+    /// Batches a table marked for its flush took without expanding.
+    uint64_t PartialExpansionHeldBatches() const
+    {
+        return expansionHeldBatches_;
+    }
+
+    uint64_t PartialFlushCap() const
+    {
+        return maxPartialAggregationMemory_;
+    }
+
+    /// Distinct groups seen so far: in the table + flushed + spilled.
+    uint64_t CumulativeDistinctKeys();
+
+    bool needsInput() override;
+
 private:
     int32_t InitMaxRowCountAndOutputTypes();
 
@@ -114,7 +224,23 @@ private:
 
     ErrorCode SpillHashMap();
 
+    uint64_t EstimateRehashReservation(uint64_t incomingRows) const;
+
+    uint64_t HashmapFreeSlots() const;
+
+    void HoldHashmapExpansion(bool held);
+
+    void EnsureReservationPctsCached();
+
+    void EnsureInputFits(const VectorBatch *vecBatch);
+
+    void ReinitializeHashmapAfterRelease();
+
+    void EnsureOutputFits();
+
     ErrorCode SpillToDisk();
+
+    ErrorCode SpillArrayTable();
 
     void SetVectors(VectorBatch *output, const std::vector<DataTypePtr> &types, int32_t rowCount);
 
@@ -167,7 +293,22 @@ private:
 
     ALWAYS_INLINE size_t GetElementsSize();
 
-    ALWAYS_INLINE void ResetHashmap();
+    ALWAYS_INLINE void ReleaseHashmapCapacity();
+
+    void ReleaseFinishedOutputState();
+
+    uint64_t PartialTableBytes();
+
+    bool PartialFlushPreferredOverSpill();
+    /// A capped partial table that still returns its memory by flushing.
+    bool PartialFlushActive() const;
+
+    void MaybeMarkPartialFull();
+    bool TryGrowPartialCap(uint64_t tableBytes);
+
+    void FinishOutput(int32_t outputRows);
+
+    void CompletePartialFlush(int32_t outputRows);
 
     std::vector<ColumnIndex> groupByCols;
     std::vector<std::vector<int32_t>> aggInputCols;
@@ -222,6 +363,41 @@ private:
     std::vector<AggregateState *> currentRowStates;
     std::vector<AggregateState *> newGroupStates;
     int8_t resizeArrayMapCnt = 0;
+    std::atomic<bool> reclaimInProgress_{false};
+    bool hashmapCapacityReleased_ = false;
+    bool outputStarted_ = false;
+
+    // Memory-driven partial flush state (see SetPartialFlushMemory). flushedRows_
+    // and spilledRows_ keep GetHashMapUniqueKeys() cumulative: the wrapper's
+    // abandon rule compares distinct keys against cumulative input rows, and a
+    // reclaim empties the in-memory table without resetting that input count.
+    uint64_t maxPartialAggregationMemory_ = 0;
+    uint64_t maxExtendedPartialAggregationMemory_ = 0;
+    bool partialFlushEligible_ = false;
+    bool partialFull_ = false;
+    bool partialFlushing_ = false;
+    uint64_t basePartialAggregationMemory_ = 0;
+    uint64_t partialInputRowsSinceFlush_ = 0;
+    uint64_t flushedRows_ = 0;
+    uint64_t spilledRows_ = 0;
+    uint64_t flushTimes_ = 0;
+    // Growth of the first table past the cap (TryGrowPartialCap): the limit, the
+    // room a growth leaves for the flush, and whether the first flush has given
+    // its verdict.
+    uint64_t partialGrowLimit_ = 0;
+    uint32_t partialDrainPct_ = 0;
+    bool partialGrowthDecided_ = false;
+    uint64_t growTimes_ = 0;
+    uint64_t expansionHeldBatches_ = 0;
+    uint64_t growDenied_ = 0;
+
+    // QueryConfig is immutable for a query's lifetime (QueryConfig.h). Cache the
+    // clamped reservation percentages once instead of copying QueryConfig and
+    // re-parsing the config map on every AddInput. Defaults mirror QueryConfig's
+    // kDefaultPct values; EnsureReservationPctsCached() fills them on first use.
+    int32_t minSpillableReservationPct_{5};
+    int32_t spillableReservationGrowthPct_{10};
+    bool reservationPctsCached_{false};
 };
 
 class HashAggregationOperatorFactory : public AggregationCommonOperatorFactory {
@@ -304,7 +480,9 @@ public:
 
     ~HashAggregationOperatorFactory() override = default;
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     OmniStatus Init() override;
 

@@ -29,15 +29,16 @@ TopNOperatorFactory::TopNOperatorFactory(const type::DataTypes &sourceTypes, int
 
 TopNOperatorFactory::~TopNOperatorFactory() = default;
 
-Operator *TopNOperatorFactory::CreateOperator()
+Operator *TopNOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    return new TopNOperator(sourceTypes, limit, offset, sortCols, sortAscendings, sortNullFirsts, sortColCount);
+    return new TopNOperator(pool, sourceTypes, limit, offset, sortCols, sortAscendings, sortNullFirsts, sortColCount);
 }
 
-TopNOperator::TopNOperator(const type::DataTypes &sourceTypes, int32_t limit, int32_t offset,
-    std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
+TopNOperator::TopNOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+    int32_t limit, int32_t offset, std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
     std::vector<int32_t> &sortNullFirsts, int32_t sortColCount)
-    : sourceTypes(sourceTypes),
+    : Operator(pool),
+      sourceTypes(sourceTypes),
       sourceTypesCount(this->sourceTypes.GetSize()),
       sortCols(sortCols),
       limit(limit),
@@ -280,27 +281,35 @@ static void ALWAYS_INLINE SetVectorForSingleRowVecBatch(omniruntime::vec::Vector
     using Vector = typename NativeAndVectorType<typeId>::vector;
     using DictVector = typename NativeAndVectorType<typeId>::dictVector;
 
-    auto flatVector = VectorHelper::CreateFlatVector<typeId>(1);
+    // Each retained row is its own batch: size string content to the value instead of the
+    // 32KB default, which otherwise costs 32KB per row per string column.
     if (vector->IsNull(position)) {
+        auto flatVector = VectorHelper::CreateFlatVector<typeId>(vector->GetPool(), 1, 1);
         (static_cast<Vector *>(flatVector))->SetNull(0);
-    } else {
-        Type value;
-        if (vector->GetEncoding() == OMNI_DICTIONARY) {
-            value = (static_cast<DictVector *>(vector))->GetValue(position);
-        } else if (vector->GetEncoding() == OMNI_ENCODING_CONST) {
-            value = (static_cast<ConstVector<Type> *>(vector))->GetConstValue();
-        } else {
-            value = (static_cast<Vector *>(vector))->GetValue(position);
-        }
-        (static_cast<Vector *>(flatVector))->SetValue(0, value);
+        singleRowVecBatch->Append(flatVector);
+        return;
     }
+    Type value;
+    if (vector->GetEncoding() == OMNI_DICTIONARY) {
+        value = (static_cast<DictVector *>(vector))->GetValue(position);
+    } else if (vector->GetEncoding() == OMNI_ENCODING_CONST) {
+        value = (static_cast<ConstVector<Type> *>(vector))->GetConstValue();
+    } else {
+        value = (static_cast<Vector *>(vector))->GetValue(position);
+    }
+    int32_t capacityInBytes = 1;
+    if constexpr (std::is_same_v<Type, std::string_view>) {
+        capacityInBytes = std::max<int32_t>(1, static_cast<int32_t>(value.size()));
+    }
+    auto flatVector = VectorHelper::CreateFlatVector<typeId>(vector->GetPool(), 1, capacityInBytes);
+    (static_cast<Vector *>(flatVector))->SetValue(0, value);
     singleRowVecBatch->Append(flatVector);
 }
 
 static ALWAYS_INLINE  BaseVector *CreateComplexVectorForSingleRow(DataType *dataType, BaseVector *vector,
     int32_t position)
 {
-    auto complexVector = VectorHelper::CreateComplexVector(dataType, 1);
+    auto complexVector = VectorHelper::CreateComplexVector(vector->GetPool(), dataType, 1);
     DataTypeId dataTypeId = dataType->GetId();
     if (vector->IsNull(position)) {
         if (dataTypeId == OMNI_ARRAY) {
@@ -411,7 +420,7 @@ int32_t TopNOperator::GetOutput(VectorBatch **outputVecBatch)
     int64_t rowCount = std::min(maxRowCount, totalRowCount - outputtedRowCount);
     auto resultVecBatch = std::make_unique<VectorBatch>(rowCount);
     auto resultVecBatchPtr = resultVecBatch.get();
-    omniruntime::vec::VectorHelper::AppendVectors(resultVecBatchPtr, sourceTypes, rowCount);
+    omniruntime::vec::VectorHelper::AppendVectors(resultVecBatchPtr, sourceTypes, rowCount, this->pool());
     auto typeIds = sourceTypes.GetIds();
     for (int64_t i = 0; i < rowCount; i++) {
         VectorBatch *singleVecBatch = resultVectorBatchList[i + outputtedRowCount];

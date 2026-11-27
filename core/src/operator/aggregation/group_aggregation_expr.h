@@ -29,7 +29,9 @@ public:
     static HashAggregationWithExprOperatorFactory *CreateAggregationWithExprOperatorFactory(
         const std::shared_ptr<const AggregationNode> &planNode, const config::QueryConfig &queryConfig);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     // originalSourceTypes is used to store raw input type which is not handled by projection function
@@ -47,7 +49,9 @@ private:
 
 class HashAggregationWithExprOperator : public Operator {
 public:
-    HashAggregationWithExprOperator(const DataTypes &originSourceTypes, const type::DataTypes &sourceTypes,
+    // Pool-bound ctor chains Operator(pool)
+    HashAggregationWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        const DataTypes &originSourceTypes, const type::DataTypes &sourceTypes,
         std::vector<std::unique_ptr<Projection>> &projections, std::vector<SimpleFilter *> &aggSimpleFilters,
         HashAggregationOperator *hashAggOperator, config::QueryConfig queryConfig = config::QueryConfig());
 
@@ -58,6 +62,22 @@ public:
     int32_t GetOutput(omniruntime::vec::VectorBatch **outputVecBatch) override;
 
     OmniStatus Close() override;
+
+    bool needsInput() override;
+
+    void noMoreInput() override
+    {
+        Operator::NonReclaimableSection innerSection(hashAggOperator);
+        noMoreInput_ = true;
+        hashAggOperator->noMoreInput();
+    }
+
+    void setNoMoreInput(bool noMoreInput) override
+    {
+        Operator::NonReclaimableSection innerSection(hashAggOperator);
+        noMoreInput_ = noMoreInput;
+        hashAggOperator->setNoMoreInput(noMoreInput);
+    }
 
     void ProcessRow(uintptr_t rowValues[], int32_t lens[]);
 

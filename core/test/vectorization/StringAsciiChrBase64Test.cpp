@@ -55,7 +55,7 @@ TEST_F(StringAsciiChrBase64Test, AsciiBasic) {
 
     vec::BaseVector* resultVector = nullptr;
     auto intType = std::make_shared<DataType>(OMNI_INT);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -77,7 +77,7 @@ TEST_F(StringAsciiChrBase64Test, AsciiBasic) {
 // ---- chr(n) -> string ----
 TEST_F(StringAsciiChrBase64Test, ChrBasic) {
     int rowSize = 5;
-    vec::BaseVector* inputVec = VectorHelper::CreateFlatVector(OMNI_LONG, rowSize);
+    vec::BaseVector* inputVec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, rowSize);
     inputVec->SetIsField(true);  // caller-owned, do not let FlatVectorReader delete
     auto* longVec = dynamic_cast<Vector<int64_t>*>(inputVec);
     ASSERT_NE(longVec, nullptr);
@@ -94,7 +94,7 @@ TEST_F(StringAsciiChrBase64Test, ChrBasic) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -116,7 +116,7 @@ TEST_F(StringAsciiChrBase64Test, ChrBasic) {
 // ---- char(n) alias (same as chr, only OMNI_LONG per velox) ----
 TEST_F(StringAsciiChrBase64Test, CharAlias) {
     int rowSize = 2;
-    vec::BaseVector* inputVec = VectorHelper::CreateFlatVector(OMNI_LONG, rowSize);
+    vec::BaseVector* inputVec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, rowSize);
     inputVec->SetIsField(true);  // caller-owned, do not let FlatVectorReader delete
     auto* longVec = dynamic_cast<Vector<int64_t>*>(inputVec);
     ASSERT_NE(longVec, nullptr);
@@ -130,7 +130,7 @@ TEST_F(StringAsciiChrBase64Test, CharAlias) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -175,7 +175,7 @@ TEST_F(StringAsciiChrBase64Test, Base64Basic) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -217,7 +217,7 @@ TEST_F(StringAsciiChrBase64Test, Base64Empty) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -252,7 +252,7 @@ TEST_F(StringAsciiChrBase64Test, Base64BinaryData) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -287,7 +287,7 @@ TEST_F(StringAsciiChrBase64Test, Base64UnBase64Roundtrip) {
 
     vec::BaseVector* encodedVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext ctx1;
+    ExecutionContext ctx1(4096, nullptr);
     ctx1.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> encodeArgs;
     encodeArgs.push(inputVec);
@@ -305,7 +305,7 @@ TEST_F(StringAsciiChrBase64Test, Base64UnBase64Roundtrip) {
 
     vec::BaseVector* decodedVector = nullptr;
     auto varbinaryType = std::make_shared<DataType>(OMNI_VARBINARY);
-    ExecutionContext ctx2;
+    ExecutionContext ctx2(4096, nullptr);
     ctx2.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> decodeArgs;
     decodeArgs.push(encodedVector);
@@ -342,7 +342,7 @@ TEST_F(StringAsciiChrBase64Test, Unbase64Basic) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varbinaryType = std::make_shared<DataType>(OMNI_VARBINARY);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);

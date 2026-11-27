@@ -61,7 +61,7 @@ TEST(ArrayFilterTest, BasicFilterGreaterThan)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -108,7 +108,7 @@ TEST(ArrayFilterTest, FilterNonePass)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -148,7 +148,7 @@ TEST(ArrayFilterTest, FilterAllPass)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -195,7 +195,7 @@ TEST(ArrayFilterTest, EmptyArrayReturnsEmpty)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -235,7 +235,7 @@ TEST(ArrayFilterTest, NullArrayRowReturnsNull)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -288,7 +288,7 @@ TEST(ArrayFilterTest, AllNullArrayRows)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -327,7 +327,7 @@ TEST(ArrayFilterTest, SingleElementArrayPass)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -371,7 +371,7 @@ TEST(ArrayFilterTest, MixedFilterResults)
         new LambdaExpr(gteExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -422,7 +422,7 @@ TEST(ArrayFilterTest, NullElementsInArray)
         new LambdaExpr(gtExpr, paramTypes, paramNameToIdxMap, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);

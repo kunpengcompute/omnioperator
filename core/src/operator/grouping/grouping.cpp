@@ -7,9 +7,9 @@
 #include <algorithm>
 
 namespace omniruntime::op {
-Operator *GroupingOperatorFactory::CreateOperator()
+Operator *GroupingOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    return new GroupingOperator(groupingNode_, queryConfig_);
+    return new GroupingOperator(pool, groupingNode_, queryConfig_);
 }
 
 GroupingOperatorFactory *GroupingOperatorFactory::CreateGroupingOperatorFactory(
@@ -18,8 +18,14 @@ GroupingOperatorFactory *GroupingOperatorFactory::CreateGroupingOperatorFactory(
     return new GroupingOperatorFactory(groupingNode, queryConfig);
 }
 
-GroupingOperator::GroupingOperator(const std::shared_ptr<const GroupingNode> &groupingNode,
-    config::QueryConfig &queryConfig): queryConfig_(queryConfig)
+GroupingOperator::GroupingOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const std::shared_ptr<const GroupingNode> &groupingNode, config::QueryConfig &queryConfig)
+    : Operator(pool), queryConfig_(queryConfig)
+{
+    InitFromGroupingNode(groupingNode);
+}
+
+void GroupingOperator::InitFromGroupingNode(const std::shared_ptr<const GroupingNode> &groupingNode)
 {
     auto expandNode = groupingNode->GetExpandPlanNode();
     aggPlanNode_ = groupingNode->GetAggregationNode();
@@ -76,10 +82,10 @@ GroupingOperator::GroupingOperator(const std::shared_ptr<const GroupingNode> &gr
     residualAggFactor_ = CreateResidualOperatorFactory(aggPlanNode_, residualOutputType, groupingKeySize, queryConfig_);
     for (const auto &projection : projections) {
         if (index == 0) {
-            auto exprEvaluator = std::make_shared<ExpressionEvaluator>(projection, sourceTypes, queryConfig);
+            auto exprEvaluator = std::make_shared<ExpressionEvaluator>(projection, sourceTypes, queryConfig_);
             exprEvaluator->ProjectFuncGeneration();
             expressionEvaluators_.push_back(exprEvaluator);
-            aggOperators_[index] = std::shared_ptr<Operator>(aggFactor_->CreateOperator());
+            aggOperators_[index] = std::shared_ptr<Operator>(aggFactor_->CreateOperator(pool_));
         } else {
             auto size = aggPlanNode_->OutputType()->GetSize();
             std::vector<ExprPtr> expressions(size);
@@ -109,10 +115,10 @@ GroupingOperator::GroupingOperator(const std::shared_ptr<const GroupingNode> &gr
                 expressions[i] = new FieldExpr(i, aggPlanNode_->OutputType()->GetType(i));
             }
             auto exprEvaluator = std::make_shared<ExpressionEvaluator>(expressions, *residualOutputType.get(),
-                queryConfig);
+                queryConfig_);
             exprEvaluator->ProjectFuncGeneration();
             expressionEvaluators_.push_back(exprEvaluator);
-            aggOperators_[index] = std::shared_ptr<Operator>(residualAggFactor_->CreateOperator());
+            aggOperators_[index] = std::shared_ptr<Operator>(residualAggFactor_->CreateOperator(pool_));
             for (const auto p : projection) {
                 delete p;
             }
@@ -135,10 +141,83 @@ int32_t GroupingOperator::AddInput(VectorBatch *vecBatch)
     return 0;
 }
 
+void GroupingOperator::setNoMoreInput(bool noMoreInput)
+{
+    if (noMoreInput) {
+        this->noMoreInput();
+        return;
+    }
+    noMoreInput_ = noMoreInput;
+    for (auto &aggOperator : aggOperators_) {
+        aggOperator->setNoMoreInput(false);
+    }
+}
+
+void GroupingOperator::noMoreInput()
+{
+    noMoreInput_ = true;
+    if (!aggOperators_.empty()) {
+        aggOperators_[0]->noMoreInput();
+    }
+}
+
+bool GroupingOperator::needsInput()
+{
+    if (!Operator::needsInput()) {
+        return false;
+    }
+    for (auto &aggOperator : aggOperators_) {
+        if (!aggOperator->needsInput()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Mid-input: a chained partial aggregation whose table passed its memory cap
+// stopped taking input and emits its table (HashAggregationOperator partial
+// flush). Move one flushed batch down the chain per call, exactly as the
+// end-of-input drain does; a flush of the last stage is this operator's own
+// output. Returns 1 with a batch, 0 without (the flush is complete or still
+// propagating).
+//
+// Stages are served from the last one backwards: a stage that is flushing has
+// refused input, so it is drained before the stage above it may feed it. Feeding
+// it anyway would grow its table past the cap with nothing to bound it.
+int32_t GroupingOperator::PumpPartialFlush(VectorBatch **outputVecBatch)
+{
+    const auto size = aggOperators_.size();
+    if (!aggOperators_[size - 1]->needsInput()) {
+        aggOperators_[size - 1]->GetOutput(outputVecBatch);
+        return *outputVecBatch == nullptr ? 0 : 1;
+    }
+    for (size_t i = size - 1; i-- > 0;) {
+        if (aggOperators_[i]->needsInput()) {
+            continue;
+        }
+        if (!aggOperators_[i + 1]->needsInput()) {
+            // The stage below still has to drain; the next call serves it.
+            return 0;
+        }
+        VectorBatch *flushed = nullptr;
+        aggOperators_[i]->GetOutput(&flushed);
+        if (flushed == nullptr) {
+            continue;
+        }
+        auto projectedVecBatch = this->expressionEvaluators_[i + 1]->Evaluate(flushed, executionContext.get());
+        aggOperators_[i + 1]->AddInput(projectedVecBatch);
+        return 0;
+    }
+    return 0;
+}
+
 int32_t GroupingOperator::GetOutput(VectorBatch **outputVecBatch)
 {
     if (!noMoreInput_) {
         SetStatus(OMNI_STATUS_NORMAL);
+        if (hasInput && !aggOperators_.empty()) {
+            return PumpPartialFlush(outputVecBatch);
+        }
         return 0;
     }
 
@@ -156,6 +235,7 @@ int32_t GroupingOperator::GetOutput(VectorBatch **outputVecBatch)
             aggOperators_[index_]->AddInput(projectedVecBatch);
             return 0;
         }
+        aggOperators_[index_]->noMoreInput();
         index_++;
     }
     aggOperators_[index_ - 1]->GetOutput(outputVecBatch);

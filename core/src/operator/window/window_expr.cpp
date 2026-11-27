@@ -200,16 +200,19 @@ WindowWithExprOperatorFactory *WindowWithExprOperatorFactory::CreateWindowWithEx
     return operatorFactory;
 }
 
-Operator *WindowWithExprOperatorFactory::CreateOperator()
+// Pool-bound override forwards pool to inner factory.
+Operator *WindowWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto windowOperator = static_cast<WindowOperator *>(operatorFactory->CreateOperator());
-    auto windowWithExprOperator = new WindowWithExprOperator(*sourceTypes, projections, windowOperator, queryConfig_);
+    auto windowOperator = static_cast<WindowOperator *>(operatorFactory->CreateOperator(pool));
+    auto windowWithExprOperator = new WindowWithExprOperator(pool, *sourceTypes, projections, windowOperator, queryConfig_);
     return windowWithExprOperator;
 }
 
-WindowWithExprOperator::WindowWithExprOperator(const type::DataTypes &sourceTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, WindowOperator *windowOperator, const config::QueryConfig &queryConfig)
-    : sourceTypes(std::move(sourceTypes)), projections(projections), windowOperator(windowOperator)
+// Pool-bound ctor — same body, chains Operator(pool).
+WindowWithExprOperator::WindowWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
+    WindowOperator *windowOperator, const config::QueryConfig &queryConfig)
+    : Operator(pool), sourceTypes(std::move(sourceTypes)), projections(projections), windowOperator(windowOperator)
 {
     executionContext->SetConfig(queryConfig);
 }
@@ -229,12 +232,14 @@ int32_t WindowWithExprOperator::AddInput(VectorBatch *vecBatch)
     auto *newInputVecBatch = OperatorUtil::ProjectVectors(vecBatch, sourceTypes, projections, executionContext.get());
     VectorHelper::FreeVecBatch(vecBatch);
     ResetInputVecBatch();
+    Operator::NonReclaimableSection innerSection(windowOperator);
     windowOperator->AddInput(newInputVecBatch);
     return 0;
 }
 
 int32_t WindowWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 {
+    Operator::NonReclaimableSection innerSection(windowOperator);
     int32_t status = windowOperator->GetOutput(outputVecBatch);
     if (windowOperator->GetStatus() == OMNI_STATUS_FINISHED) {
         UpdateSpilledMetrics(windowOperator);
@@ -245,6 +250,7 @@ int32_t WindowWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 
 OmniStatus WindowWithExprOperator::Close()
 {
+    Operator::NonReclaimableSection innerSection(windowOperator);
     windowOperator->Close();
     return OMNI_STATUS_NORMAL;
 }

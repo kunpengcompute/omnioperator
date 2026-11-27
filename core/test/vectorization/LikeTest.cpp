@@ -75,7 +75,7 @@ public:
         ASSERT_NE(function, nullptr) << "LIKE function not found for signature";
 
         auto outputType = std::make_shared<DataType>(OMNI_BOOLEAN);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         // Apply pops last arg first: push (str, pattern) -> pop order (pattern, str)
@@ -92,7 +92,7 @@ public:
         ASSERT_NE(function, nullptr) << "LIKE(str,pattern,escape) not found";
 
         auto outputType = std::make_shared<DataType>(OMNI_BOOLEAN);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(strVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(strVec);

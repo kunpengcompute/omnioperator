@@ -354,11 +354,11 @@ public:
         // opt branch
         if constexpr (std::is_same_v<RawInputType, ResultType>) {
             if (nullMap == nullptr) {
-                auto countVector = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount);
+                auto countVector = VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount);
                 auto *valueAddr = reinterpret_cast<double *>(GetValuesFromVector<OMNI_DOUBLE>(countVector));
                 std::fill_n(valueAddr, rowCount, 1);
                 auto avgVector = VectorHelper::SliceVector(originVector, 0, rowCount);
-                auto m2Vector = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount);
+                auto m2Vector = VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount);
                 auto *m2Addr = reinterpret_cast<double *>(GetValuesFromVector<OMNI_DOUBLE>(m2Vector));
                 std::fill_n(m2Addr, rowCount, 0.0);
 
@@ -383,9 +383,9 @@ protected:
         const std::shared_ptr<NullsHelper> nullMap)
     {
         int rowCount = originVector->GetSize();
-        auto countVector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount));
-        auto avgVector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount));
-        auto m2Vector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount));
+        auto countVector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount));
+        auto avgVector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount));
+        auto m2Vector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount));
 
         auto vector = reinterpret_cast<T *>(originVector);
         if (nullMap != nullptr) {

@@ -39,7 +39,8 @@ TEST(SpillTest, TestWriteRead)
     VectorHelper::FreeVecBatch(vecBatch);
 
     auto spillFile = writer.GetSpillFileInfo();
-    SpillReader reader(sourceTypes, spillFile.filePath, spillFile.fileLength, spillFile.totalRowCount, false);
+    // unit test: per-task pool not measured here — pass nullptr (no-pool path is fine for tests).
+    SpillReader reader(sourceTypes, spillFile.filePath, spillFile.fileLength, spillFile.totalRowCount, false, nullptr);
     std::unique_ptr<VectorBatch> outputVecBatch = nullptr;
     bool isEnd = false;
     reader.ReadVecBatch(outputVecBatch, isEnd);
@@ -112,7 +113,7 @@ TEST(SpillTest, TestWriteReadWithCompress)
     VectorHelper::FreeVecBatch(vecBatch);
 
     auto spillFile = writer.GetSpillFileInfo();
-    SpillReader reader(sourceTypes, spillFile.filePath, spillFile.fileLength, spillFile.totalRowCount, true);
+    SpillReader reader(sourceTypes, spillFile.filePath, spillFile.fileLength, spillFile.totalRowCount, true, nullptr);
     std::unique_ptr<VectorBatch> outputVecBatch = nullptr;
     bool isEnd = false;
     reader.ReadVecBatch(outputVecBatch, isEnd);
@@ -157,7 +158,7 @@ TEST(SpillTest, TestWriteReadLongNestedJoinSpillDir)
 
     auto spillFile = writer.GetSpillFileInfo();
     ASSERT_FALSE(spillFile.filePath.empty());
-    SpillReader reader(sourceTypes, spillFile.filePath, spillFile.fileLength, spillFile.totalRowCount, false);
+    SpillReader reader(sourceTypes, spillFile.filePath, spillFile.fileLength, spillFile.totalRowCount, false, nullptr);
     std::unique_ptr<VectorBatch> outputVecBatch = nullptr;
     bool isEnd = false;
     reader.ReadVecBatch(outputVecBatch, isEnd);

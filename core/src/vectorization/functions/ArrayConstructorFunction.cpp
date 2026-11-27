@@ -70,7 +70,7 @@ void ArrayConstructorFunction::Apply(std::stack<BaseVector *> &args, const DataT
     int32_t rowSize = context->GetResultRowSize();
 
     if (argVectors.empty()) {
-        ConstructEmptyArray(result, rowSize);
+        ConstructEmptyArray(result, rowSize, context->GetPool());
         return;
     }
 
@@ -78,45 +78,45 @@ void ArrayConstructorFunction::Apply(std::stack<BaseVector *> &args, const DataT
 
     switch (elementTypeId) {
         case OMNI_BYTE:
-            ConstructArray<int8_t>(argVectors, result, rowSize, elementTypeId);
+            ConstructArray<int8_t>(argVectors, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_SHORT:
-            ConstructArray<int16_t>(argVectors, result, rowSize, elementTypeId);
+            ConstructArray<int16_t>(argVectors, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_INT:
         case OMNI_DATE32:
-            ConstructArray<int32_t>(argVectors, result, rowSize, elementTypeId);
+            ConstructArray<int32_t>(argVectors, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_LONG:
         case OMNI_TIMESTAMP:
         case OMNI_DECIMAL64:
-            ConstructArray<int64_t>(argVectors, result, rowSize, elementTypeId);
+            ConstructArray<int64_t>(argVectors, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_FLOAT:
-            ConstructArray<float>(argVectors, result, rowSize, elementTypeId);
+            ConstructArray<float>(argVectors, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_DOUBLE:
-            ConstructArray<double>(argVectors, result, rowSize, elementTypeId);
+            ConstructArray<double>(argVectors, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_BOOLEAN:
-            ConstructArray<bool>(argVectors, result, rowSize, elementTypeId);
+            ConstructArray<bool>(argVectors, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_DECIMAL128:
-            ConstructArray<Decimal128>(argVectors, result, rowSize, elementTypeId);
+            ConstructArray<Decimal128>(argVectors, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_VARCHAR:
         case OMNI_CHAR:
         case OMNI_VARBINARY:
-            ConstructArrayVarchar(argVectors, result, rowSize);
+            ConstructArrayVarchar(argVectors, result, rowSize, context->GetPool());
             break;
         case OMNI_ARRAY:
-            ConstructArrayNested(argVectors, result, rowSize);
+            ConstructArrayNested(argVectors, result, rowSize, context->GetPool());
             break;
         case OMNI_MAP:
-            ConstructArrayMap(argVectors, result, rowSize);
+            ConstructArrayMap(argVectors, result, rowSize, context->GetPool());
             break;
         case OMNI_ROW:
-            ConstructArrayStruct(argVectors, result, rowSize);
+            ConstructArrayStruct(argVectors, result, rowSize, context->GetPool());
             break;
         default:
             for (auto *vec : argVectors) {
@@ -133,19 +133,19 @@ void ArrayConstructorFunction::Apply(std::stack<BaseVector *> &args, const DataT
 
 template <typename T>
 void ArrayConstructorFunction::ConstructArray(const std::vector<BaseVector *> &argVectors, BaseVector *&result,
-    int32_t rowSize, DataTypeId elementTypeId) const
+    int32_t rowSize, DataTypeId elementTypeId, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     size_t numArgs = argVectors.size();
     int64_t totalElements = static_cast<int64_t>(rowSize) * static_cast<int64_t>(numArgs);
 
     auto resultElementVec = std::shared_ptr<BaseVector>(
-        VectorHelper::CreateFlatVector(static_cast<int32_t>(elementTypeId), static_cast<int32_t>(totalElements)));
+        VectorHelper::CreateFlatVector(pool, static_cast<int32_t>(elementTypeId), static_cast<int32_t>(totalElements)));
     auto *typedResultElementVec = dynamic_cast<Vector<T> *>(resultElementVec.get());
     if (!typedResultElementVec) {
         OMNI_THROW("ArrayConstructorFunction Error:", "Failed to create result element vector");
     }
 
-    auto *arrayResult = new ArrayVector(rowSize, resultElementVec);
+    auto *arrayResult = new ArrayVector(rowSize, resultElementVec, pool);
     int64_t offset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -168,7 +168,7 @@ void ArrayConstructorFunction::ConstructArray(const std::vector<BaseVector *> &a
 }
 
 void ArrayConstructorFunction::ConstructArrayVarchar(const std::vector<BaseVector *> &argVectors,
-    BaseVector *&result, int32_t rowSize) const
+    BaseVector *&result, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
 
@@ -176,13 +176,13 @@ void ArrayConstructorFunction::ConstructArrayVarchar(const std::vector<BaseVecto
     int64_t totalElements = static_cast<int64_t>(rowSize) * static_cast<int64_t>(numArgs);
 
     auto resultElementVec = std::shared_ptr<BaseVector>(
-        new VarcharVector(static_cast<int32_t>(totalElements)));
+        new VarcharVector(static_cast<int32_t>(totalElements), pool));
     auto *typedResultElementVec = dynamic_cast<VarcharVector *>(resultElementVec.get());
     if (!typedResultElementVec) {
         OMNI_THROW("ArrayConstructorFunction Error:", "Failed to create result varchar vector");
     }
 
-    auto *arrayResult = new ArrayVector(rowSize, resultElementVec);
+    auto *arrayResult = new ArrayVector(rowSize, resultElementVec, pool);
     int64_t offset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -205,7 +205,7 @@ void ArrayConstructorFunction::ConstructArrayVarchar(const std::vector<BaseVecto
 }
 
 void ArrayConstructorFunction::ConstructArrayNested(const std::vector<BaseVector *> &argVectors,
-    BaseVector *&result, int32_t rowSize) const
+    BaseVector *&result, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     size_t numArgs = argVectors.size();
     int64_t totalMiddleElements = static_cast<int64_t>(rowSize) * static_cast<int64_t>(numArgs);
@@ -234,15 +234,15 @@ void ArrayConstructorFunction::ConstructArrayNested(const std::vector<BaseVector
     if (TypeUtil::IsStringType(innerElemTypeId)) {
         using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
         flatInnerElements = std::shared_ptr<BaseVector>(
-            new VarcharVector(static_cast<int32_t>(totalInnerElements)));
+            new VarcharVector(static_cast<int32_t>(totalInnerElements), pool));
     } else {
         flatInnerElements = std::shared_ptr<BaseVector>(
-            VectorHelper::CreateFlatVector(static_cast<int32_t>(innerElemTypeId),
+            VectorHelper::CreateFlatVector(pool, static_cast<int32_t>(innerElemTypeId),
                 static_cast<int32_t>(totalInnerElements)));
     }
 
     auto middleArrayVec = std::shared_ptr<BaseVector>(
-        new ArrayVector(totalMiddleElements, flatInnerElements));
+        new ArrayVector(totalMiddleElements, flatInnerElements, pool));
     auto *middleArray = dynamic_cast<ArrayVector *>(middleArrayVec.get());
 
     int64_t innerOffset = 0;
@@ -279,7 +279,7 @@ void ArrayConstructorFunction::ConstructArrayNested(const std::vector<BaseVector
         }
     }
 
-    auto *outerArrayResult = new ArrayVector(rowSize, middleArrayVec);
+    auto *outerArrayResult = new ArrayVector(rowSize, middleArrayVec, pool);
     int64_t outerOffset = 0;
     for (int32_t row = 0; row < rowSize; ++row) {
         outerArrayResult->SetOffset(row, static_cast<int32_t>(outerOffset));
@@ -291,7 +291,7 @@ void ArrayConstructorFunction::ConstructArrayNested(const std::vector<BaseVector
 }
 
 void ArrayConstructorFunction::ConstructArrayMap(const std::vector<BaseVector *> &argVectors,
-    BaseVector *&result, int32_t rowSize) const
+    BaseVector *&result, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     size_t numArgs = argVectors.size();
     int64_t totalMapElements = static_cast<int64_t>(rowSize) * static_cast<int64_t>(numArgs);
@@ -318,18 +318,18 @@ void ArrayConstructorFunction::ConstructArrayMap(const std::vector<BaseVector *>
         }
     }
 
-    auto createFlatVecByType = [](DataTypeId typeId, int32_t size) -> std::shared_ptr<BaseVector> {
+    auto createFlatVecByType = [pool](DataTypeId typeId, int32_t size) -> std::shared_ptr<BaseVector> {
         if (TypeUtil::IsStringType(typeId)) {
             using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-            return std::shared_ptr<BaseVector>(new VarcharVector(size));
+            return std::shared_ptr<BaseVector>(new VarcharVector(size, pool));
         }
-        return std::shared_ptr<BaseVector>(VectorHelper::CreateFlatVector(static_cast<int32_t>(typeId), size));
+        return std::shared_ptr<BaseVector>(VectorHelper::CreateFlatVector(pool, static_cast<int32_t>(typeId), size));
     };
     auto keyVec = createFlatVecByType(keyTypeId, static_cast<int32_t>(totalKVPairs));
     auto valueVec = createFlatVecByType(valueTypeId, static_cast<int32_t>(totalKVPairs));
 
     auto middleMapVec = std::shared_ptr<BaseVector>(
-        new MapVector(totalMapElements, keyVec, valueVec));
+        new MapVector(totalMapElements, keyVec, valueVec, pool));
     auto *middleMap = dynamic_cast<MapVector *>(middleMapVec.get());
 
     int64_t kvOffset = 0;
@@ -372,7 +372,7 @@ void ArrayConstructorFunction::ConstructArrayMap(const std::vector<BaseVector *>
         }
     }
 
-    auto *outerArrayResult = new ArrayVector(rowSize, middleMapVec);
+    auto *outerArrayResult = new ArrayVector(rowSize, middleMapVec, pool);
     int64_t outerOffset = 0;
     for (int32_t row = 0; row < rowSize; ++row) {
         outerArrayResult->SetOffset(row, static_cast<int32_t>(outerOffset));
@@ -383,7 +383,8 @@ void ArrayConstructorFunction::ConstructArrayMap(const std::vector<BaseVector *>
     result = outerArrayResult;
 }
 
-BaseVector* ArrayConstructorFunction::CreateVectorLike(BaseVector* source, int32_t size)
+BaseVector* ArrayConstructorFunction::CreateVectorLike(BaseVector* source, int32_t size,
+    omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     auto encoding = source->GetEncoding();
     if (encoding == OMNI_ENCODING_STRUCT) {
@@ -391,28 +392,28 @@ BaseVector* ArrayConstructorFunction::CreateVectorLike(BaseVector* source, int32
         std::vector<std::shared_ptr<BaseVector>> children;
         for (int32_t c = 0; c < srcRow->ChildSize(); ++c) {
             children.push_back(std::shared_ptr<BaseVector>(
-                CreateVectorLike(srcRow->ChildAt(c).get(), size)));
+                CreateVectorLike(srcRow->ChildAt(c).get(), size, pool)));
         }
-        return new RowVector(size, children);
+        return new RowVector(size, children, pool);
     } else if (encoding == OMNI_ENCODING_ARRAY) {
         auto* srcArray = dynamic_cast<ArrayVector*>(source);
         auto elemChild = std::shared_ptr<BaseVector>(
-            CreateVectorLike(srcArray->GetElementVector().get(), 0));
-        return new ArrayVector(size, elemChild);
+            CreateVectorLike(srcArray->GetElementVector().get(), 0, pool));
+        return new ArrayVector(size, elemChild, pool);
     } else if (encoding == OMNI_ENCODING_MAP) {
         auto* srcMap = dynamic_cast<MapVector*>(source);
         auto keyChild = std::shared_ptr<BaseVector>(
-            CreateVectorLike(srcMap->GetKeyVector().get(), 0));
+            CreateVectorLike(srcMap->GetKeyVector().get(), 0, pool));
         auto valueChild = std::shared_ptr<BaseVector>(
-            CreateVectorLike(srcMap->GetValueVector().get(), 0));
-        return new MapVector(size, keyChild, valueChild);
+            CreateVectorLike(srcMap->GetValueVector().get(), 0, pool));
+        return new MapVector(size, keyChild, valueChild, pool);
     } else {
-        return VectorHelper::CreateVector(OMNI_FLAT, source->GetTypeId(), size);
+        return VectorHelper::CreateVector(pool, OMNI_FLAT, source->GetTypeId(), size);
     }
 }
 
 void ArrayConstructorFunction::ConstructArrayStruct(const std::vector<BaseVector *> &argVectors,
-    BaseVector *&result, int32_t rowSize) const
+    BaseVector *&result, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     size_t numArgs = argVectors.size();
     int64_t totalElements = static_cast<int64_t>(rowSize) * static_cast<int64_t>(numArgs);
@@ -428,10 +429,10 @@ void ArrayConstructorFunction::ConstructArrayStruct(const std::vector<BaseVector
     }
 
     auto* elementRow = dynamic_cast<RowVector*>(
-        CreateVectorLike(firstRowArg, static_cast<int32_t>(totalElements)));
+        CreateVectorLike(firstRowArg, static_cast<int32_t>(totalElements), pool));
     auto elementRowVec = std::shared_ptr<BaseVector>(elementRow);
 
-    auto *outerArrayResult = new ArrayVector(rowSize, elementRowVec);
+    auto *outerArrayResult = new ArrayVector(rowSize, elementRowVec, pool);
     int64_t offset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -472,11 +473,12 @@ void ArrayConstructorFunction::ConstructArrayStruct(const std::vector<BaseVector
     result = outerArrayResult;
 }
 
-void ArrayConstructorFunction::ConstructEmptyArray(BaseVector *&result, int32_t rowSize) const
+void ArrayConstructorFunction::ConstructEmptyArray(BaseVector *&result, int32_t rowSize,
+    omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto resultElementVec = std::shared_ptr<BaseVector>(
-        VectorHelper::CreateFlatVector(static_cast<int32_t>(OMNI_INT), 0));
-    auto *arrayResult = new ArrayVector(rowSize, resultElementVec);
+        VectorHelper::CreateFlatVector(pool, static_cast<int32_t>(OMNI_INT), 0));
+    auto *arrayResult = new ArrayVector(rowSize, resultElementVec, pool);
 
     for (int32_t row = 0; row <= rowSize; ++row) {
         arrayResult->SetOffset(row, 0);
@@ -524,21 +526,21 @@ std::vector<std::shared_ptr<codegen::FunctionSignature>> ArrayConstructorSignatu
 }
 
 template void ArrayConstructorFunction::ConstructArray<int8_t>(const std::vector<BaseVector *> &,
-    BaseVector *&, int32_t, DataTypeId) const;
+    BaseVector *&, int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayConstructorFunction::ConstructArray<int16_t>(const std::vector<BaseVector *> &,
-    BaseVector *&, int32_t, DataTypeId) const;
+    BaseVector *&, int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayConstructorFunction::ConstructArray<int32_t>(const std::vector<BaseVector *> &,
-    BaseVector *&, int32_t, DataTypeId) const;
+    BaseVector *&, int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayConstructorFunction::ConstructArray<int64_t>(const std::vector<BaseVector *> &,
-    BaseVector *&, int32_t, DataTypeId) const;
+    BaseVector *&, int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayConstructorFunction::ConstructArray<float>(const std::vector<BaseVector *> &,
-    BaseVector *&, int32_t, DataTypeId) const;
+    BaseVector *&, int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayConstructorFunction::ConstructArray<double>(const std::vector<BaseVector *> &,
-    BaseVector *&, int32_t, DataTypeId) const;
+    BaseVector *&, int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayConstructorFunction::ConstructArray<bool>(const std::vector<BaseVector *> &,
-    BaseVector *&, int32_t, DataTypeId) const;
+    BaseVector *&, int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayConstructorFunction::ConstructArray<Decimal128>(const std::vector<BaseVector *> &,
-    BaseVector *&, int32_t, DataTypeId) const;
+    BaseVector *&, int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 
 template int8_t ArrayConstructorFunction::GetValue<int8_t>(BaseVector *, int32_t);
 template int16_t ArrayConstructorFunction::GetValue<int16_t>(BaseVector *, int32_t);

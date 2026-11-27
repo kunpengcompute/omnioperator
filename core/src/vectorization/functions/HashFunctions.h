@@ -26,7 +26,7 @@ public:
         args.pop();
         const auto size = context->GetResultRowSize();
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
         auto resultVector = reinterpret_cast<Vector<int32_t> *>(result);
 
@@ -122,7 +122,7 @@ public:
         args.pop();
         const auto size = context->GetResultRowSize();
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
         auto resultVector = reinterpret_cast<Vector<int64_t> *>(result);
 
@@ -207,7 +207,7 @@ public:
 
         const auto size = context->GetResultRowSize();
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
         auto resultVector = reinterpret_cast<Vector<bool> *>(result);
 

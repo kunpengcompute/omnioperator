@@ -49,7 +49,8 @@ void SelectiveIntegerColumnReader::read(uint64_t rowsToRead, common::RowSet acti
     // Full-batch pure projection: visitor cannot skip anything; bulk next() is faster.
     // Still publish as kDense so getValues can move decoded_ instead of CopyPositions.
     if (!hasFilter() && projectOut() && activeRows.size() == rowsToRead) {
-        decoded_ = makeNewVector(rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId));
+        decoded_ = makeNewVector(
+            rowsToRead, orcType_, static_cast<omniruntime::type::DataTypeId>(omniTypeId), taskPool_);
         inner_->next(decoded_.get(), rowsToRead, /*incomingNulls*/nullptr, omniTypeId);
         mat_ = Materialization::kDense;
         visitedRows_ = activeRows;
@@ -163,7 +164,7 @@ void SelectiveIntegerColumnReader::RunVisitor(const TFilter *filter, uint64_t ro
     uint64_t *outNulls = nullptr;
     if (extract) {
         decoded_ = makeNewVector(activeRows.size(), orcType_,
-                                 static_cast<omniruntime::type::DataTypeId>(omniTypeId));
+                                 static_cast<omniruntime::type::DataTypeId>(omniTypeId), taskPool_);
         out = vec::unsafe::UnsafeVector::GetRawValues(static_cast<Vector<T> *>(decoded_.get()));
         outNulls = reinterpret_cast<uint64_t *>(vec::unsafe::UnsafeBaseVector::GetNulls(decoded_.get()));
     } else {

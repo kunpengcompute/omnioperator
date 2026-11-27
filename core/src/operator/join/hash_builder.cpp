@@ -6,14 +6,16 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <vector>
 #include <memory>
 #include <utility>
 #include <thread>
 #include "broadcast_hash_table_cache.h"
 #include "join_spill_state.h"
+#include "operator/spill/spiller.h"
 #include "vector/vector_helper.h"
-#include "memory/memory_manager.h"
+#include "operator/reclaim_context.h"
 
 using omniruntime::vec::VectorHelper;
 using omniruntime::vec::VectorBatch;
@@ -26,6 +28,20 @@ void HashBuilderOperatorFactory::SetJoinSpillPolicy(bool joinSpillEnabled, JoinS
     joinSubPartCfg_ = joinSubPartCfg;
 }
 
+void HashBuilderOperatorFactory::SetJoinSpillSubPartitionPolicy(bool enabled, uint64_t,
+    JoinSubPartitionConfig cfg, bool passiveReclaimEnabled,
+    bool forceBuildGroupSpillAfterNoMoreInput, int32_t)
+{
+    SetJoinSpillPolicy(enabled, cfg);
+    passiveReclaimEnabled_ = passiveReclaimEnabled;
+    forceBuildGroupSpillAfterNoMoreInput_ = forceBuildGroupSpillAfterNoMoreInput;
+}
+
+void HashBuilderOperatorFactory::SetJoinSpillHandoffSessionEnabled(bool enabled)
+{
+    if (joinSpillState_ != nullptr) joinSpillState_->SetHandoffSessionEnabled(enabled);
+}
+
 void HashBuilderOperatorFactory::SyncSpillBindingsToState()
 {
     if (joinSpillState_ == nullptr) {
@@ -35,7 +51,9 @@ void HashBuilderOperatorFactory::SyncSpillBindingsToState()
     if (spillConfig_ != nullptr) {
         joinSpillState_->BindSpillConfig(spillConfig_);
     }
-    joinSpillState_->SetSpillMemThresholdOverride(joinSpillMemThresholdForTest_);
+    std::visit([&](auto &&arg) {
+        joinSpillState_->SetSpillJoinType(arg.GetJoinType(), arg.GetBuildSide());
+    }, *hashTablesVariants);
 }
 
 void HashBuilderOperatorFactory::SetJoinSpillState(std::shared_ptr<JoinSpillState> joinSpillState)
@@ -47,12 +65,6 @@ void HashBuilderOperatorFactory::SetJoinSpillState(std::shared_ptr<JoinSpillStat
 void HashBuilderOperatorFactory::SetSpillConfig(std::shared_ptr<SparkSpillConfig> spillConfig)
 {
     spillConfig_ = std::move(spillConfig);
-    SyncSpillBindingsToState();
-}
-
-void HashBuilderOperatorFactory::SetJoinSpillMemThresholdForTest(int64_t bytes)
-{
-    joinSpillMemThresholdForTest_ = bytes;
     SyncSpillBindingsToState();
 }
 
@@ -211,8 +223,8 @@ HashBuilderOperatorFactory::HashBuilderOperatorFactory(
     : buildTypes(buildTypes),
       hashTablesVariants(cachedVariants),
       operatorIndex(0),
-      ownsVariants_(false),
-      prebuilt_(true)
+      prebuilt_(true),
+      ownsVariants_(false)
 {
 }
 
@@ -223,13 +235,41 @@ HashBuilderOperatorFactory *HashBuilderOperatorFactory::CreateFromCachedVariants
     return factory;
 }
 
+void HashBuilderOperatorFactory::PublishCachedVariants()
+{
+    auto ticket = cacheBuildTicket_;
+    auto slot = cacheLeaseSlot_.lock();
+    if (ticket == nullptr || slot == nullptr) {
+        throw std::logic_error("Broadcast cache build lost its ticket or probe lease");
+    }
+    // Cache readers may request dynamic filters independently. Finalize this
+    // shared metadata while the builder still has exclusive ownership, so
+    // readers never lazily mutate a published table.
+    std::visit([](auto &table) { table.BuildDynamicFilters(); }, *hashTablesVariants);
+    // Allocation may fail here; the factory still owns its table and the
+    // ticket's destructor then wakes waiters. Everything below is a
+    // non-allocating ownership transfer.
+    auto prepared = ticket->prepare();
+    cacheBuildTicket_.reset();
+    auto* variants = ReleaseVariants();
+    MarkCachePinned();
+    ticket->publish(prepared, variants, this);
+    slot->lease = std::move(prepared);
+}
+
+void HashBuilderOperatorFactory::SetDistinctBuild(bool enabled)
+{
+    if (prebuilt_ || hashTablesVariants == nullptr) {
+        return;
+    }
+    std::visit([&](auto &&arg) { arg.SetDistinctBuild(enabled); }, *hashTablesVariants);
+}
+
 void HashBuilderOperatorFactory::SetDynamicFilterPushdownEnabled(bool enabled)
 {
     dynamicFilterPushdownEnabled_ = enabled;
-    // Cached BHJ table is already built; generate the filter before probe TableScan starts.
-    if (enabled && prebuilt_ && hashTablesVariants != nullptr) {
-        std::visit([&](auto &&arg) { arg.BuildDynamicFilters(); }, *hashTablesVariants);
-    }
+    // Cache publication already finalized shared filter metadata. This flag
+    // only controls task-local use and non-cached build-time generation.
 }
 
 void HashBuilderOperatorFactory::InjectCachedVariants(
@@ -242,18 +282,16 @@ void HashBuilderOperatorFactory::InjectCachedVariants(
     ownsVariants_ = false;
     prebuilt_ = true;
     broadcastHashTableId_ = broadcastHashTableId;
-    if (dynamicFilterPushdownEnabled_ && hashTablesVariants != nullptr) {
-        std::visit([&](auto &&arg) { arg.BuildDynamicFilters(); }, *hashTablesVariants);
-    }
 }
 
-Operator *HashBuilderOperatorFactory::CreateOperator()
+Operator *HashBuilderOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     /// operatorIndex is start by 0, so partitionIdex is start by 0
     int32_t partitionIndex =
         operatorIndex++ % std::visit([&](auto &&arg) { return arg.GetHashTableCount(); }, *hashTablesVariants);
-    auto *op = new HashBuilderOperator(this->buildTypes, hashTablesVariants, partitionIndex, joinSpillEnabled_,
-        joinSubPartCfg_, buildHashCols, joinSpillState_.get(), spillConfig_.get(), joinSpillMemThresholdForTest_,
+    auto *op = new HashBuilderOperator(pool, this->buildTypes, hashTablesVariants, partitionIndex, joinSpillEnabled_,
+        joinSubPartCfg_, buildHashCols, joinSpillState_.get(), passiveReclaimEnabled_,
+        forceBuildGroupSpillAfterNoMoreInput_,
         prebuilt_, broadcastHashTableId_, this, broadcastParallelBuildPolicy_, dynamicFilterPushdownEnabled_);
     op->KeepJoinSpillState(joinSpillState_);
     return op;
@@ -267,30 +305,53 @@ void HashBuilderOperator::KeepJoinSpillState(std::shared_ptr<JoinSpillState> sta
     }
 }
 
-HashBuilderOperator::~HashBuilderOperator() = default;
+HashBuilderOperator::~HashBuilderOperator()
+{
+    if (spillableRegistered_) pool()->unregisterSpillable(this);
+}
 
-HashBuilderOperator::HashBuilderOperator(const DataTypes &buildTypes, HashTableVariants *hashTables,
+HashBuilderOperator::HashBuilderOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const DataTypes &buildTypes, HashTableVariants *hashTables,
     int32_t partitionIndex, bool joinSpillEnabled, JoinSubPartitionConfig joinSubPartCfg,
-    std::vector<int32_t> buildHashCols, JoinSpillState *joinSpillState, SparkSpillConfig *spillConfig,
-    std::optional<int64_t> spillMemThresholdOverride, bool prebuilt, std::string broadcastHashTableId,
+    std::vector<int32_t> buildHashCols, JoinSpillState *joinSpillState, bool passiveReclaimEnabled,
+    bool forceBuildGroupSpillAfterNoMoreInput, bool prebuilt, std::string broadcastHashTableId,
     HashBuilderOperatorFactory *ownerFactory, BroadcastParallelBuildPolicy broadcastParallelBuildPolicy,
     bool dynamicFilterPushdownEnabled)
-    : buildTypes(buildTypes),
+    : Operator(pool),
+      buildTypes(buildTypes),
       partitionIndex(partitionIndex),
       hashTablesVariants(hashTables),
       joinSpillEnabled_(joinSpillEnabled),
+      passiveReclaimEnabled_(passiveReclaimEnabled),
+      forceBuildGroupSpillAfterNoMoreInput_(forceBuildGroupSpillAfterNoMoreInput),
       joinSubPartCfg_(joinSubPartCfg),
       broadcastParallelBuildPolicy_(broadcastParallelBuildPolicy),
       buildHashCols_(std::move(buildHashCols)),
       joinSpillState_(joinSpillState),
-      spillConfig_(spillConfig),
-      spillMemThresholdOverride_(spillMemThresholdOverride),
       prebuilt_(prebuilt),
       broadcastHashTableId_(std::move(broadcastHashTableId)),
       ownerFactory_(ownerFactory),
       dynamicFilterPushdownEnabled_(dynamicFilterPushdownEnabled)
 {
     SetOperatorName(opNameForHashBuilder);
+    // Cached BHJ build state uses the cache entry's Spark-accounted pool;
+    // task-local joins keep the task pool. A cached probe must not rebind it.
+    if (!prebuilt_) {
+        auto *tablePool = pool;
+        if (!broadcastHashTableId_.empty()) {
+            if (ownerFactory_ == nullptr) {
+                throw std::logic_error("Broadcast cache build has no owning factory");
+            }
+            cachePool_ = ownerFactory_->GetCachePool();
+            tablePool = cachePool_;
+        }
+        std::visit([tablePool](auto &&v) { v.SetPool(tablePool); }, *hashTablesVariants);
+    }
+    if (pool != nullptr && joinSpillEnabled_ && passiveReclaimEnabled_ &&
+        joinSpillState_ != nullptr && joinSpillState_->IsHandoffSessionEnabled() && !prebuilt_) {
+        pool->registerSpillable(this);
+        spillableRegistered_ = true;
+    }
 }
 
 uint32_t HashBuilderOperator::ComputeParallelBuildThreads(uint32_t rowCount, uint64_t estimatedBuildBytes) const
@@ -326,84 +387,52 @@ void HashBuilderOperator::AddLatchedInput(omniruntime::vec::VectorBatch *vecBatc
         }
         UniqueVecBatch subBatch(new omniruntime::vec::VectorBatch(static_cast<int32_t>(bucketPositions.size())));
         subBatch->ResizeVectorCount(vectorCount);
+        // Spill working memory, built outside the task pool (see SpillAndClearResidentBuild).
         for (int32_t col = 0; col < vectorCount; ++col) {
-            subBatch->SetVector(col, omniruntime::vec::VectorHelper::CopyPositionsVector(
-                owned->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size())));
+            subBatch->SetVector(col, omniruntime::vec::VectorHelper::CopyPositionsVectorToPool(
+                owned->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size()),
+                nullptr));
         }
-        joinSpillState_->SpillBuildSubPartition(runId, subPartition, subBatch.get());
+        joinSpillState_->SpillBuildSubPartition(runId, subPartition, subBatch.get(), nullptr);
     }
     ResetInputVecBatch();
 }
 
-/// After the current batch is held, spill when accounted memory crosses the threshold.
-void HashBuilderOperator::MaybeTriggerSpill()
+/// A build remains reclaimable while it still owns the pre-handoff slot-0 batches.
+uint64_t HashBuilderOperator::reclaimableBytes() const
 {
-    if (!joinSpillEnabled_) {
-        return;
+    if (!spillableRegistered_ || joinSpillState_ == nullptr || buildSpillTriggered_ ||
+        restoreDriving_ || isInNonReclaimableSection()) {
+        return 0;
     }
-    const int64_t accounted = mem::MemoryManager::GetGlobalAccountedMemory();
-    int64_t threshold = 0;
-    if (spillConfig_ != nullptr) {
-        threshold = spillMemThresholdOverride_.has_value() ? *spillMemThresholdOverride_ :
-            spillConfig_->GetSpillMemThreshold();
-    }
-    if (joinSpillState_ == nullptr || buildSpillTriggered_ || spillConfig_ == nullptr) {
-        LogJoinSpillMemCheckpoint("build_addinput", accounted, threshold, accounted >= threshold, "skip",
-            joinSpillState_ == nullptr        ? "reason=no_state" :
-            buildSpillTriggered_            ? "reason=already_spilled" :
-                                              "reason=no_spill_config");
-        return;
-    }
-    if (!spillConfig_->IsSpillEnabled()) {
-        LogJoinSpillMemCheckpoint("build_addinput", accounted, threshold, accounted >= threshold, "skip",
-            "reason=spill_disabled");
-        return;
-    }
-    if (accounted < threshold) {
-        LogJoinSpillMemCheckpoint("build_addinput", accounted, threshold, false, "check", "reason=under_threshold");
-        return;
-    }
-    LogJoinSpillMemCheckpoint("build_addinput", accounted, threshold, true, "build_spill", nullptr);
-    SpillAndClearResidentBuild();
+    return std::visit([&](auto &&arg) -> uint64_t {
+        uint64_t bytes = 0;
+        for (auto *batch : arg.GetResidentInputVecBatches(0)) {
+            if (batch != nullptr) bytes += batch->EstimateFlatSize();
+        }
+        // A distinct build also holds its growing table and key arena; a spill frees both.
+        if (bytes != 0) {
+            bytes += arg.IncrementalTableBytes(0);
+        }
+        return bytes;
+    }, *hashTablesVariants);
 }
 
-/// Before Prepare/BuildHashTable: held batches are already in GetGlobalAccountedMemory
-/// (process-wide, not reclaimableBytes). Forecast HT directory + row-list arena that
-/// open would allocate; spill if accounted + those two would cross the join mem threshold.
-void HashBuilderOperator::MaybeSpillBeforeOpenSlot0()
+int64_t HashBuilderOperator::reclaim(int64_t targetBytes)
 {
-    if (!joinSpillEnabled_ || buildSpillTriggered_ || joinSpillState_ == nullptr || spillConfig_ == nullptr) {
-        return;
-    }
-    if (!spillConfig_->IsSpillEnabled()) {
-        return;
-    }
-    const uint32_t rows = ResidentRowCountSlot0();
-    if (rows == 0) {
-        return;
-    }
-    const int64_t accounted = mem::MemoryManager::GetGlobalAccountedMemory();
-    const int64_t estHt = std::visit(
-        [](auto &&arg) { return arg.EstimateHashTableInitBytes(0); }, *hashTablesVariants);
-    const int64_t estArena = std::visit(
-        [](auto &&arg) { return arg.EstimateRowRefArenaBytes(0); }, *hashTablesVariants);
-    const int64_t forecast = accounted + estHt + estArena;
-    const int64_t threshold = joinSpillState_->SpillMemThreshold();
-    char detail[128];
-    std::snprintf(detail, sizeof(detail), "reason=eob_open_ht rows=%u ht=%ld arena=%ld forecast=%ld", rows, estHt,
-        estArena, forecast);
-    if (forecast < threshold) {
-        LogJoinSpillMemCheckpoint("build_eob_open", accounted, threshold, false, "check", detail);
-        return;
-    }
-    LogJoinSpillMemCheckpoint("build_eob_open", accounted, threshold, true, "build_spill", detail);
+    if (targetBytes <= 0 || pool() == nullptr || reclaimableBytes() == 0) return 0;
+    NonReclaimableSection guard(this);
+    const int64_t before = pool()->currentBytes();
     SpillAndClearResidentBuild();
+    return std::max<int64_t>(0, before - pool()->currentBytes());
 }
 
 /// Spill the in-memory build (partition on first spill) and clear resident data.
 void HashBuilderOperator::SpillAndClearResidentBuild()
 {
-    OwnedVecBatchList resident(std::visit([&](auto &&arg) { return arg.TakeResidentBatches(0); }, *hashTablesVariants));
+    OwnedVecBatchList resident(std::visit([&](auto &&arg) {
+        return arg.TakeOwnershipOfResidentBatches(0);
+    }, *hashTablesVariants));
     const uint64_t runId = joinSpillState_->NextRunId();
     JoinSubPartitioner partitioner(joinSubPartCfg_);
     for (auto *source : resident.batches) {
@@ -424,11 +453,15 @@ void HashBuilderOperator::SpillAndClearResidentBuild()
             }
             UniqueVecBatch subBatch(new omniruntime::vec::VectorBatch(static_cast<int32_t>(bucketPositions.size())));
             subBatch->ResizeVectorCount(vectorCount);
+            // Spill working memory: the sub-batch is written to disk and freed before this spill
+            // returns, so it is built outside the task pool. Inside Spark-driven reclaim the pool has
+            // no headroom left and a pool-bound copy would be denied the memory it is freeing.
             for (int32_t col = 0; col < vectorCount; ++col) {
-                subBatch->SetVector(col, omniruntime::vec::VectorHelper::CopyPositionsVector(
-                    source->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size())));
+                subBatch->SetVector(col, omniruntime::vec::VectorHelper::CopyPositionsVectorToPool(
+                    source->Get(col), bucketPositions.data(), 0, static_cast<int32_t>(bucketPositions.size()),
+                    nullptr));
             }
-            joinSpillState_->SpillBuildSubPartition(runId, subPartition, subBatch.get());
+            joinSpillState_->SpillBuildSubPartition(runId, subPartition, subBatch.get(), nullptr);
         }
         resident.Free(source);
     }
@@ -439,7 +472,7 @@ void HashBuilderOperator::SpillAndClearResidentBuild()
 
 void HashBuilderOperator::ResetSlot0()
 {
-    std::visit([&](auto &&arg) { arg.ResetPartition(0); }, *hashTablesVariants);
+    std::visit([&](auto &&arg) { arg.ReclaimBuildPartition(0); }, *hashTablesVariants);
 }
 
 uint32_t HashBuilderOperator::ResidentRowCountSlot0() const
@@ -483,37 +516,31 @@ void HashBuilderOperator::PrepareAndBuildSlot0Adaptive()
         *hashTablesVariants);
 }
 
-/// After RestoreBuildSubPartition, slot 0 holds only the current SP.
-/// Size the HT from those rows when forecast stays under the join spill threshold;
-/// use Adaptive only when accounted + HT + arena would cross it.
+bool HashBuilderOperator::TryReserveSlot0Table(const char *site)
+{
+    if (pool() == nullptr) return true;
+    const uint64_t estimated = std::visit([](auto &&arg) {
+        return arg.EstimateBuildReservation(0);
+    }, *hashTablesVariants);
+    const uint64_t padded = estimated + estimated / 10;
+    const int64_t request = static_cast<int64_t>(std::min<uint64_t>(
+        padded, static_cast<uint64_t>(std::numeric_limits<int64_t>::max())));
+    const int64_t quantized = omniruntime::mem::OmniTaskMemoryPool::quantizedReservationSize(request);
+    if (quantized < 0) return false;
+    if (pool()->availableReservation() >= quantized) return true;
+    ReservationRequestSection requestContext(this, reclaimableName(), site, request);
+    NonReclaimableSection guard(this);
+    return pool()->maybeReserve(request);
+}
+
+/// Restore still builds target's single slot; pool admission selects sized or adaptive open.
 void HashBuilderOperator::PrepareAndBuildSlot0ForRestore()
 {
-    lastRestoreUsedAdaptiveOpen_ = false;
-    const uint32_t rows = ResidentRowCountSlot0();
-    if (rows == 0) {
-        PrepareAndBuildSlot0();
-        return;
-    }
-    const int64_t accounted = mem::MemoryManager::GetGlobalAccountedMemory();
-    const int64_t estHt = std::visit(
-        [](auto &&arg) { return arg.EstimateHashTableInitBytes(0); }, *hashTablesVariants);
-    const int64_t estArena = std::visit(
-        [](auto &&arg) { return arg.EstimateRowRefArenaBytes(0); }, *hashTablesVariants);
-    const int64_t forecast = accounted + estHt + estArena;
-    const int64_t threshold = joinSpillState_ != nullptr ? joinSpillState_->SpillMemThreshold() : 0;
-    const bool useAdaptive = threshold > 0 && forecast >= threshold;
-    char detail[160];
-    std::snprintf(detail, sizeof(detail),
-        "reason=restore_open_sp rows=%u ht=%ld arena=%ld forecast=%ld adaptive=%d", rows, estHt, estArena,
-        forecast, useAdaptive ? 1 : 0);
-    LogJoinSpillMemCheckpoint("build_restore_open", accounted, threshold, useAdaptive,
-        useAdaptive ? "adaptive" : "sized", detail);
-    lastRestoreUsedAdaptiveOpen_ = useAdaptive;
-    if (useAdaptive) {
-        PrepareAndBuildSlot0Adaptive();
-    } else {
-        PrepareAndBuildSlot0();
-    }
+    lastRestoreUsedAdaptiveOpen_ = ResidentRowCountSlot0() > 0 &&
+        !TryReserveSlot0Table("HashBuilderOperator::PrepareAndBuildSlot0ForRestore");
+    if (lastRestoreUsedAdaptiveOpen_) PrepareAndBuildSlot0Adaptive();
+    else PrepareAndBuildSlot0();
+    if (pool() != nullptr) pool()->releaseUnusedReservation();
 }
 
 /// Publish an empty hash table plus spilled sub-partition ids for probe restore.
@@ -528,11 +555,6 @@ void HashBuilderOperator::TryPublishEmptyTableHandoff()
     auto ids = joinSpillState_->CollectBuildSpillPartitionIds();
     const uint32_t leftover = ResidentRowCountSlot0();
     if (!ids.empty() && leftover > 0) {
-        const int64_t accounted = mem::MemoryManager::GetGlobalAccountedMemory();
-        const int64_t threshold = joinSpillState_->SpillMemThreshold();
-        char detail[128];
-        std::snprintf(detail, sizeof(detail), "reason=empty_handoff_leftover rows=%u", leftover);
-        LogJoinSpillMemCheckpoint("build_eob_open", accounted, threshold, true, "build_spill", detail);
         SpillAndClearResidentBuild();
         joinSpillState_->CloseBuildWriters();
         ids = joinSpillState_->CollectBuildSpillPartitionIds();
@@ -549,7 +571,7 @@ void HashBuilderOperator::FlushHeldBuildTable()
     if (joinSpillState_ == nullptr) {
         return;
     }
-    joinSpillState_->FlushHeldBuildTable(hashTablesVariants, joinSubPartCfg_);
+    joinSpillState_->FlushHeldBuildTable(hashTablesVariants, joinSubPartCfg_, pool());
 }
 
 bool HashBuilderOperator::TryProduceNextRestoreRound()
@@ -559,7 +581,7 @@ bool HashBuilderOperator::TryProduceNextRestoreRound()
         return false;
     }
     ResetSlot0();
-    joinSpillState_->RestoreBuildSubPartition(hashTablesVariants, *nextId);
+    joinSpillState_->RestoreBuildSubPartition(hashTablesVariants, *nextId, pool());
     PrepareAndBuildSlot0ForRestore();
     // Restore peels the on-disk visited column; apply it only after the table exists.
     joinSpillState_->ApplyPendingVisitedFlags(hashTablesVariants, *nextId);
@@ -573,10 +595,16 @@ int32_t HashBuilderOperator::DriveHandoffRestore()
 {
     restoreDriving_ = true;
     if (joinSpillState_->GetHandoffPhase() == JoinHandoffPhase::Idle) {
-        MaybeSpillBeforeOpenSlot0();
+        if (forceBuildGroupSpillAfterNoMoreInput_ && ResidentRowCountSlot0() > 0) {
+            SpillAndClearResidentBuild();
+        } else if (ResidentRowCountSlot0() > 0 &&
+                   !TryReserveSlot0Table("HashBuilderOperator::DriveHandoffRestore")) {
+            SpillAndClearResidentBuild();
+        }
         TryPublishEmptyTableHandoff();
         if (joinSpillState_->GetHandoffPhase() == JoinHandoffPhase::Idle) {
             PrepareAndBuildSlot0();
+            if (pool() != nullptr) pool()->releaseUnusedReservation();
             const uint32_t numDistinct = DistinctCountSlot0();
             joinSpillState_->SetHashTableHandoff(numDistinct, {});
             std::visit([&](auto &&arg) { arg.SetStatus(OMNI_STATUS_FINISHED); }, *hashTablesVariants);
@@ -621,18 +649,75 @@ int32_t HashBuilderOperator::AddInput(omniruntime::vec::VectorBatch *vecBatch)
         return 0;
     }
     UpdateAddInputInfo(rowCount);
+    if (!broadcastHashTableId_.empty()) {
+        // The cached table can outlive this task and its allocation listener.
+        auto cacheOwnedBatch = VectorHelper::CopyVectorBatchToPool(vecBatch, cachePool_);
+        VectorHelper::FreeVecBatch(vecBatch);
+        vecBatch = cacheOwnedBatch.release();
+    }
+    // The build retains its input until the probe ends; do not let a filter or join
+    // dictionary view pin the whole upstream batch behind a few selected rows.
+    VectorHelper::CompactSparseDictionaries(vecBatch, broadcastHashTableId_.empty() ? pool() : cachePool_);
     if (joinSpillEnabled_ && joinSpillState_ != nullptr) {
-        // Hold the build in one hash table until memory NeedSpill; do not partition the batch first.
+        // The target's single slot remains resident until pool reclaim or EOB admission.
+        if (!buildSpillTriggered_) {
+            // May spill this build: the latch below then takes the batch.
+            EnsureDistinctInputFits(0, vecBatch);
+        }
         if (buildSpillTriggered_) {
             AddLatchedInput(vecBatch);
             return 0;
         }
-        std::visit([&](auto &&arg) { arg.AddVecBatch(0, vecBatch); }, *hashTablesVariants);
-        MaybeTriggerSpill();
+        AddBuildBatch(0, vecBatch);
         return 0;
     }
-    std::visit([&](auto &&arg) { arg.AddVecBatch(partitionIndex, vecBatch); }, *hashTablesVariants);
+    EnsureDistinctInputFits(partitionIndex, vecBatch);
+    AddBuildBatch(partitionIndex, vecBatch);
     return 0;
+}
+
+/// A distinct build inserts every batch into a growing table, so AddInput itself allocates: a
+/// rehash asks for the new table while the old one is live, on top of the keys and the kept
+/// rows. Inside the insertion the build cannot be reclaimed (the table is being written), so
+/// the memory is reserved first, while nothing of this batch has been added: a request the
+/// task's share cannot serve can then spill this build like any other donor instead of failing
+/// the allocation.
+void HashBuilderOperator::EnsureDistinctInputFits(int32_t slot, omniruntime::vec::VectorBatch *vecBatch)
+{
+    if (pool() == nullptr) {
+        return;
+    }
+    const uint64_t estimated = std::visit([&](auto &&arg) -> uint64_t {
+        return arg.EstimateDistinctInputGrowth(slot, vecBatch);
+    }, *hashTablesVariants);
+    if (estimated == 0) {
+        return;
+    }
+    const int64_t request = static_cast<int64_t>(std::min<uint64_t>(
+        estimated, static_cast<uint64_t>(std::numeric_limits<int64_t>::max())));
+    if (pool()->availableReservation() >= request) {
+        return;
+    }
+    ReservationRequestSection requestContext(
+        this, reclaimableName(), "HashBuilderOperator::EnsureDistinctInputFits", request);
+    ReclaimableReservationSection safeReservation(this);
+    // Best effort, like the other input pre-reservations: after a denial the allocation itself
+    // remains authoritative.
+    pool()->maybeReserve(request);
+}
+
+void HashBuilderOperator::AddBuildBatch(int32_t slot, omniruntime::vec::VectorBatch *vecBatch)
+{
+    std::visit([&](auto &&arg) {
+        if (!arg.IsDistinctBuild()) {
+            arg.AddVecBatch(slot, vecBatch);
+            return;
+        }
+        // The distinct build grows the table while it adds input; a reclaim of this
+        // operator in the middle would free the table being inserted into.
+        NonReclaimableSection guard(this);
+        arg.AddVecBatch(slot, vecBatch);
+    }, *hashTablesVariants);
 }
 
 int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVecBatch)
@@ -648,6 +733,8 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
         stats_.spilledBytes = joinSpillState_->BuildSpilledBytes();
         stats_.spilledRows = joinSpillState_->BuildSpilledRows();
         stats_.spilledFiles = joinSpillState_->BuildSpilledFiles();
+        stats_.spillScratchPeakBytes = std::max(stats_.spillScratchPeakBytes,
+            joinSpillState_->SpillScratchPeakBytes());
     };
     refreshSpillStats();
     if (!noMoreInput_) {
@@ -659,11 +746,10 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
     }
     // Pre-built path: hash table already ready from executor-level cache; just mark done.
     if (prebuilt_) {
-        if (dynamicFilterPushdownEnabled_) {
-            std::visit([&](auto &&arg) { arg.BuildDynamicFilters(); }, *hashTablesVariants);
-        }
         SetStatus(OMNI_STATUS_FINISHED);
-        std::visit([&](auto &&arg) { arg.SetStatus(OMNI_STATUS_FINISHED); }, *hashTablesVariants);
+        // The builder set the shared table's status before cache publication.
+        // Readers only finish their task-local operator; even writing the same
+        // value into the shared non-atomic status would race with other readers.
         refreshSpillStats();
         return 0;
     }
@@ -718,15 +804,10 @@ int32_t HashBuilderOperator::GetOutput(omniruntime::vec::VectorBatch **outputVec
     // BHJ cache: publish the built hash table to the executor-level cache so that
     // subsequent tasks on this executor can reuse it without rebuilding.
     if (!broadcastHashTableId_.empty()) {
-        // Release ownership in the factory so its destructor won't double-free.
-        if (ownerFactory_ != nullptr) {
-            ownerFactory_->ReleaseVariants();
-            ownerFactory_->MarkCachePinned();
-            BroadcastHashTableCache::getInstance().publish(
-                broadcastHashTableId_, hashTablesVariants, ownerFactory_);
-        } else {
-            BroadcastHashTableCache::getInstance().publish(broadcastHashTableId_, hashTablesVariants, nullptr);
+        if (ownerFactory_ == nullptr) {
+            throw std::logic_error("Broadcast cache builder has no owning factory");
         }
+        ownerFactory_->PublishCachedVariants();
     }
     refreshSpillStats();
     return 0;

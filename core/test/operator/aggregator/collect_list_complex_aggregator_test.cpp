@@ -142,7 +142,7 @@ TEST(CollectListComplexAggregatorTest, PartialProcessGroupArrayOfIntOrderPreserv
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // Input: 3 rows, arrays [1,2], [3], [4,5]
@@ -199,7 +199,7 @@ TEST(CollectListComplexAggregatorTest, PartialEmptyInputExtractNull)
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     ArrayVector *emptyCol = BuildArrayIntColumn(0, {}, {});
@@ -316,7 +316,7 @@ TEST(CollectListComplexAggregatorTest, PartialProcessGroupMapOfIntIntOrderPreser
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // Input: 2 rows, maps {1:10, 2:20} and {3:30}
@@ -388,7 +388,7 @@ TEST(CollectListComplexAggregatorTest, PartialProcessGroupRowOfIntOrderPreserved
     auto agg = factory.CreateAggregator(inputTypes, outputTypes, channels, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(executionContext.get());
 
     // Input: 3 rows, (42), (99), (7)

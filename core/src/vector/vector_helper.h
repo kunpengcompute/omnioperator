@@ -15,22 +15,43 @@
 #include "row_vector.h"
 #include "map_vector.h"
 #include "array_vector.h"
-#include "util/omni_exception.h"
 #include "util/type_util.h"
 
 namespace omniruntime::vec {
 class VectorHelper {
 public:
-    static RowBatch *TransRowBatchFromVectorBatch(VectorBatch *vecBatch);
+    // Pool-bound conversion; implemented in vector_helper.cpp.
+    static RowBatch *TransRowBatchFromVectorBatch(VectorBatch *vecBatch, mem::Allocator *allocator);
     static BaseVector *CreateStringDictionary(const int32_t *values, int32_t valueSize,
-        Vector<LargeStringContainer<std::string_view>> *vector, bool valueAsNullifyIndices = false);
+        Vector<LargeStringContainer<std::string_view>> *vector, bool valueAsNullifyIndices = false,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
+    static BaseVector *CreateVector(omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t vectorEncodingId, int32_t dataTypeId, int32_t size,
+        int32_t capacityInBytes = INITIAL_STRING_SIZE);
+    // Last in-tree production caller has been migrated; kept for external and test compatibility.
+    [[deprecated("last in-tree caller migrated; prefer the pool-bound 5-argument overload")]]
     static BaseVector *CreateVector(int32_t vectorEncodingId, int32_t dataTypeId, int32_t size,
         int32_t capacityInBytes = INITIAL_STRING_SIZE);
     static void SetVectorDataType(BaseVector* vec, DataType* dataType);
+    static BaseVector *CreateComplexVector(omniruntime::mem::OmniTaskMemoryPool *pool,
+        DataType* dataType, int32_t size);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static BaseVector *CreateComplexVector(DataType* dataType, int32_t size);
+    static std::shared_ptr<BaseVector> CreateComplexVectorShared(
+        omniruntime::mem::OmniTaskMemoryPool *pool, DataType* dataType, int32_t size);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static std::shared_ptr<BaseVector> CreateComplexVectorShared(DataType* dataType, int32_t size);
+    static BaseVector *CreateEmptyComplexVector(omniruntime::mem::OmniTaskMemoryPool *pool,
+        DataType* dataType, int32_t size);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static BaseVector *CreateEmptyComplexVector(DataType* dataType, int32_t size);
+    static BaseVector *CreateFlatVector(omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t dataTypeId, int32_t size, int32_t capacityInBytes = INITIAL_STRING_SIZE);
+    static std::shared_ptr<BaseVector> CreateFlatVectorShared(omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t dataTypeId, int32_t size, int32_t capacityInBytes = INITIAL_STRING_SIZE);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static BaseVector *CreateFlatVector(int32_t dataTypeId, int32_t size, int32_t capacityInBytes = INITIAL_STRING_SIZE);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static std::shared_ptr<BaseVector> CreateFlatVectorShared(int32_t dataTypeId, int32_t size,
         int32_t capacityInBytes = INITIAL_STRING_SIZE);
     static void SetValue(vec::BaseVector *vector, int32_t index, void *value);
@@ -44,7 +65,8 @@ public:
     static void PrintArrayVectorOffsetsAndNulls(BaseVector* vector, int32_t rowIndex);
     static void PrintMapVectorValue(MapVector *mapVec, int32_t rowIndex);
     static void PrintVectorValue(BaseVector *vector, int32_t rowIndex);
-    static BaseVector *CreateDictionaryVector(int *values, int valueSize, BaseVector *vector, int dataTypeId, bool valueAsNullifyIndices = false);
+    static BaseVector *CreateDictionaryVector(int *values, int valueSize, BaseVector *vector, int dataTypeId,
+        bool valueAsNullifyIndices = false, omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
     static void *UnsafeGetValuesDictionary(BaseVector *vector);
     static BaseVector *CastConstVectorToVector(BaseVector *vector);
     static void *UnsafeGetValues(BaseVector *vector);
@@ -54,24 +76,66 @@ public:
     static BaseVector *SliceVector(BaseVector *vector, int positionOffset, int length);
     static BaseVector *CopyPositionsDictionaryVector(BaseVector *vector, int *positions, int offset, int length);
     static std::unique_ptr<VectorBatch> CopyVectorBatch(VectorBatch *src);
+    // Materialize an independent flat/complex copy whose buffers are owned by `pool`.
+    // An explicit nullptr is the process-lifetime Jemalloc compatibility path used by
+    // executor-scoped caches whose lifetime is longer than any Spark task pool.
+    static std::unique_ptr<VectorBatch> CopyVectorBatchToPool(
+        VectorBatch *src, omniruntime::mem::OmniTaskMemoryPool *pool);
     static BaseVector *CopyPositionsVector(BaseVector *vector, int *positions, int offset, int length);
+    // Copy the rows at `positions` into a new flat vector whose buffers belong to `pool`. A null
+    // pool builds the copy outside any task pool: spill working memory that is written to disk and
+    // released before the spill returns must not grow the pool it is reclaiming. Encoded sources
+    // (dictionary, constant) are flattened by the copy. A position of -1 copies a null.
+    static BaseVector *CopyPositionsVectorToPool(BaseVector *vector, const int *positions, int offset,
+        int length, omniruntime::mem::OmniTaskMemoryPool *pool);
     static void *UnsafeGetDictionary(BaseVector *vector);
     static void AppendVector(BaseVector *destVector, int32_t offset, BaseVector *srcVector, int32_t length);
     static void ExpandElementVector(BaseVector *elementVec, type::DataTypeId typeId, int32_t newSize);
-    static BaseVector *DecodeVarcharDictionaryVector(BaseVector *vector);
-    static BaseVector *DecodeDictionaryVector(BaseVector *vector);
+    static BaseVector *DecodeVarcharDictionaryVector(BaseVector *vector,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
+    static BaseVector *DecodeDictionaryVector(BaseVector *vector,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
+    // A dictionary view keeps its whole dictionary (often an entire upstream batch) alive.
+    // True when the view selects fewer than half of the dictionary's rows.
+    static bool IsSparseDictionary(BaseVector *vector);
+    // Operators that retain input until end of input (hash build, sort) replace sparse
+    // dictionary views with flat copies so they pin only the rows they use.
+    static void CompactSparseDictionaries(VectorBatch *batch, omniruntime::mem::OmniTaskMemoryPool *pool);
+    template <typename T> static BaseVector *DecodeFlatConstVector(BaseVector *vector,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
+    static BaseVector *DecodeVarcharConstVector(BaseVector *vector,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
+    static BaseVector *DecodeConstVector(BaseVector *vector,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
     static void CopyFlatVector(BaseVector *destVector, BaseVector *srcVector, int32_t offset, int32_t length);
     static DataTypePtr GetDataType(BaseVector *srcVector);
+    static void EmptyArrayProjection(omniruntime::mem::OmniTaskMemoryPool *pool,
+        ArrayVector *dstArrVec, DataTypeId typeId);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static void EmptyArrayProjection(ArrayVector *dstArrVec, DataTypeId typeId);
+    static void EmptyMapProjection(omniruntime::mem::OmniTaskMemoryPool *pool,
+        MapVector *dstArrVec, DataTypeId keyTypeId, DataTypeId valueTypeId);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static void EmptyMapProjection(MapVector *dstArrVec, DataTypeId keyTypeId, DataTypeId valueTypeId);
+    static void CreateNullArrayVector(omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t rowSize, const DataTypePtr& dataType, BaseVector*& output);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static void CreateNullArrayVector(int32_t rowSize, const DataTypePtr& dataType, BaseVector*& output);
+    static void CreateNullMapVector(omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t rowSize, const DataTypePtr& dataType, BaseVector*& output);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static void CreateNullMapVector(int32_t rowSize, const DataTypePtr& dataType, BaseVector*& output);
+    static void CreateNullRowVector(omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t rowSize, const DataTypePtr& dataType, BaseVector*& output);
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static void CreateNullRowVector(int32_t rowSize, const DataTypePtr& dataType, BaseVector*& output);
     static std::string_view GetStringValueFromVector(BaseVector *vec, int32_t row);
 
-    template <typename T> static BaseVector *CreateDictionary(int32_t *values, int32_t valueSize, Vector<T> *vector, bool valueAsNullifyIndices = false)
+    template <typename T> static BaseVector *CreateDictionary(int32_t *values, int32_t valueSize, Vector<T> *vector,
+        bool valueAsNullifyIndices = false, omniruntime::mem::OmniTaskMemoryPool *pool = nullptr)
     {
-        auto nullsBuffer = std::make_unique<NullsBuffer>(valueSize);
+        auto nullsBuffer = std::make_unique<NullsBuffer>(valueSize, nullptr, 0,
+            pool != nullptr ? pool->getBoundAllocator() : nullptr);
         for (int i = 0; i < valueSize; i++) {
             if (UNLIKELY(vector->IsNull(values[i]) || (valueAsNullifyIndices && values[i] == -1))) {
                 nullsBuffer->SetNull(i);
@@ -80,10 +144,56 @@ public:
 
         auto dictionary = std::make_shared<DictionaryContainer<T>>(values, valueSize,
             unsafe::UnsafeVector::GetValues<T>(vector), vector->GetSize(), vector->GetOffset());
+        if (pool != nullptr) {
+            return new Vector<DictionaryContainer<T>>(
+                valueSize, dictionary, nullsBuffer.get(), pool, TYPE_ID<T>);
+        }
         return new Vector<DictionaryContainer<T>>(valueSize, dictionary, nullsBuffer.get(), TYPE_ID<T>);
     }
 
     template <type::DataTypeId typeId>
+    static BaseVector *CreateFlatVector(omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t size, int32_t capacityInBytes = INITIAL_STRING_SIZE)
+    {
+        using T = typename type::NativeType<typeId>::type;
+        if constexpr (std::is_same_v<T, std::string_view>) {
+            return new Vector<LargeStringContainer<std::string_view>>(size, pool, capacityInBytes, typeId);
+        }
+        if constexpr (std::is_same_v<T, StringView>) {
+            return new Vector<StringView>(size, pool, capacityInBytes);
+        }
+        if constexpr (!std::is_same_v<T, std::string_view> && !std::is_same_v<T, StringView>) {
+            if (pool != nullptr) {
+                auto scope = pool->accountingScope();
+                return new Vector<T>(size, scope, typeId);
+            }
+        }
+        return new Vector<T>(size, pool, typeId);
+    }
+
+    template <type::DataTypeId typeId>
+    static std::shared_ptr<BaseVector> CreateFlatVectorShared(omniruntime::mem::OmniTaskMemoryPool *pool,
+        int32_t size, int32_t capacityInBytes = INITIAL_STRING_SIZE)
+    {
+        using T = typename type::NativeType<typeId>::type;
+        if constexpr (std::is_same_v<T, std::string_view>) {
+            return std::make_shared<Vector<LargeStringContainer<std::string_view>>>(
+                size, pool, capacityInBytes, typeId);
+        }
+        if constexpr (std::is_same_v<T, StringView>) {
+            return std::make_shared<Vector<StringView>>(size, pool, capacityInBytes);
+        }
+        if constexpr (!std::is_same_v<T, std::string_view> && !std::is_same_v<T, StringView>) {
+            if (pool != nullptr) {
+                auto scope = pool->accountingScope();
+                return std::make_shared<Vector<T>>(size, scope, typeId);
+            }
+        }
+        return std::make_shared<Vector<T>>(size, pool, typeId);
+    }
+
+    template <type::DataTypeId typeId>
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static BaseVector *CreateFlatVector(int32_t size, int32_t capacityInBytes = INITIAL_STRING_SIZE)
     {
         using T = typename type::NativeType<typeId>::type;
@@ -97,6 +207,7 @@ public:
     }
 
     template <type::DataTypeId typeId>
+    [[deprecated("pass an OmniTaskMemoryPool*")]]
     static std::shared_ptr<BaseVector> CreateFlatVectorShared(int32_t size,
         int32_t capacityInBytes = INITIAL_STRING_SIZE)
     {
@@ -281,10 +392,11 @@ public:
         }
     }
 
-    template <typename T> static BaseVector *DecodeFlatDictionaryVector(BaseVector *vector)
+    template <typename T> static BaseVector *DecodeFlatDictionaryVector(BaseVector *vector,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr)
     {
         int size = vector->GetSize();
-        auto *flatVector = new Vector<T>(size);
+        auto *flatVector = new Vector<T>(size, pool, static_cast<DataTypeId>(vector->GetTypeId()));
         auto dicVector = reinterpret_cast<Vector<DictionaryContainer<T>> *>(vector);
         for (int i = 0; i < size; i++) {
             if (dicVector->IsNull(i)) {
@@ -294,84 +406,6 @@ public:
             }
         }
         return flatVector;
-    }
-
-    template <typename T> static BaseVector *DecodeFlatConstVector(BaseVector *vector)
-    {
-        const int32_t size = vector->GetSize();
-        auto *flatVector = new Vector<T>(size, vector->GetTypeId());
-        auto *constVector = reinterpret_cast<ConstVector<T> *>(vector);
-        if (size <= 0) {
-            return flatVector;
-        }
-        if (constVector->IsNull(0)) {
-            for (int32_t i = 0; i < size; ++i) {
-                flatVector->SetNull(i);
-            }
-            return flatVector;
-        }
-        const T value = constVector->GetConstValue();
-        for (int32_t i = 0; i < size; ++i) {
-            flatVector->SetValue(i, value);
-        }
-        return flatVector;
-    }
-
-    static BaseVector *DecodeVarcharConstVector(BaseVector *vector)
-    {
-        using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-        const int32_t size = vector->GetSize();
-        auto *flatVector = new VarcharVector(size, INITIAL_STRING_SIZE, vector->GetTypeId());
-        auto *constVector = reinterpret_cast<ConstVector<std::string_view> *>(vector);
-        if (size <= 0) {
-            return flatVector;
-        }
-        if (constVector->IsNull(0)) {
-            for (int32_t i = 0; i < size; ++i) {
-                flatVector->SetNull(i);
-            }
-            return flatVector;
-        }
-        const std::string_view value = constVector->GetConstValue();
-        for (int32_t i = 0; i < size; ++i) {
-            flatVector->SetValue(i, value);
-        }
-        return flatVector;
-    }
-
-    static BaseVector *DecodeConstVector(BaseVector *vector)
-    {
-        const int32_t dataTypeId = vector->GetTypeId();
-        switch (dataTypeId) {
-            case type::OMNI_INT:
-            case type::OMNI_DATE32:
-                return DecodeFlatConstVector<int32_t>(vector);
-            case type::OMNI_SHORT:
-                return DecodeFlatConstVector<int16_t>(vector);
-            case type::OMNI_BYTE:
-                return DecodeFlatConstVector<int8_t>(vector);
-            case type::OMNI_LONG:
-            case type::OMNI_TIMESTAMP:
-            case type::OMNI_DATE64:
-            case type::OMNI_DECIMAL64:
-                return DecodeFlatConstVector<int64_t>(vector);
-            case type::OMNI_DECIMAL128:
-                return DecodeFlatConstVector<type::Decimal128>(vector);
-            case type::OMNI_DOUBLE:
-                return DecodeFlatConstVector<double>(vector);
-            case type::OMNI_FLOAT:
-                return DecodeFlatConstVector<float>(vector);
-            case type::OMNI_BOOLEAN:
-                return DecodeFlatConstVector<bool>(vector);
-            case type::OMNI_VARBINARY:
-            case type::OMNI_VARCHAR:
-            case type::OMNI_CHAR:
-                return DecodeVarcharConstVector(vector);
-            default: {
-                std::string message("No such data type " + std::to_string(dataTypeId));
-                throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", message);
-            }
-        }
     }
 
     template <typename T>
@@ -422,9 +456,22 @@ public:
     }
 
     // ---- ALWAYS_INLINE methods (must stay in header) ----
+    static ALWAYS_INLINE BaseVector *CreateStringVector(
+        omniruntime::mem::OmniTaskMemoryPool *pool, uint32_t vectorSize)
+    {
+        return new Vector<LargeStringContainer<std::string_view>>(vectorSize, pool);
+    }
+
+    [[deprecated("pass a per-task pool via CreateStringVector(pool, size)")]]
     static ALWAYS_INLINE BaseVector *CreateStringVector(uint32_t vectorSize)
     {
-        return new Vector<LargeStringContainer<std::string_view>>(vectorSize);
+        return new Vector<LargeStringContainer<std::string_view>>(vectorSize, nullptr);
+    }
+
+    static ALWAYS_INLINE BaseVector *CreateStringViewVector(
+        omniruntime::mem::OmniTaskMemoryPool *pool, uint32_t vectorSize)
+    {
+        return new Vector<StringView>(vectorSize, pool);
     }
 
     static ALWAYS_INLINE BaseVector *CreateStringViewVector(uint32_t vectorSize)
@@ -432,6 +479,19 @@ public:
         return new Vector<StringView>(vectorSize);
     }
 
+    // Pool-bound form: thread the per-task pool through CreateComplexVector(pool, ...)
+    // so each output column vector is charged to the task pool. Callers such as
+    // SortOperator pass this->pool().
+    static ALWAYS_INLINE void AppendVectors(VectorBatch *vectorBatch, const type::DataTypes &sourceTypes,
+        int64_t positionCount, omniruntime::mem::OmniTaskMemoryPool *pool)
+    {
+        const std::vector<omniruntime::type::DataTypePtr> &types = sourceTypes.Get();
+        for (int i = 0; i < sourceTypes.GetSize(); i++) {
+            vectorBatch->Append(CreateComplexVector(pool, types[i].get(), positionCount));
+        }
+    }
+
+    [[deprecated("Phase 02.3.1-04: prefer the pool-bound 4-arg overload. Remaining reach: aggregator/window/topn/spill helpers (Plan 07 tail).")]]
     static ALWAYS_INLINE void AppendVectors(VectorBatch *vectorBatch, const type::DataTypes &sourceTypes,
         int64_t positionCount)
     {

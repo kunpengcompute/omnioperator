@@ -117,13 +117,14 @@ void ParquetColumnReader::NextRowGroup()
     int64_t *offsets;
     if (type_id == ::arrow::Type::LIST) {
         std::unique_ptr <omniruntime::vec::ArrayVector> arrayVec = std::make_unique<omniruntime::vec::ArrayVector>(
-                nRead);
+                nRead, taskPool_);
         arrayVec->SetElementVectorFromRaw(childOut);
         offsets = arrayVec->GetOffsets();
         nulls = reinterpret_cast<uint8_t *>(arrayVec->GetNullsBuffer()->GetNulls());
         outVec = arrayVec.release();
     } else if (type_id == ::arrow::Type::MAP) {
-        std::unique_ptr <omniruntime::vec::MapVector> mapVec = std::make_unique<omniruntime::vec::MapVector>(nRead);
+        std::unique_ptr <omniruntime::vec::MapVector> mapVec =
+            std::make_unique<omniruntime::vec::MapVector>(nRead, taskPool_);
         omniruntime::vec::RowVector *elementVec = reinterpret_cast<omniruntime::vec::RowVector *>(childOut);
         mapVec->SetKeyVector(elementVec->ChildAt(0));
         mapVec->SetValueVector(elementVec->ChildAt(1));
@@ -219,7 +220,8 @@ void ParquetColumnReader::NextRowGroup()
 
     int64_t nRead = validity_io.values_read;
     // Gather children arrays and def levels
-    std::unique_ptr <omniruntime::vec::RowVector> rowVec = std::make_unique<omniruntime::vec::RowVector>(nRead);
+    std::unique_ptr <omniruntime::vec::RowVector> rowVec =
+        std::make_unique<omniruntime::vec::RowVector>(nRead, taskPool_);
     for (auto childVec: childOuts) {
         rowVec->AddChild(childVec);
     }

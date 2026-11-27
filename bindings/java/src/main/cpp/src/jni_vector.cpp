@@ -3,8 +3,11 @@
  * Description: JNI Vector Operations Source File
  */
 #include "jni_vector.h"
+#include <atomic>
 #include <cstdint>
 #include "memory/memory_pool.h"
+#include "memory/omni_task_memory_pool.h"
+#include "memory/global_mem_tracker.h"   // process-global accounting
 #include "vector/vector_batch.h"
 #include "vector/unsafe_vector.h"
 #include "vector/vector_helper.h"
@@ -13,8 +16,8 @@
 #include "jni_common_def.h"
 #include "operator/aggregation/container_vector.h"
 #include "type/data_type_serializer.h"
-#include "memory/thread_memory_manager.h"
 #include "util/data_type_util.h"
+#include "util/telemetry.h"
 
 using namespace omniruntime::vec;
 using namespace omniruntime::mem;
@@ -24,33 +27,25 @@ static ALWAYS_INLINE BaseVector *TransformVector(long vectorAddr)
     return reinterpret_cast<BaseVector *>(vectorAddr);
 }
 
-#ifdef TRACE
-static void RecordStack(BaseVector *vector, JNIEnv *env)
-{
-    jstring jstack = (jstring)env->CallStaticObjectMethod(traceUtilCls, traceUtilStackMethodId);
-    auto stackChars = env->GetStringUTFChars(jstack, JNI_FALSE);
-    std::string stack(stackChars);
-    ThreadMemoryTrace *threadMemoryTrace = ThreadMemoryTrace::GetThreadMemoryTrace();
-    // replace c++ stack with java stack after vector is created.
-    threadMemoryTrace->ReplaceVectorTracedLog(reinterpret_cast<uintptr_t>(vector), stack);
-    env->ReleaseStringUTFChars(jstack, stackChars);
-}
-#endif
 
+// The trailing jlong nmmHandle is the per-task OmniTaskMemoryPool* address,
+// obtained Java-side via OmniNativeMemoryManagerJniWrapper.getPoolAddress().
+// The same convention is used for ComputePartitionIds in jni_helper.cpp.
+// nmmHandle == 0 -> taskPool == nullptr (test/mock path; the primary Vector
+// ctor's nullBridgePrimaryCtor handles it — vector.h:360).
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_Vec_newVectorNative(JNIEnv *env, jclass jcls,
-    jint jValueCount, jint jVectorEncodingId, jint jVectorTypeId, jint jCapacityInBytes)
+    jint jValueCount, jint jVectorEncodingId, jint jVectorTypeId, jint jCapacityInBytes,
+    jlong nmmHandle)
 {
     BaseVector *vector = nullptr;
     JNI_METHOD_START
-    vector = VectorHelper::CreateVector(jVectorEncodingId, jVectorTypeId, jValueCount, jCapacityInBytes);
+    auto *taskPool = reinterpret_cast<omniruntime::mem::OmniTaskMemoryPool *>(nmmHandle);
+    vector = VectorHelper::CreateVector(taskPool, jVectorEncodingId, jVectorTypeId, jValueCount, jCapacityInBytes);
     if (UNLIKELY(vector == nullptr)) {
         throw omniruntime::exception::OmniException("CREATE_FLAT_VECTOR_FAILED",
             "return a null pointer when creating flat vector");
     }
     JNI_METHOD_END(0)
-#ifdef TRACE
-    RecordStack(vector, env);
-#endif
     return reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(vector));
 }
 
@@ -63,15 +58,15 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_Vec_newDictionaryVecto
     jint *ids = idsArray;
     BaseVector *vector = nullptr;
     JNI_METHOD_START
-    vector = VectorHelper::CreateDictionaryVector(ids, size, dictionaryVector, dataTypeId);
+    // Recover the per-task pool from the source dictionary vector (leaf Vector<T>
+    // overrides GetPool()) so the dictionary wrapper's validity buffer is pool-accounted.
+    vector = VectorHelper::CreateDictionaryVector(ids, size, dictionaryVector, dataTypeId, false,
+        dictionaryVector->GetPool());
     if (UNLIKELY(vector == nullptr)) {
         throw omniruntime::exception::OmniException("CREATE_DICTIONARY_VECTOR_FAILED",
             "return a null pointer when creating dictionary vector");
     }
     JNI_METHOD_END(0)
-#ifdef TRACE
-    RecordStack(vector, env);
-#endif
     return reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(vector));
 }
 
@@ -83,9 +78,6 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_Vec_sliceVectorNative(
     JNI_METHOD_START
     sliceVector = VectorHelper::SliceVector(nativeVector, jStartIndex, jLength);
     JNI_METHOD_END(0)
-#ifdef TRACE
-    RecordStack(sliceVector, env);
-#endif
     return reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(sliceVector));
 }
 
@@ -100,9 +92,6 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_Vec_copyPositionsNativ
     JNI_METHOD_START
     copyVector = VectorHelper::CopyPositionsVector(nativeVector, reinterpret_cast<int *>(positions), 0, jLength);
     JNI_METHOD_END(0)
-#ifdef TRACE
-    RecordStack(copyVector, env);
-#endif
     return reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(copyVector));
 }
 
@@ -113,7 +102,23 @@ JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_Vec_freeVectorNative(JN
     if (nativeVector == nullptr) {
         std::cerr << "free vector native vector is null:" << jNativeVector << std::endl;
     }
+    if (!omniruntime::telemetry::IsOperatorVerboseEnabled()) {
+        delete nativeVector;
+        return;
+    }
+    static std::atomic<uint64_t> freeCount {0};
+    const uint64_t id = freeCount.fetch_add(1, std::memory_order_relaxed) + 1;
+    auto *pool = nativeVector == nullptr ? nullptr : nativeVector->GetPool();
+    const int64_t before = pool == nullptr ? 0 : pool->currentBytes();
+    const int32_t typeId = nativeVector == nullptr ? -1 : nativeVector->GetTypeId();
     delete nativeVector;
+    if (id <= 16 || id % 256 == 0) {
+        std::fprintf(stderr,
+            "[OMNI-VECTOR-FREE] id=%lu vector=%p type=%d pool=%p used_before=%ld used_after=%ld\n",
+            static_cast<unsigned long>(id), reinterpret_cast<void *>(jNativeVector), typeId,
+            static_cast<void *>(pool), static_cast<long>(before),
+            static_cast<long>(pool == nullptr ? 0 : pool->currentBytes()));
+    }
 }
 
 JNIEXPORT jint JNICALL Java_nova_hetu_omniruntime_vector_Vec_getCapacityInBytesNative(JNIEnv *env, jclass jcls,
@@ -239,33 +244,50 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_MapVec_getValueOffsets
     return reinterpret_cast<uintptr_t>(offsetsAddr);
 }
 
+// The legacy global-singleton MemoryManager and thread-as-pool are deleted.
+// The Java-side `nova.hetu.omniruntime.memory.MemoryManager` API is now for
+// standalone-Omni only, which is out of scope for the current release. The JNI
+// exports below remain to preserve the symbol surface for the Java test harness
+// (which still references them) but are no-ops; accounting now lives in the
+// per-task OmniTaskMemoryPool that Spark/Gluten owns via `OmniMemoryManager` +
+// `nmmHandle`. A future COMPAT triage pass may delete these Java-side classes.
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_memory_MemoryManager_setGlobalMemoryLimitNative(JNIEnv *env,
     jclass jcls, jlong jLimit)
 {
-    omniruntime::mem::MemoryManager::SetGlobalMemoryLimit(jLimit);
+    (void)env;
+    (void)jcls;
+    // Gluten passes Spark's offHeapSize here at backend init
+    // (OmniNativeBackendInitializer / SparkMemoryUtils); store it as the process-global limit
+    // so SparkSpillConfig can compute the self-spill threshold (limit * pct). This sets the
+    // spill DECISION threshold only — NOT a per-task allocation cap (Spark still owns that).
+    omniruntime::mem::SetGlobalMemoryLimit(static_cast<int64_t>(jLimit));
 }
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_memory_MemoryManager_getAllocatedMemoryNative(JNIEnv *env,
     jclass jcls)
 {
-    auto threadMemoryManager = omniruntime::mem::ThreadMemoryManager::GetThreadMemoryManager();
-    int64_t accountedMemory = threadMemoryManager->GetThreadAccountedMemory();
-    int64_t untrackedMemory = threadMemoryManager->GetUntrackedMemory();
-    return accountedMemory + untrackedMemory;
+    (void)env;
+    (void)jcls;
+    // Returns the observe-only process-global accounted bytes
+    // (running sum of live per-task OmniTaskMemoryPool usedBytes_). Restores Java-side
+    // visibility of omni's global usage; the C++ self-spill trigger reads the same counter.
+    return static_cast<jlong>(omniruntime::mem::GetGlobalAccountedMemory());
 }
 
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_memory_MemoryManager_memoryClearNative(JNIEnv *env, jclass jcls)
 {
-    auto threadMemoryManager = omniruntime::mem::ThreadMemoryManager::GetThreadMemoryManager();
-    threadMemoryManager->Clear();
+    (void)env;
+    (void)jcls;
+    // No-op: per-task pool lifecycle is owned by Spark's TaskResources (Gluten side).
 }
 
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_memory_MemoryManager_memoryReclamationNative(JNIEnv *env, jclass jcls)
 {
-    ThreadMemoryTrace *threadMemoryTrace = ThreadMemoryTrace::GetThreadMemoryTrace();
-    if (threadMemoryTrace->HasMemoryLeak()) {
-        threadMemoryTrace->FreeLeakedMemory();
-    }
+    (void)env;
+    (void)jcls;
+    // No-op: the legacy TLS ThreadMemoryTrace leak detector was deleted. Per-task
+    // OmniTaskMemoryPool accounting + the OMNI_MEM_DEBUG mem_probe facility replace it.
+    // The JNI symbol is retained because the Java-side MemoryManager harness references it.
 }
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_VecBatch_newVectorBatchNative(JNIEnv *env, jclass jcls,
@@ -311,10 +333,14 @@ JNIEXPORT jint JNICALL Java_nova_hetu_omniruntime_vector_Vec_getVecEncodingNativ
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_VarcharVec_expandDataCapacity(JNIEnv *env, jclass jcls,
     jlong jNativeVector, jint jToCapacityInBytes)
 {
+    // The buffer growth reserves task-pool memory, and a denied reservation
+    // must reach Java as an exception instead of terminating the executor.
+    JNI_METHOD_START
     auto nativeVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(jNativeVector);
     char *newBuffAddress =
         omniruntime::vec::unsafe::UnsafeStringVector::ExpandStringBuffer(nativeVector, jToCapacityInBytes);
     return reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(newBuffAddress));
+    JNI_METHOD_END(0)
 }
 
 JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_Vec_setNullFlagNative(JNIEnv *env, jclass jcls,
@@ -340,7 +366,7 @@ JNIEXPORT jint JNICALL Java_nova_hetu_omniruntime_vector_ComplexVec_getComplexCa
 
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_ComplexVec_newComplexVectorNative
-        (JNIEnv *env, jclass jcls, jint jSize, jint jVectorEncodingId, jobjectArray jDataTypes)
+        (JNIEnv *env, jclass jcls, jint jSize, jint jVectorEncodingId, jobjectArray jDataTypes, jlong nmmHandle)
 {
     BaseVector *vector = nullptr;
     DataType* dataType = nullptr;
@@ -363,16 +389,14 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_ComplexVec_newComplexV
             throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
         }
 
-        vector = VectorHelper::CreateComplexVector(dataType, jSize);
+        vector = VectorHelper::CreateComplexVector(
+            reinterpret_cast<omniruntime::mem::OmniTaskMemoryPool *>(nmmHandle), dataType, jSize);
         if (UNLIKELY(vector == nullptr)) {
             throw omniruntime::exception::OmniException("CREATE_COMPLEX_VECTOR_FAILED",
                                                         "return a null pointer when creating complex vector");
         }
         delete dataType;
     JNI_METHOD_END_WITH_COMPLEX_VECTOR(0, dataType, vector)
-#ifdef TRACE
-    RecordStack(vector, env);
-#endif
     return reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(vector));
 }
 
@@ -443,7 +467,7 @@ JNIEXPORT void JNICALL Java_nova_hetu_omniruntime_vector_MapVec_AddOffsetsNative
 
 
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_ComplexVec_newEmptyComplexVectorNative
-    (JNIEnv *env, jclass jcls, jint jSize, jint jVectorEncodingId, jobjectArray jDataTypes)
+    (JNIEnv *env, jclass jcls, jint jSize, jint jVectorEncodingId, jobjectArray jDataTypes, jlong nmmHandle)
 {
     BaseVector *vector = nullptr;
     DataType* dataType = nullptr;
@@ -466,16 +490,14 @@ JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_vector_ComplexVec_newEmptyCom
             throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
         }
 
-        vector = VectorHelper::CreateEmptyComplexVector(dataType, jSize);
+        vector = VectorHelper::CreateEmptyComplexVector(
+            reinterpret_cast<omniruntime::mem::OmniTaskMemoryPool *>(nmmHandle), dataType, jSize);
         if (UNLIKELY(vector == nullptr)) {
             throw omniruntime::exception::OmniException("CREATE_COMPLEX_VECTOR_FAILED",
                                                         "return a null pointer when creating complex vector");
         }
         delete dataType;
     JNI_METHOD_END_WITH_COMPLEX_VECTOR(0, dataType, vector)
-#ifdef TRACE
-    RecordStack(vector, env);
-#endif
     return reinterpret_cast<uintptr_t>(reinterpret_cast<void *>(vector));
 }
 

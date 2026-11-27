@@ -57,20 +57,23 @@ WindowGroupLimitWithExprOperatorFactory *WindowGroupLimitWithExprOperatorFactory
     return operatorFactory;
 }
 
-Operator *WindowGroupLimitWithExprOperatorFactory::CreateOperator()
+// Pool-bound override forwards pool to inner factory.
+Operator *WindowGroupLimitWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     auto windowGroupLimitOperator =
-        static_cast<WindowGroupLimitOperator *>(windowGroupLimitOperatorFactory->CreateOperator());
-    auto opOperator = new WindowGroupLimitWithExprOperator(*sourceTypes, partitionCols, sortCols, projections,
+        static_cast<WindowGroupLimitOperator *>(windowGroupLimitOperatorFactory->CreateOperator(pool));
+    auto opOperator = new WindowGroupLimitWithExprOperator(pool, *sourceTypes, partitionCols, sortCols, projections,
         windowGroupLimitOperator, queryConfig_);
     return opOperator;
 }
 
-WindowGroupLimitWithExprOperator::WindowGroupLimitWithExprOperator(const type::DataTypes &sourceTypes,
-    std::vector<int32_t> &partitionCols, std::vector<int32_t> &sortCols,
+// Pool-bound ctor — same body, chains Operator(pool).
+WindowGroupLimitWithExprOperator::WindowGroupLimitWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &sourceTypes, std::vector<int32_t> &partitionCols, std::vector<int32_t> &sortCols,
     std::vector<std::unique_ptr<Projection>> &projections, WindowGroupLimitOperator *windowGroupLimitOperator,
     const config::QueryConfig &queryConfig)
-    : sourceTypes(sourceTypes), projections(projections), windowGroupLimitOperator(windowGroupLimitOperator)
+    : Operator(pool), sourceTypes(sourceTypes), projections(projections),
+      windowGroupLimitOperator(windowGroupLimitOperator)
 {
     executionContext->SetConfig(queryConfig);
 }

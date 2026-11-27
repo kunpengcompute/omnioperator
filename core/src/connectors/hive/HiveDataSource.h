@@ -42,7 +42,8 @@ public:
             const std::unordered_map<
                     std::string,
                     std::shared_ptr<connector::ColumnHandle>>& columnHandles,
-            const std::shared_ptr<HiveConfig>& hiveConfig);
+            const std::shared_ptr<HiveConfig>& hiveConfig,
+            omniruntime::mem::OmniTaskMemoryPool *taskPool = nullptr);
 
     void addSplit(std::shared_ptr<ConnectorSplit> split, uint64_t size) override;
 
@@ -69,6 +70,11 @@ protected:
     std::shared_ptr<codegen::ScanSpec> scanSpec_;
     vec::VectorBatch* output_;
     std::unique_ptr<SplitReader> splitReader_;
+    // Per-task accounting pool, threaded TableScanOperator → Connector →
+    // DataSource → SplitReader. Used to charge partition-column /
+    // missing-field vector allocations to the per-task pool visible to Spark
+    // TMM. nullptr = legacy path (accounting skipped).
+    omniruntime::mem::OmniTaskMemoryPool *taskPool_{nullptr};
 
     // Output type from file reader.  This is different from outputType_ that it
     // contains column names before assignment, and columns that only used in

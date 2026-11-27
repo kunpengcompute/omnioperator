@@ -38,13 +38,13 @@ void CollectListAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *s
     const ListState<stateType> *listState = ListState<stateType>::ConstCastState(state + aggStateOffset);
     std::vector<stateType> *list = reinterpret_cast<std::vector<stateType> *>(listState->listAddr);
     if (list->empty()) {
-        auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, 0));
+        auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, 0));
         v->SetValue(rowIndex, elementVector);
         delete elementVector;
         return;
     }
     size_t elementSize = list->size();
-    auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, static_cast<int32_t>(elementSize)));
+    auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, static_cast<int32_t>(elementSize)));
     for (size_t i = 0; i < elementSize; i++) {
         elementVector->SetValue(static_cast<int32_t>(i), (*list)[i]);
     }
@@ -71,13 +71,13 @@ void CollectListAggregator<IN_ID, OUT_ID>::ExtractValuesBatch(std::vector<Aggreg
         const ListState<stateType> *listState = ListState<stateType>::ConstCastState(groupStates[rowIndex] + aggStateOffset);
         std::vector<stateType> *list = reinterpret_cast<std::vector<stateType> *>(listState->listAddr);
         if (list->empty()) {
-            auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, 0));
+            auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, 0));
             v->SetValue(rowOffset + rowIndex, elementVector);
             delete elementVector;
             continue;
         }
         size_t elementSize = list->size();
-        auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, static_cast<int32_t>(elementSize)));
+        auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, static_cast<int32_t>(elementSize)));
         for (size_t i = 0; i < elementSize; i++) {
             elementVector->SetValue(static_cast<int32_t>(i), (*list)[i]);
         }
@@ -281,7 +281,7 @@ template <DataTypeId IN_ID, DataTypeId OUT_ID>
 void CollectListAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *vecBatch, BaseVector *originVector, const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter) {
     const int32_t rowCount = (originVector != nullptr) ? originVector->GetSize() : 0;
     if (rowCount == 0) {
-        auto *emptyArr = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), 0));
+        auto *emptyArr = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), 0));
         vecBatch->Append(emptyArr);
         return;
     }
@@ -305,7 +305,7 @@ template <typename U>
 void CollectListAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInteranal(VectorBatch *result, BaseVector *originVector, const std::shared_ptr<NullsHelper> nullMap) {
     using stateType = typename AggNativeAndVectorType<IN_ID>::type;
     const int32_t rowCount = originVector->GetSize();
-    auto *arrayVector = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), rowCount));
+    auto *arrayVector = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), rowCount));
 
     int32_t nonNullCount = 0;
     for (int32_t i = 0; i < rowCount; i++) {
@@ -314,7 +314,7 @@ void CollectListAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInteranal(Vector
         }
     }
 
-    auto *elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, nonNullCount));
+    auto *elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, nonNullCount));
     int32_t elemIdx = 0;
     auto *vector = reinterpret_cast<U *>(originVector);
 

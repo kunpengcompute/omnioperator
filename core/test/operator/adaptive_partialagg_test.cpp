@@ -86,7 +86,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_short)
                                            true, true);
 
     // operator (partial)
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->Init();
 
     VectorBatch *outputVecBatch = aggPartial->AlignSchema(input);
@@ -110,7 +110,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_short)
                                          finalAggInputTypes, finalOutputTypes, aggFuncTypes, aggMaskVec,
                                          false, false);
 
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->Init();
 
     aggFinal->AddInput(outputVecBatch);
@@ -180,7 +180,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_int)
                                            true, true);
 
     // operator (partial)
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->Init();
 
     VectorBatch *outputVecBatch = aggPartial->AlignSchema(input);
@@ -204,7 +204,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_int)
                                          finalAggInputTypes, finalOutputTypes, aggFuncTypes, aggMaskVec,
                                          false, false);
 
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->Init();
 
     aggFinal->AddInput(outputVecBatch);
@@ -274,7 +274,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_long)
                                            true, true);
 
     // operator (partial)
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->Init();
 
     VectorBatch *outputVecBatch = aggPartial->AlignSchema(input);
@@ -298,7 +298,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_long)
                                          finalAggInputTypes, finalOutputTypes, aggFuncTypes, aggMaskVec,
                                          false, false);
 
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->Init();
 
     aggFinal->AddInput(outputVecBatch);
@@ -369,7 +369,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_double)
                                            true, true);
 
     // operator (partial)
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->Init();
 
     VectorBatch *outputVecBatch = aggPartial->AlignSchema(input);
@@ -393,7 +393,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_double)
                                          finalAggInputTypes, finalOutputTypes, aggFuncTypes, aggMaskVec,
                                          false, false);
 
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->Init();
 
     aggFinal->AddInput(outputVecBatch);
@@ -473,7 +473,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_decimal64)
                                            true, true);
 
     // operator (partial)
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->Init();
 
     VectorBatch *outputVecBatch = aggPartial->AlignSchema(input);
@@ -497,7 +497,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_decimal64)
                                          finalAggInputTypes, finalOutputTypes, aggFuncTypes, aggMaskVec,
                                          false, false);
 
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->Init();
 
     aggFinal->AddInput(outputVecBatch);
@@ -582,7 +582,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_decimal128)
                                            true, true);
 
     // operator (partial)
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->Init();
 
     VectorBatch *outputVecBatch = aggPartial->AlignSchema(input);
@@ -606,7 +606,7 @@ TEST(AdaptivePartialAggregationTest, verify_spark_decimal128)
                                          finalAggInputTypes, finalOutputTypes, aggFuncTypes, aggMaskVec,
                                          false, false);
 
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->Init();
 
     aggFinal->AddInput(outputVecBatch);

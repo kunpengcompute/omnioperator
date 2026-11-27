@@ -23,7 +23,7 @@ public:
     ~LookupJoinWrapperOperatorFactory() override;
     static LookupJoinWrapperOperatorFactory *CreateLookupJoinWrapperOperatorFactory(std::shared_ptr<const HashJoinNode> planNode,
         HashBuilderOperatorFactory* hashBuilderOperatorFactory, const config::QueryConfig& queryConfig);
-    Operator *CreateOperator() override;
+    Operator *CreateOperator(mem::OmniTaskMemoryPool *pool) override;
 
 private:
     LookupJoinWithExprOperatorFactory *lookupJoinWithExprOperatorFactory;
@@ -33,7 +33,8 @@ private:
 
 class LookupJoinWrapperOperator : public Operator {
 public:
-    LookupJoinWrapperOperator(LookupJoinWithExprOperator &lookupJoinWithExprOperatorFactory,
+    LookupJoinWrapperOperator(mem::OmniTaskMemoryPool *pool,
+        LookupJoinWithExprOperator &lookupJoinWithExprOperatorFactory,
         LookupOuterJoinWithExprOperator &lookupOuterJoinWithExprOperatorFactory, bool isNeedOuterJoin);
     ~LookupJoinWrapperOperator() override;
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override;

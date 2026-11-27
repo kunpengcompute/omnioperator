@@ -100,7 +100,7 @@ public:
         }
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
 
         auto *resultFlatVector = static_cast<Vector<LargeStringContainer<std::string_view>> *>(result);

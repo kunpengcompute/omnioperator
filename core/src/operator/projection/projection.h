@@ -25,8 +25,9 @@ using namespace codegen;
 
 class ProjectionOperator : public Operator {
 public:
-    explicit ProjectionOperator(std::shared_ptr<ExpressionEvaluator> &exprEvaluator)
-        : projectedVecs(nullptr), exprEvaluator(exprEvaluator)
+    ProjectionOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::shared_ptr<ExpressionEvaluator> &exprEvaluator)
+        : Operator(pool), projectedVecs(nullptr), exprEvaluator(exprEvaluator)
     {
         const auto &projs = exprEvaluator->GetProjections();
         for (uint32_t out = 0; out < projs.size(); ++out) {
@@ -83,7 +84,9 @@ public:
 
     ~ProjectionOperatorFactory() override = default;
 
-    omniruntime::op::Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // W2b-03: pool-bound override
+    omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::shared_ptr<ExpressionEvaluator> exprEvaluator;

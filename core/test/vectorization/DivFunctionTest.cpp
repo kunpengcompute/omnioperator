@@ -52,7 +52,7 @@ void TestBinaryDivOperation(
     ASSERT_EQ(expectedResults.size(), static_cast<size_t>(rowSize));
 
     // Create left vector
-    BaseVector* leftVec = VectorHelper::CreateFlatVector(inputTypeId, rowSize);
+    BaseVector* leftVec = VectorHelper::CreateFlatVector(nullptr, inputTypeId, rowSize);
     auto* leftVector = static_cast<Vector<TInput>*>(leftVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         leftVector->SetValue(i, leftData[i]);
@@ -60,7 +60,7 @@ void TestBinaryDivOperation(
     }
 
     // Create right vector
-    BaseVector* rightVec = VectorHelper::CreateFlatVector(inputTypeId, rowSize);
+    BaseVector* rightVec = VectorHelper::CreateFlatVector(nullptr, inputTypeId, rowSize);
     auto* rightVector = static_cast<Vector<TInput>*>(rightVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         rightVector->SetValue(i, rightData[i]);
@@ -76,7 +76,7 @@ void TestBinaryDivOperation(
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName << " not found for input type " << static_cast<int>(inputTypeId);
 
     // Create execution context
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
 
     // Prepare arguments stack
@@ -251,7 +251,7 @@ TEST_F(DivFunctionTest, DivDecimal128) {
     ASSERT_NE(vectorFunction, nullptr) << "Function div not found for DECIMAL128";
 
     // Create execution context
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
 
     // Prepare arguments stack
@@ -311,7 +311,7 @@ TEST_F(DivFunctionTest, DivDecimal128DivisionByZero) {
     ASSERT_NE(vectorFunction, nullptr) << "Function div not found for DECIMAL128";
 
     // Create execution context
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
 
     // Prepare arguments stack
@@ -352,7 +352,7 @@ TEST_F(DivFunctionTest, DivWithExprEval) {
     std::cout << "=== div input ===" << std::endl;
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -402,7 +402,7 @@ TEST_F(DivFunctionTest, DivWithNullInput) {
     std::cout << "=== div with NULL input ===" << std::endl;
     VectorHelper::PrintVecBatch(input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

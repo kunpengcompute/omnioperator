@@ -5,6 +5,7 @@
 #ifndef __WINDOW_H__
 #define __WINDOW_H__
 
+#include <atomic>
 #include <vector>
 #include "plannode/planNode.h"
 #include "operator/operator.h"
@@ -12,6 +13,7 @@
 #include "operator/pages_index.h"
 #include "operator/spill/spiller.h"
 #include "operator/spill/spill_merger.h"
+#include "operator/spillable_operator.h"
 #include "type/data_types.h"
 #include "window_function_options.h"
 #include "window_partition.h"
@@ -52,7 +54,9 @@ public:
         int32_t *windowFrameEndChannelsField, const OperatorConfig &operatorConfig,
         WindowFunctionOptions *windowFunctionOptionsField = nullptr);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     const DataTypes &GetSourceTypes() const
     {
@@ -214,9 +218,11 @@ private:
     OperatorConfig operatorConfig;
 };
 
-class WindowOperator : public Operator {
+class WindowOperator : public Operator, public SpillableOperator {
 public:
-    WindowOperator(const type::DataTypes &sourceTypes, std::vector<int32_t> &outputCols, int32_t outputColsCount,
+    // Pool-bound ctor chains Operator(pool)
+    WindowOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        const type::DataTypes &sourceTypes, std::vector<int32_t> &outputCols, int32_t outputColsCount,
         std::vector<int32_t> &windowFunctionTypes, int32_t windowFunctionCount, std::vector<int32_t> &partitionCols,
         int32_t partitionCount, std::vector<int32_t> &preGroupedCols, int32_t preGroupedCount,
         std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings, std::vector<int32_t> &sortNullFirsts,
@@ -240,6 +246,14 @@ public:
     void FinishPagesIndex();
 
     OmniStatus Init() override;
+    uint64_t reclaimableBytes() const override;
+    int64_t reclaim(int64_t targetBytes) override;
+    bool isInNonReclaimableSection() const noexcept override
+    {
+        return Operator::isInNonReclaimableSection();
+    }
+    Operator *operatorBase() noexcept override { return this; }
+    const char *reclaimableName() const noexcept override { return "WindowOperator"; }
 
 private:
     type::DataTypes sourceTypes;
@@ -282,6 +296,18 @@ private:
     OperatorConfig operatorConfig;
     bool isOverflowAsNull;
 
+    // Shared init body for legacy + pool-bound ctors. Takes the param refs
+    // so the body can index `sortCols`/`sortAscendings`/`sortNullFirsts` parameters
+    // (member shadowing makes direct extraction impossible — members are empty/different
+    // here). The `paramSortColCount` is the original sortColCount param value, before
+    // member-init list added partitionCount to it.
+    void InitFromCtor(std::vector<int32_t> &paramSortCols, std::vector<int32_t> &paramSortAscendings,
+        std::vector<int32_t> &paramSortNullFirsts, int32_t paramSortColCount);
+    int64_t EstimateInputReservation(const omniruntime::vec::VectorBatch *vecBatch) const;
+    void EnsureReservationPctsCached();
+    void ReserveForInput(const omniruntime::vec::VectorBatch *vecBatch);
+    void ReserveForSort();
+
     void Initialization();
     void ProcessData(omniruntime::vec::VectorBatch *&outputVecBatch, int32_t rowCount);
     void ProcessDataFromDisk(omniruntime::vec::VectorBatch *&outputVecBatch, int32_t rowCount);
@@ -317,6 +343,15 @@ private:
     uint64_t spilledBytes = 0;
     vec::VectorBatch *spillOutBatch = nullptr;
     int32_t spillBatchOffset = 0;
+    std::atomic<bool> reclaimInProgress_{false};
+
+    // QueryConfig is immutable for a query's lifetime (QueryConfig.h). Cache the
+    // clamped reservation percentages once instead of copying QueryConfig and
+    // re-parsing the config map on every AddInput. Defaults mirror QueryConfig's
+    // kDefaultPct values; EnsureReservationPctsCached() fills them on first use.
+    int32_t minSpillableReservationPct_{5};
+    int32_t spillableReservationGrowthPct_{10};
+    bool reservationPctsCached_{false};
 };
 
 int32_t FindGroupEnd(PagesIndex *pagesIndex, PagesHashStrategy *pagesHashStrategy, int32_t startPosition);

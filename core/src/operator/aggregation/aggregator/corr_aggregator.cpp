@@ -288,7 +288,7 @@ void CorrAggregator<IN_ID, OUT_ID>::ProcessSingleInternal(AggregateState *state,
             auto *p2 = reinterpret_cast<InType *>(GetValuesFromVector<IN_ID>(col2));
             p1 += rowOffset;
             p2 += rowOffset;
-            std::shared_ptr<NullsHelper> nm = nullMap ? nullMap : std::make_shared<NullsHelper>(std::make_shared<NullsBuffer>(rowCount));
+            std::shared_ptr<NullsHelper> nm = nullMap ? nullMap : std::make_shared<NullsHelper>(std::make_shared<NullsBuffer>(rowCount, nullptr, 0, allocator));
             CorrAccumulateRaw<InType, false>(s->count, s->sum_x, s->sum_y, s->sum_xx, s->sum_yy, s->sum_xy, s->valueState, p1, p2, rowCount, *nm);
         }
         if (s->count > 0 && s->valueState != AggValueState::OVERFLOWED) {
@@ -461,7 +461,7 @@ void CorrAggregator<IN_ID, OUT_ID>::AlignAggSchema(VectorBatch *result, VectorBa
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyPearson6(result);
+        RegrAlignAppendEmptyPearson6(result, this->pool_);
         return;
     }
     if (!inputRaw) {
@@ -473,7 +473,7 @@ void CorrAggregator<IN_ID, OUT_ID>::AlignAggSchema(VectorBatch *result, VectorBa
     BaseVector *xVec = inputVecBatch->Get(channels[0]);
     BaseVector *yVec = inputVecBatch->Get(channels[1]);
     // Pearson(x,y): helper args are (sparkY, sparkX) -> (channels[1], channels[0]).
-    RegrAlignAppendPearson6RawStd(result, yVec, xVec, xyNull, rc);
+    RegrAlignAppendPearson6RawStd(result, yVec, xVec, xyNull, rc, this->pool_);
 }
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
@@ -482,22 +482,23 @@ void CorrAggregator<IN_ID, OUT_ID>::AlignAggSchemaWithFilter(VectorBatch *result
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyPearson6(result);
+        RegrAlignAppendEmptyPearson6(result, this->pool_);
         return;
     }
     auto *filterVec = static_cast<Vector<bool> *>(inputVecBatch->Get(filterIndex));
     bool needFilter = DoNeedHandleAggFilter(filterVec, 0, rc);
     std::shared_ptr<NullsHelper> xyNull;
     GetVector(inputVecBatch, 0, rc, &xyNull);
-    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(xyNull, filterVec, needFilter, rc);
+    std::shared_ptr<NullsHelper> rowSkip =
+        RegrAlignMergeYxNullsWithFilter(xyNull, filterVec, needFilter, rc, this->pool_);
     if (!inputRaw) {
         RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, kCorrPartialColumnCount, rc, rowSkip,
-            false);
+            false, this->pool_);
         return;
     }
     BaseVector *xVec = inputVecBatch->Get(channels[0]);
     BaseVector *yVec = inputVecBatch->Get(channels[1]);
-    RegrAlignAppendPearson6RawStd(result, yVec, xVec, rowSkip, rc);
+    RegrAlignAppendPearson6RawStd(result, yVec, xVec, rowSkip, rc, this->pool_);
 }
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>
@@ -507,10 +508,10 @@ void CorrAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *result, B
     (void)nullMap;
     (void)aggFilter;
     if (originVector == nullptr) {
-        RegrAlignAppendEmptyPearson6(result);
+        RegrAlignAppendEmptyPearson6(result, this->pool_);
         return;
     }
-    RegrAlignAppendPearson6AllNullRows(result, originVector->GetSize());
+    RegrAlignAppendPearson6AllNullRows(result, originVector->GetSize(), this->pool_);
 }
 
 template <DataTypeId IN_ID, DataTypeId OUT_ID>

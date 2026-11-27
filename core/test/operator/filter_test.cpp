@@ -189,7 +189,7 @@ TEST(FilterTest, LessThanProcessRow)
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     exprEvaluator->SetSupportCodegen(true);
     OperatorFactory *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = dynamic_cast<FilterAndProjectOperator *>(factory->CreateOperator());
+    auto *op = dynamic_cast<FilterAndProjectOperator *>(factory->CreateOperator(nullptr));
 
     int64_t outValueAddrs[projectCount];
     int32_t outLens[projectCount];
@@ -258,7 +258,7 @@ TEST(FilterTest, ExprCodegenStringCompare)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(std::move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     auto createEnd = std::chrono::high_resolution_clock::now();
     std::cout << "The time of creating operator and factory is " <<
         std::chrono::duration_cast<std::chrono::microseconds>(createEnd - createStart).count() << std::endl;
@@ -306,7 +306,7 @@ TEST(FilterTest, LessThan)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -342,7 +342,7 @@ TEST(FilterTest, Shorts_LessThan)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -378,7 +378,7 @@ TEST(FilterTest, Bytes_LessThan)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -416,7 +416,7 @@ TEST(FilterTest, LessThanWihtoutParsing)
     auto *overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -457,7 +457,7 @@ TEST(FilterTest, GreaterThan)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -501,7 +501,7 @@ TEST(FilterTest, Shorts_GreaterThan)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -545,7 +545,7 @@ TEST(FilterTest, Bytes_GreaterThan)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -591,7 +591,7 @@ TEST(FilterTest, EqualTo)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -639,7 +639,7 @@ TEST(FilterTest, GreaterThanOrEqualTo)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -678,7 +678,7 @@ TEST(FilterTest, NotEqualTo)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -718,7 +718,7 @@ TEST(FilterTest, Shorts_NotEqualTo)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -759,7 +759,7 @@ TEST(FilterTest, Bytes_NotEqualTo)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -799,7 +799,7 @@ TEST(FilterTest, AllPass)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -836,7 +836,7 @@ TEST(FilterTest, MultipleInputs)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch1 = nullptr;
@@ -896,7 +896,7 @@ TEST(FilterTest, NegativeValues)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -953,7 +953,7 @@ TEST(FilterTest, AllTypes)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch = nullptr;
@@ -1017,7 +1017,7 @@ TEST(FilterTest, Compile)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numSelectedRows = op->GetOutput(&outputVecBatch);
@@ -1090,7 +1090,7 @@ TEST(FilterTest, LogicalOperators1)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1153,7 +1153,7 @@ TEST(FilterTest, LogicalOperators2)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1233,7 +1233,7 @@ TEST(FilterTest, LogicalOperators3)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1276,7 +1276,7 @@ TEST(FilterTest, ArithmeticAdd)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1316,7 +1316,7 @@ TEST(FilterTest, ArithmeticSubtract)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1364,7 +1364,7 @@ TEST(FilterTest, ArithmeticMultiply)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1417,7 +1417,7 @@ TEST(FilterTest, Conditional)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1468,7 +1468,7 @@ TEST(FilterTest, Conditional2)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1512,7 +1512,7 @@ TEST(FilterTest, In)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1563,7 +1563,7 @@ TEST(FilterTest, testLongIn)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1614,7 +1614,7 @@ TEST(FilterTest, testDoubleIn)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1668,7 +1668,7 @@ TEST(FilterTest, testStringIn1)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1714,7 +1714,7 @@ TEST(FilterTest, testStringIn2)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1754,7 +1754,7 @@ TEST(FilterTest, testDecimal128In)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1791,7 +1791,7 @@ TEST(FilterTest, Between)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1838,7 +1838,7 @@ TEST(FilterTest, NotEqualToAbs)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1898,7 +1898,7 @@ TEST(FilterTest, MathFunctionFilter1)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -1958,7 +1958,7 @@ TEST(FilterTest, MathFunctionFilter2)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -2000,7 +2000,7 @@ TEST(FilterTest, FilterString1)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -2044,7 +2044,7 @@ TEST(FilterTest, Coalesce1)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -2088,7 +2088,7 @@ TEST(FilterTest, Coalesce2)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -2127,7 +2127,7 @@ TEST(FilterTest, Coalesce3)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch1 = nullptr;
@@ -2180,7 +2180,7 @@ TEST(FilterTest, Coalesce4)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -2222,7 +2222,7 @@ TEST(FilterTest, Coalesce5)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -2267,7 +2267,7 @@ TEST(FilterTest, Coalesce6)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -2296,7 +2296,7 @@ void process(omniruntime::op::FilterAndProjectOperatorFactory *factory, int32_t 
         col3[i] = -1;
     }
     VectorBatch *outputVecBatch = nullptr;
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType(), IntType() }));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
@@ -2409,7 +2409,7 @@ TEST(FilterTest, TestFilterDictionaryVec)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes2, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *copiedBatch = DuplicateVectorBatch(t);
     op->AddInput(copiedBatch);
     VectorBatch *outputVecBatch = nullptr;
@@ -2461,7 +2461,7 @@ TEST(FilterTest, TestFilterDictionaryVarchar)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     auto *copiedBatch = DuplicateVectorBatch(t);
     op->AddInput(copiedBatch);
     VectorBatch *outputVecBatch = nullptr;
@@ -2509,7 +2509,7 @@ TEST(FilterTest, DecimalFilterBinaryTest)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(in1);
     VectorBatch *outputVecBatch1 = nullptr;
@@ -2583,7 +2583,7 @@ TEST(FilterTest, DecimalFilterAbsTest)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     auto start = std::chrono::system_clock::now();
     op->AddInput(in1);
@@ -2622,7 +2622,7 @@ TEST(FilterTest, FilterStringWithNull)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(batch);
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
@@ -2697,7 +2697,7 @@ TEST(FilterTest, StartsWith)
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(funcExpr, projections, inputTypes, overflowConfig);
 
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(vecBatch);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2763,7 +2763,7 @@ TEST(FilterTest, EndsWith)
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(funcExpr, projections, inputTypes, overflowConfig);
 
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(vecBatch);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2800,7 +2800,7 @@ TEST(FilterTest, SimpleFilter)
     bool initialized = filter->Initialize(overflowConfig);
     EXPECT_TRUE(initialized);
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     auto vector = reinterpret_cast<Vector<int32_t> *>(in1->Get(0));
     int64_t values[1];
     bool isNulls[1];
@@ -2846,7 +2846,7 @@ TEST(FilterTest, SimpleFilterWithNulls)
         vector->SetNull(i);
     }
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     int64_t values[1];
     bool isNulls[1];
     for (int i = 0; i < numRows; i++) {
@@ -2891,7 +2891,7 @@ TEST(FilterTest, SimpleFilterIntWithNulls)
         }
     }
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     int64_t values[2];
     bool isNulls[2];
     auto vector0 = reinterpret_cast<Vector<int32_t> *>(vecBatch->Get(0));
@@ -2955,7 +2955,7 @@ TEST(FilterTest, SimpleFilterCharWithNulls)
     bool initialized = filter->Initialize(overflowConfig);
     EXPECT_TRUE(initialized);
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     int64_t values[2];
     bool isNulls[2];
     int32_t lengths[2];
@@ -3093,7 +3093,7 @@ void SetMultiThreadArgs(struct MultiThreadArgs *multiThreadArgs, FilterAndProjec
 void OperatorAddInput(struct MultiThreadArgs *multiThreadArgs)
 {
     // create operator
-    omniruntime::op::Operator *op = multiThreadArgs->operatorFactory->CreateOperator();
+    omniruntime::op::Operator *op = multiThreadArgs->operatorFactory->CreateOperator(nullptr);
 
     // allocate vectors to operator and assemble them to vecBatch
     int vectorBatchNum;
@@ -3600,7 +3600,7 @@ TEST(FilterTest, DISABLED_FilterStruct)
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpression, expressions, inputDataTypes,
         overflowConfig);
     auto factory = new FilterAndProjectOperatorFactory(std::move(exprEvaluator));
-    auto filterOperator = factory->CreateOperator();
+    auto filterOperator = factory->CreateOperator(nullptr);
     filterOperator->AddInput(vectorBatch2);
     VectorBatch *outputVecBatch = nullptr;
     filterOperator->GetOutput(&outputVecBatch);
@@ -3612,11 +3612,31 @@ TEST(FilterTest, DISABLED_FilterStruct)
     delete factory;
 }
 
+class ScopedBatchExprEvaluateConfig {
+public:
+    explicit ScopedBatchExprEvaluateConfig(bool enabled)
+        : previous_(ConfigUtil::IsEnableBatchExprEvaluate())
+    {
+        ConfigUtil::SetEnableBatchExprEvaluate(enabled);
+    }
+
+    ~ScopedBatchExprEvaluateConfig()
+    {
+        ConfigUtil::SetEnableBatchExprEvaluate(previous_);
+    }
+
+    ScopedBatchExprEvaluateConfig(const ScopedBatchExprEvaluateConfig&) = delete;
+    ScopedBatchExprEvaluateConfig& operator=(const ScopedBatchExprEvaluateConfig&) = delete;
+
+private:
+    bool previous_;
+};
+
 // Filter a Vector<StringView> using an equality expression (column == filterValue).
 // Tests both the single-row (non-batch) and batch LLVM codegen paths for OMNI_STRING_VIEW.
 void RunStringViewFilterTest(bool batchMode, const std::string& filterValue, int32_t expectedMatch)
 {
-    ConfigUtil::SetEnableBatchExprEvaluate(batchMode);
+    ScopedBatchExprEvaluateConfig batchExprConfig(batchMode);
 
     const int32_t numRows = 11;
     // Alternating inline (≤12 bytes) and non-inline (>12 bytes) strings.
@@ -3645,7 +3665,7 @@ void RunStringViewFilterTest(bool batchMode, const std::string& filterValue, int
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -3691,7 +3711,7 @@ TEST(FilterTest, StringViewLongEqualityFilterBatch)
 
 void RunStringViewFilterNETest(bool batchMode, const std::string& filterValue, int32_t expectedMatch)
 {
-    ConfigUtil::SetEnableBatchExprEvaluate(batchMode);
+    ScopedBatchExprEvaluateConfig batchExprConfig(batchMode);
 
     const int32_t numRows = 11;
     // Alternating inline (≤12 bytes) and non-inline (>12 bytes) strings.
@@ -3720,7 +3740,7 @@ void RunStringViewFilterNETest(bool batchMode, const std::string& filterValue, i
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -3821,7 +3841,7 @@ void RunStringViewLengthFilterTest(int32_t targetLen, int32_t expectedMatch)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -3906,7 +3926,7 @@ void RunStringViewStartsWithFilterTest(const std::string &pattern, bool patternI
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -3987,7 +4007,7 @@ void RunStringViewEndsWithFilterTest(const std::string &pattern, bool patternIsS
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -4070,7 +4090,7 @@ void RunStringViewContainsFilterTest(const std::string &pattern, bool patternIsS
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -4154,7 +4174,7 @@ void RunStringViewAsciiFilterTest(int32_t targetCode, int32_t expectedMatch)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -4237,7 +4257,7 @@ void RunStringViewLocateFilterTest(const std::string &substr, bool substrIsStrin
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -4316,7 +4336,7 @@ void RunStringViewLikeFilterTest(const std::string &pattern, bool patternIsStrin
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -4397,7 +4417,7 @@ void RunStringViewInStrFilterTest(const std::string &substr, bool substrIsString
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;
@@ -4433,7 +4453,7 @@ TEST(FilterTest, StringViewInStrExactPosition)
 
 void RunStringViewFilterEvaluatorTest(bool batchMode, const std::string& filterValue, int32_t expectedMatch)
 {
-    ConfigUtil::SetEnableBatchExprEvaluate(batchMode);
+    ScopedBatchExprEvaluateConfig batchExprConfig(batchMode);
 
     const int32_t numRows = 11;
     // Alternating inline (≤12 bytes) and non-inline (>12 bytes) strings.
@@ -4466,7 +4486,7 @@ void RunStringViewFilterEvaluatorTest(bool batchMode, const std::string& filterV
     exprEvaluator->FilterFuncGeneration();
 
     omniruntime::mem::AlignedBuffer<int32_t> selectedRowsBuffer(numRows);
-    ExecutionContext execContext;
+    ExecutionContext execContext(4096, nullptr);
 
     auto out = exprEvaluator->Evaluate(vecBatch, &execContext, &selectedRowsBuffer);
     // Check for null before dereferencing: Evaluate returns nullptr when the codegen projection path
@@ -4523,7 +4543,7 @@ TEST(FilterTest, RunEvaluatorStringViewLongFilterBatch)
 void RunStringViewFilterVectorizedTest(bool batchMode, omniruntime::expressions::Operator op,
     const std::string& filterValue, int32_t expectedMatch)
 {
-    ConfigUtil::SetEnableBatchExprEvaluate(batchMode);
+    ScopedBatchExprEvaluateConfig batchExprConfig(batchMode);
 
     const int32_t numRows = 11;
     std::vector<std::string> strs = {
@@ -4560,7 +4580,7 @@ void RunStringViewFilterVectorizedTest(bool batchMode, omniruntime::expressions:
     exprEvaluator->FilterFuncGeneration();  // no-op when !useCodegen
 
     omniruntime::mem::AlignedBuffer<int32_t> selectedRowsBuffer(numRows);
-    ExecutionContext execContext;
+    ExecutionContext execContext(4096, nullptr);
 
     auto out = exprEvaluator->Evaluate(vecBatch, &execContext, &selectedRowsBuffer);
     ASSERT_NE(out, nullptr) << "Evaluate returned nullptr";
@@ -4619,6 +4639,19 @@ TEST(FilterTest, VectorizedStringViewLongNeqRowByRow)
 TEST(FilterTest, VectorizedStringViewLongNeqBatch)
 {
     RunStringViewFilterVectorizedTest(true, omniruntime::expressions::Operator::NEQ, "world_is_longer", 9);
+}
+
+// When every row passes, ProcessFilterAndProject takes its full-batch field-projection shortcut.
+// Keep this covered separately from the filtered-subset cases above: the shortcut has its own
+// type dispatch and must preserve Vector<StringView> rather than returning a null column.
+TEST(FilterTest, VectorizedStringViewAllRowsProjectionRowByRow)
+{
+    RunStringViewFilterVectorizedTest(false, omniruntime::expressions::Operator::NEQ, "not_present", 11);
+}
+
+TEST(FilterTest, VectorizedStringViewAllRowsProjectionBatch)
+{
+    RunStringViewFilterVectorizedTest(true, omniruntime::expressions::Operator::NEQ, "not_present", 11);
 }
 
 std::shared_ptr<ExpressionEvaluator> MakeStringViewValidationEvaluator(
@@ -4791,7 +4824,7 @@ TEST(FilterTest, StringViewVectorHelperCopyPositions)
 // VectorHelper — proves the operator→helper path for StringView is unblocked.
 TEST(FilterTest, StringViewFilterOutputThenSlice)
 {
-    ConfigUtil::SetEnableBatchExprEvaluate(true);
+    ScopedBatchExprEvaluateConfig batchExprConfig(true);
 
     const int32_t numRows = 6;
     std::vector<std::string> strs = {
@@ -4815,7 +4848,7 @@ TEST(FilterTest, StringViewFilterOutputThenSlice)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
 
     op->AddInput(vecBatch);
     VectorBatch *out = nullptr;

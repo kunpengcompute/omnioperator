@@ -27,7 +27,7 @@ void CardinalityFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
         OMNI_THROW("CardinalityFunction Error:", "Input vector is null");
     }
     int32_t rowSize = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_LONG, rowSize);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_LONG, rowSize);
     auto *resultVec = static_cast<Vector<int64_t> *>(result);
     DataTypeId inputTypeId = inputArg->GetTypeId();
     if (inputTypeId == OMNI_ARRAY) {

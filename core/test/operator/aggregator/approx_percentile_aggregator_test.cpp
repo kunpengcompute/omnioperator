@@ -66,14 +66,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_tinyint)
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -109,14 +109,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_smallint)
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -152,14 +152,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_int)
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -195,7 +195,7 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_long)
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
@@ -204,7 +204,7 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_long)
     EXPECT_EQ(partialOutput->GetRowCount(), 1);
     EXPECT_EQ(partialOutput->GetVectorCount(), 1);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -240,14 +240,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_float)
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -284,14 +284,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_double)
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -337,19 +337,19 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_merge_two_
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggP1 = partialFactory->CreateOperator();
+    auto aggP1 = partialFactory->CreateOperator(nullptr);
     aggP1->AddInput(vec1);
     VectorBatch* out1 = nullptr;
     (void)aggP1->GetOutput(&out1);
     ASSERT_NE(out1, nullptr);
 
-    auto aggP2 = partialFactory->CreateOperator();
+    auto aggP2 = partialFactory->CreateOperator(nullptr);
     aggP2->AddInput(vec2);
     VectorBatch* out2 = nullptr;
     (void)aggP2->GetOutput(&out2);
     ASSERT_NE(out2, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(out1);
     aggFinal->AddInput(out2);
     op::Operator::DeleteOperator(aggP1);
@@ -407,7 +407,7 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_group_by_partial_final)
     HashAggregationOperatorFactory partialFactory(groupByCols, groupTypes, partialAggCols, partialAggInputTypes,
         partialAggOutputTypes, aggFuncTypes, maskCols, inputRaws, outputPartials, false);
     partialFactory.Init();
-    auto aggPartial = partialFactory.CreateOperator();
+    auto aggPartial = partialFactory.CreateOperator(nullptr);
     aggPartial->Init();
     aggPartial->AddInput(vecBatch);
 
@@ -427,7 +427,7 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_group_by_partial_final)
     HashAggregationOperatorFactory finalFactory(groupByCols, groupTypes, finalAggCols, finalAggInputTypes,
         finalAggOutputTypes, aggFuncTypes, maskCols, finalInputRaws, finalOutputPartials, false);
     finalFactory.Init();
-    auto aggFinal = finalFactory.CreateOperator();
+    auto aggFinal = finalFactory.CreateOperator(nullptr);
     aggFinal->Init();
     aggFinal->AddInput(partialOutput);
 
@@ -473,14 +473,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_with_nulls
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -523,14 +523,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_dictionary
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -576,14 +576,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_percentile_array)
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -636,14 +636,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_weight)
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -682,14 +682,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_accuracy)
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -731,14 +731,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_weight_acc
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -790,7 +790,7 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_align_schema)
     HashAggregationOperatorFactory partialFactory(groupByCols, groupTypes, partialAggCols, partialAggInputTypes,
         partialAggOutputTypes, aggFuncTypes, maskCols, inputRaws, outputPartials, false);
     partialFactory.Init();
-    auto aggPartial = partialFactory.CreateOperator();
+    auto aggPartial = partialFactory.CreateOperator(nullptr);
     aggPartial->Init();
 
     VectorBatch* alignedBatch = aggPartial->AlignSchema(inputBatch);
@@ -807,7 +807,7 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_align_schema)
     HashAggregationOperatorFactory finalFactory(groupByCols, groupTypes, finalAggCols, finalAggInputTypes,
         finalAggOutputTypes, aggFuncTypes, maskCols, finalInputRaws, finalOutputPartials, false);
     finalFactory.Init();
-    auto aggFinal = finalFactory.CreateOperator();
+    auto aggFinal = finalFactory.CreateOperator(nullptr);
     aggFinal->Init();
     aggFinal->AddInput(alignedBatch);
 
@@ -848,14 +848,14 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_final_const_vect
 
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch* partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
     ASSERT_NE(partialOutput, nullptr);
 
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -906,13 +906,13 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_merge_final)
     std::unique_ptr<AggregationOperatorFactory> partialFactory, finalFactory;
     BuildPartialFinalFactories(sourceTypesVec, partialOutputTypes, finalOutputTypes, &partialFactory, &finalFactory);
 
-    auto aggP1 = partialFactory->CreateOperator();
+    auto aggP1 = partialFactory->CreateOperator(nullptr);
     aggP1->AddInput(vec1);
     VectorBatch* out1 = nullptr;
     (void)aggP1->GetOutput(&out1);
     ASSERT_NE(out1, nullptr);
 
-    auto aggP2 = partialFactory->CreateOperator();
+    auto aggP2 = partialFactory->CreateOperator(nullptr);
     aggP2->AddInput(vec2);
     VectorBatch* out2 = nullptr;
     (void)aggP2->GetOutput(&out2);
@@ -923,7 +923,7 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_merge_final)
     auto mergeFactory = CreateAggregationOperatorFactory(mergeAggFuncTypes, std::vector<uint32_t>({0}),
         partialOutputTypes, partialOutputTypes, std::vector<uint32_t>(), false, true, false);
 
-    auto aggMerge = mergeFactory->CreateOperator();
+    auto aggMerge = mergeFactory->CreateOperator(nullptr);
     aggMerge->AddInput(out1);
     aggMerge->AddInput(out2);
     op::Operator::DeleteOperator(aggP1);
@@ -936,7 +936,7 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_partial_merge_final)
     EXPECT_EQ(mergedOutput->GetVectorCount(), 1);
 
     // Final factory: VARBINARY -> Long
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(mergedOutput);
     op::Operator::DeleteOperator(aggMerge);
 
@@ -984,7 +984,7 @@ TEST(ApproxPercentileAggregationTest, approx_percentile_complete_single_stage)
         maskCols, aggsOutputTypes, inputRaws, outputPartials, false);
     completeFactory->Init();
 
-    auto aggComplete = completeFactory->CreateOperator();
+    auto aggComplete = completeFactory->CreateOperator(nullptr);
     aggComplete->AddInput(vecBatch);
 
     VectorBatch* completeOutput = nullptr;

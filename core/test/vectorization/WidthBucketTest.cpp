@@ -49,7 +49,7 @@ void TestWidthBucketOperation(
     int32_t rowSize = static_cast<int32_t>(valueData.size());
     
     // Create value vector (double)
-    BaseVector* valueVec = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    BaseVector* valueVec = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, rowSize);
     auto* valueVector = static_cast<Vector<double>*>(valueVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         valueVector->SetValue(i, valueData[i]);
@@ -57,7 +57,7 @@ void TestWidthBucketOperation(
     }
     
     // Create bound1 vector (double)
-    BaseVector* bound1Vec = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    BaseVector* bound1Vec = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, rowSize);
     auto* bound1Vector = static_cast<Vector<double>*>(bound1Vec);
     for (int32_t i = 0; i < rowSize; ++i) {
         bound1Vector->SetValue(i, bound1Data[i]);
@@ -65,7 +65,7 @@ void TestWidthBucketOperation(
     }
     
     // Create bound2 vector (double)
-    BaseVector* bound2Vec = VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowSize);
+    BaseVector* bound2Vec = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, rowSize);
     auto* bound2Vector = static_cast<Vector<double>*>(bound2Vec);
     for (int32_t i = 0; i < rowSize; ++i) {
         bound2Vector->SetValue(i, bound2Data[i]);
@@ -73,7 +73,7 @@ void TestWidthBucketOperation(
     }
     
     // Create numBuckets vector (int64_t)
-    BaseVector* numBucketsVec = VectorHelper::CreateFlatVector(OMNI_LONG, rowSize);
+    BaseVector* numBucketsVec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, rowSize);
     auto* numBucketsVector = static_cast<Vector<int64_t>*>(numBucketsVec);
     for (int32_t i = 0; i < rowSize; ++i) {
         numBucketsVector->SetValue(i, numBucketsData[i]);
@@ -89,7 +89,7 @@ void TestWidthBucketOperation(
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName << " not found";
     
     // Create execution context
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     
     // Prepare arguments stack (pushed in reverse order for stack)
@@ -282,7 +282,7 @@ TEST_F(WidthBucketTest, ExprEvalIntegration) {
     std::cout << "=== width_bucket input ===" << std::endl;
     VectorHelper::PrintVecBatch(input);
     
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     
     ExprEval e(input, context);

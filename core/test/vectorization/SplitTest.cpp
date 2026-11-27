@@ -104,7 +104,7 @@ public:
         vec::BaseVector* resultVector = nullptr;
         auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 
-        op::ExecutionContext context;
+        op::ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(rowSize);
         std::stack<vec::BaseVector*> args;
         args.push(inputVec);

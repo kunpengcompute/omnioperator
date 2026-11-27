@@ -290,7 +290,7 @@ void RegrSyyAggregator::AlignAggSchema(VectorBatch *result, VectorBatch *inputVe
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyVarPop3(result);
+        RegrAlignAppendEmptyVarPop3(result, this->pool_);
         return;
     }
     if (!inputRaw) {
@@ -300,7 +300,7 @@ void RegrSyyAggregator::AlignAggSchema(VectorBatch *result, VectorBatch *inputVe
     std::shared_ptr<NullsHelper> yxNull;
     GetVector(inputVecBatch, 0, rc, &yxNull);
     BaseVector *yVec = inputVecBatch->Get(channels[0]);
-    RegrAlignAppendVarPop3RawFromY(result, yVec, yxNull, rc);
+    RegrAlignAppendVarPop3RawFromY(result, yVec, yxNull, rc, this->pool_);
 }
 
 void RegrSyyAggregator::AlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *inputVecBatch,
@@ -308,20 +308,20 @@ void RegrSyyAggregator::AlignAggSchemaWithFilter(VectorBatch *result, VectorBatc
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyVarPop3(result);
+        RegrAlignAppendEmptyVarPop3(result, this->pool_);
         return;
     }
     auto *filterVec = static_cast<Vector<bool> *>(inputVecBatch->Get(filterIndex));
     bool needFilter = DoNeedHandleAggFilter(filterVec, 0, rc);
     std::shared_ptr<NullsHelper> yxNull;
     GetVector(inputVecBatch, 0, rc, &yxNull);
-    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(yxNull, filterVec, needFilter, rc);
+    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(yxNull, filterVec, needFilter, rc, this->pool_);
     if (!inputRaw) {
-        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 3, rc, rowSkip, false);
+        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 3, rc, rowSkip, false, this->pool_);
         return;
     }
     BaseVector *yVec = inputVecBatch->Get(channels[0]);
-    RegrAlignAppendVarPop3RawFromY(result, yVec, rowSkip, rc);
+    RegrAlignAppendVarPop3RawFromY(result, yVec, rowSkip, rc, this->pool_);
 }
 
 void RegrSyyAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
@@ -330,10 +330,10 @@ void RegrSyyAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector *o
     (void)nullMap;
     (void)aggFilter;
     if (originVector == nullptr) {
-        RegrAlignAppendEmptyVarPop3(result);
+        RegrAlignAppendEmptyVarPop3(result, this->pool_);
         return;
     }
-    RegrAlignAppendVarPop3AllNullRows(result, originVector->GetSize());
+    RegrAlignAppendVarPop3AllNullRows(result, originVector->GetSize(), this->pool_);
 }
 
 std::vector<DataTypePtr> RegrSyyAggregator::GetSpillType()

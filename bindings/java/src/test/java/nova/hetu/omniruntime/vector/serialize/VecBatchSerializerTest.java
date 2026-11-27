@@ -907,4 +907,29 @@ public class VecBatchSerializerTest {
         freeVecBatch(vecBatch);
         freeVecBatch(checkVecBatch);
     }
+    @Test(expectedExceptions = IllegalStateException.class)
+    public void testDeserializePropagatesConstructionFailure() {
+        VecBatchSerde.Vec unsupported = VecBatchSerde.Vec.newBuilder()
+                .setTypeExt(VecBatchSerde.DataTypeExt.newBuilder()
+                        .setId(VecBatchSerde.DataTypeExt.DataTypeId.OMNI_INVALID))
+                .setSize(1).setNulls(com.google.protobuf.ByteString.copyFrom(new byte[1])).build();
+        byte[] bytes = VecBatchSerde.VecBatch.newBuilder().setRowCount(1).setVecCount(1)
+                .addVectors(unsupported).build().toByteArray();
+        new ProtoVecBatchSerializer().deserialize(bytes);
+    }
+
+    @Test(expectedExceptions = IllegalStateException.class)
+    public void testDeserializePropagatesFailureAfterClosingEarlierVectors() {
+        VecBatchSerde.Vec first = VecBatchSerde.Vec.newBuilder()
+                .setTypeExt(VecBatchSerde.DataTypeExt.newBuilder()
+                        .setId(VecBatchSerde.DataTypeExt.DataTypeId.OMNI_INT))
+                .setSize(1).setNulls(com.google.protobuf.ByteString.copyFrom(new byte[1]))
+                .setValues(com.google.protobuf.ByteString.copyFrom(new byte[4])).build();
+        VecBatchSerde.Vec unsupported = first.toBuilder().setTypeExt(
+                first.getTypeExt().toBuilder().setId(VecBatchSerde.DataTypeExt.DataTypeId.OMNI_INVALID)).build();
+        byte[] bytes = VecBatchSerde.VecBatch.newBuilder().setRowCount(1).setVecCount(2)
+                .addVectors(first).addVectors(unsupported).build().toByteArray();
+        new ProtoVecBatchSerializer().deserialize(bytes);
+    }
+
 }

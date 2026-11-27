@@ -61,7 +61,7 @@ TEST(ExpandTest, Simple)
         exprEvaluators.push_back(exprEvaluator);
     }
     auto *factory = new ExpandOperatorFactory(move(exprEvaluators));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
 
     for (int32_t i = 0; i < numRows; i++) {

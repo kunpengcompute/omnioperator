@@ -115,7 +115,7 @@ TEST_F(ArrayUnionTest, BasicIntegerUnion)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -166,7 +166,7 @@ TEST_F(ArrayUnionTest, CompleteOverlap)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -207,7 +207,7 @@ TEST_F(ArrayUnionTest, NoOverlap)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -249,7 +249,7 @@ TEST_F(ArrayUnionTest, DuplicatesWithinArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -292,7 +292,7 @@ TEST_F(ArrayUnionTest, EmptyArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -347,7 +347,7 @@ TEST_F(ArrayUnionTest, NullElementHandling)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -408,7 +408,7 @@ TEST_F(ArrayUnionTest, LongArrayUnion)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -461,7 +461,7 @@ TEST_F(ArrayUnionTest, DoubleArrayUnion)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -512,7 +512,7 @@ TEST_F(ArrayUnionTest, BooleanArrayUnion)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -554,7 +554,7 @@ TEST_F(ArrayUnionTest, MultipleRows)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -612,7 +612,7 @@ TEST_F(ArrayUnionTest, NegativeNumbers)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

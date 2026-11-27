@@ -105,7 +105,7 @@ public:
                 }
             }
 
-            Operator *op = operatorFactory->CreateOperator();
+            Operator *op = operatorFactory->CreateOperator(nullptr);
             rowsProcessed = 0;
             VectorBatch *vb = createSingleVecBatch(state);
             int32_t nIters = 0;

@@ -58,7 +58,7 @@ void SizeFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outp
     }
 
     int32_t rowSize = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_INT, rowSize);
     if (!result) {
         OMNI_THROW("SizeFunction Error:", "Failed to create result vector");
     }

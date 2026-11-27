@@ -3,15 +3,21 @@
  * Description: ...
  */
 #include "gtest/gtest.h"
+#include <type_traits>
 #include "operator/execution_context.h"
 
 using namespace omniruntime::op;
 using namespace std;
 
+static_assert(!std::is_copy_constructible_v<ExecutionContext>);
+static_assert(!std::is_copy_assignable_v<ExecutionContext>);
+static_assert(!std::is_move_constructible_v<ExecutionContext>);
+static_assert(!std::is_move_assignable_v<ExecutionContext>);
+
 
 TEST(ExecutionContext, testAllocateAndReset)
 {
-    ExecutionContext *executionContext = new ExecutionContext();
+    ExecutionContext *executionContext = new ExecutionContext(4096, nullptr);
     int64_t chunkSize = 4096;
 
     // Small allocations should come from the same chunk.

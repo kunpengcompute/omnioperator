@@ -55,7 +55,7 @@ public:
     }
 
     static BaseVector* CreateIntVector(const std::vector<int32_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_INT, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, values.size());
         auto* typedVec = static_cast<Vector<int32_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -64,7 +64,7 @@ public:
     }
 
     static BaseVector* CreateDate32Vector(const std::vector<int32_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_DATE32, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_DATE32, values.size());
         auto* typedVec = static_cast<Vector<int32_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -79,7 +79,7 @@ public:
         ASSERT_NE(function, nullptr) << "date_from_unix_date function not found for signature";
 
         auto outputType = std::make_shared<DataType>(OMNI_DATE32);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(inputVec);
@@ -384,7 +384,7 @@ TEST(DateFromUnixDateTest, InverseOfUnixDate) {
     BaseVector* unixDateResult = nullptr;
 
     auto intOutputType = std::make_shared<DataType>(OMNI_INT);
-    ExecutionContext context1;
+    ExecutionContext context1(4096, nullptr);
     context1.SetResultRowSize(dateInputVec->GetSize());
     std::stack<BaseVector*> args1;
     args1.push(dateInputVec);

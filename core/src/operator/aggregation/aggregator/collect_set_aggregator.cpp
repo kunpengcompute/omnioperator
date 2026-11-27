@@ -43,14 +43,14 @@ void CollectSetAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateState *st
 
     if (uniqueValues->GetElementsSize() == 0) {
         // Spark: empty collect_set is [] not null; avoids ColumnarBatchToInternalRow / UnsafeProjection NPE
-        auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, 0));
+        auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, 0));
         v->SetValue(rowIndex, elementVector);
         delete elementVector;
         return;
     }
     auto elementSize = uniqueValues->GetElementsSize();
 
-    auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, elementSize));
+    auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, elementSize));
 
     int32_t index = 0;
     uniqueValues->ForEachKV([&](const stateType &key, const int8_t &value) {
@@ -84,14 +84,14 @@ void CollectSetAggregator<IN_ID, OUT_ID>::ExtractValuesBatch(std::vector<Aggrega
         DefaultHashMap<stateType, int8_t>* uniqueValues = reinterpret_cast<DefaultHashMap<stateType, int8_t> *>(setState->uniqueValuesAddr);
 
         if (uniqueValues->GetElementsSize() == 0) {
-            auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, 0));
+            auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, 0));
             v->SetValue(rowOffset + rowIndex, elementVector);
             delete elementVector;
             continue;
         }
 
         auto elementSize = uniqueValues->GetElementsSize();
-        auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, elementSize));
+        auto elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, elementSize));
 
         int32_t index = 0;
         uniqueValues->ForEachKV([&](const stateType &key, const int8_t &value) {
@@ -137,7 +137,9 @@ void CollectSetAggregator<IN_ID, OUT_ID>::InitState(AggregateState *state) {
     // Bug-XXX: default BaseHashMap initializes 2^15=32768 buckets per group (mem::Allocator accounted,
     // ~0.29MB/group for int, ~1.34MB for string), so collect_set with many groups blows MEM_CAP instantly.
     // Start with 2^4=16 buckets and grow on demand (Grower doubles); per-group sets are typically tiny.
-    DefaultHashMap<stateType, int8_t>* uniqueValues = new DefaultHashMap<stateType, int8_t>(6);
+    // Route hashmap memory to the task pool.
+    DefaultHashMap<stateType, int8_t>* uniqueValues = new DefaultHashMap<stateType, int8_t>(
+        OmniHashmapAllocator(EnsureExecutionContext()->GetAllocator()), 6);
     uniqueValues->Reset();
     setState->uniqueValuesAddr = reinterpret_cast<int64_t>(uniqueValues);
     allocatedUniqueValuesAddrs_.push_back(setState->uniqueValuesAddr);
@@ -326,7 +328,7 @@ template<DataTypeId IN_ID, DataTypeId OUT_ID>
 void CollectSetAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *vecBatch, BaseVector *originVector, const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter) {
     const int32_t rowCount = (originVector != nullptr) ? originVector->GetSize() : 0;
     if (rowCount == 0) {
-        auto *emptyArr = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), 0));
+        auto *emptyArr = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), 0));
         vecBatch->Append(emptyArr);
         return;
     }
@@ -350,7 +352,7 @@ template<typename T>
 void CollectSetAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInteranal(VectorBatch *result, BaseVector *originVector, const std::shared_ptr<NullsHelper> nullMap) {
     using stateType = typename AggNativeAndVectorType<IN_ID>::type;
     const int32_t rowCount = originVector->GetSize();
-    auto *arrayVector = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), rowCount));
+    auto *arrayVector = static_cast<ArrayVector *>(VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), rowCount));
 
     int32_t nonNullCount = 0;
     for (int32_t i = 0; i < rowCount; i++) {
@@ -359,7 +361,7 @@ void CollectSetAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInteranal(VectorB
         }
     }
 
-    auto *elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(OMNI_FLAT, IN_ID, nonNullCount));
+    auto *elementVector = static_cast<Vector<stateType> *>(VectorHelper::CreateVector(this->pool_, OMNI_FLAT, IN_ID, nonNullCount));
     int32_t elemIdx = 0;
     auto *vector = reinterpret_cast<T *>(originVector);
 

@@ -37,12 +37,12 @@ private:
     /// Set boolean value to result vector
     static void SetBooleanValueToVector(BaseVector* vec, int32_t row, bool value);
 
-    /// Main implementation: match str against LIKE pattern (% _ escape)
+    /// Main implementation: match str against LIKE pattern (% _ escape); pool is threaded through.
     void ApplyLike(BaseVector* strVec, BaseVector* patternVec, BaseVector*& result,
-                   const DataTypePtr& outputType) const;
+                   const DataTypePtr& outputType, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     void ApplyLikeWithEscape(BaseVector* strVec, BaseVector* patternVec, BaseVector* escapeVec, BaseVector*& result,
-                             const DataTypePtr& outputType) const;
+                             const DataTypePtr& outputType, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     /// Convert LIKE pattern to regex string; then match str (full match) via std::regex
     bool MatchLike(const std::string_view& str, const std::string_view& pattern) const;

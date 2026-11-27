@@ -54,7 +54,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr);
         auto outputType = std::make_shared<DataType>(OMNI_INT);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(inputVec);

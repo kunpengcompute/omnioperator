@@ -56,7 +56,9 @@ public:
     static WindowWithExprOperatorFactory *CreateWindowWithExprOperatorFactory(std::shared_ptr<const WindowNode> planNode,
         const config::QueryConfig &queryConfig);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::unique_ptr<DataTypes> sourceTypes;
@@ -67,8 +69,10 @@ private:
 
 class WindowWithExprOperator : public Operator {
 public:
-    WindowWithExprOperator(const type::DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
-        WindowOperator *windowOperator, const config::QueryConfig &queryConfig);
+    // Pool-bound ctor chains Operator(pool)
+    WindowWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+        std::vector<std::unique_ptr<Projection>> &projections, WindowOperator *windowOperator,
+        const config::QueryConfig &queryConfig);
 
     ~WindowWithExprOperator() override;
 
@@ -83,12 +87,14 @@ public:
     void noMoreInput() override
     {
         noMoreInput_ = true;
+        Operator::NonReclaimableSection innerSection(windowOperator);
         windowOperator->noMoreInput();
     }
 
     void setNoMoreInput(bool noMoreInput) override
     {
         noMoreInput_ = noMoreInput;
+        Operator::NonReclaimableSection innerSection(windowOperator);
         windowOperator->setNoMoreInput(noMoreInput);
     }
 

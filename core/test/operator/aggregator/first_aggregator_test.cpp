@@ -41,7 +41,7 @@ TEST(FirstAggregatorTest, IgnoreNull_Short_AllNullThenValue)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input1 = new Vector<short>(5);
@@ -92,7 +92,7 @@ TEST(FirstAggregatorTest, IgnoreNull_Int_AllNullThenValue)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input1 = new Vector<int32_t>(5);
@@ -139,7 +139,7 @@ TEST(FirstAggregatorTest, IgnoreNull_Byte_AllNullThenValue)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input1 = new Vector<int8_t>(5);
@@ -186,7 +186,7 @@ TEST(FirstAggregatorTest, IgnoreNull_Varbinary_AllNullThenValue)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input1 = new Vector<LargeStringContainer<std::string_view>>(5);
@@ -237,7 +237,7 @@ TEST(FirstAggregatorTest, IncludeNull_Int_FirstIsNull)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input = new Vector<int32_t>(5);

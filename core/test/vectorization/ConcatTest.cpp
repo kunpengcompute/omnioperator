@@ -130,7 +130,7 @@ TEST(ConcatTest, ConcatFunctionBasicTest) {
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     // In ExprEval, arguments are pushed in order: left arg first, right arg last (on top)
@@ -172,7 +172,7 @@ TEST(ConcatTest, ConcatFunctionThreeArgsTest) {
 
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
 
     // Step 1: concat(inputVec2, inputVec3) -> intermediateResult
@@ -220,7 +220,7 @@ TEST(ConcatTest, ConcatFunctionEmptyStringTest) {
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     // In ExprEval, arguments are pushed in order: left arg first, right arg last (on top)
@@ -261,7 +261,7 @@ TEST(ConcatTest, ConcatFunctionNullTest) {
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     // In ExprEval, arguments are pushed in order: left arg first, right arg last (on top)
@@ -322,7 +322,7 @@ TEST(ConcatTest, ConcatFunctionMultipleArgsTest) {
 
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
 
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
 
     // Step 1: concat(inputVec3, inputVec4) -> result1
@@ -379,7 +379,7 @@ TEST(ConcatTest, ConcatSVBothStringView) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec1);  // left arg (pushed first)
@@ -411,7 +411,7 @@ TEST(ConcatTest, ConcatSVMixedWithVarchar) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec1);  // left arg (SV, pushed first)
@@ -440,7 +440,7 @@ TEST(ConcatTest, ConcatSVNullPropagation) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec1);
@@ -473,7 +473,7 @@ TEST(ConcatTest, ConcatSVOutBothStringView) {
 
     vec::BaseVector* resultVector = nullptr;
     auto svType = std::make_shared<DataType>(OMNI_STRING_VIEW);
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec1);
@@ -503,7 +503,7 @@ TEST(ConcatTest, ConcatSVOutNestedThreeArgs) {
     ASSERT_NE(function, nullptr) << "concat({SV,SV})->SV overload not found";
 
     auto svType = std::make_shared<DataType>(OMNI_STRING_VIEW);
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
 
     std::stack<vec::BaseVector*> args1;
@@ -540,7 +540,7 @@ TEST(ConcatTest, ConcatSVOutResultOwnsBuffer) {
 
     vec::BaseVector* resultVector = nullptr;
     auto svType = std::make_shared<DataType>(OMNI_STRING_VIEW);
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec1);

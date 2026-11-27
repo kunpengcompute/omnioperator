@@ -88,7 +88,7 @@ TEST_F(UuidTest, BasicUuidFormat) {
     // Create seed input vector (constant) for Apply args
     auto* seedVec = CreateSeedArgVector(seed);
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args;
     args.push(seedVec);
@@ -123,7 +123,7 @@ TEST_F(UuidTest, UniqueUuidsPerRow) {
 
     auto* seedVec = CreateSeedArgVector(seed);
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args;
     args.push(seedVec);
@@ -161,7 +161,7 @@ TEST_F(UuidTest, DeterministicWithSameSeedAndPartition) {
     ASSERT_NE(function1, nullptr);
 
     auto* seedVec1 = CreateSeedArgVector(seed);
-    ExecutionContext context1;
+    ExecutionContext context1(4096, nullptr);
     context1.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args1;
     args1.push(seedVec1);
@@ -185,7 +185,7 @@ TEST_F(UuidTest, DeterministicWithSameSeedAndPartition) {
     ASSERT_NE(function2, nullptr);
 
     auto* seedVec2 = CreateSeedArgVector(seed);
-    ExecutionContext context2;
+    ExecutionContext context2(4096, nullptr);
     context2.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args2;
     args2.push(seedVec2);
@@ -223,7 +223,7 @@ TEST_F(UuidTest, DifferentSeedsProduceDifferentUuids) {
     ASSERT_NE(function1, nullptr);
 
     auto* seedVec1 = CreateSeedArgVector(seed1);
-    ExecutionContext context1;
+    ExecutionContext context1(4096, nullptr);
     context1.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args1;
     args1.push(seedVec1);
@@ -241,7 +241,7 @@ TEST_F(UuidTest, DifferentSeedsProduceDifferentUuids) {
     ASSERT_NE(function2, nullptr);
 
     auto* seedVec2 = CreateSeedArgVector(seed2);
-    ExecutionContext context2;
+    ExecutionContext context2(4096, nullptr);
     context2.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args2;
     args2.push(seedVec2);
@@ -284,7 +284,7 @@ TEST_F(UuidTest, DifferentPartitionsProduceDifferentUuids) {
     ASSERT_NE(function1, nullptr);
 
     auto* seedVec1 = CreateSeedArgVector(seed);
-    ExecutionContext context1;
+    ExecutionContext context1(4096, nullptr);
     context1.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args1;
     args1.push(seedVec1);
@@ -302,7 +302,7 @@ TEST_F(UuidTest, DifferentPartitionsProduceDifferentUuids) {
     ASSERT_NE(function2, nullptr);
 
     auto* seedVec2 = CreateSeedArgVector(seed);
-    ExecutionContext context2;
+    ExecutionContext context2(4096, nullptr);
     context2.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args2;
     args2.push(seedVec2);
@@ -343,7 +343,7 @@ TEST_F(UuidTest, SingleRow) {
     ASSERT_NE(function, nullptr);
 
     auto* seedVec = CreateSeedArgVector(seed);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args;
     args.push(seedVec);
@@ -374,7 +374,7 @@ TEST_F(UuidTest, LargeBatch) {
     ASSERT_NE(function, nullptr);
 
     auto* seedVec = CreateSeedArgVector(seed);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args;
     args.push(seedVec);
@@ -412,7 +412,7 @@ TEST_F(UuidTest, VersionAndVariantBits) {
     ASSERT_NE(function, nullptr);
 
     auto* seedVec = CreateSeedArgVector(seed);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args;
     args.push(seedVec);
@@ -454,7 +454,7 @@ TEST_F(UuidTest, ZeroSeed) {
     ASSERT_NE(function, nullptr);
 
     auto* seedVec = CreateSeedArgVector(seed);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args;
     args.push(seedVec);
@@ -487,7 +487,7 @@ TEST_F(UuidTest, NegativeSeed) {
     ASSERT_NE(function, nullptr);
 
     auto* seedVec = CreateSeedArgVector(seed);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args;
     args.push(seedVec);
@@ -520,7 +520,7 @@ TEST_F(UuidTest, LargeSeedValue) {
     ASSERT_NE(function, nullptr);
 
     auto* seedVec = CreateSeedArgVector(seed);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<BaseVector*> args;
     args.push(seedVec);

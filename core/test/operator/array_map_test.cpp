@@ -12,10 +12,12 @@ namespace HashMapTest {
 using namespace omniruntime::op;
 TEST(ArrayMapTest, TestForAllFunctions)
 {
-    DefaultArrayMap<RowRefList> hashMap(64);
+    // executionContext must be created before hashMap so we can pass its allocator
+    // (OmniHashmapAllocator requires an explicit Allocator*).
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
+    DefaultArrayMap<RowRefList> hashMap(64, OmniHashmapAllocator(executionContext->GetAllocator()));
     std::vector<size_t> positions { 0, 1, 10, 20, 30, 40, 50 };
     RowRefList *rowRef;
-    auto executionContext = std::make_unique<ExecutionContext>();
     auto arenaAllocator = executionContext->GetArena();
     for (size_t i = 0; i < positions.size(); ++i) {
         auto ret = hashMap.InsertJoinKeysToHashmap(positions[i]);

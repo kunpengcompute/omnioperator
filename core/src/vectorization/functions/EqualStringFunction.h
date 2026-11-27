@@ -112,7 +112,7 @@ class EqualStringFunction final : public VectorFunction {
         auto leftArg = args.top();
         args.pop();
         auto rowSize = context->GetResultRowSize();
-        auto *flatResult = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowSize));
+        auto *flatResult = reinterpret_cast<Vector<bool> *>(VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, rowSize));
         auto alignedBuffer = unsafe::UnsafeVector::GetValues(flatResult)->GetBuffer();
         // set defualt compared result is 0 which means the result is filtered for there might exists some row not compare when it's null
         memset(alignedBuffer, 0, rowSize);

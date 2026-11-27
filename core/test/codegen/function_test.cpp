@@ -49,7 +49,7 @@ void Date32TruncTest(const std::string &input, const std::string &level, const s
 
 static void Md5StringTest(const std::string &input, const std::string &expect)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen;
     char *res = Md5Str(contextPtr, input.c_str(), input.size(), false, &outLen);
@@ -59,7 +59,7 @@ static void Md5StringTest(const std::string &input, const std::string &expect)
 
 TEST(FunctionTest, ArenaAllocatorMalloc)
 {
-    auto execContext = new ExecutionContext();
+    auto execContext = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(execContext);
     char *ptr;
     for (uint64_t i = 1; i <= execContext->GetArena()->TotalBytes() / 256; ++i) {
@@ -73,7 +73,7 @@ TEST(FunctionTest, ArenaAllocatorMalloc)
 
 TEST(FunctionTest, ArenaAllocatorReset)
 {
-    auto execContext = new ExecutionContext();
+    auto execContext = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(execContext);
 
     ArenaAllocatorMalloc(contextptr, 1);
@@ -553,7 +553,7 @@ TEST(FunctionTest, CastDoubleToInt8)
 
 TEST(FunctionTest, CastStringToInt16)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     std::string s = " 23423 ";
@@ -594,7 +594,7 @@ TEST(FunctionTest, CastStringToInt16)
 
 TEST(FunctionTest, CastStringToInt8)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     std::string s = " 127 ";
@@ -1333,7 +1333,7 @@ TEST(FunctionTest, LessThanEqualDouble)
 
 TEST(FunctionTest, CastNumToString)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
 
     int8_t int_8 = -12;
@@ -1476,7 +1476,7 @@ TEST(FunctionTest, SplitIndexRetNull)
 
 TEST(FunctionTest, ConcatCharChar)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     int outlen = 0;
     const char *result;
@@ -1512,7 +1512,7 @@ TEST(FunctionTest, ConcatCharChar)
 
 TEST(FunctionTest, ConcatStrChar)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     int outlen = 0;
     const char *result;
@@ -1547,7 +1547,7 @@ TEST(FunctionTest, ConcatStrChar)
 
 TEST(FunctionTest, ConcatCharStr)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     int outlen = 0;
     const char *result;
@@ -1582,7 +1582,7 @@ TEST(FunctionTest, ConcatCharStr)
 
 TEST(FunctionTest, ConcatWsWithoutStr)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outlen = 0;
     const char *result;
@@ -1608,7 +1608,7 @@ TEST(FunctionTest, ConcatWsWithoutStr)
 
 TEST(FunctionTest, ConcatWsWith1Str)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outlen = 0;
     const char *result;
@@ -1642,7 +1642,7 @@ TEST(FunctionTest, ConcatWsWith1Str)
 
 TEST(FunctionTest, ConcatWsStr)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outlen = 0;
     const char *result;
@@ -1718,7 +1718,7 @@ TEST(FunctionTest, ConcatWsStr)
 
 TEST(FunctionTest, ConcatWs3Str)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outlen = 0;
     const char *result;
@@ -1803,7 +1803,7 @@ TEST(FunctionTest, ConcatWs3Str)
 
 TEST(FunctionTest, ConcatWs4Str)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outlen = 0;
     const char *result;
@@ -1870,7 +1870,7 @@ TEST(FunctionTest, ConcatWs4Str)
 
 TEST(FunctionTest, ConcatWs5Str)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outlen = 0;
     const char *result;
@@ -1938,7 +1938,7 @@ TEST(FunctionTest, ConcatWs5Str)
 
 TEST(FunctionTest, Trim)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int outLen = 0;
     const char *result;
@@ -1979,7 +1979,7 @@ TEST(FunctionTest, Trim)
 
 TEST(FunctionTest, RTrim)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int outLen = 0;
     const char *result;
@@ -2014,7 +2014,7 @@ TEST(FunctionTest, RTrim)
 
 TEST(FunctionTest, LTrim)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int outLen = 0;
     const char *result;
@@ -2050,7 +2050,7 @@ TEST(FunctionTest, LTrim)
 
 TEST(FunctionTest, Substr)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     std::string str = "Magic Johnson 123@#$";
     int32_t strlen = static_cast<int32_t>(str.length());
@@ -2092,7 +2092,7 @@ TEST(FunctionTest, Substr)
 
 TEST(FunctionTest, SubstrZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     int32_t strLen = static_cast<int32_t>(str.length());
@@ -2160,7 +2160,7 @@ TEST(FunctionTest, SubstrZh)
 
 TEST(FunctionTest, SubstrChar)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     std::string str = "Magic Johnson 123@#$       ";
     int32_t width = static_cast<int32_t>(str.length());
@@ -2220,7 +2220,7 @@ TEST(FunctionTest, SubstrChar)
 
 TEST(FunctionTest, SubstrCharZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     int32_t width = 37;
@@ -2289,7 +2289,7 @@ TEST(FunctionTest, SubstrCharZh)
 
 TEST(FunctionTest, SubstrWithStart)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     std::string str = "ABC efg 123 $%^";
     int32_t strlen = static_cast<int32_t>(str.length());
@@ -2327,7 +2327,7 @@ TEST(FunctionTest, SubstrWithStart)
 
 TEST(FunctionTest, SubstrWithZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     int32_t strLen = static_cast<int32_t>(str.length());
@@ -2381,7 +2381,7 @@ TEST(FunctionTest, SubstrWithZh)
 TEST(FunctionTest, SubstrWithZhForSpark)
 {
     ConfigUtil::SetNegativeStartIndexOutOfBoundsRule(NegativeStartIndexOutOfBoundsRule::INTERCEPT_FROM_BEYOND);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 h";
     int32_t strLen = static_cast<int32_t>(str.length());
@@ -2436,7 +2436,7 @@ TEST(FunctionTest, SubstrWithZhForSpark)
 
 TEST(FunctionTest, SubstrCharWithStart)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     std::string str = "ABC efg 123 $%^        ";
     int32_t width = static_cast<int32_t>(str.length());
@@ -2474,7 +2474,7 @@ TEST(FunctionTest, SubstrCharWithStart)
 
 TEST(FunctionTest, SubstrCharWithStartZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     int32_t width = static_cast<int32_t>(str.length());
@@ -2528,7 +2528,7 @@ TEST(FunctionTest, SubstrCharWithStartZh)
 
 TEST(FunctionTest, ToUpperStr)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     std::string test = "[\\]^_abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}.";
     std::string expected = "[\\]^_ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}.";
@@ -2542,7 +2542,7 @@ TEST(FunctionTest, ToUpperStr)
 
 TEST(FunctionTest, ToUpperChar)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     std::string test = "[\\]^_abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}.";
     std::string expected = "[\\]^_ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}.";
@@ -2558,7 +2558,7 @@ TEST(FunctionTest, ToUpperChar)
 
 TEST(FunctionTest, ToLowerStr)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string test = "[\\]^_abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}.";
     std::string expected = "[\\]^_abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz{|}.";
@@ -2572,7 +2572,7 @@ TEST(FunctionTest, ToLowerStr)
 
 TEST(FunctionTest, ToLowerChar)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string test = "[\\]^_abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}.";
     std::string expected = "[\\]^_abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz{|}.";
@@ -2618,7 +2618,7 @@ TEST(FunctionTest, LikeStr)
 
 TEST(FunctionTest, ConcatStrStr)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextptr = reinterpret_cast<int64_t>(context);
     int outlen = 0;
     const char *result;
@@ -2722,7 +2722,7 @@ TEST(FunctionTest, CastStringToDate)
 {
     ConfigUtil::SetStringToDateFormatRule(StringToDateFormatRule::ALLOW_REDUCED_PRECISION);
     // year-month-day
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t result = CastStringToDateAllowReducePrecison(contextPtr, "1970-01-03", 10, false);
     EXPECT_EQ(result, 2);
@@ -2795,7 +2795,7 @@ TEST(FunctionTest, LengthStrZh)
 
 TEST(FunctionTest, ReplaceStrStrStrWithRep)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
 
@@ -2830,7 +2830,7 @@ TEST(FunctionTest, ReplaceStrStrStrWithRep)
 
 TEST(FunctionTest, ReplaceStrStrWithoutRep)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
 
@@ -2862,7 +2862,7 @@ TEST(FunctionTest, ReplaceStrStrWithoutRep)
 
 TEST(FunctionTest, ReplaceStrCharStr)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
 
@@ -2884,7 +2884,7 @@ TEST(FunctionTest, ReplaceStrCharStr)
 
 TEST(FunctionTest, ReplaceCharCharChar)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
 
@@ -2909,7 +2909,7 @@ TEST(FunctionTest, ReplaceCharCharChar)
 
 TEST(FunctionTest, ReplaceStrStrStrZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
 
@@ -2963,7 +2963,7 @@ TEST(FunctionTest, ReplaceStrStrStrZh)
 
 TEST(FunctionTest, ConcatStrStrZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int outLen = 0;
     const char *result;
@@ -2978,7 +2978,7 @@ TEST(FunctionTest, ConcatStrStrZh)
 
 TEST(FunctionTest, ConcatCharCharZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
     const char *result;
@@ -3028,7 +3028,7 @@ TEST(FunctionTest, ConcatCharCharZh)
 
 TEST(FunctionTest, ConcatCharStrZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int outLen = 0;
     const char *result;
@@ -3048,7 +3048,7 @@ TEST(FunctionTest, ConcatCharStrZh)
 
 TEST(FunctionTest, ConcatStrCharZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int outLen = 0;
     const char *result;
@@ -3113,7 +3113,7 @@ TEST(FunctionTest, LikeCharZh)
 
 TEST(FunctionTest, CastStringToLong)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string s = "23423";
     int64_t result = CastStringToLong(contextPtr, s.c_str(), static_cast<int32_t>(s.size()), false);
@@ -3142,7 +3142,7 @@ TEST(FunctionTest, CastStringToLong)
 
 TEST(FunctionTest, CastStringToInt)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     std::string s = " 23423 ";
@@ -3459,7 +3459,7 @@ TEST(FunctionTest, CastStringToLongRetNull)
 
 TEST(FunctionTest, CastStringToDouble)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string s = "23423";
     double result = CastStringToDouble(contextPtr, s.c_str(), static_cast<int32_t>(s.size()), false);
@@ -3501,7 +3501,7 @@ TEST(FunctionTest, CastStringToDouble)
 
 TEST(FunctionTest, EvaluateHiveUdfSingle)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t inputTypes[] = { OMNI_INT, OMNI_INT };
     int32_t retType = OMNI_INT;
@@ -3606,7 +3606,7 @@ TEST(FunctionTest, UnixTimestampFromDate)
 
 TEST(FunctionTest, FromUnixTimeRetNull)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     bool isNull = false;
     std::string fmtStr = "%Y-%m-%d %H:%M:%S";
@@ -3643,7 +3643,7 @@ TEST(FunctionTest, FromUnixTimeRetNull)
 
 TEST(FunctionTest, FromUnixTimeWithoutTz)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outlen = 0;
     std::string actual;
@@ -3681,7 +3681,7 @@ TEST(FunctionTest, FromUnixTimeWithoutTz)
 
 TEST(FunctionTest, DateFormat)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     bool isNull = false;
     std::string fmtStr = "yyyy-MM-dd";
@@ -3972,7 +3972,7 @@ TEST(FunctionTest, Greatest)
 
 TEST(FunctionTest, StaticInvokeVarcharTypeWriteSideCheck)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string src = "abc";
     int outLen;
@@ -4006,7 +4006,7 @@ TEST(FunctionTest, StaticInvokeVarcharTypeWriteSideCheck)
 
 TEST(FunctionTest, StaticInvokeCharReadPadding)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string src = "abc";
     int outLen;
@@ -4044,7 +4044,7 @@ TEST(FunctionTest, StaticInvokeCharReadPadding)
 std::string RegexpReplaceTest(const std::string &stringInput, const std::string &pattern,
     const std::string &replacement, int32_t position)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
     auto res = RegexpReplace(contextPtr, stringInput.data(), stringInput.size(), pattern.data(), pattern.size(),
@@ -4064,7 +4064,7 @@ TEST(FunctionTest, RegexpReplace)
 #ifndef EXCLUDE_DUPLICATE_CODEGEN_FUNCTIONS
 TEST(FunctionTest, GetJsonObject)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
 
     auto expectNull = [&](const char *jsonStr, int32_t jsonLen, bool jsonIsNull, const char *pathStr, int32_t pathLen,

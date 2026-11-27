@@ -18,6 +18,10 @@ public class IntVec extends FixedWidthVec {
         super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, IntDataType.INTEGER);
     }
 
+    public IntVec(int size, long nmmHandle) {
+        super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, IntDataType.INTEGER, nmmHandle);
+    }
+
     public IntVec(long nativeVector) {
         super(nativeVector, IntDataType.INTEGER, BYTES);
     }

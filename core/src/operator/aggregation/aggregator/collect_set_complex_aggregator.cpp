@@ -282,11 +282,11 @@ void CollectSetComplexAggregator::ExtractValues(const AggregateState *state, std
             v->SetNull(rowIndex);
             return;
         }
-        BaseVector *elemVec = VectorHelper::CreateComplexVector(elemType, 0);
+        BaseVector *elemVec = VectorHelper::CreateComplexVector(this->pool_, elemType, 0);
         type::DataType *outputElemType = (outputType->GetId() == OMNI_ARRAY)
             ? outputType->asArray().ElementType().get() : nullptr;
         if (outputElemType != nullptr && outputElemType->GetId() == OMNI_ARRAY) {
-            ArrayVector *innerArr = new ArrayVector(static_cast<int64_t>(0), std::shared_ptr<BaseVector>(elemVec));
+            ArrayVector *innerArr = new ArrayVector(static_cast<int64_t>(0), std::shared_ptr<BaseVector>(elemVec), this->pool_);
             static_cast<ArrayVector *>(v)->SetValue(rowIndex, innerArr);
             delete innerArr;
         } else {
@@ -305,7 +305,7 @@ void CollectSetComplexAggregator::ExtractValues(const AggregateState *state, std
     for (BaseVector *s : *set) {
         totalElem += static_cast<int32_t>(s->GetSize());
     }
-    BaseVector *elemVec = VectorHelper::CreateComplexVector(elemType, totalElem);
+    BaseVector *elemVec = VectorHelper::CreateComplexVector(this->pool_, elemType, totalElem);
     int32_t offset = 0;
     size_t idx = 0;
     // For struct (OMNI_ROW), use CopyValue per row to avoid RowVector::Append issues with rawChildren_ layout.
@@ -332,7 +332,7 @@ void CollectSetComplexAggregator::ExtractValues(const AggregateState *state, std
         ? outputType->asArray().ElementType().get() : nullptr;
     if (outputElemType != nullptr && outputElemType->GetId() == OMNI_ARRAY) {
         // Array<Array<T>>: output element type is Array; SetValue expects ArrayVector.
-        ArrayVector *innerArr = new ArrayVector(static_cast<int64_t>(set->size()), std::shared_ptr<BaseVector>(elemVec));
+        ArrayVector *innerArr = new ArrayVector(static_cast<int64_t>(set->size()), std::shared_ptr<BaseVector>(elemVec), this->pool_);
         idx = 0;
         for (BaseVector *s : *set) {
             int32_t sz = static_cast<int32_t>(s->GetSize());
@@ -403,7 +403,7 @@ void CollectSetComplexAggregator::ProcessAlignAggSchema(VectorBatch *result, Bas
 {
     const int32_t rowCount = (originVector != nullptr) ? originVector->GetSize() : 0;
     if (rowCount == 0) {
-        BaseVector *emptyArr = VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), 0);
+        BaseVector *emptyArr = VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), 0);
         result->Append(emptyArr);
         return;
     }
@@ -414,7 +414,7 @@ void CollectSetComplexAggregator::ProcessAlignAggSchema(VectorBatch *result, Bas
     }
     type::DataTypePtr outputType = GetOutputTypes().GetType(0);
     ArrayVector *arrayVector = static_cast<ArrayVector *>(
-        VectorHelper::CreateComplexVector(outputType.get(), rowCount));
+        VectorHelper::CreateComplexVector(this->pool_, outputType.get(), rowCount));
     for (int32_t i = 0; i < rowCount; i++) {
         if ((nullMap != nullptr && (*nullMap)[i]) || originVector->IsNull(i)) {
             arrayVector->SetNull(i);
@@ -431,7 +431,7 @@ void CollectSetComplexAggregator::ProcessAlignAggSchema(VectorBatch *result, Bas
                 type::DataType *elemType = outputType->GetId() == OMNI_ARRAY
                     ? outputType->asArray().ElementType().get() : nullptr;
                 if (elemType != nullptr && elemType->GetId() == OMNI_ARRAY) {
-                    ArrayVector *wrapped = new ArrayVector(1, std::shared_ptr<BaseVector>(owned));
+                    ArrayVector *wrapped = new ArrayVector(1, std::shared_ptr<BaseVector>(owned), this->pool_);
                     wrapped->SetSize(0, static_cast<int32_t>(owned->GetSize()));
                     wrapped->SetNotNull(0);
                     arrayVector->SetValue(i, wrapped);

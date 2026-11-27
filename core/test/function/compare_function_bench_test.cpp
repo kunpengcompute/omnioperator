@@ -253,7 +253,7 @@
 //
 //    // auto vector_function = makeLessThan("lessThan", typeIds, config::QueryConfig{});
 //    auto vector_function = makeEqualTo("equal", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -305,7 +305,7 @@
 //    s.push(dictionaryVectory2);
 //
 //    auto vector_function = makeEqualTo("equal", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -358,7 +358,7 @@
 //    s.push(dictionaryVectory2);
 //
 //    auto vector_function = makeLessThan("lessThan", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -409,7 +409,7 @@
 //    s.push(dictionaryVectory2);
 //
 //    auto vector_function = makeGreaterThan("greaterThan", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -460,7 +460,7 @@
 //    s.push(dictionaryVectory2);
 //
 //    auto vector_function = makeGreaterThanOrEqual("greaterThanOrEqual", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -511,7 +511,7 @@
 //    s.push(dictionaryVectory2);
 //
 //    auto vector_function = makeLessThanOrEqual("lessThanOrEqual", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -545,7 +545,7 @@
 //    }
 //
 //    auto dictionaryVectory = VectorHelper::CreateDictionaryVector(indexes.data(), 10, baseVector, type::OMNI_INT);
-//    auto flatVector = reinterpret_cast<Vector<int> *>(VectorHelper::CreateFlatVector(type::OMNI_INT, rowSize));
+//    auto flatVector = reinterpret_cast<Vector<int> *>(VectorHelper::CreateFlatVector(nullptr, type::OMNI_INT, rowSize));
 //    auto flatBuffer = unsafe::UnsafeVector::GetValues(flatVector)->GetBuffer();
 //
 //    for (size_t i = 0; i < vectorSize; i++) {
@@ -561,7 +561,7 @@
 //    s.push(flatVector);
 //
 //    auto vector_function = makeEqualTo("equal", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -597,7 +597,7 @@
 //    }
 //
 //    auto dictionaryVectory = VectorHelper::CreateDictionaryVector(indexes.data(), 10, baseVector, type::OMNI_VARCHAR);
-//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(type::OMNI_VARCHAR, rowSize));
+//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(nullptr, type::OMNI_VARCHAR, rowSize));
 //
 //    for (size_t i = 0; i < vectorSize; i++) {
 //        std::string_view sv = prefix + std::to_string(i);
@@ -613,7 +613,7 @@
 //    s.push(flatVector);
 //
 //    auto vector_function = makeEqualTo("equal", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -648,7 +648,7 @@
 //    }
 //
 //    auto dictionaryVectory = VectorHelper::CreateDictionaryVector(indexes.data(), 10, baseVector, type::OMNI_VARCHAR);
-//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(type::OMNI_VARCHAR, rowSize));
+//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(nullptr, type::OMNI_VARCHAR, rowSize));
 //
 //    for (size_t i = 0; i < vectorSize; i++) {
 //        std::string_view sv = prefix + std::to_string(i);
@@ -664,7 +664,7 @@
 //    s.push(flatVector);
 //
 //    auto vector_function = makeLessThan("lessThan", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -699,7 +699,7 @@
 //    }
 //
 //    auto dictionaryVectory = VectorHelper::CreateDictionaryVector(indexes.data(), 10, baseVector, type::OMNI_VARCHAR);
-//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(type::OMNI_VARCHAR, rowSize));
+//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(nullptr, type::OMNI_VARCHAR, rowSize));
 //
 //    for (size_t i = 0; i < vectorSize; i++) {
 //        std::string_view sv = prefix + std::to_string(i);
@@ -715,7 +715,7 @@
 //    s.push(flatVector);
 //
 //    auto vector_function = makeGreaterThan("greaterThan", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -750,7 +750,7 @@
 //    }
 //
 //    auto dictionaryVectory = VectorHelper::CreateDictionaryVector(indexes.data(), 10, baseVector, type::OMNI_VARCHAR);
-//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(type::OMNI_VARCHAR, rowSize));
+//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(nullptr, type::OMNI_VARCHAR, rowSize));
 //
 //    for (size_t i = 0; i < vectorSize; i++) {
 //        std::string_view sv = prefix + std::to_string(i);
@@ -766,7 +766,7 @@
 //    s.push(flatVector);
 //
 //    auto vector_function = makeGreaterThanOrEqual("greaterThanOrEqual", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -801,7 +801,7 @@
 //    }
 //
 //    auto dictionaryVectory = VectorHelper::CreateDictionaryVector(indexes.data(), 10, baseVector, type::OMNI_VARCHAR);
-//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(type::OMNI_VARCHAR, rowSize));
+//    auto flatVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(VectorHelper::CreateFlatVector(nullptr, type::OMNI_VARCHAR, rowSize));
 //
 //    for (size_t i = 0; i < vectorSize; i++) {
 //        std::string_view sv = prefix + std::to_string(i);
@@ -817,7 +817,7 @@
 //    s.push(flatVector);
 //
 //    auto vector_function = makeLessThanOrEqual("lessThanOrEqual", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -861,7 +861,7 @@
 //    s.push(constVector);
 //
 //    auto vector_function = makeEqualTo("equal", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -907,7 +907,7 @@
 //    s.push(constVector);
 //
 //    auto vector_function = makeEqualTo("equal", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -955,7 +955,7 @@
 //    s.push(constVector);
 //
 //    auto vector_function = makeLessThan("lessThan", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -1001,7 +1001,7 @@
 //    s.push(constVector);
 //
 //    auto vector_function = makeGreaterThan("greaterThan", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -1047,7 +1047,7 @@
 //    s.push(constVector);
 //
 //    auto vector_function = makeGreaterThanOrEqual("greaterThanOrEqual", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);
@@ -1094,7 +1094,7 @@
 //    s.push(constVector);
 //
 //    auto vector_function = makeLessThanOrEqual("lessThanOrEqual", typeIds, config::QueryConfig{});
-//    auto result = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+//    auto result = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
 //    auto arrayType = std::make_shared<DataType>(OMNI_ARRAY);
 //    op::ExecutionContext context;
 //    context.SetResultRowSize(rowSize);

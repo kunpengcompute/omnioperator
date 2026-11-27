@@ -281,14 +281,15 @@ void MaxByAggregator<COL1_ID, COL2_ID>::ProcessGroupUnspill(std::vector<UnspillR
 template <DataTypeId COL1_ID, DataTypeId COL2_ID>
 void MaxByAggregator<COL1_ID, COL2_ID>::AlignAggSchema(VectorBatch *result, VectorBatch *inputVecBatch)
 {
-    MinMaxByAlignAggSchema<COL1_ID, COL2_ID>(result, inputVecBatch, channels, inputRaw);
+    MinMaxByAlignAggSchema<COL1_ID, COL2_ID>(result, inputVecBatch, channels, inputRaw, this->pool_);
 }
 
 template <DataTypeId COL1_ID, DataTypeId COL2_ID>
 void MaxByAggregator<COL1_ID, COL2_ID>::AlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *inputVecBatch,
     const int32_t filterIndex)
 {
-    MinMaxByAlignAggSchemaWithFilter<COL1_ID, COL2_ID>(result, inputVecBatch, channels, inputRaw, filterIndex);
+    MinMaxByAlignAggSchemaWithFilter<COL1_ID, COL2_ID>(result, inputVecBatch, channels, inputRaw, filterIndex,
+        this->pool_);
 }
 
 template <DataTypeId COL1_ID, DataTypeId COL2_ID>
@@ -298,7 +299,7 @@ void MaxByAggregator<COL1_ID, COL2_ID>::ProcessAlignAggSchema(VectorBatch *resul
     (void)nullMap;
     (void)aggFilter;
     if (originVector == nullptr) {
-        MinMaxByAlignAppendEmptyPartial2<COL1_ID, COL2_ID>(result);
+        MinMaxByAlignAppendEmptyPartial2<COL1_ID, COL2_ID>(result, this->pool_);
     }
 }
 

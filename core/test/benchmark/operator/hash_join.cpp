@@ -124,7 +124,7 @@ protected:
     {
         hashBuilderOperatorFactory =
             dynamic_cast<HashBuilderOperatorFactory *>(HashBuilder::createOperatorFactory(state));
-        hashBuilderOperator = hashBuilderOperatorFactory->CreateOperator();
+        hashBuilderOperator = hashBuilderOperatorFactory->CreateOperator(nullptr);
         for (const auto &vb : HashBuilder::createVecBatch(state)) {
             hashBuilderOperator->AddInput(vb());
         }

@@ -307,7 +307,7 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnChar)
     // create the filter expression
     omniruntime::expressions::Expr *joinFilter = CreateJoinFilterExprWithChar();
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     nestedLoopJoinBuildOperator->AddInput(buildVecBatch);
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
@@ -320,7 +320,7 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnChar)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, nullptr, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -378,7 +378,7 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnCharWithDictionary)
     // create the filter expression
     omniruntime::expressions::Expr *joinFilter = CreateJoinFilterExprWithChar();
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     nestedLoopJoinBuildOperator->AddInput(buildVecBatch);
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
@@ -391,7 +391,7 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnCharWithDictionary)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, nullptr, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -447,7 +447,7 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnChar)
         new NestedLoopJoinBuildOperatorFactory(buildDataTypes, buildColumns, buildDataTypes.GetSize());
     // create the filter expression
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     nestedLoopJoinBuildOperator->AddInput(buildVecBatch);
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
@@ -460,7 +460,7 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnChar)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -516,7 +516,7 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnCharWithDictionary)
         new NestedLoopJoinBuildOperatorFactory(buildDataTypes, buildColumns, buildDataTypes.GetSize());
     // create the filter expression
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     nestedLoopJoinBuildOperator->AddInput(buildVecBatch);
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
@@ -529,7 +529,7 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnCharWithDictionary)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -580,7 +580,7 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnChar)
     // create the filter expression
     omniruntime::expressions::Expr *joinFilter = CreateJoinFilterExprWithInt();
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     nestedLoopJoinBuildOperator->AddInput(buildVecBatch);
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
@@ -593,7 +593,7 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnChar)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -645,7 +645,7 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnCharWithDictionary)
     // create the filter expression
     omniruntime::expressions::Expr *joinFilter = CreateJoinFilterExprWithInt();
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     nestedLoopJoinBuildOperator->AddInput(buildVecBatch);
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
@@ -658,7 +658,7 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnCharWithDictionary)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -709,7 +709,7 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnChar)
     // create the filter expression
     omniruntime::expressions::Expr *joinFilter = CreateJoinFilterExprWithInt();
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     nestedLoopJoinBuildOperator->AddInput(buildVecBatch);
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
@@ -720,7 +720,7 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnChar)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -772,7 +772,7 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnCharWithDictionary)
     // create the filter expression
     omniruntime::expressions::Expr *joinFilter = CreateJoinFilterExprWithInt();
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     nestedLoopJoinBuildOperator->AddInput(buildVecBatch);
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
@@ -784,7 +784,7 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnCharWithDictionary)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -816,7 +816,7 @@ TEST(NestedLoopJoinTest, TestOperatorWithoutInput)
 
     // create the operator
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
 
     // Simulate no output
@@ -829,7 +829,7 @@ TEST(NestedLoopJoinTest, TestOperatorWithoutInput)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
 
     Expr::DeleteExprs({ joinFilter });
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
@@ -868,7 +868,7 @@ TEST(NestedLoopJoinTest, TestLeftJoinOperatorWithoutBuildInput)
     // create the filter expression
     omniruntime::expressions::Expr *joinFilter = CreateJoinFilterExprWithInt();
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
 
@@ -886,7 +886,7 @@ TEST(NestedLoopJoinTest, TestLeftJoinOperatorWithoutBuildInput)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -933,7 +933,7 @@ TEST(NestedLoopJoinTest, TestCrossJoinOperatorWithoutBuildInput)
     // create the filter expression
     omniruntime::expressions::Expr *joinFilter = nullptr;
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
 
@@ -950,7 +950,7 @@ TEST(NestedLoopJoinTest, TestCrossJoinOperatorWithoutBuildInput)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -997,7 +997,7 @@ TEST(NestedLoopJoinTest, TestInnerJoinOperatorWithoutBuildInput)
     // create the filter expression
     omniruntime::expressions::Expr *joinFilter = CreateJoinFilterExprWithInt();
     auto nestedLoopJoinBuildOperator =
-        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator());
+        static_cast<NestedLoopJoinBuildOperator *>(nestedLoopJoinBuildOperatorFactory->CreateOperator(nullptr));
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
 
@@ -1014,7 +1014,7 @@ TEST(NestedLoopJoinTest, TestInnerJoinOperatorWithoutBuildInput)
         NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
         probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr, config::QueryConfig());
     auto nestLoopJoinLookupOperator =
-        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
+        dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator(nullptr));
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     nestLoopJoinLookupOperator->GetOutput(&outputVecBatch);
@@ -1086,7 +1086,7 @@ TEST(NestedLoopJoinTest, TestRightBuildRightNoEqualityJoinOnChar)
         data.buildNotMatchRows.data(), 1);
 
     auto factory = new NestedLoopJoinBuildOperatorFactory(data.buildDataTypes, data.buildColumns.data(), 2);
-    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator());
+    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator(nullptr));
     buildOp->AddInput(data.buildVecBatch);
     VectorBatch *buildOutput = nullptr;
     buildOp->GetOutput(&buildOutput);
@@ -1096,7 +1096,7 @@ TEST(NestedLoopJoinTest, TestRightBuildRightNoEqualityJoinOnChar)
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_RIGHT;
     auto lookupFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
         joinTypePtr, data.probeDataTypes, data.probeColumns.data(), 2, filter, factoryAddr, nullptr, config::QueryConfig());
-    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator());
+    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator(nullptr));
     lookupOp->AddInput(data.probeVecBatch);
 
     VectorBatch *output1 = nullptr;
@@ -1132,7 +1132,7 @@ TEST(NestedLoopJoinTest, TestRightBuildRightWithoutProbeInputNoEqualityJoinOnCha
         buildNotMatchRows.data(), 4);
 
     auto factory = new NestedLoopJoinBuildOperatorFactory(data.buildDataTypes, data.buildColumns.data(), 2);
-    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator());
+    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator(nullptr));
     buildOp->AddInput(data.buildVecBatch);
     VectorBatch *buildOutput = nullptr;
     buildOp->GetOutput(&buildOutput);
@@ -1142,7 +1142,7 @@ TEST(NestedLoopJoinTest, TestRightBuildRightWithoutProbeInputNoEqualityJoinOnCha
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_RIGHT;
     auto lookupFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
         joinTypePtr, data.probeDataTypes, data.probeColumns.data(), 2, filter, factoryAddr, nullptr, config::QueryConfig());
-    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator());
+    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator(nullptr));
     lookupOp->AddInput(emptyProbeVecBatch);
 
     VectorBatch *output = nullptr;
@@ -1171,7 +1171,7 @@ TEST(NestedLoopJoinTest, TestFullBuildRightNoEqualityJoinOnChar)
         data.buildNotMatchRows.data(), 1);
 
     auto factory = new NestedLoopJoinBuildOperatorFactory(data.buildDataTypes, data.buildColumns.data(), 2);
-    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator());
+    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator(nullptr));
     buildOp->AddInput(data.buildVecBatch);
     VectorBatch *buildOutput = nullptr;
     buildOp->GetOutput(&buildOutput);
@@ -1181,7 +1181,7 @@ TEST(NestedLoopJoinTest, TestFullBuildRightNoEqualityJoinOnChar)
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_FULL;
     auto lookupFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
         joinTypePtr, data.probeDataTypes, data.probeColumns.data(), 2, filter, factoryAddr, nullptr, config::QueryConfig());
-    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator());
+    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator(nullptr));
     lookupOp->AddInput(data.probeVecBatch);
 
     VectorBatch *output1 = nullptr;
@@ -1229,7 +1229,7 @@ TEST(NestedLoopJoinTest, TestCrossJoinWithBuildConstVector)
     int32_t probeColumns[2] = {0, 1};
 
     auto factory = new NestedLoopJoinBuildOperatorFactory(buildDataTypes, buildColumns, 2);
-    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator());
+    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator(nullptr));
     buildOp->AddInput(buildVecBatch);
     VectorBatch *buildOutput = nullptr;
     buildOp->GetOutput(&buildOutput);
@@ -1238,7 +1238,7 @@ TEST(NestedLoopJoinTest, TestCrossJoinWithBuildConstVector)
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_INNER;
     auto lookupFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
         joinTypePtr, probeDataTypes, probeColumns, 2, nullptr, factoryAddr, nullptr, config::QueryConfig());
-    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator());
+    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator(nullptr));
     lookupOp->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     lookupOp->GetOutput(&outputVecBatch);
@@ -1279,7 +1279,7 @@ TEST(NestedLoopJoinTest, TestCrossJoinWithProbeConstVector)
     int32_t probeColumns[2] = {0, 1};
 
     auto factory = new NestedLoopJoinBuildOperatorFactory(buildDataTypes, buildColumns, 2);
-    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator());
+    auto buildOp = static_cast<NestedLoopJoinBuildOperator *>(factory->CreateOperator(nullptr));
     buildOp->AddInput(buildVecBatch);
     VectorBatch *buildOutput = nullptr;
     buildOp->GetOutput(&buildOutput);
@@ -1288,7 +1288,7 @@ TEST(NestedLoopJoinTest, TestCrossJoinWithProbeConstVector)
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_INNER;
     auto lookupFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
         joinTypePtr, probeDataTypes, probeColumns, 2, nullptr, factoryAddr, nullptr, config::QueryConfig());
-    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator());
+    auto lookupOp = dynamic_cast<NestLoopJoinLookupOperator *>(lookupFactory->CreateOperator(nullptr));
     lookupOp->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
     lookupOp->GetOutput(&outputVecBatch);

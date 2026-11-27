@@ -16,9 +16,11 @@ namespace omniruntime {
 namespace op {
 class AggregationCommonOperator : public Operator {
 public:
-    explicit AggregationCommonOperator(std::vector<std::unique_ptr<Aggregator>> &&aggs, std::vector<bool> &inputRaws,
+    // Pool-bound ctor — chains Operator(pool) so pool_ + ExecutionContext bind from construction.
+    AggregationCommonOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::vector<std::unique_ptr<Aggregator>> &&aggs, std::vector<bool> &inputRaws,
         std::vector<bool> &outputPartials, bool isOverflowAsNull = false)
-        : inputRaws(inputRaws), outputPartials(outputPartials), isOverflowAsNull(isOverflowAsNull)
+        : Operator(pool), inputRaws(inputRaws), outputPartials(outputPartials), isOverflowAsNull(isOverflowAsNull)
     {
         for (auto &agg : aggs) {
             agg->SetExecutionContext(executionContext.get());

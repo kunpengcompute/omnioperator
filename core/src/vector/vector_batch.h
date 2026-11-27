@@ -56,7 +56,13 @@ public:
 
     size_t GetCapacity();
 
+    // Legacy element-count metric: sums BaseVector::GetSize() across columns.
+    // This is not a byte count (e.g. N rows x C columns returns N * C).
     uint64_t CalculateTotalSize() const;
+
+    // Estimates the bytes needed by a flat representation of all vectors in
+    // this batch. This is the Omni counterpart of Velox BaseVector::estimateFlatSize().
+    uint64_t EstimateFlatSize() const;
 
 protected:
     void Pop()

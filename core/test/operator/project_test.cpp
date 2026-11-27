@@ -45,7 +45,7 @@ TEST(ProjectionTest, Cast)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     op->AddInput(t);
@@ -92,7 +92,7 @@ TEST(ProjectionTest, CastDouble)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     op->AddInput(t);
@@ -131,7 +131,7 @@ TEST(ProjectionTest, CastInt64ToDecimal128)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     op->AddInput(t);
@@ -169,7 +169,7 @@ TEST(ProjectionTest, MakeDecimal64ToDiffScale)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     op->AddInput(t);
@@ -211,7 +211,7 @@ TEST(ProjectionTest, MakeDecimal128ToDiffScale)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     op->AddInput(t);
@@ -253,7 +253,7 @@ TEST(ProjectionTest, MakeDecimal64To128WithDiffScale)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     op->AddInput(t);
@@ -293,7 +293,7 @@ TEST(ProjectionTest, Simple)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
 
     for (int32_t i = 0; i < numRows; i++) {
@@ -355,7 +355,7 @@ TEST(ProjectionTest, AbsWithNullValues)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
     for (int i = 0; i < numRows; i++) {
         if (i % 2 == 0) {
@@ -410,7 +410,7 @@ TEST(ProjectionTest, Negatives)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
 
     op->AddInput(t);
@@ -443,7 +443,7 @@ TEST(ProjectionTest, Longs)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
 
     op->AddInput(t);
@@ -477,7 +477,7 @@ TEST(ProjectionTest, Doubles)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
 
     op->AddInput(t);
@@ -513,7 +513,7 @@ TEST(ProjectionTest, Doubles_DivideByZero)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -546,7 +546,7 @@ TEST(ProjectionTest, Bytes_DivideByZero)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -579,7 +579,7 @@ TEST(ProjectionTest, Shorts_DivideByZero)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -608,7 +608,7 @@ TEST(ProjectionTest, testModShort) {
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -638,7 +638,7 @@ TEST(ProjectionTest, testModByte) {
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -670,7 +670,7 @@ TEST(ProjectionTest, testModDoubles)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
     t->Get(0)->SetNull(5);
     t->Get(0)->SetNull(8000);
@@ -712,7 +712,7 @@ TEST(ProjectionTest, testModDoubles2)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
     t->Get(0)->SetNull(0);
     t->Get(0)->SetNull(9999);
@@ -751,7 +751,7 @@ TEST(ProjectionTest, DoublesModulusByZero)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -790,7 +790,7 @@ TEST(ProjectionTest, MultipleColumns)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     op->AddInput(t);
@@ -845,7 +845,7 @@ TEST(ProjectionTest, BenchmarkMultipleColumns)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3, col4);
 
     std::cout << "[BenchmarkMultipleColumns Project without varchar]\n\n";
@@ -884,7 +884,7 @@ TEST(ProjectionTest, BenchmarkMultipleColumns)
 
     auto exprEvaluator2 = std::make_shared<ExpressionEvaluator>(exprs2, inputTypes, overflowConfig);
     factory = new ProjectionOperatorFactory(move(exprEvaluator2));
-    op = factory->CreateOperator();
+    op = factory->CreateOperator(nullptr);
 
     for (int i = 0; i < 10; i++) {
         auto start = std::chrono::system_clock::now();
@@ -936,7 +936,7 @@ TEST(ProjectionTest, DependOtherColumn)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     op->AddInput(t);
@@ -990,7 +990,7 @@ TEST(ProjectionTest, ProjectString1)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -1052,7 +1052,7 @@ TEST(ProjectionTest, DictionaryVecTest)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes2, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     auto copy = DuplicateVectorBatch(t);
     op->AddInput(copy);
@@ -1092,7 +1092,7 @@ TEST(ProjectionTest, Decimal128Arithmetic)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     op->AddInput(t);
@@ -1135,7 +1135,7 @@ TEST(ProjectionTest, Decimal128Arithmetic2)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col0, col1);
     auto copy = DuplicateVectorBatch(t);
@@ -1184,7 +1184,7 @@ TEST(ProjectionTest, Decimal128Arithmetic3)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col0, col1);
 
     auto copy = DuplicateVectorBatch(t);
@@ -1225,7 +1225,7 @@ TEST(ProjectionTest, Decimal128Multiply)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     op->AddInput(t);
@@ -1260,7 +1260,7 @@ TEST(ProjectionTest, Decimal128Divide)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     op->AddInput(t);
@@ -1301,7 +1301,7 @@ TEST(ProjectionTest, MultipleDecimal128Columns)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     op->AddInput(t);
@@ -1368,7 +1368,7 @@ TEST(ProjectionTest, StringSubstr)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -1438,7 +1438,7 @@ TEST(ProjectionTest, SlicedDictionaryVecTest)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes1, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(std::move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     auto copy = DuplicateVectorBatch(vecBatch);
     op->AddInput(copy);
@@ -1495,7 +1495,7 @@ TEST(ProjectionTest, SlicedDictionaryVecWithNullTest)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(std::move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     auto copy = DuplicateVectorBatch(t);
     op->AddInput(copy);
@@ -1557,7 +1557,7 @@ TEST(ProjectionTest, Tpcds96)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col0, col1, col2, col3);
 
     for (int32_t i = 0; i < numRows; i++) {
@@ -1686,7 +1686,7 @@ TEST(ProjectionTest, Round)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col0, col1, col2, col3, col4, col5);
 
     auto copy = DuplicateVectorBatch(t);
@@ -1759,7 +1759,7 @@ TEST(ProjectionTest, ConcatStrAndChar)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -1836,7 +1836,7 @@ TEST(ProjectionTest, varcharExpand)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -1880,7 +1880,7 @@ TEST(ProjectionTest, testDivDecimal128)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -1911,7 +1911,7 @@ TEST(ProjectionTest, testAddDecimal128)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -1943,7 +1943,7 @@ TEST(ProjectionTest, testDecimal128Between)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -1975,7 +1975,7 @@ TEST(ProjectionTest, testDecimal128In)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -2012,7 +2012,7 @@ TEST(ProjectionTest, testDecimal128Comprehensive)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -2054,7 +2054,7 @@ TEST(ProjectionTest, TestAndExprWithNull)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
@@ -2114,7 +2114,7 @@ TEST(ProjectionTest, TestOrExprWithNull)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     t->Get(0)->SetNull(6);
@@ -2164,7 +2164,7 @@ TEST(ProjectionTest, testSubDecimal64)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -2195,7 +2195,7 @@ TEST(ProjectionTest, testMulDecimal64)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -2226,7 +2226,7 @@ TEST(ProjectionTest, testDivDecimal64)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -2257,7 +2257,7 @@ TEST(ProjectionTest, testModDecimal64)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -2292,7 +2292,7 @@ TEST(ProjectionTest, testDecimal64ArithOutputDecimal128)
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
 
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
 
     op->AddInput(t);
@@ -2330,7 +2330,7 @@ TEST(ProjectionTest, testDecimal64In)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -2361,7 +2361,7 @@ TEST(ProjectionTest, testDecimal64Between)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
     VectorBatch *outputVecBatch = nullptr;
@@ -2400,7 +2400,7 @@ TEST(ProjectionTest, testDecimal64Comprehensive)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *input = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(input);
@@ -2431,7 +2431,7 @@ TEST(ProjectionTest, Decimal64ColDivide)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     op->AddInput(t);
@@ -2531,7 +2531,7 @@ TEST(ProjectionTest, ConcatStrCharTest)
 
     auto input = CreateInputVecBatchForConcat(vecOfTypes);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2565,7 +2565,7 @@ TEST(ProjectionTest, ConcatCharStrTest)
 
     auto input = CreateInputVecBatchForConcat(vecOfTypes);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2603,7 +2603,7 @@ TEST(ProjectionTest, ConcatStrStrTest)
 
     auto input = CreateInputVecBatchForConcat(vecOfTypes);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2638,7 +2638,7 @@ TEST(ProjectionTest, ConcatCharCharTest)
 
     auto input = CreateInputVecBatchForConcat(vecOfTypes);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2691,7 +2691,7 @@ TEST(ProjectionTest, ReplaceStrWithRep)
     string replace[] = { "opera", "*#", "VARCHAR" };
     auto input = CreateVectorBatch(inputTypes, 3, str, search, replace);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2725,7 +2725,7 @@ TEST(ProjectionTest, ReplaceStrWithoutRep)
     string search[] = { "char1", "char2", "char3" };
     auto input = CreateVectorBatch(inputTypes, 3, str, search);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2758,7 +2758,7 @@ TEST(ProjectionTest, LowerStr)
     string str[] = { "VARchar100", "Char200", "var**VAR" };
     auto input = CreateVectorBatch(inputTypes, 3, str);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2791,7 +2791,7 @@ TEST(ProjectionTest, LowerChar)
     string str[] = { "VARchar100", "Char200", "var**VAR" };
     auto input = CreateVectorBatch(inputTypes, 3, str);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2824,7 +2824,7 @@ TEST(ProjectionTest, LengthChar)
     string str[] = { "VARchar100", "Char200", "var**VAR" };
     auto input = CreateVectorBatch(inputTypes, 3, str);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2858,7 +2858,7 @@ TEST(ProjectionTest, LengthStr)
     string str[] = { "VARchar100", "Char200", "var**VAR" };
     auto input = CreateVectorBatch(inputTypes, 3, str);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2913,7 +2913,7 @@ TEST(ProjectionTest, MightContain)
     int64_t value[] = { 11L, 30L, 55L};
     auto input = CreateVectorBatch(inputTypes, 3, value);
 
-    auto op = factory->CreateOperator();
+    auto op = factory->CreateOperator(nullptr);
     op->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
@@ -2950,7 +2950,7 @@ TEST(ProjectionTest, testDecimal128NegativeLiteral)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);
@@ -2984,7 +2984,7 @@ TEST(ProjectionTest, ProjectCastIntToString)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
 
     auto copy = DuplicateVectorBatch(t);
@@ -3023,7 +3023,7 @@ TEST(ProjectionTest, ProjectCastDecimal128ToString)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
 
     auto copy = DuplicateVectorBatch(t);
@@ -3062,7 +3062,7 @@ TEST(ProjectionTest, ProjectCastDoubleToString)
     auto overflowConfig = new OverflowConfig(omniruntime::op::OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
 
@@ -3109,7 +3109,7 @@ TEST(ProjectionTest, ProjectCastStringToString)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     auto *t = CreateVectorBatch(inputTypes, numRows, strings);
 
@@ -3150,7 +3150,7 @@ TEST(ProjectionTest, ProjectCastStrStrZh)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     auto *col0 = new string[numRows];
     for (int32_t i = 0; i < numRows; i++) {
@@ -3207,7 +3207,7 @@ TEST(ProjectionTest, ProjectCastStrStrWithOverflowConfig)
     auto overflowConfig = new OverflowConfig(omniruntime::op::OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     auto *col0 = new string[numRows];
     for (int32_t i = 0; i < numRows; i++) {
@@ -3263,7 +3263,7 @@ TEST(ProjectionTest, ProjectCastIntToDecimal)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     op->AddInput(t);
@@ -3301,7 +3301,7 @@ TEST(ProjectionTest, ProjectCastIntToDecimal64)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col);
 
     auto copy = DuplicateVectorBatch(t);
@@ -3340,7 +3340,7 @@ TEST(ProjectionTest, ProjectSparkConfig)
     auto overflowConfig = new OverflowConfig(OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, 1, col);
     op->AddInput(t);
@@ -3375,7 +3375,7 @@ TEST(ProjectionTest, ProjectMulDecimal64)
     auto overflowConfig = new OverflowConfig(OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, 1, col);
     op->AddInput(t);
@@ -3417,7 +3417,7 @@ TEST(ProjectionTest, AddDecimal)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
     op->AddInput(t);
@@ -3465,7 +3465,7 @@ TEST(ProjectionTest, AddDecimalReturnNull)
     auto overflowConfig = new OverflowConfig(OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
     op->AddInput(t);
@@ -3504,7 +3504,7 @@ TEST(ProjectionTest, Nulls)
     auto overflowConfig = new OverflowConfig(OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows);
     op->AddInput(t);

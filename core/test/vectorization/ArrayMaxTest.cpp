@@ -56,7 +56,7 @@ TEST_F(ArrayMaxTest, IntegerArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -97,7 +97,7 @@ TEST_F(ArrayMaxTest, IntegerArrayMin)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -138,7 +138,7 @@ TEST_F(ArrayMaxTest, LongArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -177,7 +177,7 @@ TEST_F(ArrayMaxTest, DoubleArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -220,7 +220,7 @@ TEST_F(ArrayMaxTest, DoubleArrayMaxWithSpecialValues)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -267,7 +267,7 @@ TEST_F(ArrayMaxTest, DoubleArrayMinWithSpecialValues)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -308,7 +308,7 @@ TEST_F(ArrayMaxTest, BooleanArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -348,7 +348,7 @@ TEST_F(ArrayMaxTest, NegativeNumbersArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -390,7 +390,7 @@ TEST_F(ArrayMaxTest, BoundaryValuesArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -429,7 +429,7 @@ TEST_F(ArrayMaxTest, SingleElementArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -469,7 +469,7 @@ TEST_F(ArrayMaxTest, FloatArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -508,7 +508,7 @@ TEST_F(ArrayMaxTest, ByteArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -547,7 +547,7 @@ TEST_F(ArrayMaxTest, ShortArrayMax)
         new FieldExpr(0, std::make_shared<DataType>(OMNI_ARRAY))
     }, type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

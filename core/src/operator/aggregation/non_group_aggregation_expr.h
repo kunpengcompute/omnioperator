@@ -36,7 +36,9 @@ public:
     static AggregationWithExprOperatorFactory *CreateAggregationWithExprOperatorFactory(
         const std::shared_ptr<const AggregationNode> &planNode, const config::QueryConfig &queryConfig);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::unique_ptr<DataTypes> originSourceTypes;
@@ -51,9 +53,11 @@ private:
 
 class AggregationWithExprOperator : public Operator {
 public:
-    AggregationWithExprOperator(const DataTypes &originSourceTypes, const type::DataTypes &sourceTypes,
-        std::vector<std::unique_ptr<Projection>> &projections, std::vector<SimpleFilter *> &aggSimpleFilters,
-        AggregationOperator *AggOperator, const config::QueryConfig &queryConfig);
+    // Pool-bound ctor chains Operator(pool)
+    AggregationWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const DataTypes &originSourceTypes,
+        const type::DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
+        std::vector<SimpleFilter *> &aggSimpleFilters, AggregationOperator *AggOperator,
+        const config::QueryConfig &queryConfig);
 
     ~AggregationWithExprOperator() override;
 

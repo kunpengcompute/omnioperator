@@ -89,6 +89,9 @@ public:
     void SetExecutionContext(ExecutionContext *executionContext) override
     {
         realAggregator->SetExecutionContext(executionContext);
+        // Rebind the reusable null-map buffer to the pool-bound allocator so its
+        // AllocateReuse() routes through the per-task pool instead of nullBridge.
+        nullMapBuffer = std::make_shared<AlignedBuffer<uint8_t>>(0, executionContext->GetAllocator());
     }
 
     void ProcessGroup(AggregateState *state, VectorBatch *vectorBatch, const int32_t rowOffset,

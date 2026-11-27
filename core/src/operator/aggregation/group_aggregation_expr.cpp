@@ -7,6 +7,8 @@
 #include "agg_util.h"
 #include "operator/util/operator_util.h"
 #include "vector/vector_helper.h"
+#include "util/telemetry.h"
+#include <cstdio>
 
 using namespace std;
 namespace omniruntime {
@@ -149,20 +151,21 @@ HashAggregationWithExprOperatorFactory *HashAggregationWithExprOperatorFactory::
                                                       planNode->GetAggUdafNames());
 }
 
-Operator *HashAggregationWithExprOperatorFactory::CreateOperator()
+Operator *HashAggregationWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto hashAggOperator = static_cast<HashAggregationOperator *>(hashAggOperatorFactory->CreateOperator());
-    auto *op = new HashAggregationWithExprOperator(*originSourceTypes, *sourceTypes, projections, aggSimpleFilters,
-        hashAggOperator, queryConfig_);
+    auto hashAggOperator = static_cast<HashAggregationOperator *>(hashAggOperatorFactory->CreateOperator(pool));
+    auto *op = new HashAggregationWithExprOperator(pool, *originSourceTypes, *sourceTypes, projections,
+        aggSimpleFilters, hashAggOperator, queryConfig_);
     op->Init();
     return op;
 }
 
-HashAggregationWithExprOperator::HashAggregationWithExprOperator(const DataTypes &originSourceTypes,
-    const DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
-    std::vector<SimpleFilter *> &aggSimpleFilters, HashAggregationOperator *hashAggOperator,
-    config::QueryConfig queryConfig)
-    : originTypes(originSourceTypes),
+HashAggregationWithExprOperator::HashAggregationWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const DataTypes &originSourceTypes, const DataTypes &sourceTypes,
+    std::vector<std::unique_ptr<Projection>> &projections, std::vector<SimpleFilter *> &aggSimpleFilters,
+    HashAggregationOperator *hashAggOperator, config::QueryConfig queryConfig)
+    : Operator(pool),
+      originTypes(originSourceTypes),
       sourceTypes(sourceTypes),
       projections(projections),
       hashAggOperator(hashAggOperator)
@@ -171,6 +174,15 @@ HashAggregationWithExprOperator::HashAggregationWithExprOperator(const DataTypes
     adaptivePartialAgg = queryConfig.EnableAdaptivePartialAggregation();
     adaptivePartialAggMinRows = queryConfig.AdaptivePartialAggregationMinRows();
     adaptivePartialAggRatio = queryConfig.AdaptivePartialAggregationRatio();
+    hashAggOperator->SetPartialFlushMemory(queryConfig.MaxPartialAggregationMemory(),
+        queryConfig.MaxExtendedPartialAggregationMemory());
+    if (omniruntime::telemetry::IsReclaimVerboseEnabled()) {
+        std::fprintf(stderr,
+            "[OMNI-HASHAGG] event=partial_flush_operator operator=%p step_partials=%d adaptive=%d cap=%lu extended_cap=%lu\n",
+            static_cast<void *>(hashAggOperator), static_cast<int>(hashAggOperator->IsStepPartials()),
+            static_cast<int>(adaptivePartialAgg), static_cast<unsigned long>(queryConfig.MaxPartialAggregationMemory()),
+            static_cast<unsigned long>(queryConfig.MaxExtendedPartialAggregationMemory()));
+    }
     auto aggFilterNum = aggSimpleFilters.size();
     this->aggSimpleFilters.resize(aggFilterNum, nullptr);
     for (size_t i = 0; i < aggFilterNum; ++i) {
@@ -225,15 +237,30 @@ int32_t HashAggregationWithExprOperator::AddInput(VectorBatch *inputVecBatch)
     }
     VectorHelper::FreeVecBatch(inputVecBatch);
     ResetInputVecBatch();
+    // The inner map is mutable for all of AddInput except its own reviewed
+    // pre-reservation window, which temporarily reopens self-reclaim.
+    Operator::NonReclaimableSection innerSection(hashAggOperator);
     hashAggOperator->AddInput(newInputVecBatch);
 
-    if (adaptivePartialAgg && IsStepPartials() && numInputRows > adaptivePartialAggMinRows) {
-        long keyNums = GetHashMapUniqueKeys();
-        if (keyNums > adaptivePartialAggRatio * numInputRows) {
-            abandonedPartialAggregation = true;
+    if (adaptivePartialAgg && IsStepPartials()) {
+        if (numInputRows > adaptivePartialAggMinRows) {
+            // Cumulative distinct groups (in memory + flushed + spilled) against
+            // cumulative input rows.
+            long keyNums = static_cast<long>(hashAggOperator->CumulativeDistinctKeys());
+            if (keyNums > adaptivePartialAggRatio * numInputRows) {
+                abandonedPartialAggregation = true;
+            }
+        }
+        if (abandonedPartialAggregation) {
+            hashAggOperator->CancelPartialFlush();
         }
     }
     return 0;
+}
+
+bool HashAggregationWithExprOperator::needsInput()
+{
+    return Operator::needsInput() && !hashAggOperator->IsPartialFlushing();
 }
 
 void HashAggregationWithExprOperator::ProcessRow(uintptr_t rowValues[], int32_t lens[])
@@ -241,12 +268,14 @@ void HashAggregationWithExprOperator::ProcessRow(uintptr_t rowValues[], int32_t 
     auto inputVecBatch = oneRowAdaptor.Trans2VectorBatch(rowValues, lens);
     VectorBatch *newInputVecBatch =
         AggUtil::AggFilterRequiredVectors(inputVecBatch, originTypes, sourceTypes, projections, executionContext.get());
+    Operator::NonReclaimableSection innerSection(hashAggOperator);
     hashAggOperator->AddInput(newInputVecBatch);
     // no need to delete inputVecBatch, it will be reused when this interface call again
 }
 
 int32_t HashAggregationWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 {
+    Operator::NonReclaimableSection innerSection(hashAggOperator);
     if (hashAggOperator->isFinished() && isActivateAdaptivePartial) {
         if (abandonedInputVecBatch == nullptr) {
             if (!noMoreInput_) {
@@ -274,6 +303,13 @@ int32_t HashAggregationWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
         int32_t status = hashAggOperator->GetOutput(outputVecBatch);
         return status;
     }
+    if (hashAggOperator->IsPartialFlushing()) {
+        // Memory-driven partial flush: emit the table mid-input; the operator
+        // resets itself after the last batch and input resumes.
+        int32_t status = hashAggOperator->GetOutput(outputVecBatch);
+        SetStatus(OMNI_STATUS_NORMAL);
+        return *outputVecBatch == nullptr ? 0 : status;
+    }
     if (!noMoreInput_) {
         SetStatus(OMNI_STATUS_NORMAL);
         return 0;
@@ -297,6 +333,7 @@ int32_t HashAggregationWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 
 OmniStatus HashAggregationWithExprOperator::Close()
 {
+    Operator::NonReclaimableSection innerSection(hashAggOperator);
     hashAggOperator->Close();
     return OMNI_STATUS_NORMAL;
 }
@@ -353,7 +390,7 @@ VectorBatch *HashAggregationWithExprOperator::AlignSchema(VectorBatch *inputVecB
 
 OmniStatus HashAggregationWithExprOperator::Init()
 {
-    oneRowAdaptor.Init(sourceTypes);
+    oneRowAdaptor.Init(sourceTypes, this->pool());
     return OMNI_STATUS_NORMAL;
 }
 }

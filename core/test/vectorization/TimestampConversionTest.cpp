@@ -54,7 +54,7 @@ public:
     }
     
     static BaseVector* CreateInputVector(DataTypeId typeId, const std::vector<int64_t>& intValues) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, intValues.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, typeId, intValues.size());
         
         // Handle different types correctly to avoid buffer overflow
         switch (typeId) {
@@ -104,7 +104,7 @@ public:
     }
     
     static BaseVector* CreateDoubleVector(const std::vector<double>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_DOUBLE, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_DOUBLE, values.size());
         auto* typedVec = static_cast<Vector<double>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -120,7 +120,7 @@ public:
         ASSERT_NE(function, nullptr) << funcName << " function not found for signature";
         
         auto outputType = TimestampType();
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(inputVec);
@@ -324,7 +324,7 @@ TEST(TimestampConversionTest, TimestampSeconds_SpecialFloatingPoint) {
 TEST(TimestampConversionTest, TimestampSeconds_DifferentTypes) {
     // Test FLOAT
     std::vector<double> floatValues = {1.0};
-    BaseVector* floatVec = VectorHelper::CreateFlatVector(OMNI_FLOAT, 1);
+    BaseVector* floatVec = VectorHelper::CreateFlatVector(nullptr, OMNI_FLOAT, 1);
     auto* floatTypedVec = static_cast<Vector<float>*>(floatVec);
     floatTypedVec->SetValue(0, 1.0f);
     

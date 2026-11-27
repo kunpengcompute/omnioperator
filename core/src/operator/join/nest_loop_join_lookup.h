@@ -42,7 +42,9 @@ public:
 
     ~NestLoopJoinLookupOperatorFactory() override;
 
-    omniruntime::op::Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     DataTypes probeTypes; // all types for probe
@@ -56,13 +58,17 @@ private:
 
 class NestLoopJoinLookupOperator : public Operator {
 public:
-    NestLoopJoinLookupOperator(JoinType joinType, std::vector<int32_t> &probeOutputCols, Filter *filter,
+    // Pool-bound ctors chain Operator(pool)
+    NestLoopJoinLookupOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        JoinType joinType, std::vector<int32_t> &probeOutputCols, Filter *filter,
         DataTypes probeTypes, VectorBatch *buildVectorBatch, DataTypes buildTypes,
         std::vector<int32_t> &buildOutputCols, DataTypes joinedTypes);
 
-    NestLoopJoinLookupOperator(JoinType joinType, std::vector<int32_t> &probeOutputCols,
-        Filter *filter, DataTypes probeTypes, VectorBatch *buildVectorBatch, DataTypes buildTypes,
-        std::vector<int32_t> &buildOutputCols, DataTypes joinedTypes, const config::QueryConfig &queryConfig, Expr *filterExpr);
+    NestLoopJoinLookupOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        JoinType joinType, std::vector<int32_t> &probeOutputCols, Filter *filter,
+        DataTypes probeTypes, VectorBatch *buildVectorBatch, DataTypes buildTypes,
+        std::vector<int32_t> &buildOutputCols, DataTypes joinedTypes,
+        const config::QueryConfig &queryConfig, Expr *filterExpr);
 
     ~NestLoopJoinLookupOperator() override;
 
@@ -73,6 +79,9 @@ public:
     OmniStatus Close() override;
 
 private:
+    // Shared init body for all four ctor variants (~20 line setup).
+    void InitFromCtor(DataTypes &probeTypes);
+
     void BuildOutput(VectorBatch **outputVecBatch);
 
     void BuildNotMatchOutput(VectorBatch **outputVecBatch);

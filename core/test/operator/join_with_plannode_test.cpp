@@ -110,7 +110,7 @@ TEST(NativeOmniJoinWithPlanNodeTest, TestInnerEqualityJoinWithOneBuildOp)
     auto *queryConfig = new config::QueryConfig();
     auto [joinNode, leftKey, rightKey] = ConstructSimpleJoinKeyHashJoinNode(OMNI_JOIN_TYPE_INNER, false, true, nullptr);
     HashBuilderWithExprOperatorFactory *hashBuilderWithExprFactory = HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(joinNode, *queryConfig);
-    auto *hashBuilderOperator = dynamic_cast<HashBuilderWithExprOperator *>(hashBuilderWithExprFactory->CreateOperator());
+    auto *hashBuilderOperator = dynamic_cast<HashBuilderWithExprOperator *>(hashBuilderWithExprFactory->CreateOperator(nullptr));
     VectorBatch *vecBatch = ConstructSimpleBuildVectorBatch();
     hashBuilderOperator->AddInput(vecBatch);
     VectorBatch *hashBuildOutput = nullptr;
@@ -118,7 +118,7 @@ TEST(NativeOmniJoinWithPlanNodeTest, TestInnerEqualityJoinWithOneBuildOp)
 
     auto hashBuilderFactory = hashBuilderWithExprFactory->GetHashBuilderOperatorFactory();
     LookupJoinWithExprOperatorFactory *lookupJoinFactory = LookupJoinWithExprOperatorFactory::CreateLookupJoinWithExprOperatorFactory(joinNode, hashBuilderFactory, *queryConfig);
-    auto *lookupJoinOperator = dynamic_cast<LookupJoinWithExprOperator *>(lookupJoinFactory->CreateOperator());
+    auto *lookupJoinOperator = dynamic_cast<LookupJoinWithExprOperator *>(lookupJoinFactory->CreateOperator(nullptr));
     VectorBatch *probeVecBatch = ConstructSimpleProbeVectorBatch();
     lookupJoinOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
@@ -152,7 +152,7 @@ TEST(NativeOmniJoinWithPlanNodeTest, TestFullEqualityJoinWithOneBuildOp)
 
     auto hashBuilderFactory = hashBuilderWithExprFactory->GetHashBuilderOperatorFactory();
     LookupJoinWrapperOperatorFactory *lookupJoinWrapperOperatorFactory = LookupJoinWrapperOperatorFactory::CreateLookupJoinWrapperOperatorFactory(joinNode, hashBuilderFactory, config::QueryConfig());
-    auto lookupJoinWrapperOperator = lookupJoinWrapperOperatorFactory->CreateOperator();
+    auto lookupJoinWrapperOperator = lookupJoinWrapperOperatorFactory->CreateOperator(nullptr);
     VectorBatch *probeVecBatch = ConstructSimpleProbeVectorBatch();
     lookupJoinWrapperOperator->AddInput(probeVecBatch);
     VectorBatch *outputVecBatch = nullptr;
@@ -164,6 +164,9 @@ TEST(NativeOmniJoinWithPlanNodeTest, TestFullEqualityJoinWithOneBuildOp)
     EXPECT_EQ(outputVecBatch->GetRowCount(), expectVecBatch->GetRowCount());
     EXPECT_TRUE(VecBatchMatchIgnoreOrder(outputVecBatch, expectVecBatch));
 
+    // Matched rows are drained, but the outer pass still owns the build table.
+    EXPECT_FALSE(std::visit([](const auto &table) { return table.IsBuildStateReleased(); },
+        *hashBuilderFactory->GetHashTablesVariants()));
     VectorBatch *appendOutput;
     lookupJoinWrapperOperator->GetOutput(&appendOutput);
     int64_t expectedData0[1] = {0};
@@ -184,6 +187,11 @@ TEST(NativeOmniJoinWithPlanNodeTest, TestFullEqualityJoinWithOneBuildOp)
     BaseVector **pVectorAppend = appendOutput->GetVectors();
     std::rotate(pVectorAppend, pVectorAppend + 2, pVectorAppend + appendOutput->GetVectorCount());
     EXPECT_TRUE(VecBatchMatchIgnoreOrder(appendOutput, vectorBatch));
+    EXPECT_EQ(lookupJoinWrapperOperator->GetStatus(), OMNI_STATUS_FINISHED);
+    // The wrapper has emitted the unmatched rows; its private build state can
+    // now be released before the builder factory or task is destroyed.
+    EXPECT_TRUE(std::visit([](const auto &table) { return table.IsBuildStateReleased(); },
+        *hashBuilderFactory->GetHashTablesVariants()));
 
     delete leftKey;
     delete rightKey;

@@ -123,10 +123,10 @@ inline vec::BaseVector *CopyComplexSliceToOwned(vec::BaseVector *slice, type::Da
             if (n == 0) {
                 if (colDataType != nullptr && colDataType->GetId() == type::OMNI_ARRAY) {
                     type::ArrayType *arrayType = static_cast<type::ArrayType *>(colDataType);
-                    return vec::VectorHelper::CreateEmptyComplexVector(arrayType->ElementType().get(), 0);
+                    return vec::VectorHelper::CreateEmptyComplexVector(slice->GetPool(), arrayType->ElementType().get(), 0);
                 }
                 type::DataTypePtr elemType = vec::VectorHelper::GetDataType(slice);
-                return vec::VectorHelper::CreateEmptyComplexVector(elemType.get(), 0);
+                return vec::VectorHelper::CreateEmptyComplexVector(slice->GetPool(), elemType.get(), 0);
             }
             std::vector<int> positions(static_cast<size_t>(n));
             for (int32_t i = 0; i < n; i++) {

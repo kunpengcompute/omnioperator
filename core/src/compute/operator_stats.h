@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 #include <string>
@@ -95,6 +96,10 @@ struct OperatorStats {
 
     // Total current spilled files.
     uint32_t spilledFiles{0};
+
+    // Largest working memory one spill held outside the task pool (spill write batch plus
+    // operator scratch). Reported only; it is neither billed to Spark nor limited.
+    uint64_t spillScratchPeakBytes{0};
 
     CpuWallTiming finishTiming;
 
@@ -200,6 +205,7 @@ struct OperatorStats {
         spilledRows += other.spilledRows;
         spilledPartitions += other.spilledPartitions;
         spilledFiles += other.spilledFiles;
+        spillScratchPeakBytes = std::max(spillScratchPeakBytes, other.spillScratchPeakBytes);
 
         finishTiming.Add(other.finishTiming);
     }
@@ -226,6 +232,7 @@ struct OperatorStats {
         spilledRows = 0;
         spilledPartitions = 0;
         spilledFiles = 0;
+        spillScratchPeakBytes = 0;
 
         finishTiming.Clear();
     }

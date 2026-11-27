@@ -190,13 +190,13 @@ namespace {
 class ScopedSpillTestMemoryLimit {
 public:
     explicit ScopedSpillTestMemoryLimit(int64_t limit)
-        : previous_(mem::MemoryManager::GetGlobalMemoryLimit())
+        : previous_(mem::GetGlobalMemoryLimit())
     {
-        mem::MemoryManager::SetGlobalMemoryLimit(limit);
+        mem::SetGlobalMemoryLimit(limit);
     }
     ~ScopedSpillTestMemoryLimit()
     {
-        mem::MemoryManager::SetGlobalMemoryLimit(previous_);
+        mem::SetGlobalMemoryLimit(previous_);
     }
 private:
     int64_t previous_;
@@ -242,7 +242,7 @@ TEST(ConfigTest, sparkSpillThresholdUsesFractionWithoutDividingAgain)
 TEST(ConfigTest, sparkSpillThresholdPreservesUnlimitedAndMaximumLimits)
 {
     {
-        const ScopedSpillTestMemoryLimit memoryLimit(mem::MemoryManager::UNLIMIT);
+        const ScopedSpillTestMemoryLimit memoryLimit(mem::GLOBAL_MEM_UNLIMITED);
         EXPECT_EQ(op::SparkSpillConfig("/tmp", UINT64_MAX, INT32_MAX, 0.9).GetSpillMemThreshold(), INT64_MAX);
     }
     {
@@ -266,5 +266,79 @@ TEST(ConfigTest, sparkSpillJsonPreservesDecimals)
     auto *spill = dynamic_cast<op::SparkSpillConfig *>(decoded.GetSpillConfig());
     ASSERT_NE(spill, nullptr);
     EXPECT_EQ(spill->GetSpillMemThreshold(), 125000);
+}
+
+TEST(ConfigTest, JoinSpillEffectiveRequiresGlobalSpill)
+{
+    const QueryConfig globalOff({
+        {QueryConfig::kJoinSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillHandoffEnabled, "true"}});
+    EXPECT_TRUE(globalOff.joinSpillEnabled());
+    EXPECT_FALSE(globalOff.joinSpillEffective());
+    EXPECT_FALSE(globalOff.joinSpillHandoffEffective());
+
+    const QueryConfig globalOn({
+        {QueryConfig::kSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillHandoffEnabled, "true"}});
+    EXPECT_TRUE(globalOn.joinSpillEffective());
+    EXPECT_TRUE(globalOn.joinSpillHandoffEffective());
+}
+
+TEST(ConfigTest, ForceBuildGroupSpillRequiresEffectiveHandoff)
+{
+    const QueryConfig handoffOff({
+        {QueryConfig::kSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillHandoffEnabled, "false"},
+        {QueryConfig::kForceBuildGroupSpillAfterNoMoreInput, "true"}});
+    EXPECT_TRUE(handoffOff.forceBuildGroupSpillAfterNoMoreInput());
+    EXPECT_FALSE(handoffOff.forceBuildGroupSpillEffective());
+
+    const QueryConfig handoffOn({
+        {QueryConfig::kSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillHandoffEnabled, "true"},
+        {QueryConfig::kForceBuildGroupSpillAfterNoMoreInput, "true"}});
+    EXPECT_TRUE(handoffOn.forceBuildGroupSpillEffective());
+}
+
+TEST(ConfigTest, PassiveReclaimIsOnByDefault)
+{
+    const QueryConfig defaults({
+        {QueryConfig::kSpillEnabled, "true"},
+        {QueryConfig::kForceBuildGroupSpillAfterNoMoreInput, "false"}});
+    EXPECT_TRUE(defaults.passiveReclaimEnabled());
+    EXPECT_TRUE(defaults.passiveReclaimEffective());
+    EXPECT_FALSE(defaults.forceBuildGroupSpillEffective());
+}
+
+TEST(ConfigTest, PassiveReclaimAndForceEobAreIndependent)
+{
+    const QueryConfig passiveOnly({
+        {QueryConfig::kSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillHandoffEnabled, "true"},
+        {QueryConfig::kPassiveReclaimEnabled, "true"},
+        {QueryConfig::kForceBuildGroupSpillAfterNoMoreInput, "false"}});
+    EXPECT_TRUE(passiveOnly.passiveReclaimEffective());
+    EXPECT_FALSE(passiveOnly.forceBuildGroupSpillEffective());
+
+    const QueryConfig forceOnly({
+        {QueryConfig::kSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillHandoffEnabled, "true"},
+        {QueryConfig::kPassiveReclaimEnabled, "false"},
+        {QueryConfig::kForceBuildGroupSpillAfterNoMoreInput, "true"}});
+    EXPECT_FALSE(forceOnly.passiveReclaimEffective());
+    EXPECT_TRUE(forceOnly.forceBuildGroupSpillEffective());
+
+    const QueryConfig passiveWithoutHandoff({
+        {QueryConfig::kSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillEnabled, "true"},
+        {QueryConfig::kJoinSpillHandoffEnabled, "false"},
+        {QueryConfig::kPassiveReclaimEnabled, "true"}});
+    EXPECT_TRUE(passiveWithoutHandoff.passiveReclaimEnabled());
+    EXPECT_FALSE(passiveWithoutHandoff.passiveReclaimEffective());
 }
 }

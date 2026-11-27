@@ -49,6 +49,9 @@ int64_t GetRawAddr(const DataTypes &types, int32_t i, BaseVector *colVec)
         case OMNI_DECIMAL128:
             return reinterpret_cast<int64_t>(unsafe::UnsafeVector::GetRawValues(
                 reinterpret_cast<Vector<Decimal128> *>(colVec)));
+        case OMNI_STRING_VIEW:
+            return reinterpret_cast<int64_t>(unsafe::UnsafeVector::GetRawValues(
+                reinterpret_cast<Vector<StringView> *>(colVec)));
         case OMNI_VARCHAR:
         case OMNI_CHAR:
         case OMNI_VARBINARY:
@@ -393,15 +396,16 @@ bool Projection::ConstantColumnProjection(ExecutionContext *context, BaseVector 
     return true;
 }
 
-BaseVector *Projection::ConstantArrayProjection(int32_t numSelectedRows) const
+BaseVector *Projection::ConstantArrayProjection(omniruntime::mem::OmniTaskMemoryPool *pool,
+    int32_t numSelectedRows) const
 {
     const size_t n = constantArrayValues.size();
     if (numSelectedRows <= 0) {
-        return new ArrayVector(0);
+        return new ArrayVector(0, pool);
     }
     if (n == 0) {
-        auto *arr = new ArrayVector(numSelectedRows);
-        auto *elemVec = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, 0));
+        auto *arr = new ArrayVector(numSelectedRows, pool);
+        auto *elemVec = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(pool, OMNI_DOUBLE, 0));
         arr->SetElementVectorFromRaw(elemVec);
         for (int32_t i = 0; i < numSelectedRows; i++) {
             arr->SetSize(i, 0);
@@ -409,14 +413,14 @@ BaseVector *Projection::ConstantArrayProjection(int32_t numSelectedRows) const
         return arr;
     }
     const int32_t totalElements = numSelectedRows * static_cast<int32_t>(n);
-    auto *elemVec = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, totalElements));
+    auto *elemVec = static_cast<Vector<double> *>(VectorHelper::CreateFlatVector(pool, OMNI_DOUBLE, totalElements));
     double *vals = unsafe::UnsafeVector::GetRawValues(elemVec);
     for (int32_t row = 0; row < numSelectedRows; row++) {
         for (size_t j = 0; j < n; j++) {
             vals[row * static_cast<int32_t>(n) + j] = constantArrayValues[j];
         }
     }
-    auto *arrVec = new ArrayVector(numSelectedRows);
+    auto *arrVec = new ArrayVector(numSelectedRows, pool);
     arrVec->SetElementVectorFromRaw(elemVec);
     for (int32_t i = 0; i < numSelectedRows; i++) {
         arrVec->SetSize(i, static_cast<int32_t>(n));
@@ -437,13 +441,13 @@ BaseVector *Projection::Project(VectorBatch *vecBatch, int32_t selectedRows[], i
     } else if (this->isConstantProjection) {
         BaseVector *outVec = nullptr;
         if (outType->GetId() == OMNI_ARRAY) {
-            VectorHelper::CreateNullArrayVector(numSelectedRows, outType, outVec);
+            VectorHelper::CreateNullArrayVector(context->GetPool(), numSelectedRows, outType, outVec);
         } else if (outType->GetId() == OMNI_MAP) {
-            VectorHelper::CreateNullMapVector(numSelectedRows, outType, outVec);
+            VectorHelper::CreateNullMapVector(context->GetPool(), numSelectedRows, outType, outVec);
         } else if (outType->GetId() == OMNI_ROW){
-            VectorHelper::CreateNullRowVector(numSelectedRows, outType, outVec);
+            VectorHelper::CreateNullRowVector(context->GetPool(), numSelectedRows, outType, outVec);
         } else {
-            outVec = VectorHelper::CreateFlatVector(outType->GetId(), numSelectedRows);
+            outVec = VectorHelper::CreateFlatVector(context->GetPool(), outType->GetId(), numSelectedRows);
         }
         if (!ConstantColumnProjection(context, outVec)) {
             delete outVec;
@@ -454,12 +458,12 @@ BaseVector *Projection::Project(VectorBatch *vecBatch, int32_t selectedRows[], i
             return outVec;
         }
     } else if (this->isConstantArrayProjection) {
-        BaseVector *outVec = ConstantArrayProjection(numSelectedRows);
+        BaseVector *outVec = ConstantArrayProjection(context->GetPool(), numSelectedRows);
         context->GetArena()->Reset();
         return outVec;
     } else {
         DataTypeId outTypeId = outType->GetId();
-        BaseVector *outVec = VectorHelper::CreateFlatVector(outTypeId, numSelectedRows);
+        BaseVector *outVec = VectorHelper::CreateFlatVector(context->GetPool(), outTypeId, numSelectedRows);
         if (outTypeId == OMNI_VARCHAR || outTypeId == OMNI_CHAR) {
             ProjectHelperVarWidth(*vecBatch, valueAddrs, nullAddrs, offsetAddrs, outVec, numSelectedRows, selectedRows,
                 context, dictionaryVectors, outTypeId);
@@ -608,6 +612,8 @@ BaseVector *Projection::ColumnProjectionProxy(VectorBatch *vecBatch, int32_t sel
             return ColumnProjectionHelper<bool>(vecBatch, selectedRows, numSelectedRows);
         case OMNI_DECIMAL128:
             return ColumnProjectionHelper<Decimal128>(vecBatch, selectedRows, numSelectedRows);
+        case OMNI_STRING_VIEW:
+            return ColumnProjectionHelper<StringView>(vecBatch, selectedRows, numSelectedRows);
         case OMNI_VARCHAR:
         case OMNI_CHAR:
         case OMNI_VARBINARY:
@@ -689,7 +695,7 @@ BaseVector *Projection::ColumnProjectionVarCharVectorHelper(VectorBatch *vecBatc
             // copyPosition for string vectors is 10 to 30 times slower than creating a dictionary
             // so here rather than calling copyPosition with create a dictionary view of original input vector
             return VectorHelper::CreateStringDictionary(selectedRows, numSelectedRows,
-                reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(colVec));
+                reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(colVec), false, colVec->GetPool());
         }
     }
     return nullptr;
@@ -995,6 +1001,8 @@ BaseVector *ColumnProjectionProxy(BaseVector *colVec, int32_t numSelectedRows, i
             return ColumnProjectionHelper<bool>(colVec, numSelectedRows);
         case OMNI_DECIMAL128:
             return ColumnProjectionHelper<Decimal128>(colVec, numSelectedRows);
+        case OMNI_STRING_VIEW:
+            return ColumnProjectionHelper<StringView>(colVec, numSelectedRows);
         case OMNI_VARCHAR:
         case OMNI_CHAR:
         case OMNI_VARBINARY:

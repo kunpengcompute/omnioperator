@@ -17,9 +17,16 @@ extern "C" {
  * Class:     nova_hetu_omniruntime_operator_OmniOperatorFactory
  * Method:    createOperatorNative
  * Signature: (JJ)J
+ *
+ * The trailing jlong nmmHandle is the per-task OmniTaskMemoryPool* address.
+ * The .cpp had been updated to the 4-arg signature but the .h was left at the
+ * 2-arg form, breaking the extern "C" decl/def linkage match: the .cpp symbol
+ * got C++-name-mangled instead of the plain Java_... form, causing
+ * UnsatisfiedLinkError at runtime. Keep all four declarations (Java native,
+ * .h extern "C" decl, .cpp def, bundle jar) byte-identical.
  */
 JNIEXPORT jlong JNICALL Java_nova_hetu_omniruntime_operator_OmniOperatorFactory_createOperatorNative(JNIEnv *env,
-    jobject jObj, jlong jNativeFactoryObj);
+    jobject jObj, jlong jNativeFactoryObj, jlong nmmHandle);
 
 /*
  * Class:     nova_hetu_omniruntime_operator_OmniOperatorFactory

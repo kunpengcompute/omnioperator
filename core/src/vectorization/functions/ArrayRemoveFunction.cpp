@@ -76,36 +76,36 @@ void ArrayRemoveFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
 
     switch (elementTypeId) {
         case OMNI_BYTE:
-            ProcessRemove<int8_t>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessRemove<int8_t>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_SHORT:
-            ProcessRemove<int16_t>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessRemove<int16_t>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_INT:
         case OMNI_DATE32:
-            ProcessRemove<int32_t>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessRemove<int32_t>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_LONG:
         case OMNI_TIMESTAMP:
         case OMNI_DECIMAL64:
-            ProcessRemove<int64_t>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessRemove<int64_t>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_FLOAT:
-            ProcessRemove<float>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessRemove<float>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_DOUBLE:
-            ProcessRemove<double>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessRemove<double>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_BOOLEAN:
-            ProcessRemove<bool>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessRemove<bool>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_DECIMAL128:
-            ProcessRemove<Decimal128>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessRemove<Decimal128>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_VARCHAR:
         case OMNI_CHAR:
         case OMNI_VARBINARY:
-            ProcessRemoveVarchar(arrayVec, elementVec, result, rowSize);
+            ProcessRemoveVarchar(arrayVec, elementVec, result, rowSize, context->GetPool());
             break;
         case OMNI_NONE:
             result = arrayArg;
@@ -124,7 +124,7 @@ void ArrayRemoveFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
 
 template <typename T>
 void ArrayRemoveFunction::ProcessRemove(ArrayVector *arrayVec, BaseVector *elementVec, BaseVector *&result,
-    int32_t rowSize, DataTypeId elementTypeId) const
+    int32_t rowSize, DataTypeId elementTypeId, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto srcElementVec = arrayVec->GetElementVector();
     auto *typedSrcElementVec = dynamic_cast<Vector<T> *>(srcElementVec.get());
@@ -165,13 +165,13 @@ void ArrayRemoveFunction::ProcessRemove(ArrayVector *arrayVec, BaseVector *eleme
     }
 
     auto resultElementVec = std::shared_ptr<BaseVector>(
-        VectorHelper::CreateFlatVector(static_cast<int32_t>(elementTypeId), static_cast<int32_t>(totalOutputElements)));
+        VectorHelper::CreateFlatVector(pool, static_cast<int32_t>(elementTypeId), static_cast<int32_t>(totalOutputElements)));
     auto *typedResultElementVec = dynamic_cast<Vector<T> *>(resultElementVec.get());
     if (!typedResultElementVec) {
         OMNI_THROW("ArrayRemoveFunction Error:", "Failed to create result element vector");
     }
 
-    auto *arrayResult = new ArrayVector(rowSize, resultElementVec);
+    auto *arrayResult = new ArrayVector(rowSize, resultElementVec, pool);
     int64_t outputOffset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -216,7 +216,7 @@ void ArrayRemoveFunction::ProcessRemove(ArrayVector *arrayVec, BaseVector *eleme
 }
 
 void ArrayRemoveFunction::ProcessRemoveVarchar(ArrayVector *arrayVec, BaseVector *elementVec, BaseVector *&result,
-    int32_t rowSize) const
+    int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
 
@@ -271,13 +271,13 @@ void ArrayRemoveFunction::ProcessRemoveVarchar(ArrayVector *arrayVec, BaseVector
     }
 
     auto resultElementVec = std::shared_ptr<BaseVector>(
-        new VarcharVector(static_cast<int32_t>(totalOutputElements)));
+        new VarcharVector(static_cast<int32_t>(totalOutputElements), pool));
     auto *typedResultElementVec = dynamic_cast<VarcharVector *>(resultElementVec.get());
     if (!typedResultElementVec) {
         OMNI_THROW("ArrayRemoveFunction Error:", "Failed to create result varchar vector");
     }
 
-    auto *arrayResult = new ArrayVector(rowSize, resultElementVec);
+    auto *arrayResult = new ArrayVector(rowSize, resultElementVec, pool);
     int64_t outputOffset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -321,20 +321,20 @@ void ArrayRemoveFunction::ProcessRemoveVarchar(ArrayVector *arrayVec, BaseVector
 }
 
 template void ArrayRemoveFunction::ProcessRemove<int8_t>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRemoveFunction::ProcessRemove<int16_t>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRemoveFunction::ProcessRemove<int32_t>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRemoveFunction::ProcessRemove<int64_t>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRemoveFunction::ProcessRemove<float>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRemoveFunction::ProcessRemove<double>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRemoveFunction::ProcessRemove<bool>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayRemoveFunction::ProcessRemove<Decimal128>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 
 } // namespace omniruntime::vectorization

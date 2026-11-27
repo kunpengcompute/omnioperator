@@ -99,7 +99,7 @@ TEST_F(ArraysOverlapTest, IntArraysBasicOverlap)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -139,7 +139,7 @@ TEST_F(ArraysOverlapTest, EmptyArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -184,7 +184,7 @@ TEST_F(ArraysOverlapTest, NullElements)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -227,7 +227,7 @@ TEST_F(ArraysOverlapTest, NullArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -266,7 +266,7 @@ TEST_F(ArraysOverlapTest, ByteArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -305,7 +305,7 @@ TEST_F(ArraysOverlapTest, ShortArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -344,7 +344,7 @@ TEST_F(ArraysOverlapTest, LongArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -381,7 +381,7 @@ TEST_F(ArraysOverlapTest, FloatArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -426,7 +426,7 @@ TEST_F(ArraysOverlapTest, DoubleArraysWithNaN)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -467,7 +467,7 @@ TEST_F(ArraysOverlapTest, BooleanArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -531,7 +531,7 @@ TEST_F(ArraysOverlapTest, VarcharArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -572,7 +572,7 @@ TEST_F(ArraysOverlapTest, NegativeNumbers)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -614,7 +614,7 @@ TEST_F(ArraysOverlapTest, BoundaryValues)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -653,7 +653,7 @@ TEST_F(ArraysOverlapTest, SingleElementArrays)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -692,7 +692,7 @@ TEST_F(ArraysOverlapTest, DuplicateElements)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -735,7 +735,7 @@ TEST_F(ArraysOverlapTest, FloatArraysWithNaN)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -778,7 +778,7 @@ TEST_F(ArraysOverlapTest, BothArraysNullElementsNoOverlap)
         new FieldExpr(1, std::make_shared<DataType>(OMNI_ARRAY))
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

@@ -54,8 +54,9 @@ public:
 
 class TopNSortOperator : public Operator {
 public:
-    TopNSortOperator(const type::DataTypes &sourceTypes, int32_t n, bool isStrictTopN,
-        const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
+    // Pool-bound ctor chains Operator(pool)
+    TopNSortOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes, int32_t n,
+        bool isStrictTopN, const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
         const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts);
 
     ~TopNSortOperator() override = default;
@@ -67,6 +68,8 @@ public:
     OmniStatus Close() override;
 
 private:
+    // Shared init body for legacy + pool-bound ctors.
+    void InitFromCtor();
 
     void Prepare(vec::BaseVector **inputVectors);
 
@@ -206,9 +209,11 @@ public:
 
     ~TopNSortOperatorFactory() override = default;
 
-    Operator *CreateOperator() override
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override
     {
-        return new TopNSortOperator(sourceTypes, n, isStrictTopN, partitionCols, sortCols, sortAscendings,
+        return new TopNSortOperator(pool, sourceTypes, n, isStrictTopN, partitionCols, sortCols, sortAscendings,
             sortNullFirsts);
     }
 

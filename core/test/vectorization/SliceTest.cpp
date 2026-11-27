@@ -41,7 +41,7 @@ TEST(SliceTest, SliceBasicTest)
         new LiteralExpr(3, intType)   // length = 3
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -87,7 +87,7 @@ TEST(SliceTest, SliceFromMiddleTest)
         new LiteralExpr(2, intType)   // length = 2
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -127,7 +127,7 @@ TEST(SliceTest, SliceNegativeIndexTest)
         new LiteralExpr(2, intType)    // length = 2
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -167,7 +167,7 @@ TEST(SliceTest, SliceExceedsBoundsTest)
         new LiteralExpr(5, intType)   // length = 5 (exceeds array size)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -210,7 +210,7 @@ TEST(SliceTest, SliceMultipleRowsTest)
         new LiteralExpr(2, intType)    // length = 2 for all rows
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -263,7 +263,7 @@ TEST(SliceTest, SliceEmptyArrayTest)
         new LiteralExpr(1, intType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -299,7 +299,7 @@ TEST(SliceTest, SliceOutOfBoundsTest)
         new LiteralExpr(2, intType)    // length = 2
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

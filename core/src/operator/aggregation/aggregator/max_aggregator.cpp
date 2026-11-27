@@ -231,7 +231,7 @@ void MaxAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch *re
     const std::shared_ptr<NullsHelper> nullMap)
 {
     int rowCount = originVector->GetSize();
-    auto maxVector = reinterpret_cast<OutVector *>(VectorHelper::CreateFlatVector(OUT_ID, rowCount));
+    auto maxVector = reinterpret_cast<OutVector *>(VectorHelper::CreateFlatVector(this->pool_, OUT_ID, rowCount));
     auto vector = reinterpret_cast<T *>(originVector);
     if (nullMap != nullptr) {
         for (int index = 0; index < rowCount; ++index) {

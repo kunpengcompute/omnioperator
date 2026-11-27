@@ -97,7 +97,7 @@ void NameStructFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr
             OMNI_THROW("NameStruct Error", "All arguments must have the same size");
         }
     }
-    result = VectorHelper::CreateComplexVector(const_cast<DataType *>(outputType.get()), size);
+    result = VectorHelper::CreateComplexVector(context->GetPool(), const_cast<DataType *>(outputType.get()), size);
     auto *resultRow = static_cast<RowVector *>(result);
     std::vector<int64_t> mapRunningOffsets(argVectors.size(), 0);
     for (int32_t row = 0; row < size; ++row) {

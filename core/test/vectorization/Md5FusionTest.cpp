@@ -103,7 +103,7 @@ void ExpectVectorMd5(const std::vector<std::string> &values, const std::vector<b
 
     std::stack<BaseVector *> args;
     args.push(CreateStringInput(values, nulls, OMNI_VARBINARY));
-    ExecutionContext executionContext;
+    ExecutionContext executionContext(4096, nullptr);
     executionContext.SetResultRowSize(static_cast<int32_t>(values.size()));
     BaseVector *result = nullptr;
     function->Apply(args, std::make_shared<DataType>(OMNI_VARCHAR), result, &executionContext);
@@ -152,7 +152,7 @@ TEST(Md5FusionTest, FusedFunctionPreservesConcatWsNullAndEmptySemantics)
     args.push(CreateStringInput({"unused", "unused", "", "unused"}, {true, true, false, false}));
     args.push(CreateStringInput({"b", "unused", "b", "unused"}, {false, true, false, false}));
 
-    ExecutionContext executionContext;
+    ExecutionContext executionContext(4096, nullptr);
     executionContext.SetResultRowSize(ROW_SIZE);
     FusedMd5ConcatWsFunction function(4);
     BaseVector *result = nullptr;
@@ -171,7 +171,7 @@ TEST(Md5FusionTest, FusedFunctionHashesEmptyStringWhenOnlySeparatorIsPresent)
 {
     std::stack<BaseVector *> args;
     args.push(CreateStringInput({","}));
-    ExecutionContext executionContext;
+    ExecutionContext executionContext(4096, nullptr);
     executionContext.SetResultRowSize(1);
     FusedMd5ConcatWsFunction function(1);
     BaseVector *result = nullptr;
@@ -240,7 +240,7 @@ TEST(Md5FusionTest, ExprEvalBypassesConcatWsMaterialization)
     DataTypes inputTypes(inputTypeList);
     VectorBatch *input = CreateVectorBatch(inputTypes, ROW_SIZE, separator, value1, value2);
 
-    ExecutionContext executionContext;
+    ExecutionContext executionContext(4096, nullptr);
     executionContext.SetResultRowSize(ROW_SIZE);
     ExprEval evaluator(input, &executionContext);
     evaluator.Visit(*md5);

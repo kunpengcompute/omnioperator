@@ -45,16 +45,19 @@ TableScanOperatorFactory *TableScanOperatorFactory::CreateTableScanOperatorFacto
     return pOperatorFactory;
 }
 
-Operator *TableScanOperatorFactory::CreateOperator()
+// Pool-bound override
+Operator *TableScanOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto pTableScanOperator = new TableScanOperator(planNode_, maxRowCount_, splitsStore_);
+    auto pTableScanOperator = new TableScanOperator(pool, planNode_, maxRowCount_, splitsStore_);
     return pTableScanOperator;
 }
 
-TableScanOperator::TableScanOperator(
+// Pool-bound ctor chains Operator(pool).
+TableScanOperator::TableScanOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
     const std::shared_ptr<const TableScanNode> tableScanNode, const uint64_t maxRowCount,
     std::shared_ptr <SplitsStore> splitsStore)
-    : tableHandle_(tableScanNode->tableHandle()),
+    : Operator(pool),
+    tableHandle_(tableScanNode->tableHandle()),
     columnHandles_(tableScanNode->assignments()),
     outputType_(tableScanNode->getRowTypePtr()),
     splitsStore_(splitsStore),
@@ -156,7 +159,7 @@ int32_t TableScanOperator::GetOutput(VectorBatch **outputVecBatch)
             }
             *outputVecBatch = data;
             stats().AddInputVector(
-                data->CalculateTotalSize(), 1, static_cast<uint64_t>(data->GetRowCount()));
+                data->EstimateFlatSize(), 1, static_cast<uint64_t>(data->GetRowCount()));
             return 0;
         }
         needNewSplit_ = true;
@@ -195,7 +198,11 @@ bool TableScanOperator::getSplit()
     needNewSplit_ = false;
 
     if (dataSource_ == nullptr) {
-        dataSource_ = connector_->createDataSource(outputType_, tableHandle_, columnHandles_);
+        // Thread the per-task pool from Operator::pool() into the
+        // DataSource → SplitReader chain so that partition-column and
+        // missing-field allocations are visible to Spark TMM via the
+        // per-task pool's listener.
+        dataSource_ = connector_->createDataSource(outputType_, tableHandle_, columnHandles_, pool());
     }
     flushPendingDynamicFilters();
 

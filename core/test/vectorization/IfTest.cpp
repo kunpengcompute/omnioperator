@@ -104,7 +104,7 @@ public:
         ASSERT_NE(function, nullptr) << "If function not found for type " << outputTypeId;
 
         auto outputType = std::make_shared<DataType>(outputTypeId);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(condVec->GetSize());
         std::stack<BaseVector*> args;
 
@@ -812,7 +812,7 @@ TEST(IfTest, SingleRow) {
 namespace {
 BaseVector* RunIfExpr(IfExpr* ifExpr, VectorBatch* batch, int32_t rowSize)
 {
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     ExprEval e(batch, &context);
     e.VisitExpr(*ifExpr);
@@ -1012,7 +1012,7 @@ TEST(IfTest, LazyIfExprUnderFilter)
     VectorBatch* input = CreateVectorBatch(inputTypes, rowSize, cond, a, b);
 
     bool mask[rowSize] = {true, true, false, false};
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     context.hasFilter = true;
     context.SetIsSelectRow(mask);
@@ -1155,7 +1155,7 @@ TEST(IfTest, LazyIfExprInsideLambda)
             new LambdaExpr(ifBody, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     ExprEval e(input, &context);
     e.VisitExpr(*expr);
@@ -1202,7 +1202,7 @@ TEST(IfTest, LazyIfExprInsideLambdaUnderFilter)
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
     bool mask[rowSize] = {true, false, false};
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     context.hasFilter = true;
     context.SetIsSelectRow(mask);

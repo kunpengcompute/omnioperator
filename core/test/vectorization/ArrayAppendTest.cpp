@@ -139,7 +139,7 @@ TEST(ArrayAppendTest, AppendIntElements)
         new FieldExpr(1, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -188,7 +188,7 @@ TEST(ArrayAppendTest, AppendToEmptyArray)
         new FieldExpr(1, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -231,7 +231,7 @@ TEST(ArrayAppendTest, NullArrayReturnsNull)
         new FieldExpr(1, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -279,7 +279,7 @@ TEST(ArrayAppendTest, NullElementAppended)
         new FieldExpr(1, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -326,7 +326,7 @@ TEST(ArrayAppendTest, NullElementsInArray)
         new FieldExpr(1, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -372,7 +372,7 @@ TEST(ArrayAppendTest, AllNullArrayRows)
         new FieldExpr(1, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -404,7 +404,7 @@ TEST(ArrayAppendTest, AppendLongElements)
         new FieldExpr(1, LongType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -446,7 +446,7 @@ TEST(ArrayAppendTest, AppendDoubleElements)
         new FieldExpr(1, DoubleType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -486,7 +486,7 @@ TEST(ArrayAppendTest, AppendBoolElements)
         new FieldExpr(1, BooleanType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -526,7 +526,7 @@ TEST(ArrayAppendTest, SingleElementArrayAppend)
         new FieldExpr(1, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -574,7 +574,7 @@ TEST(ArrayAppendTest, MixedNullAndNonNullRows)
         new FieldExpr(1, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -618,7 +618,7 @@ TEST(ArrayAppendTest, AppendDuplicateValues)
         new FieldExpr(1, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto *context = new ExecutionContext();
+    auto *context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);

@@ -27,7 +27,9 @@ public:
     static DistinctLimitOperatorFactory *CreateDistinctLimitOperatorFactory(const type::DataTypes &inSourceTypes,
         const int32_t *inDistinctCols, int32_t inDistinctColsCount, int32_t inHashColumn, int64_t inLimit);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     type::DataTypes sourceTypes;
@@ -72,8 +74,9 @@ public:
     static constexpr int32_t INVALID_DISTINCT_COL_ID = -1;
 
 public:
-    DistinctLimitOperator(const type::DataTypes &sourceTypes, std::vector<int32_t> &distinctCols,
-        int32_t distinctColsCount, int32_t hashCol, int64_t limit);
+    // Pool-bound ctor chains Operator(pool)
+    DistinctLimitOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+        std::vector<int32_t> &distinctCols, int32_t distinctColsCount, int32_t hashCol, int64_t limit);
 
     ~DistinctLimitOperator() override;
 

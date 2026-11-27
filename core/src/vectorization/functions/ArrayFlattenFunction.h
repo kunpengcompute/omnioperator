@@ -58,14 +58,14 @@ namespace omniruntime::vectorization {
             if (TypeUtil::IsStringType(innerTypeId)) {
                 using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
                 flatElements = std::shared_ptr<BaseVector>(
-                    new VarcharVector(static_cast<int32_t>(totalFlatElements)));
+                    new VarcharVector(static_cast<int32_t>(totalFlatElements), context->GetPool()));
             } else {
                 flatElements = std::shared_ptr<BaseVector>(
-                    VectorHelper::CreateFlatVector(static_cast<int32_t>(innerTypeId),
+                    VectorHelper::CreateFlatVector(context->GetPool(), static_cast<int32_t>(innerTypeId),
                         static_cast<int32_t>(totalFlatElements)));
             }
 
-            auto *resultArray = new ArrayVector(rowSize, flatElements);
+            auto *resultArray = new ArrayVector(rowSize, flatElements, context->GetPool());
             int64_t flatOffset = 0;
 
             for (int32_t row = 0; row < rowSize; ++row) {

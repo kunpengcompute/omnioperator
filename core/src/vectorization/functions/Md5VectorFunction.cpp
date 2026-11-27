@@ -78,7 +78,7 @@ void Md5VectorFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr 
     args.pop();
     const int32_t rowSize = context->GetResultRowSize();
     auto *output = static_cast<Vector<LargeStringContainer<std::string_view>> *>(
-        VectorHelper::CreateStringVector(rowSize));
+        VectorHelper::CreateStringVector(context->GetPool(), rowSize));
 
     std::vector<int32_t> scalarRows;
     std::array<std::vector<int32_t>, 4> vectorBuckets;

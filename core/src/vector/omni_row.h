@@ -518,6 +518,7 @@ template <type::DataTypeId id> uint8_t *PrintRow(uint8_t *row)
         std::string out = "the value is null. \n";
         LogDebug("Row Handle:%s\n", out.c_str());
 #endif
+        return row + BaseSerialize::PrefixLen;
     } else {
         if constexpr (std::is_same_v<std::string_view, Type>) {
             return StringRowGetValue(row);
@@ -616,10 +617,14 @@ public:
         return oneRowLen;
     }
 
-    int32_t FillBuffer()
+    // Pool-bound FillBuffer: caller supplies the pool-bound Allocator so the buffer
+    // returned via TakeRowBuffer() can be freed by RowInfo on the same allocator
+    // (same-pool alloc/free symmetry).
+    int32_t FillBuffer(mem::Allocator *alloc)
     {
         oneRowLen = CalculateCompactLength(columnSize);
-        originBuffer = (uint8_t *)(mem::Allocator::GetAllocator()->Alloc(oneRowLen));
+        filledAllocator_ = alloc;
+        originBuffer = (uint8_t *)(alloc->Alloc(oneRowLen));
         writeBuffer = originBuffer;
         for (int32_t i = 0; i < columnSize; ++i) {
             writeBuffer = oneRow[i]->WriteBuffer(writeBuffer);
@@ -629,6 +634,10 @@ public:
 #endif
         return oneRowLen;
     }
+
+    // Returns the Allocator used in the last FillBuffer(Allocator*) call, so callers
+    // can pass it to the RowInfo ctor for alloc/free symmetry.
+    mem::Allocator *GetFilledAllocator() const { return filledAllocator_; }
 
     int32_t CalculateHashPos()
     {
@@ -695,6 +704,9 @@ private:
     uint8_t *originBuffer;
     uint8_t *writeBuffer;
     int32_t columnSize;
+    // Tracks which Allocator was used by the last FillBuffer(Allocator*) call
+    // so callers can pass it to the RowInfo ctor for alloc/free symmetry.
+    mem::Allocator *filledAllocator_ = nullptr;
 };
 
 class RowParser {
@@ -774,27 +786,59 @@ private:
 
 class RowInfo {
 public:
-    uint8_t *row;
-    int32_t length;
-    bool ownsRow = false;
+    uint8_t *row = nullptr;
+    int32_t length = 0;
 
-    RowInfo(uint8_t *row, int32_t length, bool ownsRow = false) : row(row), length(length), ownsRow(ownsRow) {}
+    // Pool-bound ctor: caller supplies the Allocator that owns `row` so ~RowInfo()
+    // frees to the same allocator (same-pool alloc/free symmetry).
+    RowInfo(uint8_t *row, int32_t length, mem::Allocator *alloc)
+        : row(row), length(length), allocator_(alloc) {}
+
+    // Non-owning ctor: `row` is managed externally; ~RowInfo() does NOT free.
+    // Used by tests and any site where the buffer lifetime is controlled elsewhere.
+    RowInfo(uint8_t *row, int32_t length) : row(row), length(length), allocator_(nullptr) {}
 
     RowInfo() = default;
 
-    RowInfo(const RowInfo &rowInfo)
+    RowInfo(const RowInfo &) = delete;
+    RowInfo &operator=(const RowInfo &) = delete;
+
+    RowInfo(RowInfo &&other) noexcept
+        : row(other.row), length(other.length), allocator_(other.allocator_)
     {
-        this->row = rowInfo.row;
-        this->length = rowInfo.length;
-        this->ownsRow = rowInfo.ownsRow;
+        other.row = nullptr;
+        other.length = 0;
+        other.allocator_ = nullptr;
+    }
+
+    RowInfo &operator=(RowInfo &&other) noexcept
+    {
+        if (this != &other) {
+            if (allocator_ != nullptr) {
+                allocator_->Free(row, length);
+            }
+            row = other.row;
+            length = other.length;
+            allocator_ = other.allocator_;
+            other.row = nullptr;
+            other.length = 0;
+            other.allocator_ = nullptr;
+        }
+        return *this;
     }
 
     ~RowInfo()
     {
-        if (ownsRow) {
-            mem::Allocator::GetAllocator()->Free(row, length);
+        // Pool-bound path: routes Free to the exact Allocator that the matching
+        // Alloc used (same-pool alloc/free symmetry).
+        if (allocator_ != nullptr) {
+            allocator_->Free(row, length);
         }
     }
+
+private:
+    // The owning allocator moves together with the row storage.
+    mem::Allocator *allocator_ = nullptr;
 };
 
 // friend for shuffle

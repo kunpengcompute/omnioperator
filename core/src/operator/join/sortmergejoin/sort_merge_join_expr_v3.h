@@ -39,7 +39,9 @@ public:
 
     ~StreamedTableWithExprOperatorFactoryV3() override;
 
-    omniruntime::op::Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     SortMergeJoinOperatorV3 *GetSmjOperator();
 
@@ -55,7 +57,8 @@ private:
 
 class StreamedTableWithExprOperatorV3 : public Operator {
 public:
-    StreamedTableWithExprOperatorV3(const type::DataTypes &streamTypes,
+    // Pool-bound ctor chains Operator(pool)
+    StreamedTableWithExprOperatorV3(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &streamTypes,
         std::vector<std::unique_ptr<Projection>> &projections, SortMergeJoinOperatorV3 *smjOperator);
 
     ~StreamedTableWithExprOperatorV3() override;
@@ -86,7 +89,9 @@ public:
 
     ~BufferedTableWithExprOperatorFactoryV3() override;
 
-    omniruntime::op::Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::unique_ptr<DataTypes> bufferTypes;
@@ -98,7 +103,8 @@ private:
 
 class BufferedTableWithExprOperatorV3 : public Operator {
 public:
-    BufferedTableWithExprOperatorV3(const type::DataTypes &bufferTypes,
+    // Pool-bound ctor chains Operator(pool)
+    BufferedTableWithExprOperatorV3(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &bufferTypes,
         std::vector<std::unique_ptr<Projection>> &projections, SortMergeJoinOperatorV3 *smjOperator);
 
     ~BufferedTableWithExprOperatorV3() override;

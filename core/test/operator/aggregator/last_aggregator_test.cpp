@@ -41,7 +41,7 @@ TEST(LastAggregatorTest, IgnoreNull_Short_LastNonNull)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input1 = new Vector<short>(5);
@@ -93,7 +93,7 @@ TEST(LastAggregatorTest, IgnoreNull_Int_LastNonNull)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input1 = new Vector<int32_t>(5);
@@ -143,7 +143,7 @@ TEST(LastAggregatorTest, IgnoreNull_Byte_LastNonNull)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input1 = new Vector<int8_t>(5);
@@ -193,7 +193,7 @@ TEST(LastAggregatorTest, IgnoreNull_Varbinary_LastNonNull)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input1 = new Vector<LargeStringContainer<std::string_view>>(5);
@@ -247,7 +247,7 @@ TEST(LastAggregatorTest, IncludeNull_Int_LastIsNull)
     auto agg = factory.CreateAggregator(*inTypes, *outTypes, ch, true, true, false);
     ASSERT_NE(agg, nullptr);
 
-    auto ctx = std::make_unique<ExecutionContext>();
+    auto ctx = std::make_unique<ExecutionContext>(4096, nullptr);
     agg->SetExecutionContext(ctx.get());
 
     auto *input = new Vector<int32_t>(5);

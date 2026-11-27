@@ -19,7 +19,8 @@ void CoalesceFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
     argVectors.push_back(args.top());
     args.pop();
     std::reverse(argVectors.begin(), argVectors.end());
-    DispatchCoalesce(argVectors, outputType, result);
+    // Per-task pool is threaded to all CoalesceXxx helpers via DispatchCoalesce.
+    DispatchCoalesce(argVectors, outputType, result, context->GetPool());
 
     for (auto* vec : argVectors) {
         delete vec;
@@ -27,41 +28,42 @@ void CoalesceFunction::Apply(std::stack<BaseVector *> &args, const DataTypePtr &
 }
 
 void CoalesceFunction::DispatchCoalesce(const std::vector<BaseVector *> &argVectors,
-                                        const DataTypePtr &outputType, BaseVector *&result) const {
+                                        const DataTypePtr &outputType, BaseVector *&result,
+                                        omniruntime::mem::OmniTaskMemoryPool *pool) const {
     DataTypeId outputTypeId = outputType->GetId();
 
     if (TypeUtil::IsStringType(outputTypeId)) {
-        CoalesceString(argVectors, result, outputType);
+        CoalesceString(argVectors, result, outputType, pool);
     } else if (outputTypeId == OMNI_BOOLEAN) {
-        CoalesceBoolean(argVectors, result, outputType);
+        CoalesceBoolean(argVectors, result, outputType, pool);
     } else if (outputTypeId == OMNI_ARRAY) {
-        CoalesceArray(argVectors, result, outputType);
+        CoalesceArray(argVectors, result, outputType, pool);
     } else if (outputTypeId == OMNI_MAP) {
-        CoalesceMap(argVectors, result, outputType);
+        CoalesceMap(argVectors, result, outputType, pool);
     } else if (outputTypeId == OMNI_ROW) {
-        CoalesceRow(argVectors, result, outputType);
+        CoalesceRow(argVectors, result, outputType, pool);
     } else {
         switch (outputTypeId) {
             case OMNI_BYTE:
-                CoalesceNumeric<int8_t>(argVectors, result, outputType);
+                CoalesceNumeric<int8_t>(argVectors, result, outputType, pool);
                 break;
             case OMNI_SHORT:
-                CoalesceNumeric<int16_t>(argVectors, result, outputType);
+                CoalesceNumeric<int16_t>(argVectors, result, outputType, pool);
                 break;
             case OMNI_INT:
             case OMNI_DATE32:
-                CoalesceNumeric<int32_t>(argVectors, result, outputType);
+                CoalesceNumeric<int32_t>(argVectors, result, outputType, pool);
                 break;
             case OMNI_LONG:
             case OMNI_TIMESTAMP:
             case OMNI_DECIMAL64:
-                CoalesceNumeric<int64_t>(argVectors, result, outputType);
+                CoalesceNumeric<int64_t>(argVectors, result, outputType, pool);
                 break;
             case OMNI_FLOAT:
-                CoalesceNumeric<float>(argVectors, result, outputType);
+                CoalesceNumeric<float>(argVectors, result, outputType, pool);
                 break;
             case OMNI_DOUBLE:
-                CoalesceNumeric<double>(argVectors, result, outputType);
+                CoalesceNumeric<double>(argVectors, result, outputType, pool);
                 break;
             default:
                 OMNI_THROW("Coalesce function Error",
@@ -72,9 +74,10 @@ void CoalesceFunction::DispatchCoalesce(const std::vector<BaseVector *> &argVect
 
 template<typename T>
 void CoalesceFunction::CoalesceNumeric(const std::vector<BaseVector *> &argVectors,
-                                       BaseVector *&result, const DataTypePtr &outputType) const {
+                                       BaseVector *&result, const DataTypePtr &outputType,
+                                       omniruntime::mem::OmniTaskMemoryPool *pool) const {
     auto size = argVectors[0]->GetSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(pool, outputType->GetId(), size);
 
     for (int32_t row = 0; row < size; ++row) {
         bool found = false;
@@ -93,9 +96,10 @@ void CoalesceFunction::CoalesceNumeric(const std::vector<BaseVector *> &argVecto
 }
 
 void CoalesceFunction::CoalesceString(const std::vector<BaseVector *> &argVectors,
-                                     BaseVector *&result, const DataTypePtr &outputType) const {
+                                     BaseVector *&result, const DataTypePtr &outputType,
+                                     omniruntime::mem::OmniTaskMemoryPool *pool) const {
     auto size = argVectors[0]->GetSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(pool, outputType->GetId(), size);
 
     for (int32_t row = 0; row < size; ++row) {
         bool found = false;
@@ -114,9 +118,10 @@ void CoalesceFunction::CoalesceString(const std::vector<BaseVector *> &argVector
 }
 
 void CoalesceFunction::CoalesceBoolean(const std::vector<BaseVector *> &argVectors,
-                                      BaseVector *&result, const DataTypePtr &outputType) const {
+                                      BaseVector *&result, const DataTypePtr &outputType,
+                                      omniruntime::mem::OmniTaskMemoryPool *pool) const {
     auto size = argVectors[0]->GetSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(pool, outputType->GetId(), size);
 
     for (int32_t row = 0; row < size; ++row) {
         bool found = false;
@@ -135,10 +140,11 @@ void CoalesceFunction::CoalesceBoolean(const std::vector<BaseVector *> &argVecto
 }
 
 void CoalesceFunction::CoalesceArray(const std::vector<BaseVector *> &argVectors,
-                                     BaseVector *&result, const DataTypePtr &outputType) const {
+                                     BaseVector *&result, const DataTypePtr &outputType,
+                                     omniruntime::mem::OmniTaskMemoryPool *pool) const {
     auto size = argVectors[0]->GetSize();
 
-    result = VectorHelper::CreateComplexVector(outputType.get(), size);
+    result = VectorHelper::CreateComplexVector(pool, outputType.get(), size);
     auto *resultArray = static_cast<ArrayVector *>(result);
 
     for (int32_t row = 0; row < size; ++row) {
@@ -160,7 +166,8 @@ void CoalesceFunction::CoalesceArray(const std::vector<BaseVector *> &argVectors
 }
 
 void CoalesceFunction::CoalesceMap(const std::vector<BaseVector *> &argVectors,
-                                   BaseVector *&result, const DataTypePtr &outputType) const {
+                                   BaseVector *&result, const DataTypePtr &outputType,
+                                   omniruntime::mem::OmniTaskMemoryPool *pool) const {
     auto size = argVectors[0]->GetSize();
     std::vector<int32_t> sourceIdx(size, -1);
     for (int32_t row = 0; row < size; ++row) {
@@ -174,7 +181,7 @@ void CoalesceFunction::CoalesceMap(const std::vector<BaseVector *> &argVectors,
 
     auto *firstSrcMap = static_cast<MapVector *>(argVectors[0]);
 
-    result = VectorHelper::CreateComplexVector(outputType.get(), size);
+    result = VectorHelper::CreateComplexVector(pool, outputType.get(), size);
     auto *resultMap = static_cast<MapVector *>(result);
 
     int64_t totalElements = 0;
@@ -218,7 +225,8 @@ void CoalesceFunction::CoalesceMap(const std::vector<BaseVector *> &argVectors,
 }
 
 void CoalesceFunction::CoalesceRow(const std::vector<BaseVector *> &argVectors,
-                                   BaseVector *&result, const DataTypePtr &outputType) const {
+                                   BaseVector *&result, const DataTypePtr &outputType,
+                                   omniruntime::mem::OmniTaskMemoryPool *pool) const {
     auto size = argVectors[0]->GetSize();
 
     std::vector<int32_t> sourceIdx(size, -1);
@@ -231,7 +239,7 @@ void CoalesceFunction::CoalesceRow(const std::vector<BaseVector *> &argVectors,
         }
     }
 
-    result = VectorHelper::CreateComplexVector(outputType.get(), size);
+    result = VectorHelper::CreateComplexVector(pool, outputType.get(), size);
     auto *resultRow = static_cast<RowVector *>(result);
 
     for (int32_t row = 0; row < size; ++row) {
@@ -363,12 +371,12 @@ void CoalesceFunction::SetStringValueToVector(BaseVector *vec, int32_t row,
 }
 
 // Explicit template instantiations
-template void CoalesceFunction::CoalesceNumeric<int8_t>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &) const;
-template void CoalesceFunction::CoalesceNumeric<int16_t>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &) const;
-template void CoalesceFunction::CoalesceNumeric<int32_t>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &) const;
-template void CoalesceFunction::CoalesceNumeric<int64_t>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &) const;
-template void CoalesceFunction::CoalesceNumeric<float>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &) const;
-template void CoalesceFunction::CoalesceNumeric<double>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &) const;
+template void CoalesceFunction::CoalesceNumeric<int8_t>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &, omniruntime::mem::OmniTaskMemoryPool *) const;
+template void CoalesceFunction::CoalesceNumeric<int16_t>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &, omniruntime::mem::OmniTaskMemoryPool *) const;
+template void CoalesceFunction::CoalesceNumeric<int32_t>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &, omniruntime::mem::OmniTaskMemoryPool *) const;
+template void CoalesceFunction::CoalesceNumeric<int64_t>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &, omniruntime::mem::OmniTaskMemoryPool *) const;
+template void CoalesceFunction::CoalesceNumeric<float>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &, omniruntime::mem::OmniTaskMemoryPool *) const;
+template void CoalesceFunction::CoalesceNumeric<double>(const std::vector<BaseVector *> &, BaseVector *&, const DataTypePtr &, omniruntime::mem::OmniTaskMemoryPool *) const;
 
 template int8_t CoalesceFunction::GetValueFromVector<int8_t>(BaseVector *, int32_t) const;
 template int16_t CoalesceFunction::GetValueFromVector<int16_t>(BaseVector *, int32_t) const;

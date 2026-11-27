@@ -65,7 +65,7 @@ TEST_F(ArrayShuffleTest, IntArrayShuffle)
         new LiteralExpr(int64_t(42), longType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -124,7 +124,7 @@ TEST_F(ArrayShuffleTest, LongArrayShuffle)
         new LiteralExpr(int64_t(99), longType)
     }, arrayLongType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -185,7 +185,7 @@ TEST_F(ArrayShuffleTest, ShortArrayShuffle)
         new LiteralExpr(int64_t(7), longType)
     }, arrayShortType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -245,7 +245,7 @@ TEST_F(ArrayShuffleTest, ByteArrayShuffle)
         new LiteralExpr(int64_t(12), longType)
     }, arrayByteType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -305,7 +305,7 @@ TEST_F(ArrayShuffleTest, FloatArrayShuffle)
         new LiteralExpr(int64_t(55), longType)
     }, arrayFloatType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -366,7 +366,7 @@ TEST_F(ArrayShuffleTest, DoubleArrayShuffle)
         new LiteralExpr(int64_t(77), longType)
     }, arrayDoubleType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -427,7 +427,7 @@ TEST_F(ArrayShuffleTest, BooleanArrayShuffle)
         new LiteralExpr(int64_t(33), longType)
     }, arrayBoolType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -490,7 +490,7 @@ TEST_F(ArrayShuffleTest, VarcharArrayShuffle)
         new LiteralExpr(int64_t(88), longType)
     }, arrayVarcharType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -550,7 +550,7 @@ TEST_F(ArrayShuffleTest, Decimal128ArrayShuffle)
         new LiteralExpr(int64_t(11), longType)
     }, arrayDecimal128Type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -610,7 +610,7 @@ TEST_F(ArrayShuffleTest, Date32ArrayShuffle)
         new LiteralExpr(int64_t(22), longType)
     }, arrayDate32Type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -669,7 +669,7 @@ TEST_F(ArrayShuffleTest, TimestampArrayShuffle)
         new LiteralExpr(int64_t(66), longType)
     }, arrayTimestampType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -723,7 +723,7 @@ TEST_F(ArrayShuffleTest, NullArrayShuffle)
         new LiteralExpr(int64_t(42), longType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -760,7 +760,7 @@ TEST_F(ArrayShuffleTest, EmptyArrayShuffle)
         new LiteralExpr(int64_t(42), longType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -800,7 +800,7 @@ TEST_F(ArrayShuffleTest, SingleElementArrayShuffle)
         new LiteralExpr(int64_t(99), longType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -850,7 +850,7 @@ TEST_F(ArrayShuffleTest, ArrayWithNullElementsShuffle)
         new LiteralExpr(int64_t(42), longType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -923,7 +923,7 @@ TEST_F(ArrayShuffleTest, MultipleRowsShuffle)
         new LiteralExpr(int64_t(42), longType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1011,7 +1011,7 @@ TEST_F(ArrayShuffleTest, MultipleRowsWithNullRow)
         new LiteralExpr(int64_t(42), longType)
     }, arrayIntType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1091,7 +1091,7 @@ TEST_F(ArrayShuffleTest, DeterministicWithSameSeed)
             new LiteralExpr(seed, longType)
         }, arrayIntType);
 
-        auto context = new ExecutionContext();
+        auto context = new ExecutionContext(4096, nullptr);
         context->SetResultRowSize(rowSize);
 
         ExprEval e(vectorBatch, context);
@@ -1154,7 +1154,7 @@ TEST_F(ArrayShuffleTest, VarbinaryArrayShuffle)
         new LiteralExpr(int64_t(15), longType)
     }, arrayVarbinaryType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1214,7 +1214,7 @@ TEST_F(ArrayShuffleTest, Decimal64ArrayShuffle)
         new LiteralExpr(int64_t(50), longType)
     }, arrayDecimal64Type);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);

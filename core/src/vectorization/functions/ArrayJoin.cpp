@@ -152,7 +152,7 @@ void ArrayJoinImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &out
     }
 
     int32_t rowSize = context->GetResultRowSize();
-    auto *resultVector = VectorHelper::CreateStringVector(rowSize);
+    auto *resultVector = VectorHelper::CreateStringVector(context->GetPool(), rowSize);
     auto *strResult = dynamic_cast<Vector<LargeStringContainer<std::string_view>> *>(resultVector);
 
     auto inputElementVector = arrayVec->GetElementVector();

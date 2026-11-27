@@ -17,6 +17,7 @@
 #include "driver.h"
 #include "codegen/time_util.h"
 #include "operator/join/hash_builder.h"
+#include "operator/reclaim_context.h"
 #include "util/debug.h"
 #include "vector/vector_helper.h"
 #include <memory>
@@ -77,6 +78,7 @@ void OmniDriver::close()
         }
         delete factory;
     }
+    lifetimeGuard_.reset();
     closed_ = true;
 }
 
@@ -84,9 +86,22 @@ void OmniDriver::close()
 // terminating throw. Annotate exceptions with Operator info.
 #define CALL_OPERATOR(call, operatorPtr, operatorId, operatorMethod)                                    \
         opCallStatus_.Start(operatorId, operatorMethod);                                                \
-        call;                                                                                           \
+        {                                                                                               \
+            const bool _reclaimContextEnabled = (operatorPtr)->reclaimGuardEnabled();                  \
+            ::omniruntime::op::ActiveOperatorCallSection _activeCall(                                  \
+                operatorPtr, operatorMethod, (operatorPtr)->operatorType().c_str(),                     \
+                _reclaimContextEnabled);                                                                \
+            ::omniruntime::op::Operator::NonReclaimableSection _nonReclaimable(                         \
+                operatorPtr, _reclaimContextEnabled);                                                   \
+            try {                                                                                        \
+                call;                                                                                    \
+            } catch (...) {                                                                              \
+                opCallStatus_.Stop();                                                                    \
+                throw;                                                                                   \
+            }                                                                                            \
+        }                                                                                                \
         opCallStatus_.TimeSegmentStatistic(operatorPtr, operatorMethod);                                \
-        opCallStatus_.Stop();                                                                           \
+        opCallStatus_.Stop();
 
 void OpCallStatus::Start(int32_t operatorId, const char* operatorMethod)
 {
@@ -211,7 +226,7 @@ StopReason OmniDriver::RunInternal(
                         withDeltaCpuWallTimer(op, &OperatorStats::getOutputTime, [&]() {
                             CALL_OPERATOR(op->GetOutput(&intermediateResult), op, curOperatorId_, kOpMethodGetOutput);
                             if (intermediateResult) {
-                                resultBytes = intermediateResult->CalculateTotalSize();
+                                resultBytes = intermediateResult->EstimateFlatSize();
                                 {
                                     auto &lockedStats = op->stats();
                                     lockedStats.AddOutputVector(resultBytes, intermediateResult->GetVectorCount(), intermediateResult->GetRowCount());
@@ -251,7 +266,7 @@ StopReason OmniDriver::RunInternal(
                         if (*result != nullptr) {
                             {
                                 auto &lockedStats = op->stats();
-                                lockedStats.AddOutputVector((*result)->CalculateTotalSize(), (*result)->GetVectorCount(), (*result)->GetRowCount());
+                                lockedStats.AddOutputVector((*result)->EstimateFlatSize(), (*result)->GetVectorCount(), (*result)->GetRowCount());
                             }
                         }
                     });
@@ -391,7 +406,6 @@ void OmniDriver::updatePipelineStats()
         pipelineStats_.pipelineId = pipelineId;
     }
 }
-
 void OmniDriver::CollectStatsBeforeClose(int32_t operatorIdx)
 {
     auto &op = operators_[operatorIdx];

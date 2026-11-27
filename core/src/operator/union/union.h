@@ -24,7 +24,9 @@ public:
 
     static UnionOperatorFactory *CreateUnionOperatorFactory(std::shared_ptr<const UnionNode> planNode);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     type::DataTypes sourceTypes;
@@ -34,7 +36,9 @@ private:
 
 class UnionOperator : public Operator {
 public:
-    UnionOperator(const type::DataTypes &sourceTypes, int32_t sourceTypesCount, bool isDistinct);
+    // Pool-bound ctor chains Operator(pool)
+    UnionOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+        int32_t sourceTypesCount, bool isDistinct);
 
     ~UnionOperator() override;
 
@@ -65,7 +69,9 @@ private:
 
 class UnionBuildOperator : public Operator {
 public:
-    explicit UnionBuildOperator(std::shared_ptr<Operator> unionOperator) : unionOperator(unionOperator) {}
+    // Inherits pool from the wrapped union operator (same task scope).
+    explicit UnionBuildOperator(std::shared_ptr<Operator> unionOperator)
+        : Operator(unionOperator ? unionOperator->pool() : nullptr), unionOperator(unionOperator) {}
 
     ~UnionBuildOperator() override = default;
 

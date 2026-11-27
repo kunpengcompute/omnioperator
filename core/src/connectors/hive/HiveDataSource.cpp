@@ -24,7 +24,9 @@ HiveDataSource::HiveDataSource(
     const type::RowTypePtr &outputType,
     const std::shared_ptr <connector::ConnectorTableHandle> &tableHandle,
     const std::unordered_map <std::string, std::shared_ptr<connector::ColumnHandle>> &columnHandles,
-    const std::shared_ptr <HiveConfig> &hiveConfig) : hiveConfig_(hiveConfig), outputType_(outputType) {
+    const std::shared_ptr <HiveConfig> &hiveConfig,
+    omniruntime::mem::OmniTaskMemoryPool *taskPool)
+    : hiveConfig_(hiveConfig), taskPool_(taskPool), outputType_(outputType) {
     // Column handled keyed on the column alias, the name used in the query.
     for (const auto &[canonicalizedName, columnHandle]: columnHandles) {
         auto handle = std::dynamic_pointer_cast<HiveColumnHandle>(columnHandle);
@@ -97,13 +99,15 @@ void HiveDataSource::addDynamicFilter(type::column_index_t channel, ::common::Fi
 }
 
 std::unique_ptr<SplitReader> HiveDataSource::createSplitReader() {
+    // Thread per-task pool into SplitReader.
     return SplitReader::create(
             split_,
             hiveTableHandle_,
             &partitionKeys_,
             hiveConfig_,
             readerOutputType_,
-            scanSpec_);
+            scanSpec_,
+            taskPool_);
 }
 
 void HiveDataSource::addSplit(std::shared_ptr<ConnectorSplit> split, uint64_t size) {
@@ -135,7 +139,7 @@ std::optional<vec::VectorBatch *> HiveDataSource::next(uint64_t size) {
         return getEmptyOutput();
     }
     completedRows_ += static_cast<uint64_t>(rowsRemaining);
-    completedBytes_ += output_->CalculateTotalSize();
+    completedBytes_ += output_->EstimateFlatSize();
     return output_;
 }
 

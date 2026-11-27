@@ -34,11 +34,17 @@ OperatorFactory* createOperatorFactory(
 class LocalPlanner {
 public:
     static void buildOperatorStats(std::vector<std::shared_ptr<OmniDriver>>* drivers);
+    // Pool param is threaded from OmniTask::Next so createOperator(factory,
+    // planNode, pool) can pass a real per-task pool into
+    // factory->CreateOperator(pool) — bypassing the nullptr fallthrough that
+    // caused a SIGSEGV at runtime (codegen .so's CreateFlatVector(pool,...)
+    // dereferenced pool=nullptr through ExecutionContext::GetPool()).
     static void plan(
         const omniruntime::PlanFragment& fragment,
         std::vector<std::shared_ptr<omniruntime::compute::OmniDriver>>* drivers,
         const config::QueryConfig& queryConfig,
-        std::shared_ptr<SplitsStore> splitsStore);
+        std::shared_ptr<SplitsStore> splitsStore,
+        omniruntime::mem::OmniTaskMemoryPool* pool = nullptr);
 };
 }  // namespace compute
 }  // namespace omniruntime

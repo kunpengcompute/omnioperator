@@ -88,7 +88,7 @@ VectorBatch *FilterAndProject(std::unique_ptr<omniruntime::codegen::Filter> &fil
     auto *selectedRows = new int32_t[rowCount];
     GetDataFromVecBatch(*vecBatch, valueAddrs, nullAddrs, offsetAddrs, dictionaries, types);
 
-    auto context = new omniruntime::op::ExecutionContext();
+    auto context = new omniruntime::op::ExecutionContext(4096, nullptr);
     if (filter != nullptr) {
         numSelectedRows = filter->GetFilterFunc()(valueAddrs, rowCount, selectedRows, nullAddrs, offsetAddrs,
             reinterpret_cast<int64_t>(context), dictionaries);

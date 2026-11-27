@@ -4,6 +4,7 @@
 #ifndef __OMNI_OPERATOR_H__
 #define __OMNI_OPERATOR_H__
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <unordered_map>
@@ -17,6 +18,7 @@
 #include "compute/reason.h"
 #include "compute/operator_stats.h"
 #include "reader/common/Filter.h"
+#include "memory/omni_task_memory_pool.h"
 
 namespace omniruntime {
 namespace op {
@@ -33,12 +35,111 @@ struct IdentityProjection {
 
 class Operator {
 public:
-    Operator()
+    // Pool-bound primary constructor. pool may be nullptr (test/no-pool path) — accounting
+    // is then skipped throughout the Operator's ExecutionContext, and the OMNI_DEBUG gate
+    // flags any allocation taken on this path. Production callers always supply a real
+    // per-task pool (via JNI nmmHandle decode).
+    explicit Operator(omniruntime::mem::OmniTaskMemoryPool *pool)
         : sourceTypes(nullptr),
-          executionContext(std::make_unique<ExecutionContext>()),
+          executionContext(std::make_unique<ExecutionContext>(4096, pool)),
           inputVecBatch(nullptr),
+          pool_(pool),
           status(OMNI_STATUS_NORMAL)
     {
+    }
+
+    // Pool accessor — subclasses use this when constructing Vectors so each Vector binds
+    // to the operator's per-task pool (per-task accounting + cross-scope free safety).
+    omniruntime::mem::OmniTaskMemoryPool *pool() const { return pool_; }
+
+    class NonReclaimableSection {
+    public:
+        explicit NonReclaimableSection(Operator *op) noexcept
+            : NonReclaimableSection(op, op->reclaimGuardEnabled())
+        {
+        }
+        NonReclaimableSection(Operator *op, bool enabled) noexcept
+            : op_(op), enabled_(enabled)
+        {
+            if (enabled_) {
+                saved_ = op_->nonReclaimableSection_.exchange(true, std::memory_order_acq_rel);
+            }
+        }
+        ~NonReclaimableSection()
+        {
+            if (enabled_) {
+                op_->nonReclaimableSection_.store(saved_, std::memory_order_release);
+            }
+        }
+        NonReclaimableSection(const NonReclaimableSection &) = delete;
+        NonReclaimableSection &operator=(const NonReclaimableSection &) = delete;
+    private:
+        Operator *op_;
+        bool enabled_;
+        bool saved_{false};
+    };
+
+    // This is intentionally a distinct type: it is permitted only around a
+    // reviewed pre-reservation which occurs before operator state mutation.
+    class ReclaimableReservationSection {
+    public:
+        explicit ReclaimableReservationSection(Operator *op) noexcept
+            : op_(op), enabled_(op->reclaimGuardEnabled())
+        {
+            if (enabled_) {
+                saved_ = op_->nonReclaimableSection_.exchange(false, std::memory_order_acq_rel);
+            }
+        }
+        ~ReclaimableReservationSection()
+        {
+            if (enabled_) {
+                op_->nonReclaimableSection_.store(saved_, std::memory_order_release);
+            }
+        }
+        ReclaimableReservationSection(const ReclaimableReservationSection &) = delete;
+        ReclaimableReservationSection &operator=(const ReclaimableReservationSection &) = delete;
+    private:
+        Operator *op_;
+        bool enabled_;
+        bool saved_{false};
+    };
+
+    bool reclaimGuardEnabled() const noexcept
+    {
+        return reclaimGuardEnabled_.load(std::memory_order_acquire);
+    }
+
+    void setReclaimGuardEnabled(bool enabled) noexcept
+    {
+        reclaimGuardEnabled_.store(enabled, std::memory_order_release);
+    }
+
+    virtual bool isInNonReclaimableSection() const noexcept
+    {
+        return nonReclaimableSection_.load(std::memory_order_acquire);
+    }
+
+    // Late pool binding for operators built before the per-task pool is known (e.g. the SMJ
+    // operator created in the factory ctor with a nullptr-pool sentinel). Idempotent: a
+    // same-pool call is a no-op. A non-null pool that differs from an already-bound non-null
+    // pool is a contract violation — the operator is task-scoped and silently rebinding would
+    // free pool-accounted memory against the wrong pool; fail loudly instead (mirrors
+    // JoinHashTableVariants::SetPool). A single Spark task owns a single pool, so the throw
+    // never fires in normal flow but catches cross-task aliasing loudly.
+    void SetPool(omniruntime::mem::OmniTaskMemoryPool *pool)
+    {
+        if (pool == nullptr || pool == pool_) {
+            return;
+        }
+        if (pool_ != nullptr) {
+            throw omniruntime::exception::OmniException("OPERATOR_RUNTIME_ERROR",
+                "Operator::SetPool called with a different pool; operator is task-scoped");
+        }
+        pool_ = pool;
+        // Rebind this operator's own ExecutionContext so executionContext-driven allocations
+        // are accounted too. Safe for SMJ: its base ExecutionContext is unused between the
+        // factory-ctor construction and this CreateOperator-time rebind.
+        executionContext = std::make_unique<ExecutionContext>(4096, pool);
     }
 
     virtual ~Operator()
@@ -258,9 +359,16 @@ protected:
     int32_t* sourceTypes;
     std::unique_ptr<ExecutionContext> executionContext;
     vec::VectorBatch* inputVecBatch = nullptr;
+    // Per-task memory pool. nullptr on the no-pool (test) path; non-null when
+    // constructed via Operator(pool).
+    omniruntime::mem::OmniTaskMemoryPool *pool_ = nullptr;
     bool noMoreInput_{true};
     int32_t inputOperatorCnt_{0};
     std::vector<IdentityProjection> identityProjections_;
+    std::atomic<bool> nonReclaimableSection_{false};
+    // Enabled only while this operator is registered as a reclaim candidate.
+    // Non-spill plans therefore avoid an atomic RMW around every operator call.
+    std::atomic<bool> reclaimGuardEnabled_{false};
 
     void UpdateAddInputInfo(int32_t rowCount)
     {

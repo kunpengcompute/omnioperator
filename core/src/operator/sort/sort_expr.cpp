@@ -82,16 +82,20 @@ SortWithExprOperatorFactory::~SortWithExprOperatorFactory()
     delete sortOperatorFactory;
 }
 
-Operator *SortWithExprOperatorFactory::CreateOperator()
+// Pool-bound override forwards pool to inner factory.
+Operator *SortWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto sortOperator = static_cast<SortOperator *>(sortOperatorFactory->CreateOperator());
-    auto pOperator = new SortWithExprOperator(*sourceTypes, projections, sortOperator, queryConfig_);
+    auto sortOperator = static_cast<SortOperator *>(sortOperatorFactory->CreateOperator(pool));
+    auto pOperator = new SortWithExprOperator(pool, *sourceTypes, projections, sortOperator, queryConfig_);
+    pOperator->Init();
     return pOperator;
 }
 
-SortWithExprOperator::SortWithExprOperator(const type::DataTypes &sourceTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, SortOperator *sortOperator, const config::QueryConfig& queryConfig)
-    : sourceTypes(sourceTypes), projections(projections), sortOperator(sortOperator)
+// Pool-bound ctor — same body, chains Operator(pool).
+SortWithExprOperator::SortWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
+    SortOperator *sortOperator, const config::QueryConfig& queryConfig)
+    : Operator(pool), sourceTypes(sourceTypes), projections(projections), sortOperator(sortOperator)
 {
     SetOperatorName(metricsNameSort);
     executionContext->SetConfig(queryConfig);
@@ -100,6 +104,15 @@ SortWithExprOperator::SortWithExprOperator(const type::DataTypes &sourceTypes,
 SortWithExprOperator::~SortWithExprOperator()
 {
     delete sortOperator;
+}
+
+OmniStatus SortWithExprOperator::Init()
+{
+    const auto outerStatus = Operator::Init();
+    if (outerStatus != OMNI_STATUS_NORMAL) {
+        return outerStatus;
+    }
+    return sortOperator->Init();
 }
 
 int32_t SortWithExprOperator::AddInput(VectorBatch *inputVecBatch)
@@ -114,12 +127,17 @@ int32_t SortWithExprOperator::AddInput(VectorBatch *inputVecBatch)
         OperatorUtil::ProjectVectors(inputVecBatch, sourceTypes, projections, executionContext.get());
     VectorHelper::FreeVecBatch(inputVecBatch);
     ResetInputVecBatch();
+    // Keep the inner operator protected for the complete wrapper dispatch. Its
+    // reviewed pre-reservation section temporarily clears this flag immediately
+    // before PagesIndex mutation, enabling safe active self-reclaim only there.
+    Operator::NonReclaimableSection innerSection(sortOperator);
     sortOperator->AddInput(newInputVecBatch);
     return 0;
 }
 
 int32_t SortWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 {
+    Operator::NonReclaimableSection innerSection(sortOperator);
     int32_t status = sortOperator->GetOutput(outputVecBatch);
     if (*outputVecBatch != nullptr) {
         UpdateGetOutputInfo((*outputVecBatch)->GetRowCount());
@@ -137,6 +155,7 @@ int32_t SortWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 
 OmniStatus SortWithExprOperator::Close()
 {
+    Operator::NonReclaimableSection innerSection(sortOperator);
     sortOperator->Close();
     return OMNI_STATUS_NORMAL;
 }

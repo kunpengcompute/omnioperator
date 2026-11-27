@@ -55,7 +55,9 @@ public:
 
 class WindowGroupLimitOperator : public Operator {
 public:
-    WindowGroupLimitOperator(const type::DataTypes &sourceTypes, int32_t n, const std::string funcName,
+    // Pool-bound ctor chains Operator(pool)
+    WindowGroupLimitOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        const type::DataTypes &sourceTypes, int32_t n, const std::string funcName,
         const std::vector<int32_t> &partitionCols, const std::vector<int32_t> &sortCols,
         const std::vector<int32_t> &sortAscendings, const std::vector<int32_t> &sortNullFirsts);
 
@@ -68,6 +70,11 @@ public:
     OmniStatus Close() override;
 
 private:
+    // Shared init body for legacy + pool-bound ctors. The body indexes the
+    // param `sortCols` (member sortCols already initialized in member-init list — but
+    // the original code referred to the param, so passing explicitly preserves behavior).
+    void InitFromCtor(const std::vector<int32_t> &paramSortCols);
+
     void Prepare(vec::BaseVector **inputVectors);
 
     void InsertNewValueOptimize(LimitPartitionValue &value, vec::VectorBatch *inputVecBatch,
@@ -173,6 +180,8 @@ private:
     int32_t FindInsertPosition(BaseVector **insertSortVectors, int32_t insertRowIdx,
         std::vector<VectorBatch *> &vecBatches, std::vector<int32_t> &rowIndexes, int32_t position);
 
+    bool HasSelectedRows(const VectorBatch *inputVecBatch) const;
+
     type::DataTypes sourceTypes;
     int32_t n;
     std::string funcName;
@@ -214,9 +223,11 @@ public:
 
     ~WindowGroupLimitOperatorFactory() override = default;
 
-    Operator *CreateOperator() override
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override
     {
-        return new WindowGroupLimitOperator(sourceTypes, n, funcName, partitionCols, sortCols, sortAscendings,
+        return new WindowGroupLimitOperator(pool, sourceTypes, n, funcName, partitionCols, sortCols, sortAscendings,
             sortNullFirsts);
     }
 

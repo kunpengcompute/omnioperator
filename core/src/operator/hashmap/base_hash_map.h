@@ -110,8 +110,9 @@ static const double MAX_LOAD_FACTOR = 0.9;
  * @tparam KeyType the key type of hashmap
  * @tparam ValueType the value type of hashmap
  */
-template <typename KeyType, typename ValueType> class HashSlot {
+template <typename KeyType, typename ValueType, bool kStoreHash = true> class HashSlot {
 public:
+    static constexpr bool kStoresHash = true;
     HashSlot() = default;
 
     ~HashSlot() = default;
@@ -191,15 +192,93 @@ private:
 };
 
 /**
+ * Slot without the cached hash. Probing compares keys (IsSameKey ignores the hash), so the
+ * cached value only serves rehash; maps that rarely rehash recompute it there instead of
+ * spending 8 bytes (a third of an int64 slot) per slot.
+ */
+template <typename KeyType, typename ValueType> class HashSlot<KeyType, ValueType, false> {
+public:
+    static constexpr bool kStoresHash = false;
+    HashSlot() = default;
+
+    ~HashSlot() = default;
+
+    explicit HashSlot(const KeyType &keyParam)
+    {
+        kv.first = keyParam;
+    }
+
+    explicit HashSlot(KeyType &&keyParam) : kv(std::move(keyParam), ValueType {}) {}
+
+    HashSlot(HashSlot &&o) noexcept : kv(std::move(o.kv)) {}
+
+    HashSlot(const KeyType &key, const ValueType &value) : kv(key, value) {}
+
+    HashSlot &operator = (HashSlot &&o) noexcept
+    {
+        kv = std::move(o.kv);
+        return *this;
+    }
+
+    HashSlot &operator = (const HashSlot &o)
+    {
+        kv = o.kv;
+        return *this;
+    }
+
+    HashSlot(const HashSlot &o) : kv(o.kv) {}
+
+    bool ALWAYS_INLINE IsSameKey(const size_t &otherHashVal, const KeyType &key1)
+    {
+        return kv.first == key1;
+    }
+
+    void SetValue(const ValueType &value)
+    {
+        kv.second = value;
+    }
+
+    const KeyType &GetKey() const
+    {
+        return kv.first;
+    }
+
+    ValueType &GetValue()
+    {
+        return kv.second;
+    }
+
+    const ValueType &GetValue() const
+    {
+        return kv.second;
+    }
+
+    void SetHashVal(const size_t) {}
+
+private:
+    std::pair<KeyType, ValueType> kv;
+};
+
+/**
  * A user-defined Allocator must implement 2 functions
  * 1 Allocate(uint64_t size, uint8_t **buffer): allocate @size bytes, and set ret pointer to *buffer
  * 2 Release(uint8_t *buffer): release the memory
  */
 class OmniHashmapAllocator {
 public:
-    OmniHashmapAllocator() : pool(mem::Allocator::GetAllocator()) {}
+    // Pool-bound ctor: callers pass a pool-bound Allocator* from their ExecutionContext.
+    // No default ctor — all instantiation sites must supply an explicit allocator so
+    // alloc/free routes to the correct pool.
+    explicit OmniHashmapAllocator(mem::Allocator *allocator) : pool(allocator) {}
 
     ~OmniHashmapAllocator() = default;
+
+    // OmniHashmapAllocator is value-stored in BaseHashMap/ArrayMap; allow default-move
+    // construction so callers can pass OmniHashmapAllocator(alloc) as a ctor arg.
+    OmniHashmapAllocator(OmniHashmapAllocator &&) = default;
+    OmniHashmapAllocator &operator=(OmniHashmapAllocator &&) = default;
+    OmniHashmapAllocator(const OmniHashmapAllocator &) = default;
+    OmniHashmapAllocator &operator=(const OmniHashmapAllocator &) = default;
 
     int Allocate(uint64_t size, uint8_t **buffer)
     {
@@ -268,9 +347,20 @@ public:
         CalculateThreshold();
     }
 
+    // A non-zero step overrides the default growth (x4 below 2^23 slots, x2 above).
+    void SetFixedStep(uint8_t step)
+    {
+        fixedStep = step;
+    }
+
+    uint8_t GetFixedStep() const
+    {
+        return fixedStep;
+    }
+
     uint64_t GrowSize()
     {
-        degree += (degree >= enlargeThreshold ? expandFactoryOne : expandFactoryTwo);
+        degree += fixedStep != 0 ? fixedStep : (degree >= enlargeThreshold ? expandFactoryOne : expandFactoryTwo);
         CalculateThreshold();
         return 1ULL << degree;
     }
@@ -295,6 +385,7 @@ private:
 
     uint64_t threshold = 0;
     uint8_t degree;
+    uint8_t fixedStep = 0;
 };
 
 struct OutputState {
@@ -476,17 +567,21 @@ private:
  */
 template <typename KeyType, typename ValueType, typename HashType, typename GrowStrategy, typename Allocator,
     std::enable_if_t<std::is_move_constructible_v<KeyType> && std::is_move_constructible_v<ValueType> &&
-    (std::is_move_assignable_v<ValueType> || std::is_copy_assignable_v<ValueType>)>* = nullptr>
+    (std::is_move_assignable_v<ValueType> || std::is_copy_assignable_v<ValueType>)>* = nullptr,
+    bool kStoreHash = true>
 class BaseHashMap {
 public:
-    using Slot = HashSlot<KeyType, ValueType>;
+    using Slot = HashSlot<KeyType, ValueType, kStoreHash>;
     using HashKey = KeyType;
     using ResultType = InsertResult<ValueType>;
     using Keys = KeyType;
     using Values = ValueType;
 
 public:
-    BaseHashMap(uint8_t initDegree = defaultDegreeSize) : grower(initDegree)
+    // Pool-bound ctor: pass a pre-constructed Allocator so all hash-table memory
+    // routes to the caller's pool.
+    BaseHashMap(Allocator alloc, uint8_t initDegree = defaultDegreeSize)
+        : allocator(std::move(alloc)), initialDegree(initDegree), grower(initDegree)
     {
         InitSlots(grower.GetCurrentSize());
     }
@@ -532,9 +627,11 @@ public:
             }
             return 0;
         }
+        const uint8_t fixedStep = grower.GetFixedStep();
         do {
-            projectedDegree += projectedDegree >= Grower::enlargeThreshold ? Grower::expandFactoryOne
-                                                                           : Grower::expandFactoryTwo;
+            projectedDegree += fixedStep != 0 ? fixedStep
+                : (projectedDegree >= Grower::enlargeThreshold ? Grower::expandFactoryOne
+                                                               : Grower::expandFactoryTwo);
             projectedCapacity = 1ULL << projectedDegree;
             threshold = static_cast<uint64_t>(
                 std::ceil(static_cast<double>(projectedCapacity) * MAX_LOAD_FACTOR));
@@ -566,15 +663,25 @@ public:
 
     ALWAYS_INLINE void InitSlots(uint64_t newCapacity)
     {
-        capacity = newCapacity;
+        uint8_t *newCtrlAddress = nullptr;
+        uint8_t *newSlotsAddress = nullptr;
+        const uint64_t ctrlBytes = (newCapacity + Group::kWidth) * sizeof(ctrl_t);
+        const uint64_t slotBytes = newCapacity * sizeof(Slot);
+        allocator.Allocate(ctrlBytes, &newCtrlAddress);
+        try {
+            allocator.Allocate(slotBytes, &newSlotsAddress);
+        } catch (...) {
+            allocator.Release(newCtrlAddress, ctrlBytes);
+            throw;
+        }
 
-        allocator.Allocate(CtrlAllocationBytes(newCapacity), &ctrlAddress);
-        identifiers = reinterpret_cast<ctrl_t *>(ctrlAddress);
+        capacity = newCapacity;
+        ctrlAddress = newCtrlAddress;
+        identifiers = reinterpret_cast<ctrl_t *>(newCtrlAddress);
+        slotsAddress = newSlotsAddress;
+        slots = reinterpret_cast<Slot *>(newSlotsAddress);
         memset(identifiers, kEmpty, sizeof(ctrl_t) * newCapacity);
         memset(identifiers + newCapacity, kSentinel, sizeof(ctrl_t) * Group::kWidth);
-
-        allocator.Allocate(SlotAllocationBytes(newCapacity), &slotsAddress);
-        slots = reinterpret_cast<Slot *>(slotsAddress);
     }
 
     BaseHashMap(const BaseHashMap &) = delete;
@@ -610,6 +717,11 @@ public:
         rehashDisabled_ = disabled;
     }
 
+    void SetGrowthStep(uint8_t step)
+    {
+        grower.SetFixedStep(step);
+    }
+
     void EnableParallelBuildCounter(std::atomic<size_t> *counter)
     {
         elementsSizeCounter_ = counter;
@@ -618,6 +730,36 @@ public:
     void DisableParallelBuildCounter()
     {
         elementsSizeCounter_ = nullptr;
+    }
+
+    /// Approximate resident bytes of map buffers (ctrl + slots + optional null slot).
+    ALWAYS_INLINE uint64_t GetAllocatedBytes() const
+    {
+        uint64_t bytes = 0;
+        if (capacity > 0) {
+            bytes += (capacity + Group::kWidth) * sizeof(ctrl_t) + capacity * sizeof(Slot);
+        }
+        if (nullSlot != nullptr) {
+            bytes += sizeof(Slot);
+        }
+        return bytes;
+    }
+
+    // Release() drops all ctrl/slot/null allocations and leaves the map in an
+    // explicit released state. The owner must call ReinitializeAfterRelease()
+    // before inserting again. This is the physical-reclaim contract used by
+    // HashAgg after spilling; Reset() intentionally retains capacity for
+    // ordinary reuse and therefore has a different estimate below.
+    uint64_t ReclaimableBytesOnRelease() const
+    {
+        return GetAllocatedBytes();
+    }
+
+    // Reset() keeps the main ctrl/slot arrays for reuse and only releases the
+    // optional null slot. Do not advertise retained capacity as reclaimable.
+    uint64_t ReclaimableBytesOnReset() const
+    {
+        return nullSlot == nullptr ? 0 : sizeof(Slot);
     }
 
     /**
@@ -666,10 +808,36 @@ public:
         return InsertResult<ValueType>(slot.GetValue(), inserted);
     }
 
+    // Growth-free fast path. Builders that pre-size via BuildHashTable() can
+    // never cross the load threshold, so this insert must stay check-free.
     template <typename T> ALWAYS_INLINE InsertResult<ValueType> EmplaceNotNullKey(T &&key)
     {
-        if (UNLIKELY(NeedRehash())) {
-            Rehash();
+        return EmplaceNotNullKeyImpl<false>(std::forward<T>(key));
+    }
+
+    template <typename T> ALWAYS_INLINE InsertResult<ValueType> EmplaceNotNullKey(T &&key, size_t &hashValue)
+    {
+        return EmplaceNotNullKeyImpl<false>(std::forward<T>(key), hashValue);
+    }
+
+    // Growth-enabled insert for adaptive builders that start from a small seed
+    // (BuildHashTableAdaptive restore fallback). Do not use on pre-sized tables.
+    template <typename T> ALWAYS_INLINE InsertResult<ValueType> EmplaceNotNullKeyGrowing(T &&key)
+    {
+        return EmplaceNotNullKeyImpl<true>(std::forward<T>(key));
+    }
+
+    template <typename T> ALWAYS_INLINE InsertResult<ValueType> EmplaceNotNullKeyGrowing(T &&key, size_t &hashValue)
+    {
+        return EmplaceNotNullKeyImpl<true>(std::forward<T>(key), hashValue);
+    }
+
+    template <bool kGrow, typename T> ALWAYS_INLINE InsertResult<ValueType> EmplaceNotNullKeyImpl(T &&key)
+    {
+        if constexpr (kGrow) {
+            if (UNLIKELY(NeedRehash())) {
+                Rehash();
+            }
         }
         bool inserted = false;
         auto hashValue = hasher(key);
@@ -684,10 +852,13 @@ public:
         return InsertResult<ValueType>(slots[pos].GetValue(), inserted);
     }
 
-    template <typename T> ALWAYS_INLINE InsertResult<ValueType> EmplaceNotNullKey(T &&key, size_t &hashValue)
+    template <bool kGrow, typename T> ALWAYS_INLINE InsertResult<ValueType> EmplaceNotNullKeyImpl(T &&key,
+        size_t &hashValue)
     {
-        if (UNLIKELY(NeedRehash())) {
-            Rehash();
+        if constexpr (kGrow) {
+            if (UNLIKELY(NeedRehash())) {
+                Rehash();
+            }
         }
         bool inserted = false;
         auto pos = FindPosition(key, hashValue, inserted);
@@ -840,8 +1011,12 @@ public:
 
     void ReleaseSlots(uint64_t newCapacity) noexcept
     {
-        allocator.Release(slotsAddress, sizeof(Slot) * newCapacity);
-        allocator.Release(ctrlAddress, sizeof(ctrl_t) * (newCapacity + Group::kWidth));
+        if (slotsAddress != nullptr) {
+            allocator.Release(slotsAddress, sizeof(Slot) * newCapacity);
+        }
+        if (ctrlAddress != nullptr) {
+            allocator.Release(ctrlAddress, sizeof(ctrl_t) * (newCapacity + Group::kWidth));
+        }
     }
 
     void Reset()
@@ -852,14 +1027,46 @@ public:
             allocator.Release(reinterpret_cast<uint8_t *>(nullSlot), sizeof(Slot));
             nullSlot = nullptr;
         }
-        memset(identifiers, kEmpty, sizeof(ctrl_t) * capacity);
-        memset(identifiers + capacity, kSentinel, sizeof(ctrl_t) * Group::kWidth);
-        memset(slotsAddress, 0, sizeof(Slot) * capacity);
+        if (capacity > 0) {
+            memset(identifiers, kEmpty, sizeof(ctrl_t) * capacity);
+            memset(identifiers + capacity, kSentinel, sizeof(ctrl_t) * Group::kWidth);
+            memset(slotsAddress, 0, sizeof(Slot) * capacity);
+        }
+    }
+
+    void Release()
+    {
+        if constexpr (not std::is_trivially_destructible<Slot>::value) {
+            DeconstructAllSlot();
+        }
+        ReleaseSlots(capacity);
+        if (nullSlot != nullptr) {
+            nullSlot->~Slot();
+            allocator.Release(reinterpret_cast<uint8_t *>(nullSlot), sizeof(Slot));
+        }
+        slotsAddress = nullptr;
+        slots = nullptr;
+        identifiers = EmptyGroup();
+        ctrlAddress = nullptr;
+        nullSlot = nullptr;
+        elementsSize = 0;
+        capacity = 0;
+        grower = GrowStrategy(initialDegree);
+    }
+
+    // Release is an owner-level lifecycle event, not an insertion concern.
+    // Recreate storage once at that lifecycle boundary instead of checking it
+    // in every Emplace* call made by every BaseHashMap user.
+    void ReinitializeAfterRelease()
+    {
+        if (capacity == 0) {
+            InitSlots(grower.GetCurrentSize());
+        }
     }
 
     class HashmapIteratorOutput {
     public:
-        HashmapIteratorOutput(BaseHashMap<KeyType, ValueType, HashType, GrowStrategy, Allocator> *mapPtr, uint32_t pos,
+        HashmapIteratorOutput(BaseHashMap *mapPtr, uint32_t pos,
             uint32_t hasBeenOutputCount, ctrl_t *identifiers)
             : hashMapPtr(mapPtr)
         {
@@ -914,7 +1121,7 @@ public:
         }
 
     private:
-        BaseHashMap<KeyType, ValueType, HashType, GrowStrategy, Allocator> *hashMapPtr;
+        BaseHashMap *hashMapPtr;
         ctrl_t *identifiers_ = EmptyGroup();
         uint32_t pos = 0;
         uint32_t remainSlot = 0;
@@ -945,8 +1152,14 @@ public:
 private:
     void Reinsert(Slot &&cell)
     {
-        auto pos = FindPosition(cell.GetKey(), cell.GetHashVal());
-        identifiers[pos] = (h2_t)H2(cell.GetHashVal());
+        size_t hashVal;
+        if constexpr (Slot::kStoresHash) {
+            hashVal = cell.GetHashVal();
+        } else {
+            hashVal = hasher(cell.GetKey());
+        }
+        auto pos = FindPosition(cell.GetKey(), hashVal);
+        identifiers[pos] = (h2_t)H2(hashVal);
         new (&slots[pos]) Slot(std::move(cell));
     }
 
@@ -1141,6 +1354,7 @@ private:
     HashType hasher;
     uint64_t capacity = 0; // the number of hashmap capacity
     static constexpr uint8_t defaultDegreeSize = 15;
+    uint8_t initialDegree;
     GrowStrategy grower;
 };
 

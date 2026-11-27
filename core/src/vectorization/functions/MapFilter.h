@@ -38,14 +38,14 @@ namespace omniruntime::vectorization {
             auto srcKeyTypeId = srcMapVec->GetKeyVector()->GetTypeId();
             auto srcValueTypeId = srcMapVec->GetValueVector()->GetTypeId();
 
-            result = new MapVector(mapRowSize);
+            result = new MapVector(mapRowSize, context->GetPool());
             auto *dstMapVec = static_cast<MapVector *>(result);
 
             if (mapRowSize == 0 || srcMapVec->GetNullCount() == mapRowSize) {
                 for (int32_t i = 0; i < mapRowSize; ++i) {
                     dstMapVec->SetNull(i);
                 }
-                VectorHelper::EmptyMapProjection(dstMapVec, srcKeyTypeId, srcValueTypeId);
+                VectorHelper::EmptyMapProjection(context->GetPool(), dstMapVec, srcKeyTypeId, srcValueTypeId);
                 delete srcMapVec;
                 return;
             }
@@ -59,7 +59,7 @@ namespace omniruntime::vectorization {
                         dstMapVec->SetNull(i);
                     }
                 }
-                VectorHelper::EmptyMapProjection(dstMapVec, srcKeyTypeId, srcValueTypeId);
+                VectorHelper::EmptyMapProjection(context->GetPool(), dstMapVec, srcKeyTypeId, srcValueTypeId);
                 delete srcMapVec;
                 return;
             }
@@ -71,12 +71,12 @@ namespace omniruntime::vectorization {
             keyForLambda->SetIsField(true);
             valueForLambda->SetIsField(true);
 
+            context->SetResultRowSize(keyElementVec->GetSize());
             ExprEval lambdaEval(context);
             lambdaEval.paramNameToIdxMap = lambdaExpr->paramNameToIdxMap_;
             lambdaEval.lambdaParams_.push_back(keyForLambda);
             lambdaEval.lambdaParams_.push_back(valueForLambda);
 
-            context->SetResultRowSize(keyElementVec->GetSize());
             lambdaBody->Accept(lambdaEval);
             context->SetResultRowSize(mapRowSize);
             std::unique_ptr<BaseVector> boolResultVecHolder(lambdaEval.GetResult());
@@ -122,7 +122,7 @@ namespace omniruntime::vectorization {
 
             int32_t selectedCount = static_cast<int32_t>(selectedIndices.size());
             if (selectedCount == 0) {
-                VectorHelper::EmptyMapProjection(dstMapVec, srcKeyTypeId, srcValueTypeId);
+                VectorHelper::EmptyMapProjection(context->GetPool(), dstMapVec, srcKeyTypeId, srcValueTypeId);
             } else {
                 BaseVector *filteredKeys = keyElementVec->CopyPositions(
                     selectedIndices.data(), 0, selectedCount);

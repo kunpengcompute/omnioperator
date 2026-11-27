@@ -34,7 +34,9 @@ public:
     static LookupOuterJoinOperatorFactory *CreateLookupOuterJoinOperatorFactory(
         std::shared_ptr<const HashJoinNode> planNode,
         HashBuilderOperatorFactory* hashBuilderOperatorFactory, const config::QueryConfig& queryConfig);
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     DataTypes buildOutputTypes;
@@ -63,10 +65,14 @@ private:
 
 class LookupOuterJoinOperator : public Operator {
 public:
-    LookupOuterJoinOperator(DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
+    // Pool-bound ctors chain Operator(pool)
+    LookupOuterJoinOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
         std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables);
-    LookupOuterJoinOperator(DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
-        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, BuildSide buildSide);
+    LookupOuterJoinOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
+        std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes,
+        HashTableVariants *hashTables, BuildSide buildSide);
     ~LookupOuterJoinOperator() override;
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override;
     int32_t GetOutput(omniruntime::vec::VectorBatch **outputVecBatch) override;
@@ -74,6 +80,11 @@ public:
         int32_t probeOutputColsCount, int rowCount);
     void PrepareAllUnvisitedRows();
     void PrepareTotalVisitedCounts();
+
+    uint64_t ReleaseBuildState()
+    {
+        return std::visit([](auto &arg) { return arg.ReleaseBuildState(); }, *hashTables);
+    }
 
 private:
     void BuildVecBatch(VectorBatch *vectorBatch);

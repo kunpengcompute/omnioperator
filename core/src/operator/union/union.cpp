@@ -30,14 +30,14 @@ UnionOperatorFactory *UnionOperatorFactory::CreateUnionOperatorFactory(std::shar
     return unionOperatorFactory;
 }
 
-Operator *UnionOperatorFactory::CreateOperator()
+Operator *UnionOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    UnionOperator *unionOperator = new UnionOperator(sourceTypes, sourceTypesCount, isDistinct);
-    return unionOperator;
+    return new UnionOperator(pool, sourceTypes, sourceTypesCount, isDistinct);
 }
 
-UnionOperator::UnionOperator(const type::DataTypes &sourceTypes, int32_t sourceTypesCount, bool isDistinct)
-    : sourceTypes(sourceTypes), sourceTypesCount(sourceTypesCount), isDistinct(isDistinct)
+UnionOperator::UnionOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+    int32_t sourceTypesCount, bool isDistinct)
+    : Operator(pool), sourceTypes(sourceTypes), sourceTypesCount(sourceTypesCount), isDistinct(isDistinct)
 {}
 
 UnionOperator::~UnionOperator() = default;

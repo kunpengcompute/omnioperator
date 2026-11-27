@@ -149,20 +149,21 @@ SortAggregationWithExprOperatorFactory *SortAggregationWithExprOperatorFactory::
                                                       *operatorConfig, queryConfig, planNode->GetStep());
 }
 
-Operator *SortAggregationWithExprOperatorFactory::CreateOperator()
+Operator *SortAggregationWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto sortAggOperator = static_cast<SortAggregationOperator *>(sortAggOperatorFactory->CreateOperator());
-    auto *op = new SortAggregationWithExprOperator(*originSourceTypes, *sourceTypes, projections, aggSimpleFilters,
+    auto sortAggOperator = static_cast<SortAggregationOperator *>(sortAggOperatorFactory->CreateOperator(pool));
+    auto *op = new SortAggregationWithExprOperator(pool, *originSourceTypes, *sourceTypes, projections, aggSimpleFilters,
         sortAggOperator, queryConfig_);
     op->Init();
     return op;
 }
 
-SortAggregationWithExprOperator::SortAggregationWithExprOperator(const DataTypes &originSourceTypes,
-    const DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
+SortAggregationWithExprOperator::SortAggregationWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const DataTypes &originSourceTypes, const DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
     std::vector<SimpleFilter *> &aggSimpleFilters, SortAggregationOperator *sortAggOperator,
     config::QueryConfig queryConfig)
-    : originTypes(originSourceTypes),
+    : Operator(pool),
+      originTypes(originSourceTypes),
       sourceTypes(sourceTypes),
       projections(projections),
       sortAggOperator(sortAggOperator)

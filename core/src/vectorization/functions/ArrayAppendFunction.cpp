@@ -63,36 +63,36 @@ void ArrayAppendFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
 
     switch (elementTypeId) {
         case OMNI_BYTE:
-            ProcessAppend<int8_t>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessAppend<int8_t>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_SHORT:
-            ProcessAppend<int16_t>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessAppend<int16_t>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_INT:
         case OMNI_DATE32:
-            ProcessAppend<int32_t>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessAppend<int32_t>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_LONG:
         case OMNI_TIMESTAMP:
         case OMNI_DECIMAL64:
-            ProcessAppend<int64_t>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessAppend<int64_t>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_FLOAT:
-            ProcessAppend<float>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessAppend<float>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_DOUBLE:
-            ProcessAppend<double>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessAppend<double>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_BOOLEAN:
-            ProcessAppend<bool>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessAppend<bool>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_DECIMAL128:
-            ProcessAppend<Decimal128>(arrayVec, elementVec, result, rowSize, elementTypeId);
+            ProcessAppend<Decimal128>(arrayVec, elementVec, result, rowSize, elementTypeId, context->GetPool());
             break;
         case OMNI_VARCHAR:
         case OMNI_CHAR:
         case OMNI_VARBINARY:
-            ProcessAppendVarchar(arrayVec, elementVec, result, rowSize);
+            ProcessAppendVarchar(arrayVec, elementVec, result, rowSize, context->GetPool());
             break;
         case OMNI_NONE: {
             // Element type is NONE (all nulls), append null to each non-null array row
@@ -108,17 +108,17 @@ void ArrayAppendFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
             }
             int64_t totalOutputElements = totalSrcElements + nonNullRows;
 
-            auto *arrayResult = new ArrayVector(rowSize);
+            auto *arrayResult = new ArrayVector(rowSize, context->GetPool());
             int64_t outputOffset = 0;
 
             if (totalOutputElements > 0 && srcElementVec) {
                 DataTypeId srcElemTypeId = srcElementVec->GetTypeId();
                 BaseVector *newElementVector = nullptr;
                 if (srcElemTypeId == OMNI_VARCHAR || srcElemTypeId == OMNI_CHAR) {
-                    newElementVector = VectorHelper::CreateStringVector(
+                    newElementVector = VectorHelper::CreateStringVector(context->GetPool(),
                         static_cast<uint32_t>(totalOutputElements));
                 } else {
-                    newElementVector = VectorHelper::CreateFlatVector(
+                    newElementVector = VectorHelper::CreateFlatVector(context->GetPool(),
                         static_cast<int32_t>(srcElemTypeId),
                         static_cast<int32_t>(totalOutputElements));
                 }
@@ -176,7 +176,7 @@ void ArrayAppendFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
 
 template <typename T>
 void ArrayAppendFunction::ProcessAppend(ArrayVector *arrayVec, BaseVector *elementVec, BaseVector *&result,
-    int32_t rowSize, DataTypeId elementTypeId) const
+    int32_t rowSize, DataTypeId elementTypeId, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto srcElementVec = arrayVec->GetElementVector();
     int64_t *srcOffsets = arrayVec->GetOffsets();
@@ -191,7 +191,7 @@ void ArrayAppendFunction::ProcessAppend(ArrayVector *arrayVec, BaseVector *eleme
     int64_t totalOutputElements = totalSrcElements + nonNullRows;
 
     auto resultElementVec = std::shared_ptr<BaseVector>(
-        VectorHelper::CreateFlatVector(static_cast<int32_t>(elementTypeId),
+        VectorHelper::CreateFlatVector(pool, static_cast<int32_t>(elementTypeId),
             static_cast<int32_t>(totalOutputElements > 0 ? totalOutputElements : 1)));
     auto *typedResultElementVec = dynamic_cast<Vector<T> *>(resultElementVec.get());
     if (!typedResultElementVec) {
@@ -203,7 +203,7 @@ void ArrayAppendFunction::ProcessAppend(ArrayVector *arrayVec, BaseVector *eleme
         typedSrcElementVec = dynamic_cast<Vector<T> *>(srcElementVec.get());
     }
 
-    auto *arrayResult = new ArrayVector(rowSize, resultElementVec);
+    auto *arrayResult = new ArrayVector(rowSize, resultElementVec, pool);
     int64_t outputOffset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -244,7 +244,7 @@ void ArrayAppendFunction::ProcessAppend(ArrayVector *arrayVec, BaseVector *eleme
 }
 
 void ArrayAppendFunction::ProcessAppendVarchar(ArrayVector *arrayVec, BaseVector *elementVec, BaseVector *&result,
-    int32_t rowSize) const
+    int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
 
@@ -261,7 +261,7 @@ void ArrayAppendFunction::ProcessAppendVarchar(ArrayVector *arrayVec, BaseVector
     int64_t totalOutputElements = totalSrcElements + nonNullRows;
 
     auto resultElementVec = std::shared_ptr<BaseVector>(
-        new VarcharVector(static_cast<int32_t>(totalOutputElements > 0 ? totalOutputElements : 1)));
+        new VarcharVector(static_cast<int32_t>(totalOutputElements > 0 ? totalOutputElements : 1), pool));
     auto *typedResultElementVec = dynamic_cast<VarcharVector *>(resultElementVec.get());
     if (!typedResultElementVec) {
         OMNI_THROW("ArrayAppendFunction Error:", "Failed to create result varchar vector");
@@ -272,7 +272,7 @@ void ArrayAppendFunction::ProcessAppendVarchar(ArrayVector *arrayVec, BaseVector
         typedSrcElementVec = dynamic_cast<VarcharVector *>(srcElementVec.get());
     }
 
-    auto *arrayResult = new ArrayVector(rowSize, resultElementVec);
+    auto *arrayResult = new ArrayVector(rowSize, resultElementVec, pool);
     int64_t outputOffset = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -324,20 +324,20 @@ void ArrayAppendFunction::ProcessAppendVarchar(ArrayVector *arrayVec, BaseVector
 }
 
 template void ArrayAppendFunction::ProcessAppend<int8_t>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayAppendFunction::ProcessAppend<int16_t>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayAppendFunction::ProcessAppend<int32_t>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayAppendFunction::ProcessAppend<int64_t>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayAppendFunction::ProcessAppend<float>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayAppendFunction::ProcessAppend<double>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayAppendFunction::ProcessAppend<bool>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 template void ArrayAppendFunction::ProcessAppend<Decimal128>(ArrayVector *, BaseVector *, BaseVector *&,
-    int32_t, DataTypeId) const;
+    int32_t, DataTypeId, omniruntime::mem::OmniTaskMemoryPool *) const;
 
 } // namespace omniruntime::vectorization

@@ -296,7 +296,8 @@ void ApproxPercentileAggregator<IN_ID, OUT_ID>::ExtractValues(const AggregateSta
         if (vectors[0]->GetTypeId() == type::OMNI_ARRAY) {
             auto* arrayVec = static_cast<omniruntime::vec::ArrayVector*>(vectors[0]);
             size_t numPercentiles = acc->percentiles.size();
-            BaseVector* elemVec = new Vector<OutType>(static_cast<int32_t>(numPercentiles));
+            // Pool comes from TypedAggregator base (aggregator.h:321-350).
+            BaseVector* elemVec = new Vector<OutType>(static_cast<int32_t>(numPercentiles), this->pool_);
             for (size_t pctIdx = 0; pctIdx < numPercentiles; ++pctIdx) {
                 OutType val;
                 acc->estimateQuantile(acc->percentiles[pctIdx], &val);
@@ -545,7 +546,7 @@ void ApproxPercentileAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatc
     if constexpr (IN_ID != type::OMNI_VARBINARY) {
         int32_t rowCount = originVector->GetSize();
         auto* outVec = reinterpret_cast<Vector<LargeStringContainer<std::string_view>>*>(
-            VectorHelper::CreateFlatVector(type::OMNI_VARBINARY, rowCount, 4096 * static_cast<size_t>(rowCount)));
+            VectorHelper::CreateFlatVector(this->pool_, type::OMNI_VARBINARY, rowCount, 4096 * static_cast<size_t>(rowCount)));
         for (int32_t rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
             if (nullMap && (*nullMap)[rowIdx]) {
                 outVec->SetNull(rowIdx);

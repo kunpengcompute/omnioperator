@@ -43,7 +43,7 @@ public:
         
         // Create result vector if it doesn't exist
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
         
         auto *resultVector = reinterpret_cast<Vector<int32_t> *>(result);
@@ -274,7 +274,7 @@ public:
         args.pop();
         const auto size = inputArg->GetSize();
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(
+            result = VectorHelper::CreateFlatVector(context->GetPool(),
                 outputType != nullptr ? outputType->GetId() : OMNI_TIMESTAMP, size);
         }
         const tz::TimeZone *timeZone = nullptr;

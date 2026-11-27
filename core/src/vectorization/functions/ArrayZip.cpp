@@ -15,13 +15,14 @@ using namespace omniruntime::op;
 
 namespace {
 
-BaseVector *CreateElementVectorByType(DataTypeId typeId, int64_t size)
+// Pool is threaded through to CreateFlatVector for per-task memory tracking.
+BaseVector *CreateElementVectorByType(DataTypeId typeId, int64_t size, omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     int64_t allocSize = size > 0 ? size : 1;
     if (typeId == OMNI_VARCHAR || typeId == OMNI_CHAR || typeId == OMNI_VARBINARY) {
-        return VectorHelper::CreateStringVector(static_cast<uint32_t>(allocSize));
+        return VectorHelper::CreateStringVector(pool, static_cast<uint32_t>(allocSize));
     }
-    return VectorHelper::CreateFlatVector(typeId, static_cast<int32_t>(allocSize));
+    return VectorHelper::CreateFlatVector(pool, typeId, static_cast<int32_t>(allocSize));
 }
 
 void CopyElementValue(BaseVector *srcElem, int32_t srcIdx, BaseVector *dstElem, int32_t dstIdx)
@@ -95,14 +96,14 @@ void ArrayZipImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outp
     for (int32_t i = 0; i < numArrays_; ++i) {
         if (elementTypeIds[i] != OMNI_NONE) {
             childVectors[i] = std::shared_ptr<BaseVector>(
-                CreateElementVectorByType(elementTypeIds[i], allocSize));
+                CreateElementVectorByType(elementTypeIds[i], allocSize, context->GetPool()));
         } else {
             childVectors[i] = std::shared_ptr<BaseVector>(
-                VectorHelper::CreateFlatVector(OMNI_INT, static_cast<int32_t>(allocSize)));
+                VectorHelper::CreateFlatVector(context->GetPool(), OMNI_INT, static_cast<int32_t>(allocSize)));
         }
     }
 
-    auto *resultArray = new ArrayVector(rowSize);
+    auto *resultArray = new ArrayVector(rowSize, context->GetPool());
 
     // Second pass: fill data
     int64_t currentOffset = 0;
@@ -150,7 +151,7 @@ void ArrayZipImpl::Apply(std::stack<BaseVector *> &args, const DataTypePtr &outp
     resultArray->SetOffset(rowSize, static_cast<int32_t>(currentOffset));
 
     // Build the RowVector from child vectors and set as element of result array
-    auto *rowVector = new RowVector(static_cast<int32_t>(allocSize), childVectors);
+    auto *rowVector = new RowVector(static_cast<int32_t>(allocSize), childVectors, context->GetPool());
     resultArray->SetElementVector(std::shared_ptr<BaseVector>(rowVector));
 
     result = resultArray;

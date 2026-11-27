@@ -55,7 +55,7 @@ template <typename... Ts> struct Arguments {
             offsets[col] = new int32_t[1];
         }
 
-        ctx = new omniruntime::op::ExecutionContext();
+        ctx = new omniruntime::op::ExecutionContext(4096, nullptr);
         context = reinterpret_cast<int64_t>(ctx);
     }
 
@@ -181,7 +181,7 @@ TEST(ExpressionTest, q1LongType)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     timer.CalculateElapse();
     std::cout << "prepare projection operator : "
               << " wall " << timer.GetWallElapse() << " cpu " << timer.GetCpuElapse() << std::endl;
@@ -276,7 +276,7 @@ TEST(ExpressionTest, q1ByteType)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     timer.CalculateElapse();
     std::cout << "prepare projection operator : "
               << " wall " << timer.GetWallElapse() << " cpu " << timer.GetCpuElapse() << std::endl;
@@ -371,7 +371,7 @@ TEST(ExpressionTest, q1ShortType)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     timer.CalculateElapse();
     std::cout << "prepare projection operator : "
               << " wall " << timer.GetWallElapse() << " cpu " << timer.GetCpuElapse() << std::endl;
@@ -466,7 +466,7 @@ TEST(ExpressionTest, q1DoubleType)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     timer.CalculateElapse();
     std::cout << "compile expression : "
               << " wall " << timer.GetWallElapse() << " cpu " << timer.GetCpuElapse() << std::endl;
@@ -656,7 +656,7 @@ TEST(ExpressionTest, q1Decimal64Type)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(std::move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     timer.CalculateElapse();
     std::cout << "compile expression : "
@@ -761,7 +761,7 @@ TEST(ExpressionTest, q1Decimal128Type)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(std::move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     timer.CalculateElapse();
     std::cout << "compile expression : "
@@ -869,7 +869,7 @@ TEST(ExpressionTest, Decimal64BigIntToDecimal128)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(std::move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     timer.CalculateElapse();
     std::cout << "compile expression : "
@@ -950,7 +950,7 @@ TEST(ExpressionTest, q1Decimal64Cast)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     timer.CalculateElapse();
     std::cout << "compile expression : "
@@ -1026,7 +1026,7 @@ TEST(ExpressionTest, q1DateType)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     timer.CalculateElapse();
     std::cout << "compile expression : "
@@ -1121,7 +1121,7 @@ TEST(ExpressionTest, q1Case1)
 
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     timer.CalculateElapse();
     std::cout << "compile expression : "
@@ -1328,7 +1328,7 @@ TEST(ExpressionTest, q1SwitchCase)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     timer.CalculateElapse();
     std::cout << "compile expression : "
@@ -1506,7 +1506,7 @@ TEST(ExpressionTest, q1If)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
     timer.CalculateElapse();
     std::cout << "compile expression : "
@@ -1618,7 +1618,7 @@ TEST(ExpressionTest, q1CastDoubleLong)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     timer.CalculateElapse();
     PrintRunTime("compile expression: ", timer.GetWallElapse(), timer.GetCpuElapse());
 
@@ -1684,7 +1684,7 @@ TEST(ExpressionTest, q1CastDecimal64Double)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     timer.CalculateElapse();
     PrintRunTime("compile expression: ", timer.GetWallElapse(), timer.GetCpuElapse());
 
@@ -1748,7 +1748,7 @@ TEST(ExpressionTest, q1CastDecimal64Int64)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     timer.CalculateElapse();
     PrintRunTime("compile expression: ", timer.GetWallElapse(), timer.GetCpuElapse());
 
@@ -1811,7 +1811,7 @@ TEST(ExpressionTest, q1TestNull)
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
 
 
     // evaluate

@@ -30,6 +30,9 @@
 #include "OmniByteRLE.hh"
 #include "reader/common/JulianGregorianRebase.h"
 
+// Forward-declare OmniTaskMemoryPool to avoid pulling in the full pool header.
+namespace omniruntime::mem { class OmniTaskMemoryPool; }
+
 namespace omniruntime::reader {
 
     class OmniColumnReader: public ::orc::ColumnReader {
@@ -37,6 +40,18 @@ namespace omniruntime::reader {
         OmniColumnReader(const ::orc::Type& type, ::orc::StripeStreams& stripe);
 
         virtual ~OmniColumnReader() {}
+
+        // Per-task pool for vector allocations performed inside next() — set by
+        // omniBuildReader and propagated to child readers. nullptr = no per-task
+        // accounting (falls back to [[deprecated]] no-pool Vector ctor / nullBridge);
+        // non-null = Vector<T>(numValues, taskPool_, dataTypeId) primary ctor.
+        omniruntime::mem::OmniTaskMemoryPool *taskPool_ = nullptr;
+        // Virtual so composite readers (Struct/List/Map) can override and
+        // recursively stamp the pool onto their children — children are
+        // constructed during the composite ctor BEFORE the parent reader's
+        // SetTaskPool is called, so we cannot rely on construction-time
+        // propagation alone.
+        virtual void SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) { taskPool_ = pool; }
 
         /**
          * Skip number of specified rows.
@@ -74,6 +89,9 @@ namespace omniruntime::reader {
     public:
         OmniStructColumnReader(const ::orc::Type& type, ::orc::StripeStreams& stipe,
             common::JulianGregorianRebase *julianPtr);
+
+        // Propagate the per-task pool to all child column readers.
+        void SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
         uint64_t skip(uint64_t numValues) override;
 
@@ -126,6 +144,9 @@ namespace omniruntime::reader {
         OmniMapColumnReader(const orc::Type& type, orc::StripeStreams& stipe,
                             common::JulianGregorianRebase *julianPtr);
 
+        // Propagate the per-task pool to both key and value readers.
+        void SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) override;
+
         uint64_t skip(uint64_t numValues) override;
 
         /**
@@ -162,6 +183,9 @@ namespace omniruntime::reader {
     public:
         OmniListColumnReader(const orc::Type& type, orc::StripeStreams& stripe,
                              common::JulianGregorianRebase *julianPtr);
+
+        // Propagate the per-task pool to the single child reader.
+        void SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
         uint64_t skip(uint64_t numValues) override;
 
@@ -404,7 +428,8 @@ namespace omniruntime::reader {
             bool isChar = false;
 
             // ORC dictionary converted to Omni format; built once per stripe and shared across batches.
-            std::shared_ptr<omniruntime::vec::LargeStringContainer<std::string_view>> omniDict_;
+            void ensureOmniDictionary() const;
+            mutable std::shared_ptr<omniruntime::vec::LargeStringContainer<std::string_view>> omniDict_;
             int32_t omniDictSize_ = 0;
 
             // ORC dictionary as flat StringView entries; built lazily once per stripe. StringView
@@ -427,10 +452,12 @@ namespace omniruntime::reader {
             int32_t GetOmniDictSize() const { return omniDictSize_; }
             std::shared_ptr<omniruntime::vec::LargeStringContainer<std::string_view>> GetOmniDict() const
             {
+                ensureOmniDictionary();
                 return omniDict_;
             }
             std::string_view GetOmniDictValue(int32_t id) const
             {
+                ensureOmniDictionary();
                 return omniDict_->GetValue(id);
             }
     };
@@ -603,9 +630,14 @@ namespace omniruntime::reader {
             uint64_t *incomingNulls, int omniTypeId) override;
     };
 
+    // The taskPool param is threaded by OrcRowReader from ReaderOptions::GetTaskPool()
+    // down to every leaf ColumnReader. The returned reader has SetTaskPool() invoked
+    // before return; recursive child constructions inherit the same pool. nullptr is
+    // permitted for legacy or standalone test paths.
     std::unique_ptr<::orc::ColumnReader> omniBuildReader(const ::orc::Type& type,
                                                     ::orc::StripeStreams& stripe,
-                                                    common::JulianGregorianRebase *julianPtr);
+                                                    common::JulianGregorianRebase *julianPtr,
+                                                    omniruntime::mem::OmniTaskMemoryPool *taskPool = nullptr);
 
     void scaleInt128(::orc::Int128& value, uint32_t scale, uint32_t currentScale);
 

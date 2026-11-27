@@ -23,7 +23,11 @@ public:
 
     static LimitOperatorFactory *CreateLimitOperatorFactory(std::shared_ptr<const LimitNode> planNode);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override — forwards `pool` to the new LimitOperator(pool, ...) ctor
+    // so the Limit op binds Vector allocations to the per-task pool. Legacy CreateOperator()
+    // + LimitOperator(limit, offset) stay until the atomic ABI flip.
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     int32_t limit;
@@ -33,7 +37,10 @@ private:
 
 class LimitOperator : public Operator {
 public:
-    LimitOperator(int32_t limit, int32_t offset, int32_t columnCount = 0);
+    // Pool-bound ctor — chains Operator(pool) so pool_ is set + ExecutionContext
+    // is pool-bound from construction. Same data members as the legacy ctor.
+    LimitOperator(omniruntime::mem::OmniTaskMemoryPool *pool, int32_t limit, int32_t offset,
+        int32_t columnCount = 0);
 
     ~LimitOperator() override;
 

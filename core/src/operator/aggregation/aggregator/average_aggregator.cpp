@@ -374,9 +374,9 @@ void AverageAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBatch
     const std::shared_ptr<NullsHelper> nullMap)
 {
     int rowCount = originVector->GetSize();
-    auto containerVector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, 2));
-    auto sumVector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(OMNI_DOUBLE, rowCount));
-    auto countVector = reinterpret_cast<Vector<int64_t> *>(VectorHelper::CreateFlatVector(OMNI_LONG, rowCount));
+    auto containerVector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, 2));
+    auto sumVector = reinterpret_cast<Vector<double> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_DOUBLE, rowCount));
+    auto countVector = reinterpret_cast<Vector<int64_t> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_LONG, rowCount));
 
     auto vector = reinterpret_cast<T *>(originVector);
     if (nullMap != nullptr) {

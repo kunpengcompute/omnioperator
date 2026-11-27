@@ -149,6 +149,13 @@ LookupJoinWithExprOperatorFactory *LookupJoinWithExprOperatorFactory::CreateLook
         probeHashCols, probeHashColsCount, buildOutputCols.data(), buildOutputCols.size(), *buildTypes,
     reinterpret_cast<int64_t>(hashBuilderOperatorFactory), filter, isShuffle, overflowConfig, queryConfig, outputList.data());
 
+    // This wrapper must preserve the cached-table policy installed by the
+    // inner lookup factory. Releasing build state after the first probe task
+    // would leave later executor tasks reading freed array-map slots.
+    const bool sharedCachedBuild = hashBuilderOperatorFactory->IsPrebuilt() ||
+        !hashBuilderOperatorFactory->GetBroadcastHashTableId().empty();
+    pLookupJoinWithExprOperatorFactory->SetEagerReleaseBuildState(
+        !sharedCachedBuild);
     delete overflowConfig;
     overflowConfig = nullptr;
     return pLookupJoinWithExprOperatorFactory;
@@ -186,8 +193,8 @@ LookupJoinWithExprOperatorFactory::LookupJoinWithExprOperatorFactory(const DataT
     overflowConfig, outputList)
 {
     this->queryConfig_ = queryConfig;
-    this->operatorFactory->SetJoinSpillPolicy(queryConfig.spillEnabled() && queryConfig.joinSpillEnabled(),
-        JoinSubPartitionConfig::FromQueryConfig(queryConfig));
+    this->operatorFactory->SetJoinSpillPolicy(queryConfig.joinSpillEffective(),
+        JoinSubPartitionConfig::FromQueryConfig(queryConfig), queryConfig.passiveReclaimEffective());
 }
 
 LookupJoinWithExprOperatorFactory::~LookupJoinWithExprOperatorFactory()
@@ -195,16 +202,19 @@ LookupJoinWithExprOperatorFactory::~LookupJoinWithExprOperatorFactory()
     delete this->operatorFactory;
 }
 
-Operator *LookupJoinWithExprOperatorFactory::CreateOperator()
+// Pool-bound override forwards pool to inner factory.
+Operator *LookupJoinWithExprOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto lookupJoinOperator = static_cast<LookupJoinOperator *>(operatorFactory->CreateOperator());
-    return new LookupJoinWithExprOperator(*probeTypes, projections, lookupJoinOperator, queryConfig_);
+    auto lookupJoinOperator = static_cast<LookupJoinOperator *>(operatorFactory->CreateOperator(pool));
+    return new LookupJoinWithExprOperator(pool, *probeTypes, projections, lookupJoinOperator, queryConfig_);
 }
 
-LookupJoinWithExprOperator::LookupJoinWithExprOperator(const type::DataTypes &probeTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, LookupJoinOperator *lookupJoinOperator,
-    const config::QueryConfig &queryConfig)
-    : probeTypes(probeTypes),
+// Pool-bound ctor — same body, chains Operator(pool).
+LookupJoinWithExprOperator::LookupJoinWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &probeTypes, std::vector<std::unique_ptr<Projection>> &projections,
+    LookupJoinOperator *lookupJoinOperator, const config::QueryConfig &queryConfig)
+    : Operator(pool),
+      probeTypes(probeTypes),
       projections(projections),
       lookupJoinOperator(lookupJoinOperator)
 {
@@ -222,6 +232,9 @@ LookupJoinWithExprOperator::~LookupJoinWithExprOperator()
 
 int32_t LookupJoinWithExprOperator::AddInput(VectorBatch *vecBatch)
 {
+    // The registered donor is the inner LookupJoin. Projection allocations in this
+    // wrapper can trigger synchronous pool reclaim, so protect the inner call too.
+    Operator::NonReclaimableSection innerNrs(lookupJoinOperator);
     if (vecBatch->GetRowCount() <= 0) {
         VectorHelper::FreeVecBatch(vecBatch);
         ResetInputVecBatch();
@@ -233,21 +246,22 @@ int32_t LookupJoinWithExprOperator::AddInput(VectorBatch *vecBatch)
 
     lookupJoinOperator->AddInput(newInputVecBatch);
     SetStatus(lookupJoinOperator->GetStatus());
-    UpdateSpilledMetrics(lookupJoinOperator);
     return 0;
 }
 
 int32_t LookupJoinWithExprOperator::GetOutput(VectorBatch **outputVecBatch)
 {
+    Operator::NonReclaimableSection innerNrs(lookupJoinOperator);
     int32_t status = lookupJoinOperator->GetOutput(outputVecBatch);
     SetStatus(lookupJoinOperator->GetStatus());
-    // Driver snapshots stats before Close(); copy after each GetOutput.
+    // Propagate inner probe spill to this (collected) operator's stats_ → Spark UI Spill(disk).
     UpdateSpilledMetrics(lookupJoinOperator);
     return status;
 }
 
 BlockingReason LookupJoinWithExprOperator::IsBlocked(ContinueFuture* future)
 {
+    Operator::NonReclaimableSection innerNrs(lookupJoinOperator);
     return lookupJoinOperator->IsBlocked(future);
 }
 
@@ -258,6 +272,7 @@ bool LookupJoinWithExprOperator::needsInput()
 
 OmniStatus LookupJoinWithExprOperator::Close()
 {
+    Operator::NonReclaimableSection innerNrs(lookupJoinOperator);
     lookupJoinOperator->Close();
     return OMNI_STATUS_NORMAL;
 }

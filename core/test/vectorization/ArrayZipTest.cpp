@@ -73,7 +73,7 @@ TEST_F(ArrayZipTest, BasicIntSameLength)
         new FieldExpr(1, arrayIntType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -147,7 +147,7 @@ TEST_F(ArrayZipTest, DifferentLengthArrays)
         new FieldExpr(1, arrayIntType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -218,7 +218,7 @@ TEST_F(ArrayZipTest, NullArrayRow)
         new FieldExpr(1, arrayIntType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -265,7 +265,7 @@ TEST_F(ArrayZipTest, BothEmptyArrays)
         new FieldExpr(1, arrayIntType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -319,7 +319,7 @@ TEST_F(ArrayZipTest, DoubleTypeArrays)
         new FieldExpr(1, arrayDoubleType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -386,7 +386,7 @@ TEST_F(ArrayZipTest, FloatDifferentLengths)
         new FieldExpr(1, arrayFloatType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -454,7 +454,7 @@ TEST_F(ArrayZipTest, LongTypeArrays)
         new FieldExpr(1, arrayLongType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -522,7 +522,7 @@ TEST_F(ArrayZipTest, ShortTypeArrays)
         new FieldExpr(1, arrayShortType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -590,7 +590,7 @@ TEST_F(ArrayZipTest, ByteTypeArrays)
         new FieldExpr(1, arrayByteType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -658,7 +658,7 @@ TEST_F(ArrayZipTest, BooleanTypeArrays)
         new FieldExpr(1, arrayBoolType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -730,7 +730,7 @@ TEST_F(ArrayZipTest, MixedIntAndVarcharArrays)
         new FieldExpr(1, arrayVarcharType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -798,7 +798,7 @@ TEST_F(ArrayZipTest, Date32TypeArrays)
         new FieldExpr(1, arrayDateType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -866,7 +866,7 @@ TEST_F(ArrayZipTest, TimestampTypeArrays)
         new FieldExpr(1, arrayTsType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -937,7 +937,7 @@ TEST_F(ArrayZipTest, Decimal128TypeArrays)
         new FieldExpr(1, arrayDecType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1007,7 +1007,7 @@ TEST_F(ArrayZipTest, NullElementsInInput)
         new FieldExpr(1, arrayIntType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1090,7 +1090,7 @@ TEST_F(ArrayZipTest, MultipleRows)
         new FieldExpr(1, arrayIntType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1188,7 +1188,7 @@ TEST_F(ArrayZipTest, MultipleRowsWithNullRow)
         new FieldExpr(1, arrayIntType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1276,7 +1276,7 @@ TEST_F(ArrayZipTest, ThreeArrayZip)
         new FieldExpr(2, arrayIntType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -1351,7 +1351,7 @@ TEST_F(ArrayZipTest, VarcharTypeArrays)
         new FieldExpr(1, arrayVarcharType)
     }, outputType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);

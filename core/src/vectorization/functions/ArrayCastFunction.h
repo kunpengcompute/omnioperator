@@ -35,15 +35,16 @@ public:
         }
 
         const int32_t nRows = src->GetSize();
+        auto *pool = context == nullptr ? nullptr : context->GetPool();
         auto dstElemsOwner = std::shared_ptr<BaseVector>(
-            VectorHelper::CreateFlatVector(outType->ElementType()->GetId(), src->GetElementVector() == nullptr
+            VectorHelper::CreateFlatVector(pool, outType->ElementType()->GetId(), src->GetElementVector() == nullptr
                     ? 0
                     : src->GetElementVector()->GetSize()));
         if (src->GetElementVector() != nullptr) {
             CastElements(src->GetElementVector().get(), dstElemsOwner.get(), outType->ElementType()->GetId());
         }
 
-        auto *dst = new ArrayVector(nRows, dstElemsOwner);
+        auto *dst = new ArrayVector(nRows, dstElemsOwner, pool);
         for (int32_t row = 0; row < nRows; ++row) {
             dst->SetOffset(row, static_cast<int32_t>(src->GetOffset(row)));
             if (src->IsNull(row)) {

@@ -74,7 +74,8 @@ LookupOuterJoinOperatorFactory *LookupOuterJoinOperatorFactory::CreateLookupOute
         buildOutputCols.data(), *buildOutputTypes, hashBuilderOperatorFactory->GetHashTablesVariants());
 }
 
-Operator *LookupOuterJoinOperatorFactory::CreateOperator()
+// Pool-bound override
+Operator *LookupOuterJoinOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     auto probeOutputType = std::vector<type::DataTypePtr>();
     for (const auto& col : probeOutputCols) {
@@ -82,7 +83,8 @@ Operator *LookupOuterJoinOperatorFactory::CreateOperator()
     }
     auto probeOutputTypes = DataTypes(probeOutputType);
     auto lookupOuterJoinOperator =
-        new LookupOuterJoinOperator(probeOutputTypes, probeOutputCols, buildOutputCols, buildOutputTypes, hashTables, buildSide);
+        new LookupOuterJoinOperator(pool, probeOutputTypes, probeOutputCols, buildOutputCols, buildOutputTypes,
+            hashTables, buildSide);
     return lookupOuterJoinOperator;
 }
 
@@ -107,9 +109,12 @@ void LookupOuterJoinOperator::PrepareTotalVisitedCounts()
         *hashTables);
 }
 
-LookupOuterJoinOperator::LookupOuterJoinOperator(DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
+// Pool-bound (no buildSide) — same body, chains Operator(pool).
+LookupOuterJoinOperator::LookupOuterJoinOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
     std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables)
-    : probeOutputTypes(probeOutputTypes),
+    : Operator(pool),
+      probeOutputTypes(probeOutputTypes),
       probeOutputCols(probeOutputCols),
       buildOutputCols(buildOutputCols),
       buildOutputTypes(buildOutputTypes),
@@ -123,9 +128,13 @@ LookupOuterJoinOperator::LookupOuterJoinOperator(DataTypes &probeOutputTypes, st
     SetOperatorName(opNameForLookUpJoin);
 }
 
-LookupOuterJoinOperator::LookupOuterJoinOperator(DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
-    std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables, BuildSide buildSide)
-    : probeOutputTypes(probeOutputTypes),
+// Pool-bound (with buildSide) — same body, chains Operator(pool).
+LookupOuterJoinOperator::LookupOuterJoinOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    DataTypes &probeOutputTypes, std::vector<int32_t> &probeOutputCols,
+    std::vector<int32_t> &buildOutputCols, const type::DataTypes &buildOutputTypes, HashTableVariants *hashTables,
+    BuildSide buildSide)
+    : Operator(pool),
+      probeOutputTypes(probeOutputTypes),
       probeOutputCols(probeOutputCols),
       buildOutputCols(buildOutputCols),
       buildOutputTypes(buildOutputTypes),
@@ -135,7 +144,7 @@ LookupOuterJoinOperator::LookupOuterJoinOperator(DataTypes &probeOutputTypes, st
       buildSide(buildSide)
 {
     int32_t outputRowSize =
-            OperatorUtil::GetRowSize(this->buildOutputTypes.Get()) + OperatorUtil::GetRowSize(this->probeOutputTypes.Get());
+        OperatorUtil::GetRowSize(this->buildOutputTypes.Get()) + OperatorUtil::GetRowSize(this->probeOutputTypes.Get());
     maxRowCount = OperatorUtil::GetMaxRowCount((outputColsCount == 0) ? DEFAULT_ROW_SIZE : outputRowSize);
     SetOperatorName(opNameForLookUpJoin);
 }
@@ -190,7 +199,7 @@ void LookupOuterJoinOperator::BuildVecBatch(VectorBatch *vectorBatch)
     auto rowCount = vectorBatch->GetRowCount();
     for (int32_t col = 0; col < probeOutputTypes.GetSize(); col++) {
         auto typeId = probeOutputTypes.GetType(col)->GetId();
-        auto vector = VectorHelper::CreateVector(OMNI_FLAT, typeId, rowCount);
+        auto vector = VectorHelper::CreateVector(this->pool(), OMNI_FLAT, typeId, rowCount);
         for (int32_t row = 0; row < rowCount; row++) {
             if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR || typeId == type::OMNI_VARBINARY) {
                 static_cast<Vector<LargeStringContainer<std::string_view>> *>(vector)->SetNull(row);
@@ -201,7 +210,7 @@ void LookupOuterJoinOperator::BuildVecBatch(VectorBatch *vectorBatch)
         vectorBatch->Append(vector);
     }
     for (int32_t buildCol = 0; buildCol < buildOutputTypes.GetSize(); buildCol++) {
-        auto vector = VectorHelper::CreateVector(OMNI_FLAT, buildOutputTypes.GetType(buildCol)->GetId(), rowCount);
+        auto vector = VectorHelper::CreateVector(this->pool(), OMNI_FLAT, buildOutputTypes.GetType(buildCol)->GetId(), rowCount);
         vectorBatch->Append(vector);
     }
 

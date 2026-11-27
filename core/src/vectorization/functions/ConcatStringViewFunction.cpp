@@ -36,7 +36,7 @@ void ConcatStringViewFunction::ApplyConcat(const std::vector<BaseVector *> &argV
     ExecutionContext *context)
 {
     const int32_t size = context->GetResultRowSize();
-    auto *out = new Vector<StringView>(size);
+    auto *out = new Vector<StringView>(size, context->GetPool());
 
     for (int32_t row = 0; row < size; ++row) {
         bool hasNull = false;

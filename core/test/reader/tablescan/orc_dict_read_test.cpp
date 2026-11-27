@@ -27,6 +27,9 @@
 #include "orc/OrcFile.hh"
 #include "scan_test.h"
 #include <memory>
+#include "memory/omni_task_memory_pool.h"
+#include "reader/ReaderFactory.h"
+#include "reader/ReaderOptions.h"
 #include <orc/Type.hh>
 #include <gtest/gtest.h>
 
@@ -312,4 +315,48 @@ TEST_F(DictReadTest, ReadMultiColWithDictVector)
         std::string_view actual = dictVec->GetValue(i);
         ASSERT_EQ(actual, strData[i]) << "STRING mismatch at row " << i;
     }
+}
+
+TEST_F(DictReadTest, DictionaryPayloadStaysAccountedAfterReaderDestruction)
+{
+    const std::string value(65536, 'x');
+    WriteStringOrcFile(std::vector<std::string>(100, value), {},
+        orc::createPrimitiveType(orc::TypeKind::STRING));
+    omniruntime::mem::OmniTaskMemoryPool pool(nullptr);
+    struct Cleanup {
+        std::vector<BaseVector*>& vectors;
+        ~Cleanup() { for (auto *v : vectors) delete v; vectors.clear(); }
+    } cleanup{readBatch};
+    std::vector<BaseVector*> *batch = nullptr;
+    {
+        auto options = std::make_shared<omniruntime::reader::ReaderOptions>();
+        options->ParseEnhanceJson("{}");
+        options->SetTaskPool(&pool);
+        auto orcOptions = std::make_shared<orc::ReaderOptions>();
+        orcOptions->setMemoryPool(*orc::getDefaultPool());
+        options->SetOrcReaderOptions(orcOptions);
+        options->SetOrcRowReaderOptions(std::make_shared<orc::RowReaderOptions>());
+        options->SetUri(std::make_shared<UriInfo>("file", filename, "", "-1"));
+        auto rowType = omniruntime::type::ROW({}, {});
+        options->SetRowType(rowType);
+        options->SetFileRowType(rowType);
+        auto reader = GetReaderFactory(omniruntime::codegen::FileFormat::ORC)->CreateReader(options);
+        options->GetOrcRowReaderOptions().include(std::list<std::string>{"c0"});
+        auto rowReader = reader->CreateRowReader();
+        ASSERT_EQ(rowReader->Next(&batch, nullptr, 100), 100);
+        ASSERT_NE(batch, nullptr);
+        ASSERT_EQ(batch->size(), 1);
+        // Move vector ownership out of the reader's returned batch.
+        readBatch.swap(*batch);
+        delete batch;
+        batch = nullptr;
+    }
+    ASSERT_EQ(readBatch[0]->GetEncoding(), OMNI_DICTIONARY);
+    auto *dict = dynamic_cast<DictionaryStringVector*>(readBatch[0]);
+    ASSERT_NE(dict, nullptr);
+    EXPECT_EQ(dict->GetValue(99), value);
+    EXPECT_GE(pool.currentBytes(), static_cast<int64_t>(value.size()));
+    for (auto *vector : readBatch) delete vector;
+    readBatch.clear();
+    EXPECT_EQ(pool.currentBytes(), 0);
 }

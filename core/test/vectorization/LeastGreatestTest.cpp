@@ -38,7 +38,7 @@ using namespace omniruntime::TestUtil;
 template<typename T>
 BaseVector* CreateNumericVector(DataTypeId typeId, const std::vector<T>& values, const std::vector<bool>& nulls) {
     int32_t rowSize = static_cast<int32_t>(values.size());
-    BaseVector* vec = VectorHelper::CreateFlatVector(typeId, rowSize);
+    BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, typeId, rowSize);
     auto* typedVec = static_cast<Vector<T>*>(vec);
     for (int32_t i = 0; i < rowSize; ++i) {
         if (nulls[i]) {
@@ -89,7 +89,7 @@ void ExecuteLeastGreatest(const std::string& funcName,
     ASSERT_NE(function, nullptr) << funcName << " function not found for signature";
     
     int32_t rowSize = inputs[0]->GetSize();
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     
     // Push args to stack (reverse order for stack)

@@ -45,13 +45,15 @@ std::unique_ptr<DataSource> HiveConnector::createDataSource(
         const std::shared_ptr<ConnectorTableHandle>& tableHandle,
         const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ColumnHandle>>& columnHandles)
+        std::shared_ptr<connector::ColumnHandle>>& columnHandles,
+        omniruntime::mem::OmniTaskMemoryPool *taskPool)
 {
     return std::make_unique<HiveDataSource>(
             outputType,
             tableHandle,
             columnHandles,
-            hiveConfig_);
+            hiveConfig_,
+            taskPool);
 }
 
 bool registerHiveConnectorMetadataFactory(

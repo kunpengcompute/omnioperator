@@ -65,7 +65,7 @@ inline double RunRegrAndGetDouble(uint32_t aggType)
 {
     auto *batch = MakeLinearBatch();
     auto factory = CreateRegrHashAggregationFactory(aggType, DoubleType());
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     op->Init();
     op->AddInput(batch);
     VectorBatch *out = nullptr;
@@ -81,7 +81,7 @@ inline int64_t RunRegrAndGetLong(uint32_t aggType)
 {
     auto *batch = MakeLinearBatch();
     auto factory = CreateRegrHashAggregationFactory(aggType, LongType());
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     op->Init();
     op->AddInput(batch);
     VectorBatch *out = nullptr;
@@ -128,7 +128,7 @@ inline double RunNonGroupRegrGetDouble(uint32_t aggFuncType)
     auto factory = std::make_unique<AggregationOperatorFactory>(sourceTypes, aggFuncTypes, aggInputCols, maskCols,
         aggOutputTypes, inputRaws, outputPartials, hasAggFilters, false, false);
     factory->Init();
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *in = MakeRegrYxLinearBatch();
     op->Init();
     op->AddInput(in);

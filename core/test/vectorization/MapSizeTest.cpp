@@ -46,7 +46,7 @@ public:
             offsets.push_back(totalKeys);
         }
 
-        auto keyVector = VectorHelper::CreateFlatVector(OMNI_INT, allKeys.size());
+        auto keyVector = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, allKeys.size());
         auto* keyFlatVec = reinterpret_cast<Vector<int32_t>*>(keyVector);
         for (size_t i = 0; i < allKeys.size(); ++i) {
             keyFlatVec->SetValue(i, allKeys[i]);
@@ -92,7 +92,7 @@ public:
 
         int32_t rowCount = mapVector->vec::BaseVector::GetSize();
 
-        auto boolVector = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowCount);
+        auto boolVector = VectorHelper::CreateFlatVector(nullptr, OMNI_BOOLEAN, rowCount);
         auto* boolFlatVec = reinterpret_cast<Vector<bool>*>(boolVector);
         for (int32_t i = 0; i < rowCount; ++i) {
             boolFlatVec->SetValue(i, true);
@@ -103,7 +103,7 @@ public:
         BaseVector* resultVec = nullptr;
         auto outputType = std::make_shared<DataType>(OMNI_INT);
 
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(rowCount);
         context.hasFilter = false;
 

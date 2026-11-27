@@ -265,9 +265,9 @@ void CollectListComplexAggregator::ExtractValues(const AggregateState *state, st
             v->SetNull(rowIndex);
             return;
         }
-        BaseVector *elemVec = VectorHelper::CreateComplexVector(elemType, 0);
+        BaseVector *elemVec = VectorHelper::CreateComplexVector(this->pool_, elemType, 0);
         if (targetColTypeId_ == OMNI_ARRAY) {
-            ArrayVector *innerArr = new ArrayVector(static_cast<int64_t>(0), std::shared_ptr<BaseVector>(elemVec));
+            ArrayVector *innerArr = new ArrayVector(static_cast<int64_t>(0), std::shared_ptr<BaseVector>(elemVec), this->pool_);
             static_cast<ArrayVector *>(v)->SetValue(rowIndex, innerArr);
             delete innerArr;
         } else {
@@ -286,7 +286,7 @@ void CollectListComplexAggregator::ExtractValues(const AggregateState *state, st
     for (BaseVector *s : *list) {
         totalElem += static_cast<int32_t>(s->GetSize());
     }
-    BaseVector *elemVec = VectorHelper::CreateComplexVector(elemType, totalElem);
+    BaseVector *elemVec = VectorHelper::CreateComplexVector(this->pool_, elemType, totalElem);
     int32_t offset = 0;
     for (BaseVector *s : *list) {
         int32_t sz = static_cast<int32_t>(s->GetSize());
@@ -297,7 +297,7 @@ void CollectListComplexAggregator::ExtractValues(const AggregateState *state, st
     }
     if (targetColTypeId_ == OMNI_ARRAY) {
         // Array<Array<T>>: output element type is Array; SetValue expects ArrayVector.
-        ArrayVector *innerArr = new ArrayVector(static_cast<int64_t>(list->size()), std::shared_ptr<BaseVector>(elemVec));
+        ArrayVector *innerArr = new ArrayVector(static_cast<int64_t>(list->size()), std::shared_ptr<BaseVector>(elemVec), this->pool_);
         for (size_t i = 0; i < list->size(); i++) {
             int32_t sz = static_cast<int32_t>((*list)[i]->GetSize());
             innerArr->SetSize(static_cast<int32_t>(i), sz);
@@ -366,7 +366,7 @@ void CollectListComplexAggregator::ProcessAlignAggSchema(VectorBatch *result, Ba
 {
     const int32_t rowCount = (originVector != nullptr) ? originVector->GetSize() : 0;
     if (rowCount == 0) {
-        BaseVector *emptyArr = VectorHelper::CreateComplexVector(GetOutputTypes().GetType(0).get(), 0);
+        BaseVector *emptyArr = VectorHelper::CreateComplexVector(this->pool_, GetOutputTypes().GetType(0).get(), 0);
         result->Append(emptyArr);  // batch takes ownership; do not delete
         return;
     }
@@ -377,7 +377,7 @@ void CollectListComplexAggregator::ProcessAlignAggSchema(VectorBatch *result, Ba
     }
     type::DataTypePtr outputType = GetOutputTypes().GetType(0);
     ArrayVector *arrayVector = static_cast<ArrayVector *>(
-        VectorHelper::CreateComplexVector(outputType.get(), rowCount));
+        VectorHelper::CreateComplexVector(this->pool_, outputType.get(), rowCount));
     for (int32_t i = 0; i < rowCount; i++) {
         if ((nullMap != nullptr && (*nullMap)[i]) || originVector->IsNull(i)) {
             arrayVector->SetNull(i);
@@ -392,7 +392,7 @@ void CollectListComplexAggregator::ProcessAlignAggSchema(VectorBatch *result, Ba
             BaseVector *owned = CopyComplexSliceToOwned(slice, targetColTypeId_, targetColDataType_.get());
             if (owned != nullptr) {
                 // ArrayVector::SetValue expects ArrayVector source for Array<Array<T>>; wrap element slice.
-                ArrayVector *wrapped = new ArrayVector(1, std::shared_ptr<BaseVector>(owned));
+                ArrayVector *wrapped = new ArrayVector(1, std::shared_ptr<BaseVector>(owned), this->pool_);
                 wrapped->SetSize(0, static_cast<int32_t>(owned->GetSize()));
                 wrapped->SetNotNull(0);
                 arrayVector->SetValue(i, wrapped);

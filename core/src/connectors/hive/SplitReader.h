@@ -19,6 +19,8 @@
 #include "type/data_type.h"
 #include "TableHandle.h"
 #include "memory/memory_pool.h"
+#include "memory/omni_task_memory_pool.h"  // per-task accounting pool
+#include "OmniOrcPoolAdapter.h"  // ORC reader pool plumbing
 #include <type/data_type.h>
 #include "reader/Reader.h"
 #include <iostream>
@@ -49,7 +51,8 @@ public:
         const std::unordered_map<std::string, std::shared_ptr<HiveColumnHandle>> *partitionKeys_,
         const std::shared_ptr<const HiveConfig> &hiveConfig_,
         const type::RowTypePtr &readerOutputType_,
-        const std::shared_ptr<codegen::ScanSpec> &scanSpec_);
+        const std::shared_ptr<codegen::ScanSpec> &scanSpec_,
+        omniruntime::mem::OmniTaskMemoryPool *taskPool = nullptr);
 
     static std::unique_ptr <SplitReader> create(
         const std::shared_ptr <hive::HiveConnectorSplit> &hiveSplit,
@@ -57,7 +60,8 @@ public:
         const std::unordered_map <std::string, std::shared_ptr<HiveColumnHandle>> *partitionKeys,
         const std::shared_ptr<const HiveConfig> &hiveConfig,
         const type::RowTypePtr &readerOutputType,
-        const std::shared_ptr <codegen::ScanSpec> &scanSpec);
+        const std::shared_ptr <codegen::ScanSpec> &scanSpec,
+        omniruntime::mem::OmniTaskMemoryPool *taskPool = nullptr);
 
     virtual ~SplitReader() = default;
 
@@ -81,6 +85,20 @@ protected:
     const std::shared_ptr<const HiveConfig> hiveConfig_;
     type::RowTypePtr readerOutputType_;
     mem::MemoryPool *const pool_;
+    // Per-task accounting pool threaded from TableScanOperator. Charges the
+    // missing-field FlatVectors (built via CreateFlatVector(taskPool_, ...)) and
+    // the partition-column ConstVectors at SplitReader.cpp:next(). A ConstVector
+    // holds a single broadcast value, so its only pool-charged allocation is its
+    // validity (nulls) buffer; the threaded pool makes that charge real instead of
+    // silently dropping it via the no-pool bridge.
+    omniruntime::mem::OmniTaskMemoryPool *const taskPool_;
+    // Adapter that lets Apache ORC C++ allocate through our per-task pool.
+    // MUST be declared BEFORE baseReader_ — C++ destroys members in reverse
+    // declaration order, and the orc::Reader owned by baseReader_ may call
+    // adapter->free() during its own destruction, so the adapter must outlive
+    // baseReader_. When taskPool_ is null the adapter is still constructed but
+    // its malloc/free fall back to std::malloc/free (legacy / test contexts).
+    OmniOrcPoolAdapter orcPoolAdapter_;
     std::shared_ptr <codegen::ScanSpec> scanSpec_;
     std::unique_ptr <omniruntime::reader::Reader> baseReader_;
     std::unique_ptr <omniruntime::reader::RowReader> baseRowReader_;
@@ -173,39 +191,39 @@ protected:
         vec::BaseVector *result = nullptr;
         switch (dataTypeId) {
             case omniruntime::type::OMNI_BYTE:
-                result = new vec::ConstVector<int8_t>(0, dataTypeId, batchRowSize);
+                result = new vec::ConstVector<int8_t>(0, dataTypeId, batchRowSize, taskPool_);
                 break;
             case omniruntime::type::OMNI_SHORT:
-                result = new vec::ConstVector<int16_t>(0, dataTypeId, batchRowSize);
+                result = new vec::ConstVector<int16_t>(0, dataTypeId, batchRowSize, taskPool_);
                 break;
             case omniruntime::type::OMNI_INT:
             case omniruntime::type::OMNI_DATE32:
-                result = new vec::ConstVector<int32_t>(0, dataTypeId, batchRowSize);
+                result = new vec::ConstVector<int32_t>(0, dataTypeId, batchRowSize, taskPool_);
                 break;
             case omniruntime::type::OMNI_LONG:
             case omniruntime::type::OMNI_DECIMAL64:
             case omniruntime::type::OMNI_TIMESTAMP:
             case omniruntime::type::OMNI_DATE64:
-                result = new vec::ConstVector<int64_t>(0, dataTypeId, batchRowSize);
+                result = new vec::ConstVector<int64_t>(0, dataTypeId, batchRowSize, taskPool_);
                 break;
             case omniruntime::type::OMNI_FLOAT:
-                result = new vec::ConstVector<float>(0.0f, dataTypeId, batchRowSize);
+                result = new vec::ConstVector<float>(0.0f, dataTypeId, batchRowSize, taskPool_);
                 break;
             case omniruntime::type::OMNI_DOUBLE:
-                result = new vec::ConstVector<double>(0.0, dataTypeId, batchRowSize);
+                result = new vec::ConstVector<double>(0.0, dataTypeId, batchRowSize, taskPool_);
                 break;
             case omniruntime::type::OMNI_BOOLEAN:
-                result = new vec::ConstVector<bool>(false, dataTypeId, batchRowSize);
+                result = new vec::ConstVector<bool>(false, dataTypeId, batchRowSize, taskPool_);
                 break;
             case omniruntime::type::OMNI_CHAR:
             case omniruntime::type::OMNI_VARCHAR:
             case omniruntime::type::OMNI_VARBINARY:
                 result = new vec::ConstVector<std::string_view>(
-                    std::string_view(), dataTypeId, batchRowSize);
+                    std::string_view(), dataTypeId, batchRowSize, taskPool_);
                 break;
             case omniruntime::type::OMNI_DECIMAL128:
                 result = new vec::ConstVector<omniruntime::type::Decimal128>(
-                    omniruntime::type::Decimal128(0), dataTypeId, batchRowSize);
+                    omniruntime::type::Decimal128(0), dataTypeId, batchRowSize, taskPool_);
                 break;
             default:
                 LogError("createNullConstVec: unsupported data type %d", dataTypeId);
@@ -223,55 +241,55 @@ protected:
         switch (dataTypeId) {
             case omniruntime::type::OMNI_BYTE: {
                 int8_t item = static_cast<int8_t>(std::stoi(val));
-                return new vec::ConstVector<int8_t>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<int8_t>(item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_SHORT: {
                 int16_t item = static_cast<int16_t>(std::stoi(val));
-                return new vec::ConstVector<int16_t>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<int16_t>(item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_INT: {
                 int32_t item = std::stoi(val);
-                return new vec::ConstVector<int32_t>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<int32_t>(item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_DATE32: {
                 int32_t item = ParseDate32(val);
-                return new vec::ConstVector<int32_t>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<int32_t>(item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_LONG: {
                 int64_t item = std::stol(val);
-                return new vec::ConstVector<int64_t>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<int64_t>(item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_FLOAT: {
                 float item = std::stof(val);
-                return new vec::ConstVector<float>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<float>(item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_DOUBLE: {
                 double item = std::stod(val);
-                return new vec::ConstVector<double>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<double>(item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_BOOLEAN: {
                 bool item = (val == "true" || val == "1");
-                return new vec::ConstVector<bool>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<bool>(item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_CHAR:
             case omniruntime::type::OMNI_VARCHAR:
             case omniruntime::type::OMNI_VARBINARY: {
                 return new vec::ConstVector<std::string_view>(
-                    std::string_view(val), dataTypeId, batchRowSize);
+                    std::string_view(val), dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_DECIMAL64: {
                 auto decimal = omniruntime::type::Decimal128(val);
                 int64_t item = static_cast<int64_t>(decimal.ToInt128());
-                return new vec::ConstVector<int64_t>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<int64_t>(item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_DECIMAL128: {
                 auto item = omniruntime::type::Decimal128(val);
                 return new vec::ConstVector<omniruntime::type::Decimal128>(
-                    item, dataTypeId, batchRowSize);
+                    item, dataTypeId, batchRowSize, taskPool_);
             }
             case omniruntime::type::OMNI_TIMESTAMP: {
                 int64_t item = StringToTimestamp(val);
-                return new vec::ConstVector<int64_t>(item, dataTypeId, batchRowSize);
+                return new vec::ConstVector<int64_t>(item, dataTypeId, batchRowSize, taskPool_);
             }
             default:
                 LogError("createConstPartitionVec: unsupported data type %d", dataTypeId);

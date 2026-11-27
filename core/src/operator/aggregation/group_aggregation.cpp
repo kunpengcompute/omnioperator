@@ -3,14 +3,19 @@
  * Description: Hash Aggregation Source File
  */
 #include "group_aggregation.h"
+#include <algorithm>
 #include <cmath>
+#include <limits>
+#include <string>
 #include "vector/vector_helper.h"
 #include "operator/status.h"
 #include "operator/util/operator_util.h"
+#include "operator/reclaim_context.h"
 #include "util/type_util.h"
 #include "util/debug.h"
 #include "operator/aggregation/aggregator/aggregator_factory.h"
 #include "type/data_type.h"
+#include "util/telemetry.h"
 
 #if defined(DEBUG_OPERATOR) && defined(TRACE)
 #include <sstream>
@@ -20,6 +25,8 @@ namespace op {
 using namespace omniruntime::type;
 
 static constexpr int32_t UNSPILL_ROW_COUNT_ONE_BATCH = 128;
+// Rows per sorted run when spilling fixed-key groups (hash map or array table).
+static constexpr int32_t kMaxFixedRowsPerSpillRun = 1024 * 1024;
 
 static ALWAYS_INLINE uint8_t PackedBitWidthForType(int32_t typeId)
 {
@@ -43,26 +50,36 @@ static ALWAYS_INLINE uint8_t PackedBitWidthForType(int32_t typeId)
     }
 }
 
-using SetVector = void (*)(VectorBatch *vecBatch, int32_t rowCount);
-template <typename V> void SetVectorImpl(VectorBatch *vecBatch, int32_t rowCount)
+// The function-pointer dispatch table carries a trailing OmniTaskMemoryPool*,
+// so every Set* helper allocates its output vectors from the task pool.
+using SetVector = void (*)(VectorBatch *vecBatch, int32_t rowCount,
+                           omniruntime::mem::OmniTaskMemoryPool *pool);
+template <typename V> void SetVectorImpl(VectorBatch *vecBatch, int32_t rowCount,
+                                         omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    vecBatch->Append(new V(rowCount));
+    vecBatch->Append(new V(rowCount, pool));
 }
 
-void SetVarcharVector(VectorBatch *vecBatch, int32_t rowCount)
+void SetVarcharVector(VectorBatch *vecBatch, int32_t rowCount,
+                      omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    vecBatch->Append(new Vector<LargeStringContainer<std::string_view>>(rowCount));
+    vecBatch->Append(new Vector<LargeStringContainer<std::string_view>>(rowCount, pool));
 }
 
-void SetContainerVector(VectorBatch *vecBatch, int32_t rowCount)
+void SetContainerVector(VectorBatch *vecBatch, int32_t rowCount,
+                        omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto doubleVector = new Vector<double>(rowCount);
-    auto longVector = new Vector<int64_t>(rowCount);
+    // ContainerVector is pool-bound: its NullsBuffer and values buffer are charged
+    // to the task pool and released symmetrically by ~ContainerVector.
+    // ArrayVector/MapVector/RowVector containers are still not pool-bound because
+    // BaseVector has no pool member.
+    auto doubleVector = new Vector<double>(rowCount, pool);
+    auto longVector = new Vector<int64_t>(rowCount, pool);
     std::vector<int64_t> vectorAddresses(AVG_VECTOR_COUNT);
     vectorAddresses[0] = reinterpret_cast<int64_t>(doubleVector);
     vectorAddresses[1] = reinterpret_cast<int64_t>(longVector);
     std::vector<DataTypePtr> dataTypes{ DoubleType(), LongType() };
-    auto containerVector = new ContainerVector(rowCount, vectorAddresses, dataTypes);
+    auto containerVector = new ContainerVector(rowCount, vectorAddresses, dataTypes, pool);
     vecBatch->Append(containerVector);
 }
 
@@ -120,7 +137,7 @@ OmniStatus HashAggregationOperatorFactory::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-Operator *HashAggregationOperatorFactory::CreateOperator()
+Operator *HashAggregationOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     std::vector<ColumnIndex> groupByIndex(groupByColIndices.size(), ColumnIndex());
     std::vector<std::unique_ptr<Aggregator>> aggs;
@@ -163,12 +180,15 @@ Operator *HashAggregationOperatorFactory::CreateOperator()
                 std::to_string(this->aggregatorFactories.size()));
         }
         aggregator->SetStatisticalAggregate(isStatisticalAggregate);
+        // Bind the per-task pool so result/spill Vector<T> allocations
+        // route through it (sum/avg/min/max/var/bit_*/regr_* helpers).
+        aggregator->SetPool(pool);
         aggs.push_back(std::move(aggregator));
     }
 
-    auto groupByOperator = new HashAggregationOperator(groupByIndex, aggsInputCols, aggInputColsSize, aggInputTypes,
-        aggOutputTypes, std::move(aggs), inputRaws, outputPartials, hasAggFilters, operatorConfig, aggFuncTypesVector,
-        step);
+    auto groupByOperator = new HashAggregationOperator(pool, groupByIndex, aggsInputCols, aggInputColsSize,
+        aggInputTypes, aggOutputTypes, std::move(aggs), inputRaws, outputPartials, hasAggFilters, operatorConfig,
+        aggFuncTypesVector, step);
     groupByOperator->SetGroupByColumnsHandleType(handleType);
     groupByOperator->Init();
     return groupByOperator;
@@ -218,6 +238,386 @@ void HashAggregationOperatorFactory::ChooseGroupByType()
 void HashAggregationOperator::SetGroupByColumnsHandleType(HandleType t)
 {
     groupByColumnsHandleType = t;
+}
+
+HashAggregationOperator::~HashAggregationOperator()
+{
+    if (pool_ != nullptr) {
+        pool_->unregisterSpillable(this);
+    }
+}
+
+uint64_t HashAggregationOperator::EstimateRehashReservation(uint64_t incomingRows) const
+{
+    switch (groupByColumnsHandleType) {
+        case HandleType::serialize:
+            return serialize == nullptr ? 0 : serialize->table->EstimateRehashAllocation(incomingRows);
+        case HandleType::fixedInt16:
+            return fixedInt16 == nullptr ? 0 : fixedInt16->table->EstimateRehashAllocation(incomingRows);
+        case HandleType::fixedInt32:
+            return fixedInt32 == nullptr ? 0 : fixedInt32->table->EstimateRehashAllocation(incomingRows);
+        case HandleType::fixedInt64:
+            return fixedInt64 == nullptr ? 0 : fixedInt64->table->EstimateRehashAllocation(incomingRows);
+        case HandleType::packedInt32:
+            return packedInt32 == nullptr ? 0 : packedInt32->table->EstimateRehashAllocation(incomingRows);
+        case HandleType::packedInt64:
+            return packedInt64 == nullptr ? 0 : packedInt64->table->EstimateRehashAllocation(incomingRows);
+        case HandleType::packedInt128:
+            return packedInt128 == nullptr ? 0 : packedInt128->table->EstimateRehashAllocation(incomingRows);
+        default:
+            return 0;
+    }
+}
+
+uint64_t HashAggregationOperator::HashmapFreeSlots() const
+{
+    switch (groupByColumnsHandleType) {
+        case HandleType::serialize:
+            return serialize == nullptr ? 0 : serialize->table->FreeSlots();
+        case HandleType::fixedInt16:
+            return fixedInt16 == nullptr ? 0 : fixedInt16->table->FreeSlots();
+        case HandleType::fixedInt32:
+            return fixedInt32 == nullptr ? 0 : fixedInt32->table->FreeSlots();
+        case HandleType::fixedInt64:
+            return fixedInt64 == nullptr ? 0 : fixedInt64->table->FreeSlots();
+        case HandleType::packedInt32:
+            return packedInt32 == nullptr ? 0 : packedInt32->table->FreeSlots();
+        case HandleType::packedInt64:
+            return packedInt64 == nullptr ? 0 : packedInt64->table->FreeSlots();
+        case HandleType::packedInt128:
+            return packedInt128 == nullptr ? 0 : packedInt128->table->FreeSlots();
+        default:
+            return 0;
+    }
+}
+
+void HashAggregationOperator::HoldHashmapExpansion(bool held)
+{
+    switch (groupByColumnsHandleType) {
+        case HandleType::serialize:
+            if (serialize != nullptr) {
+                serialize->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::fixedInt16:
+            if (fixedInt16 != nullptr) {
+                fixedInt16->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::fixedInt32:
+            if (fixedInt32 != nullptr) {
+                fixedInt32->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::fixedInt64:
+            if (fixedInt64 != nullptr) {
+                fixedInt64->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::packedInt32:
+            if (packedInt32 != nullptr) {
+                packedInt32->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::packedInt64:
+            if (packedInt64 != nullptr) {
+                packedInt64->table->SetExpansionHeld(held);
+            }
+            break;
+        case HandleType::packedInt128:
+            if (packedInt128 != nullptr) {
+                packedInt128->table->SetExpansionHeld(held);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+void HashAggregationOperator::EnsureReservationPctsCached()
+{
+    if (reservationPctsCached_) {
+        return;
+    }
+    // QueryConfig is immutable for the lifetime of a query, so the clamped
+    // percentages are safe to cache. Read lazily instead of in the constructor:
+    // on the wrapper path the ExecutionContext receives its config after the
+    // operator object exists.
+    const auto queryConfig = executionContext->queryConfig();
+    minSpillableReservationPct_ = std::max<int32_t>(queryConfig.minSpillableReservationPct(), 0);
+    spillableReservationGrowthPct_ = std::max<int32_t>(queryConfig.spillableReservationGrowthPct(), 0);
+    reservationPctsCached_ = true;
+}
+
+void HashAggregationOperator::EnsureInputFits(const VectorBatch *vecBatch)
+{
+    // Match Velox GroupingSet::ensureInputFits: an empty table relies on normal
+    // allocation/arbitration instead of reserving. Unlike Velox, partial
+    // aggregation reserves too: Omni has no memory-driven partial flush, so a
+    // partial table otherwise grows only inside AddInput, where arbitration
+    // cannot spill it, and the task fails once its memory share is used up.
+    if (pool_ == nullptr || !operatorConfig.GetSpillConfig()->IsSpillEnabled() || GetElementsSize() == 0) {
+        return;
+    }
+    constexpr uint64_t kMax = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+    const auto add = [](uint64_t left, uint64_t right) {
+        constexpr uint64_t max = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+        return left > max - std::min(right, max) ? max : left + right;
+    };
+    const auto multiply = [](uint64_t left, uint64_t right) {
+        constexpr uint64_t max = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+        return right != 0 && left > max / right ? max : left * right;
+    };
+
+    const uint64_t incomingRows = static_cast<uint64_t>(vecBatch->GetRowCount());
+    const uint64_t aggregateStateBytes = multiply(
+        incomingRows, static_cast<uint64_t>(std::max<int32_t>(totalAggStatesSize, 0)));
+    const uint64_t serializedKeyBytes = groupByColumnsHandleType == HandleType::serialize
+        ? multiply(std::min<uint64_t>(vecBatch->EstimateFlatSize(), kMax), 2)
+        : 0;
+    const uint64_t arenaDemand = add(aggregateStateBytes, serializedKeyBytes);
+    const uint64_t arenaFree = executionContext == nullptr || executionContext->GetArena() == nullptr
+        ? 0
+        : executionContext->GetArena()->AvailBytes();
+    const uint64_t arenaGrowth = arenaDemand > arenaFree ? arenaDemand - arenaFree : 0;
+    const uint64_t tableIncrement = EstimateRehashReservation(incomingRows);
+    // tableIncrement is the whole new ctrl/slot array of a rehash. The rehash
+    // fills it while the old array is still live and frees the old one after,
+    // so the new array is needed once. Doubling it asked for twice the real
+    // peak, and the request that did not fit spilled a table that would have.
+    // Only the arena estimate keeps Velox's factor of two.
+    const uint64_t headroom = add(multiply(arenaGrowth, 2), tableIncrement);
+    // Velox scales both percentages by the operator's own pool. pool_ is the
+    // task pool here, shared with the shuffle writer, readers and every other
+    // operator, so scaling by it asks for a tenth of the whole task: when other
+    // operators hold most of the task's Spark share, each request is denied
+    // and the table is spilled while still small. Scale by what this
+    // aggregation could spill.
+    const uint64_t currentUsage = reclaimableBytes();
+    EnsureReservationPctsCached();
+    const uint64_t minimumReservation =
+        multiply(currentUsage, static_cast<uint64_t>(minSpillableReservationPct_)) / 100;
+    const uint64_t availableReservation = static_cast<uint64_t>(pool_->availableReservation());
+
+    if (availableReservation >= minimumReservation) {
+        // EstimateRehashAllocation()==0 is Omni's equivalent of enough free
+        // hash-table rows; the arena check covers fixed states and serialized
+        // out-of-line keys.
+        if (tableIncrement == 0 && arenaFree >= arenaDemand) {
+            return;
+        }
+        if (availableReservation > headroom) {
+            return;
+        }
+    }
+
+    // Velox GroupingSet::ensureInputFits never reserves for a partial
+    // aggregation: its table is capped and flushes. Keep only the batch's own
+    // demand for a capped partial table, so a denial brings the flush forward
+    // without asking the siblings for a growth cushion first.
+    const uint64_t growthReservation = PartialFlushActive() ? 0 :
+        multiply(currentUsage, static_cast<uint64_t>(spillableReservationGrowthPct_)) / 100;
+    const int64_t target = static_cast<int64_t>(std::max(headroom, growthReservation));
+    ReservationRequestSection request(
+        this, reclaimableName(), "HashAggregationOperator::EnsureInputFits", target);
+    ReclaimableReservationSection safeReservation(this);
+    if (pool_->maybeReserve(target)) {
+        return;
+    }
+    // Velox treats a failed speculative reservation as non-fatal. Normal
+    // allocation remains authoritative and can still trigger arbitration.
+    if (omniruntime::telemetry::IsReclaimVerboseEnabled()) {
+        std::fprintf(stderr,
+            "[OMNI-HASHAGG] event=ensure_input_fits outcome=reservation_denied pool=%p incoming_rows=%ld target=%ld used=%ld reserved=%ld\n",
+            static_cast<void *>(pool_), static_cast<long>(vecBatch->GetRowCount()),
+            static_cast<long>(target), static_cast<long>(pool_->currentBytes()),
+            static_cast<long>(pool_->reservedBytes()));
+    }
+    // A flushable partial aggregation whose share is already taken by its
+    // siblings (a final aggregation in its output phase, the shuffle writer)
+    // would otherwise grow by denied requests until reclaim spills the small
+    // table whole, again and again (q3 SF1000 st16: 50 spills of 3 MB per
+    // task). Velox never spills a partial aggregation; treat the denial as
+    // "table full": this batch still goes in, then the table is flushed
+    // downstream and the memory returns.
+    if (PartialFlushActive()) {
+        partialFull_ = true;
+    }
+}
+
+void NO_INLINE HashAggregationOperator::ReinitializeHashmapAfterRelease()
+{
+    switch (groupByColumnsHandleType) {
+        case HandleType::serialize:
+            serialize->table->ReinitializeAfterRelease();
+            break;
+        case HandleType::fixedInt16:
+            fixedInt16->table->ReinitializeAfterRelease();
+            break;
+        case HandleType::fixedInt32:
+            fixedInt32->table->ReinitializeAfterRelease();
+            break;
+        case HandleType::fixedInt64:
+            fixedInt64->table->ReinitializeAfterRelease();
+            break;
+        case HandleType::packedInt32:
+            packedInt32->table->ReinitializeAfterRelease();
+            break;
+        case HandleType::packedInt64:
+            packedInt64->table->ReinitializeAfterRelease();
+            break;
+        case HandleType::packedInt128:
+            packedInt128->table->ReinitializeAfterRelease();
+            break;
+        default:
+            return;
+    }
+    hashmapCapacityReleased_ = false;
+}
+
+void HashAggregationOperator::EnsureOutputFits()
+{
+    // A flushing partial table (including the first/last aggregations kept
+    // out of isStepPartials) emits its flush from the memory it already holds;
+    // reserving an output cushion for every flush only spills its siblings.
+    if (pool_ == nullptr || isStepPartials || PartialFlushActive() ||
+        !operatorConfig.GetSpillConfig()->IsSpillEnabled() || hasSpill ||
+        spillMerger != nullptr || GetElementsSize() == 0) {
+        return;
+    }
+    // Omni output batches are capped by this byte budget. Keep Velox's 1.2x
+    // output cushion without introducing floating-point truncation.
+    constexpr int64_t kOutputReservation =
+        static_cast<int64_t>(OperatorUtil::MAX_VEC_BATCH_SIZE_IN_BYTES) * 6 / 5;
+    // maybeReserve quantizes the request to the 8 MiB growth quantum before it
+    // subtracts the headroom already available in the pool, so it grants this
+    // request without touching the ledgers when `availableReservation()` is at
+    // least the quantized size. Match that admission test first and skip the
+    // request context / reclaim guard / mutex path entirely (mirrors
+    // HashBuilderOperator::TryReserveTableBuild). The caller's hasSpill /
+    // spillMerger guard above means the post-reserve spill handoff cannot be
+    // missed on this path: no listener callback runs here, so no arbitration
+    // can select this operator between the check and the return.
+    const int64_t desiredHeadroom =
+        omniruntime::mem::OmniTaskMemoryPool::quantizedReservationSize(kOutputReservation);
+    if (desiredHeadroom >= 0 && pool_->availableReservation() >= desiredHeadroom) {
+        if (omniruntime::telemetry::IsReclaimVerboseEnabled()) {
+            std::fprintf(stderr,
+                "[OMNI-HASHAGG] event=ensure_output_fits outcome=reservation_already_available pool=%p available=%ld desired=%ld\n",
+                static_cast<void *>(pool_), static_cast<long>(pool_->availableReservation()),
+                static_cast<long>(desiredHeadroom));
+        }
+        return;
+    }
+    ReservationRequestSection request(
+        this, reclaimableName(), "HashAggregationOperator::EnsureOutputFits", kOutputReservation);
+    ReclaimableReservationSection safeReservation(this);
+    if (pool_->maybeReserve(kOutputReservation)) {
+        // Arbitration may have selected and spilled this operator while the
+        // request was in flight. Its disk output path does not need the full
+        // in-memory output cushion.
+        if (hasSpill) {
+            pool_->releaseUnusedReservation();
+        }
+        return;
+    }
+    if (omniruntime::telemetry::IsReclaimVerboseEnabled()) {
+        std::fprintf(stderr,
+            "[OMNI-HASHAGG] event=ensure_output_fits outcome=reservation_denied pool=%p target=%ld used=%ld reserved=%ld\n",
+            static_cast<void *>(pool_), static_cast<long>(kOutputReservation),
+            static_cast<long>(pool_->currentBytes()), static_cast<long>(pool_->reservedBytes()));
+    }
+}
+
+uint64_t HashAggregationOperator::reclaimableBytes() const
+{
+    if (!isInited || outputStarted_ || spillMerger != nullptr ||
+        reclaimInProgress_.load(std::memory_order_acquire) ||
+        const_cast<HashAggregationOperator *>(this)->GetElementsSize() == 0 ||
+        const_cast<HashAggregationOperator *>(this)->PartialFlushPreferredOverSpill()) {
+        return 0;
+    }
+    // reclaim() resets the arena but deliberately retains its first chunk;
+    // BaseHashMap::Release returns all ctrl/slot/null storage. Advertise only
+    // bytes those exact operations can return to the task pool. Element-count
+    // times row-width could overstate the real reclaimable allocation.
+    uint64_t bytes = executionContext->GetArena()->ReclaimableBytesOnReset();
+    const auto addReclaimable = [&bytes](uint64_t value) {
+        bytes = value > std::numeric_limits<uint64_t>::max() - bytes
+            ? std::numeric_limits<uint64_t>::max()
+            : bytes + value;
+    };
+    if (arrayTable != nullptr) {
+        addReclaimable(arrayTable->AllocatedBytes());
+    } else if (serialize != nullptr) {
+        addReclaimable(serialize->table->ReclaimableBytesOnRelease());
+    } else if (fixedInt32 != nullptr) {
+        addReclaimable(fixedInt32->table->ReclaimableBytesOnRelease());
+    } else if (fixedInt64 != nullptr) {
+        addReclaimable(fixedInt64->table->ReclaimableBytesOnRelease());
+    } else if (fixedInt16 != nullptr) {
+        addReclaimable(fixedInt16->table->ReclaimableBytesOnRelease());
+    } else if (packedInt32 != nullptr) {
+        addReclaimable(packedInt32->table->ReclaimableBytesOnRelease());
+    } else if (packedInt64 != nullptr) {
+        addReclaimable(packedInt64->table->ReclaimableBytesOnRelease());
+    } else if (packedInt128 != nullptr) {
+        addReclaimable(packedInt128->table->ReclaimableBytesOnRelease());
+    }
+    return bytes;
+}
+
+bool HashAggregationOperator::PartialFlushActive() const
+{
+    return partialFlushEligible_ && maxPartialAggregationMemory_ != 0 && !hasSpill;
+}
+
+bool HashAggregationOperator::PartialFlushPreferredOverSpill()
+{
+    // Velox never spills a partial aggregation (AggregationNode::canSpill is
+    // final/single only). A flushable partial table that is still within its
+    // extended cap returns its memory by flushing: it is not a spill donor, and
+    // a reclaim request only brings the flush forward. Above the extended cap
+    // (the driver has not drained a pending flush yet) the table stays a
+    // donor, so a request that nothing else can serve is still honoured.
+    return PartialFlushActive() && !outputStarted_ && !partialFlushing_ &&
+        PartialTableBytes() <= std::max(maxExtendedPartialAggregationMemory_, maxPartialAggregationMemory_);
+}
+
+int64_t HashAggregationOperator::reclaim(int64_t targetBytes)
+{
+    if (targetBytes <= 0 || pool_ == nullptr || isInNonReclaimableSection()) {
+        return 0;
+    }
+    if (PartialFlushPreferredOverSpill()) {
+        if (GetElementsSize() != 0) {
+            partialFull_ = true;
+        }
+        return 0;
+    }
+    if (reclaimableBytes() == 0) {
+        return 0;
+    }
+    bool expected = false;
+    if (!reclaimInProgress_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+        return 0;
+    }
+    struct ResetFlag {
+        std::atomic<bool> &flag;
+        ~ResetFlag() { flag.store(false, std::memory_order_release); }
+    } resetFlag{reclaimInProgress_};
+
+    const int64_t before = pool_->currentBytes();
+    const auto result = SpillHashMap();
+    if (UNLIKELY(result != ErrorCode::SUCCESS)) {
+        throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
+    }
+    executionContext->GetArena()->Reset();
+    ReleaseHashmapCapacity();
+    // The table a pending flush would have emitted is on disk now; the disk
+    // path drains it at the end of input, so input can resume.
+    partialFull_ = false;
+    return std::max<int64_t>(0, before - pool_->currentBytes());
 }
 
 OmniStatus HashAggregationOperator::Init()
@@ -345,6 +745,10 @@ OmniStatus HashAggregationOperator::Init()
     // 7 vector analyzer
     vectorAnalyzer = new VectorAnalyzer(groupByCols);
 
+    if (pool_ != nullptr && operatorConfig.GetSpillConfig()->IsSpillEnabled()) {
+        pool_->registerSpillable(this);
+    }
+
     return OMNI_STATUS_NORMAL;
 }
 
@@ -352,7 +756,8 @@ void HashAggregationOperator::ResizeArrayMap(int64_t oldMin)
 {
     auto offSet = oldMin - vectorAnalyzer->MinValue();
     auto newTableSize = vectorAnalyzer->GetRange();
-    auto newArrayTable = std::make_unique<DefaultArrayMap<AggregateState>>(newTableSize);
+    auto newArrayTable = std::make_unique<DefaultArrayMap<AggregateState>>(
+        newTableSize, OmniHashmapAllocator(executionContext->GetAllocator()));
     auto newAssigned = newArrayTable->GetAssigned();
     auto newSlots = newArrayTable->GetSlots();
     auto oldTableSize = arrayTable->Size();
@@ -401,13 +806,18 @@ void HashAggregationOperator::MoveEntryArrayTableToHashMap(int64_t minValue)
 
 int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
 {
-    setInputedData(true);
     auto rowCount = vecBatch->GetRowCount();
     if (rowCount <= 0) {
         VectorHelper::FreeVecBatch(vecBatch);
         ResetInputVecBatch();
         return 0;
     }
+
+    // The active operator is reclaimable only here: no analyzer, hashmap,
+    // aggregate state, or ownership mutation has happened for this batch yet.
+    EnsureInputFits(vecBatch);
+    setInputedData(true);
+    partialInputRowsSinceFlush_ += static_cast<uint64_t>(rowCount);
 
     UpdateAddInputInfo(rowCount);
     // do decide hash table mode
@@ -416,7 +826,8 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
     vectorAnalyzer->DecideHashMode(vecBatch);
     if (vectorAnalyzer->IsArrayHashTableType()) {
         if (arrayTable == nullptr) {
-            arrayTable = std::make_unique<DefaultArrayMap<AggregateState>>(vectorAnalyzer->GetRange());
+            arrayTable = std::make_unique<DefaultArrayMap<AggregateState>>(
+                vectorAnalyzer->GetRange(), OmniHashmapAllocator(executionContext->GetAllocator()));
         } else if (vectorAnalyzer->MinMaxChanged() && resizeArrayMapCnt == 0) {
             ResizeArrayMap(oldMin);
         } else if (vectorAnalyzer->MinMaxChanged() && resizeArrayMapCnt >= 1) {
@@ -430,10 +841,14 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
             EmplaceToArrayMap(vecBatch, groupVector);
             VectorHelper::FreeVecBatch(vecBatch);
             ResetInputVecBatch();
+            MaybeMarkPartialFull();
             return 0;
         }
     }
 
+    if (UNLIKELY(hashmapCapacityReleased_)) {
+        ReinitializeHashmapAfterRelease();
+    }
     if (UNLIKELY(preIsArrayMap && arrayTable != nullptr)) {
         MoveEntryArrayTableToHashMap(oldMin);
     }
@@ -479,6 +894,28 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
         groupVectors[i] = curVector;
     }
 
+    // A partial table that is already marked for its flush (the reservation
+    // for this batch was denied, or a reclaim asked for its memory) is emitted
+    // and released right after this batch. It must not expand for it: the new
+    // chunk array is allocated inside the insert, where nothing can be flushed
+    // or spilled, so a task without room for it fails (Meituan q3 at the 10 GB
+    // point, stage 16: 128 MB denied in the insert that followed a denied
+    // reservation). The batch goes into the free slots instead.
+    struct ExpansionHold {
+        HashAggregationOperator *op;
+        ~ExpansionHold()
+        {
+            if (op != nullptr) {
+                op->HoldHashmapExpansion(false);
+            }
+        }
+    } expansionHold{nullptr};
+    if (partialFull_ && PartialFlushActive() && HashmapFreeSlots() >= static_cast<uint64_t>(rowCount)) {
+        HoldHashmapExpansion(true);
+        expansionHold.op = this;
+        expansionHeldBatches_++;
+    }
+
     if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
         // Decode all group-by columns upfront to eliminate encoding branches in hot path
         serialize->DecodeGroupByColumns(groupVectors, groupColNum, rowCount);
@@ -504,15 +941,203 @@ int32_t HashAggregationOperator::AddInput(VectorBatch *vecBatch)
     }
     VectorHelper::FreeVecBatch(vecBatch);
     ResetInputVecBatch();
-    if (operatorConfig.GetSpillConfig()->NeedSpill(GetElementsSize())) {
-        auto result = SpillHashMap();
-        executionContext->GetArena()->Reset();
-        ResetHashmap();
-        if (UNLIKELY(result != ErrorCode::SUCCESS)) {
-            throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
+    MaybeMarkPartialFull();
+    return 0;
+}
+
+bool HashAggregationOperator::needsInput()
+{
+    return Operator::needsInput() && !partialFull_;
+}
+
+void HashAggregationOperator::SetPartialFlushMemory(uint64_t maxBytes, uint64_t maxExtendedBytes)
+{
+    maxPartialAggregationMemory_ = maxBytes;
+    basePartialAggregationMemory_ = maxBytes;
+    maxExtendedPartialAggregationMemory_ = std::max(maxBytes, maxExtendedBytes);
+    // The first table may grow to three times the extended cap (45 % of the
+    // task's share with the default 10 % / 15 % caps), and a growth has to find
+    // half of the new cap as free room for the flush (TryGrowPartialCap).
+    constexpr uint64_t kPartialGrowLimitPct = 300;
+    constexpr uint32_t kPartialDrainPct = 50;
+    partialGrowLimit_ = maxExtendedPartialAggregationMemory_ / 100 * kPartialGrowLimitPct;
+    partialDrainPct_ = kPartialDrainPct;
+}
+
+bool HashAggregationOperator::TryGrowPartialCap(uint64_t tableBytes)
+{
+    // Whether a partial table is worth more memory than its cap shows only in
+    // its flush: keys that repeat after more rows than the cap holds look like
+    // new keys while the table is small (Trip.com q1_2: a 70 MB cap passed
+    // 4.4 G of 4.5 G rows on, 84 GB of shuffle for 4 GB). So the first table of
+    // the operator may grow past the cap, up to the growth limit, and its flush
+    // gives the verdict (CompletePartialFlush): a good reduction keeps the
+    // grown cap, a poor one returns to the base cap for good (Meituan q3).
+    // Memory pressure still flushes a grown table: a denied reservation or a
+    // reclaim request marks it full.
+    bool grown = false;
+    uint64_t drainRoom = 0;
+    if (!partialGrowthDecided_) {
+        uint64_t cap = maxPartialAggregationMemory_;
+        while (cap < partialGrowLimit_ && cap < tableBytes) {
+            cap = std::min(cap > partialGrowLimit_ / 2 ? partialGrowLimit_ : cap * 2, partialGrowLimit_);
+        }
+        if (cap >= tableBytes && cap > maxPartialAggregationMemory_) {
+            // Velox maybeIncreasePartialAggregationMemoryUsage: the cap grows only
+            // when the task can reserve the growth now. A table that grew on
+            // memory it does not have meets the denial inside a rehash, where
+            // nothing can flush (Meituan q3 with a 30 % cap: 134 MB denied in the
+            // insert, 471 failed attempts). The operator is not a donor for its
+            // own request.
+            // The flush of the grown table copies its groups into the operator
+            // downstream while the table is still resident (it is released when
+            // the last batch is out). A growth that takes all the free memory
+            // leaves none for that copy (Meituan q3 stage 9: a 335 MB table next
+            // to 225 MB of a final aggregation, 10 MB left for the shuffle writer,
+            // 45 writer spills per task). So the growth also has to find the
+            // drain room, as headroom of the task pool.
+            drainRoom = cap / 100 * partialDrainPct_;
+            const int64_t wanted = static_cast<int64_t>(cap - tableBytes + drainRoom);
+            bool reserved = true;
+            if (pool_ != nullptr) {
+                ReservationRequestSection request(
+                    this, reclaimableName(), "HashAggregationOperator::TryGrowPartialCap", wanted);
+                NonReclaimableSection ownRequest(this, true);
+                reserved = pool_->maybeReserve(wanted);
+            }
+            if (reserved) {
+                maxPartialAggregationMemory_ = cap;
+                growTimes_++;
+                grown = true;
+            } else {
+                growDenied_++;
+            }
         }
     }
-    return 0;
+    if (omniruntime::telemetry::IsReclaimSuccessTelemetryEnabled()) {
+        std::fprintf(stderr,
+            "[OMNI-HASHAGG] event=partial_cap operator=%p action=%s table_bytes=%lu cap=%lu limit=%lu groups=%lu "
+            "window_rows=%lu flush_times=%lu grow_times=%lu grow_denied=%lu drain_room=%lu flushed_rows=%lu\n",
+            static_cast<void *>(this), grown ? "grow" : "flush", static_cast<unsigned long>(tableBytes),
+            static_cast<unsigned long>(maxPartialAggregationMemory_), static_cast<unsigned long>(partialGrowLimit_),
+            static_cast<unsigned long>(GetElementsSize()), static_cast<unsigned long>(partialInputRowsSinceFlush_),
+            static_cast<unsigned long>(flushTimes_), static_cast<unsigned long>(growTimes_),
+            static_cast<unsigned long>(growDenied_), static_cast<unsigned long>(drainRoom),
+            static_cast<unsigned long>(flushedRows_));
+    }
+    return grown;
+}
+
+uint64_t HashAggregationOperator::PartialTableBytes()
+{
+    // Arena (aggregate states, serialized keys, row container) plus the hash or
+    // array table's own storage: the same bytes a reclaim would return.
+    uint64_t bytes = executionContext->GetArena()->TotalBytes();
+    if (arrayTable != nullptr) {
+        bytes += arrayTable->AllocatedBytes();
+    } else if (serialize != nullptr) {
+        bytes += serialize->table->ReclaimableBytesOnRelease();
+    } else if (fixedInt32 != nullptr) {
+        bytes += fixedInt32->table->ReclaimableBytesOnRelease();
+    } else if (fixedInt64 != nullptr) {
+        bytes += fixedInt64->table->ReclaimableBytesOnRelease();
+    } else if (fixedInt16 != nullptr) {
+        bytes += fixedInt16->table->ReclaimableBytesOnRelease();
+    } else if (packedInt32 != nullptr) {
+        bytes += packedInt32->table->ReclaimableBytesOnRelease();
+    } else if (packedInt64 != nullptr) {
+        bytes += packedInt64->table->ReclaimableBytesOnRelease();
+    } else if (packedInt128 != nullptr) {
+        bytes += packedInt128->table->ReclaimableBytesOnRelease();
+    }
+    return bytes;
+}
+
+void HashAggregationOperator::MaybeMarkPartialFull()
+{
+    // Velox HashAggregation::addInput: a partial (non-global) aggregation whose
+    // table passed the cap stops taking input and flushes. Once the table has
+    // spilled the disk path owns the rest of the operator's life, so no flush.
+    if (!partialFlushEligible_ || maxPartialAggregationMemory_ == 0 || partialFull_ || hasSpill ||
+        GetElementsSize() == 0) {
+        return;
+    }
+    const uint64_t tableBytes = PartialTableBytes();
+    if (tableBytes > maxPartialAggregationMemory_ && !TryGrowPartialCap(tableBytes)) {
+        partialFull_ = true;
+    }
+}
+
+void HashAggregationOperator::FinishOutput(int32_t outputRows)
+{
+    if (partialFlushing_) {
+        CompletePartialFlush(outputRows);
+        return;
+    }
+    SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+    ReleaseFinishedOutputState();
+}
+
+void HashAggregationOperator::CompletePartialFlush(int32_t outputRows)
+{
+    // Velox HashAggregation::resetPartialOutputIfNeed +
+    // maybeIncreasePartialAggregationMemoryUsage. The reset is the sequence a
+    // reclaim already uses (arena reset + table release), minus the disk write;
+    // the next AddInput reinitializes the table.
+    const uint64_t inputRows = partialInputRowsSinceFlush_;
+    const double aggregationPct = inputRows == 0 ? 0.0 : 100.0 * static_cast<double>(outputRows) / static_cast<double>(inputRows);
+    const int64_t usedBefore = pool_ == nullptr ? 0 : pool_->currentBytes();
+
+    flushedRows_ += static_cast<uint64_t>(outputRows);
+    flushTimes_++;
+    executionContext->GetArena()->Reset();
+    ReleaseHashmapCapacity();
+    outputState = OutputState();
+    outputStarted_ = false;
+    partialFull_ = false;
+    partialFlushing_ = false;
+    partialInputRowsSinceFlush_ = 0;
+
+    // Velox abandons the partial aggregation when a flush at the extended cap
+    // left more than this many rows unique; Omni keeps flushing instead. The
+    // rows a table deduplicates inside the task are rows the shuffle writer
+    // never has to serialize, and on q3 SF1000 abandoning sent 1 568 M rows
+    // through the writer where flushing at the base cap sent 1 245 M, with
+    // 12 GB of writer spill against none and 89 s against 80 s. So the cap
+    // follows the reduction: a flush that reduced well may grow it to the
+    // extended cap, a flush that did not shrinks it back, so that the memory
+    // goes to the operators that reduce data. The wrapper's cumulative
+    // row-ratio rule stays the one abandon path for step partials.
+    constexpr double kPartialMinFinalPct = 40.0;
+    const bool noReduction = aggregationPct > kPartialMinFinalPct;
+    if (noReduction) {
+        // A first/last partial (kept out of isStepPartials upstream) has no
+        // pass-through at all, so its table of unique keys stays small (q3
+        // SF1000 st16: 112 MB of 99 % distinct keys next to a shuffle writer
+        // that spilled 13 GB for want of 60 MB).
+        constexpr uint64_t kFirstLastDegradedCapDivisor = 8;
+        maxPartialAggregationMemory_ = isStepPartials
+            ? std::max<uint64_t>(1, basePartialAggregationMemory_)
+            : std::max<uint64_t>(1, maxExtendedPartialAggregationMemory_ / kFirstLastDegradedCapDivisor);
+    } else {
+        // A cap the first table grew past the extended cap stays.
+        if (maxPartialAggregationMemory_ < maxExtendedPartialAggregationMemory_) {
+            maxPartialAggregationMemory_ =
+                std::min(maxPartialAggregationMemory_ * 2, maxExtendedPartialAggregationMemory_);
+        }
+    }
+    partialGrowthDecided_ = true;
+
+    if (pool_ != nullptr && omniruntime::telemetry::IsReclaimSuccessTelemetryEnabled()) {
+        const int64_t usedAfter = pool_->currentBytes();
+        std::fprintf(stderr,
+            "[OMNI-HASHAGG] event=partial_flush operator=%p flush_times=%lu output_rows=%d input_rows=%lu "
+            "aggregation_pct=%.1f next_cap=%lu used_before=%ld used_after=%ld reserved=%ld\n",
+            static_cast<void *>(this), static_cast<unsigned long>(flushTimes_), outputRows,
+            static_cast<unsigned long>(inputRows), aggregationPct,
+            static_cast<unsigned long>(maxPartialAggregationMemory_),
+            static_cast<long>(usedBefore), static_cast<long>(usedAfter), static_cast<long>(pool_->reservedBytes()));
+    }
 }
 
 /**
@@ -559,99 +1184,111 @@ void HashAggregationOperator::InitSpillInfos()
     aggregationSort = std::make_unique<AggregationSort>(aggregators);
 }
 
-void SetArrayVector(VectorBatch *vecBatch, DataTypePtr elementType, int32_t rowCount)
+// Scalar leaf vectors are pool-bound; the ArrayVector/MapVector/RowVector
+// containers themselves are not. Nested complex types go through the
+// CreateComplexVector(pool, ...) overload (the no-pool overload is deprecated).
+void SetArrayVector(VectorBatch *vecBatch, DataTypePtr elementType, int32_t rowCount,
+                    omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     std::shared_ptr<BaseVector> elementVector;
     auto elemTypeId = elementType->GetId();
     switch (elemTypeId) {
         case type::OMNI_BYTE:
-            elementVector = std::make_shared<Vector<int8_t>>(0);
+            elementVector = std::make_shared<Vector<int8_t>>(0, pool);
             break;
         case type::OMNI_INT:
         case type::OMNI_DATE32:
         case type::OMNI_TIME32:
-            elementVector = std::make_shared<Vector<int32_t>>(0);
+            elementVector = std::make_shared<Vector<int32_t>>(0, pool);
             break;
         case type::OMNI_LONG:
         case type::OMNI_DATE64:
         case type::OMNI_TIME64:
         case type::OMNI_TIMESTAMP:
         case type::OMNI_DECIMAL64:
-            elementVector = std::make_shared<Vector<int64_t>>(0);
+            elementVector = std::make_shared<Vector<int64_t>>(0, pool);
             break;
         case type::OMNI_SHORT:
-            elementVector = std::make_shared<Vector<int16_t>>(0);
+            elementVector = std::make_shared<Vector<int16_t>>(0, pool);
             break;
         case type::OMNI_DOUBLE:
-            elementVector = std::make_shared<Vector<double>>(0);
+            elementVector = std::make_shared<Vector<double>>(0, pool);
             break;
         case type::OMNI_FLOAT:
-            elementVector = std::make_shared<Vector<float>>(0);
+            elementVector = std::make_shared<Vector<float>>(0, pool);
             break;
         case type::OMNI_BOOLEAN:
-            elementVector = std::make_shared<Vector<bool>>(0);
+            elementVector = std::make_shared<Vector<bool>>(0, pool);
             break;
         case type::OMNI_DECIMAL128:
-            elementVector = std::make_shared<Vector<Decimal128>>(0);
+            elementVector = std::make_shared<Vector<Decimal128>>(0, pool);
             break;
         case type::OMNI_CHAR:
         case type::OMNI_VARCHAR:
         case type::OMNI_VARBINARY:
-            elementVector = std::make_shared<Vector<LargeStringContainer<std::string_view>>>(0);
+            elementVector = std::make_shared<Vector<LargeStringContainer<std::string_view>>>(0, pool);
             break;
         case type::OMNI_ARRAY:
         case type::OMNI_MAP:
         case type::OMNI_ROW:
-            elementVector = std::shared_ptr<BaseVector>(VectorHelper::CreateComplexVector(elementType.get(), 0));
+            // Pool-bound CreateComplexVector overload (vector_helper.h:142) recursively
+            // pool-threads scalar leaves; nested Array/Map/Row container ctors stay no-pool.
+            elementVector = std::shared_ptr<BaseVector>(VectorHelper::CreateComplexVector(pool, elementType.get(), 0));
             break;
         default:
             throw omniruntime::exception::OmniException("Set ArrayVector error, unsupport element type:", std::to_string(elemTypeId));
     }
 
-    auto arrayVector = new ArrayVector(rowCount, elementVector);
+    auto arrayVector = new ArrayVector(rowCount, elementVector, pool);
     vecBatch->Append(arrayVector);
 }
 
-void SetMapVector(VectorBatch *vecBatch, DataTypePtr keyType, DataTypePtr valueType, int32_t rowCount)
+void SetMapVector(VectorBatch *vecBatch, DataTypePtr keyType, DataTypePtr valueType, int32_t rowCount,
+                  omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    std::shared_ptr<BaseVector> keyVector(VectorHelper::CreateComplexVector(keyType.get(), 0));
-    std::shared_ptr<BaseVector> valueVector(VectorHelper::CreateComplexVector(valueType.get(), 0));
-    auto *mapVector = new MapVector(rowCount, keyVector, valueVector);
+    std::shared_ptr<BaseVector> keyVector(VectorHelper::CreateComplexVector(pool, keyType.get(), 0));
+    std::shared_ptr<BaseVector> valueVector(VectorHelper::CreateComplexVector(pool, valueType.get(), 0));
+    auto *mapVector = new MapVector(rowCount, keyVector, valueVector, pool);
     vecBatch->Append(mapVector);
 }
 
-void SetRowVector(VectorBatch *vecBatch, const std::vector<DataTypePtr> &fieldTypes, int32_t rowCount)
+void SetRowVector(VectorBatch *vecBatch, const std::vector<DataTypePtr> &fieldTypes, int32_t rowCount,
+                  omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     std::vector<std::shared_ptr<BaseVector>> children;
     for (const auto &fieldType : fieldTypes) {
-        children.push_back(std::shared_ptr<BaseVector>(VectorHelper::CreateComplexVector(fieldType.get(), rowCount)));
+        children.push_back(std::shared_ptr<BaseVector>(VectorHelper::CreateComplexVector(pool, fieldType.get(), rowCount)));
     }
-    auto *rowVector = new RowVector(rowCount, children);
+    auto *rowVector = new RowVector(rowCount, children, pool);
     vecBatch->Append(rowVector);
 }
 
 void HashAggregationOperator::SetVectors(VectorBatch *output, const std::vector<DataTypePtr> &types, int32_t rowCount)
 {
+    // Every dispatch site passes this->pool(), so the function-pointer table and
+    // the Set{Array,Map,Row}Vector helpers allocate scalar leaf vectors from the
+    // task pool.
+    auto *pool = this->pool();
     auto colSize = types.size();
     for (size_t colIndex = 0; colIndex < colSize; ++colIndex) {
         const DataTypePtr &type = types[colIndex];
         auto typeId = type->GetId();
         if (typeId < DATA_TYPE_MAX_COUNT) {
-            GROUP_AGG_FUNCTIONS[type->GetId()](output, rowCount);
+            GROUP_AGG_FUNCTIONS[type->GetId()](output, rowCount, pool);
         } else if (typeId == OMNI_ARRAY) {
             auto arrayType = std::static_pointer_cast<ArrayType>(type);
             DataTypePtr elementType = arrayType->ElementType();
-            SetArrayVector(output, elementType, rowCount);
+            SetArrayVector(output, elementType, rowCount, pool);
         } else if (typeId == OMNI_MAP) {
             auto mapType = std::static_pointer_cast<MapType>(type);
-            SetMapVector(output, mapType->Key(), mapType->Value(), rowCount);
+            SetMapVector(output, mapType->Key(), mapType->Value(), rowCount, pool);
         } else if (typeId == OMNI_ROW) {
             auto rowType = std::static_pointer_cast<RowType>(type);
             std::vector<DataTypePtr> fieldTypes;
             for (size_t i = 0; i < rowType->Size(); i++) {
                 fieldTypes.push_back(rowType->Type(i));
             }
-            SetRowVector(output, fieldTypes, rowCount);
+            SetRowVector(output, fieldTypes, rowCount, pool);
         }
     }
 }
@@ -661,6 +1298,30 @@ int32_t HashAggregationOperator::GetOutput(VectorBatch **outputVecBatch)
     if (!hasInputedData()) {
         return 0;
     }
+    if (partialFull_) {
+        if (noMoreInput_) {
+            // The input ended before the flush started (or while it runs): the
+            // normal final output is the flush.
+            partialFull_ = false;
+        } else if (hasSpill) {
+            // A reclaim spilled the table between AddInput and this call. The
+            // disk path owns it from here and drains only at the end of input:
+            // starting the merge now would finish the operator and drop every
+            // group added afterwards. Nothing to emit; input resumes.
+            partialFull_ = false;
+            SetStatus(OMNI_STATUS_NORMAL);
+            return 0;
+        } else {
+            // partialFull_ stays set for the whole flush: it is what refuses
+            // input (needsInput) and keeps the driver pulling until
+            // CompletePartialFlush has emitted the last batch and reset the
+            // table. Clearing it here would resume input into a table that is
+            // only partly emitted.
+            partialFlushing_ = true;
+        }
+    }
+    EnsureOutputFits();
+    outputStarted_ = true;
     int32_t expectedBatchSize = 0;
     if (LIKELY(groupByColumnsHandleType == HandleType::serialize)) {
         expectedBatchSize = Output(serialize, outputVecBatch);
@@ -681,11 +1342,17 @@ int32_t HashAggregationOperator::GetOutput(VectorBatch **outputVecBatch)
         LogError("other groupby field handle type %d not implement now ", groupByColumnsHandleType);
         throw std::out_of_range("other groupby field handle type not implement");
     }
+    // Reservation belongs to the shared task pool. Keep unused headroom for
+    // subsequent output batches and sibling operators instead of returning it
+    // to Spark after every batch. Pre-reservation and task teardown are unchanged.
     return expectedBatchSize;
 }
 
 OmniStatus HashAggregationOperator::Close()
 {
+    if (pool_ != nullptr) {
+        pool_->unregisterSpillable(this);
+    }
     delete[] sourceTypes;
     sourceTypes = nullptr;
     // delete spiller object when exception occurs
@@ -1226,69 +1893,173 @@ ErrorCode HashAggregationOperator::SpillToDisk()
     } else if (packedInt128 != nullptr) {
         totalSpillCount = packedInt128->GetElementsSize();
     }
-    aggregationSort->ResizeKvVector(totalSpillCount);
-
     auto aggregationSortPtr = aggregationSort.get();
-    OutputState curOutputState;
-    {
-        if (serialize != nullptr) {
-            serialize->SpillExtract(totalSpillCount, spillOutputState,
-            [&](const auto &key, int64_t hashVal, uint8_t *value, int32_t idx) mutable {
+    if (serialize != nullptr) {
+        // Serialized keys must be reconstructed while the original hash table
+        // remains alive. Keep only one sorted spill run in scratch memory at a
+        // time; retaining all reconstructed keys can exhaust the task pool.
+        constexpr int32_t kMaxRowsPerRun = 64 * 1024;
+        constexpr size_t kMaxScratchBytesPerRun = 8 * 1024 * 1024;
+        // The scratch is spill working memory, not operator state: it is taken outside the task
+        // pool because the spill usually runs inside Spark-driven reclaim with no headroom left,
+        // and it is released before the spill returns. Its peak is reported in the operator stats.
+        mem::Allocator unpooledScratchAllocator(nullptr);
+        mem::SimpleArenaAllocator scratch(64 * 1024, &unpooledScratchAllocator);
+        int32_t spilledRows = 0;
+        while (spilledRows < totalSpillCount) {
+            const int32_t runRows = std::min(kMaxRowsPerRun, totalSpillCount - spilledRows);
+            aggregationSort->ResizeKvVector(runRows);
+            const int32_t extractedRows = serialize->SpillExtract(runRows, kMaxScratchBytesPerRun,
+                scratch, spillOutputState,
+                [&](const auto &key, int64_t hashVal, uint8_t *value, int32_t idx) mutable {
                 aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
                 }, [&](const auto &key, int64_t hashVal, uint8_t *value, int32_t idx) mutable {
                 aggregationSortPtr->ParseHashMapToVectorWithHashVal(key, value, idx, hashVal);
             });
-        } else if (fixedInt32 != nullptr) {
-            fixedInt32->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
-        } else if (fixedInt64 != nullptr) {
-            fixedInt64->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
-        } else if (fixedInt16 != nullptr) {
-            fixedInt16->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVector(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
-        } else if (packedInt32 != nullptr) {
-            packedInt32->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVectorAsBytes(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
-        } else if (packedInt64 != nullptr) {
-            packedInt64->Extract(totalSpillCount, spillOutputState,
-                [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseHashMapToVectorAsBytes(key, value, idx);
-                }, [&](const auto &key, uint8_t *value, int32_t idx) mutable {
-                aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
-            });
+            if (extractedRows == 0) {
+                aggregationSort->ClearVector();
+                LogError("Serialized hash aggregation spill stopped before all rows were extracted.");
+                return ErrorCode::UNSUPPORTED;
+            }
+            aggregationSort->ResizeKvVector(extractedRows);
+            aggregationSort->SortKvVector(true);
+            auto result = spiller->Spill(aggregationSort.get(), this, true);
+            stats_.spillScratchPeakBytes = std::max<uint64_t>(stats_.spillScratchPeakBytes,
+                scratch.TotalBytes() + spiller->ScratchPeakBytes());
+            aggregationSort->ClearVector();
+            if (result != ErrorCode::SUCCESS) {
+                return result;
+            }
+            scratch.Reset();
+            spilledRows += extractedRows;
         }
+        aggregationSort->ReleaseVectors();
+        return ErrorCode::SUCCESS;
     }
 
-    aggregationSort->SortKvVector(serialize != nullptr);
-    auto rowCount = aggregationSort->GetRowCount();
-    LogDebug("Spill data to disk starting in hash aggregation operator, rowCount=%lld\n", rowCount);
-    ErrorCode result = spiller->Spill(aggregationSort.get(), this, serialize != nullptr);
-    LogDebug("Spill data to disk finished in hash aggregation operator, rowCount=%lld\n", rowCount);
-    aggregationSort->ClearVector();
+    // Fixed keys are materialized into kv entries plus a std::string per group. Spilling the
+    // whole table in one run doubles its footprint exactly when the pool is short of memory,
+    // so write bounded sorted runs; the unspill merge already handles several runs.
+    constexpr int32_t kMaxFixedRowsPerRun = kMaxFixedRowsPerSpillRun;
+    auto extractRun = [&](int32_t runRows) -> int32_t {
+        auto parse = [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+            aggregationSortPtr->ParseHashMapToVector(key, value, idx);
+        };
+        auto parseBytes = [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+            aggregationSortPtr->ParseHashMapToVectorAsBytes(key, value, idx);
+        };
+        auto parseNull = [&](const auto &key, uint8_t *value, int32_t idx) mutable {
+            aggregationSortPtr->ParseNullHashMapToVector(key, value, idx);
+        };
+        if (fixedInt32 != nullptr) {
+            return fixedInt32->Extract(runRows, spillOutputState, parse, parseNull);
+        } else if (fixedInt64 != nullptr) {
+            return fixedInt64->Extract(runRows, spillOutputState, parse, parseNull);
+        } else if (fixedInt16 != nullptr) {
+            return fixedInt16->Extract(runRows, spillOutputState, parse, parseNull);
+        } else if (packedInt32 != nullptr) {
+            return packedInt32->Extract(runRows, spillOutputState, parseBytes, parseNull);
+        } else if (packedInt64 != nullptr) {
+            return packedInt64->Extract(runRows, spillOutputState, parseBytes, parseNull);
+        } else if (packedInt128 != nullptr) {
+            return packedInt128->Extract(runRows, spillOutputState, parseBytes, parseNull);
+        }
+        return 0;
+    };
+    ErrorCode result = ErrorCode::SUCCESS;
+    int32_t spilledRows = 0;
+    while (spilledRows < totalSpillCount) {
+        const int32_t runRows = std::min(kMaxFixedRowsPerRun, totalSpillCount - spilledRows);
+        aggregationSort->ResizeKvVector(runRows);
+        const int32_t extractedRows = extractRun(runRows);
+        if (extractedRows <= 0) {
+            break;
+        }
+        aggregationSort->ResizeKvVector(extractedRows);
+        aggregationSort->SortKvVector(false);
+        LogDebug("Spill data to disk starting in hash aggregation operator, rowCount=%d\n", extractedRows);
+        result = spiller->Spill(aggregationSort.get(), this, false);
+        aggregationSort->ClearVector();
+        if (result != ErrorCode::SUCCESS) {
+            break;
+        }
+        spilledRows += extractedRows;
+    }
+    aggregationSort->ReleaseVectors();
+    return result;
+}
+
+// Spill the array table straight into sorted runs, in slot order, with the same key encoding
+// the fixed-key handlers produce. Moving the entries into a hash map first would allocate a
+// table sized by the group count from the task pool while the array table is still alive,
+// which is exactly when reclaim has no headroom for it.
+ErrorCode HashAggregationOperator::SpillArrayTable()
+{
+    const int64_t minValue = vectorAnalyzer->MinValue();
+    const auto totalRows = static_cast<int32_t>(arrayTable->GetElementsSize());
+    auto aggregationSortPtr = aggregationSort.get();
+    uint32_t slotCursor = 0;
+    auto extractRun = [&](auto typedKey, int32_t runRows) {
+        using KeyType = decltype(typedKey);
+        int32_t row = 0;
+        arrayTable->OutputEachValue([&](const auto &value, const auto &index) {
+            auto *state = reinterpret_cast<AggregateState *>(value);
+            if (index != 0) {
+                aggregationSortPtr->ParseHashMapToVector(static_cast<KeyType>(index + minValue - 1), state, row);
+            } else {
+                aggregationSortPtr->ParseNullHashMapToVector(KeyType{}, state, row);
+            }
+            ++row;
+        }, slotCursor, runRows);
+    };
+    ErrorCode result = ErrorCode::SUCCESS;
+    int32_t spilledRows = 0;
+    while (spilledRows < totalRows) {
+        const int32_t runRows = std::min(kMaxFixedRowsPerSpillRun, totalRows - spilledRows);
+        aggregationSort->ResizeKvVector(runRows);
+        if (groupByColumnsHandleType == HandleType::fixedInt32) {
+            extractRun(int32_t{}, runRows);
+        } else if (groupByColumnsHandleType == HandleType::fixedInt64) {
+            extractRun(int64_t{}, runRows);
+        } else {
+            extractRun(int16_t{}, runRows);
+        }
+        aggregationSort->SortKvVector(false);
+        LogDebug("Spill array table to disk in hash aggregation operator, rowCount=%d\n", runRows);
+        result = spiller->Spill(aggregationSort.get(), this, false);
+        aggregationSort->ClearVector();
+        if (result != ErrorCode::SUCCESS) {
+            break;
+        }
+        spilledRows += runRows;
+    }
+    aggregationSort->ReleaseVectors();
     return result;
 }
 
 ErrorCode HashAggregationOperator::SpillHashMap()
 {
+    // Array-map groups are spilled directly from the array table (SpillArrayTable); afterwards
+    // the operator continues on the normal hash table. Handler types the array path does not
+    // cover keep the old route through the already-initialized fixed-key handler.
+    const bool spillArray = vectorAnalyzer != nullptr && vectorAnalyzer->IsArrayHashTableType() &&
+        arrayTable != nullptr && (groupByColumnsHandleType == HandleType::fixedInt32 ||
+        groupByColumnsHandleType == HandleType::fixedInt64 || groupByColumnsHandleType == HandleType::fixedInt16);
+    if (!spillArray && vectorAnalyzer != nullptr && vectorAnalyzer->IsArrayHashTableType() && arrayTable != nullptr) {
+        if (UNLIKELY(hashmapCapacityReleased_)) {
+            ReinitializeHashmapAfterRelease();
+        }
+        MoveEntryArrayTableToHashMap(vectorAnalyzer->MinValue());
+        vectorAnalyzer->SetNormalHashTable();
+    }
     auto rowCount = 0;
-    if (serialize != nullptr) {
+    if (spillArray) {
+        rowCount = static_cast<int32_t>(arrayTable->GetElementsSize());
+        if (rowCount == 0) {
+            arrayTable.reset();
+            vectorAnalyzer->SetNormalHashTable();
+        }
+    } else if (serialize != nullptr) {
         rowCount = serialize->GetElementsSize();
     } else if (fixedInt32 != nullptr) {
         rowCount = fixedInt32->GetElementsSize();
@@ -1317,7 +2088,20 @@ ErrorCode HashAggregationOperator::SpillHashMap()
         hasSpill = true;
     }
     UpdateSpillTimesInfo();
-    auto result = SpillToDisk();
+    ErrorCode result;
+    if (spillArray) {
+        result = SpillArrayTable();
+        if (result == ErrorCode::SUCCESS) {
+            arrayTable.reset();
+            vectorAnalyzer->SetNormalHashTable();
+        }
+    } else {
+        result = SpillToDisk();
+    }
+    stats_.spillScratchPeakBytes = std::max(stats_.spillScratchPeakBytes, spiller->ScratchPeakBytes());
+    if (result == ErrorCode::SUCCESS) {
+        spilledRows_ += static_cast<uint64_t>(rowCount);
+    }
     spillOutputState.hasBeenOutputNum = 0;
     spillOutputState.outputHashmapPos = 0;
     spillOutputState.rowBegin = nullptr;
@@ -1352,22 +2136,19 @@ std::vector<uint64_t> HashAggregationOperator::GetSpecialMetricsInfo()
 
 uint64_t HashAggregationOperator::GetHashMapUniqueKeys()
 {
-    if (serialize != nullptr) {
-        return serialize->GetElementsSize();
-    } else if (fixedInt32 != nullptr) {
-        return fixedInt32->GetElementsSize();
-    } else if (fixedInt64 != nullptr) {
-        return fixedInt64->GetElementsSize();
-    } else if (fixedInt16 != nullptr) {
-        return fixedInt16->GetElementsSize();
-    } else if (packedInt32 != nullptr) {
-        return packedInt32->GetElementsSize();
-    } else if (packedInt64 != nullptr) {
-        return packedInt64->GetElementsSize();
-    } else if (packedInt128 != nullptr) {
-        return packedInt128->GetElementsSize();
-    }
-    return 0;
+    // Groups currently in the table, hash or array mode (the array table used
+    // to report 0 here, which hid array-keyed partial aggregations from the
+    // wrapper's abandon rule).
+    return static_cast<uint64_t>(GetElementsSize());
+}
+
+uint64_t HashAggregationOperator::CumulativeDistinctKeys()
+{
+    // Cumulative over the operator's life: groups in the table plus the groups
+    // already emitted by a partial flush or written by a spill. The wrapper's
+    // abandon rule divides this by cumulative input rows; the in-memory count
+    // alone can never reach the ratio again once a reclaim emptied the table.
+    return static_cast<uint64_t>(GetElementsSize()) + flushedRows_ + spilledRows_;
 }
 
 VectorBatch *HashAggregationOperator::AlignSchema(VectorBatch *inputVecBatch)
@@ -1483,7 +2264,7 @@ VectorBatch *HashAggregationOperator::GetOutputFromDiskWithoutAgg(VectorBatch *o
                 }
             } else if (fixedInt64 != nullptr) {
                 if (keyRef.size > 0) {
-                    auto key = static_cast<int64_t>(std::stoi(keyRef.ToString()));
+                    auto key = static_cast<int64_t>(std::stoll(keyRef.ToString()));
                     fixedInt64->ParseKeyToCols(key, groupOutputVectors, groupColNum, rowIdx);
                 } else {
                     fixedInt64->ParseNull(0, groupOutputVectors, groupColNum, rowIdx);
@@ -1686,17 +2467,18 @@ void HashAggregationOperator::GetOutputFromDisk(VectorBatch **outputVecBatch)
     if (spillMerger == nullptr) {
         if (GetElementsSize() > 0) {
             auto result = SpillHashMap();
-            executionContext->GetArena()->Reset();
-            ResetHashmap();
             if (UNLIKELY(result != ErrorCode::SUCCESS)) {
                 throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
             }
+            executionContext->GetArena()->Reset();
+            ReleaseHashmapCapacity();
         }
 
         spilledBytes = spiller->GetSpilledBytes();
         auto spillFiles = spiller->FinishSpill();
+        stats_.spilledFiles = spillFiles.size();
         UpdateSpillFileInfo(spillFiles.size());
-        spillMerger = spiller->CreateSpillMerger(spillFiles, spiller->isSpillCompressEnable(), serialize != nullptr);
+        spillMerger = spiller->CreateSpillMerger(spillFiles, spiller->isSpillCompressEnable(), serialize != nullptr, this->pool());
         delete spiller;
         spiller = nullptr;
         if (spillMerger == nullptr) {
@@ -1752,6 +2534,7 @@ int32_t HashAggregationOperator::Output(Deserialize &deserializeHashmap, VectorB
         }
         if (spillTotalRowCount == spillRowOffset) {
             SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+            ReleaseFinishedOutputState();
         }
         return 1;
     }
@@ -1764,7 +2547,7 @@ int32_t HashAggregationOperator::Output(Deserialize &deserializeHashmap, VectorB
     }
 
     if (totalRowCount == 0) {
-        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+        FinishOutput(0);
         return 0;
     }
 
@@ -1784,7 +2567,7 @@ int32_t HashAggregationOperator::Output(Deserialize &deserializeHashmap, VectorB
     *outputVecBatch = output.release();
     UpdateGetOutputInfo((*outputVecBatch)->GetRowCount());
     if (static_cast<int32_t>(outputState.hasBeenOutputNum) == totalRowCount) {
-        SetStatus(OmniStatus::OMNI_STATUS_FINISHED);
+        FinishOutput(totalRowCount);
     }
     return 1;
 }
@@ -1792,7 +2575,9 @@ int32_t HashAggregationOperator::Output(Deserialize &deserializeHashmap, VectorB
 ALWAYS_INLINE size_t HashAggregationOperator::GetElementsSize()
 {
     size_t elementSize = 0;
-    if (serialize != nullptr) {
+    if (vectorAnalyzer != nullptr && vectorAnalyzer->IsArrayHashTableType()) {
+        elementSize = arrayTable == nullptr ? 0 : arrayTable->GetElementsSize();
+    } else if (serialize != nullptr) {
         elementSize = serialize->GetElementsSize();
     } else if (fixedInt32 != nullptr) {
         elementSize = fixedInt32->GetElementsSize();
@@ -1810,22 +2595,50 @@ ALWAYS_INLINE size_t HashAggregationOperator::GetElementsSize()
     return elementSize;
 }
 
-ALWAYS_INLINE void HashAggregationOperator::ResetHashmap()
+ALWAYS_INLINE void HashAggregationOperator::ReleaseHashmapCapacity()
 {
+    arrayTable.reset();
     if (serialize != nullptr) {
-        serialize->ResetHashmap();
+        serialize->table->Release();
+        serialize->ResetRowContainer();
     } else if (fixedInt32 != nullptr) {
-        fixedInt32->ResetHashmap();
+        fixedInt32->ReleaseHashmapCapacity();
     } else if (fixedInt64 != nullptr) {
-        fixedInt64->ResetHashmap();
+        fixedInt64->ReleaseHashmapCapacity();
     } else if (fixedInt16 != nullptr) {
-        fixedInt16->ResetHashmap();
+        fixedInt16->ReleaseHashmapCapacity();
     } else if (packedInt32 != nullptr) {
-        packedInt32->ResetHashmap();
+        packedInt32->ReleaseHashmapCapacity();
     } else if (packedInt64 != nullptr) {
-        packedInt64->ResetHashmap();
+        packedInt64->ReleaseHashmapCapacity();
     } else if (packedInt128 != nullptr) {
-        packedInt128->ResetHashmap();
+        packedInt128->ReleaseHashmapCapacity();
+    }
+    hashmapCapacityReleased_ = true;
+}
+
+void HashAggregationOperator::ReleaseFinishedOutputState()
+{
+    const int64_t usedBefore = pool_ == nullptr ? 0 : pool_->currentBytes();
+    executionContext->GetArena()->Reset();
+    ReleaseHashmapCapacity();
+    groupStates.reset();
+    std::vector<AggregateState *>().swap(rowStates);
+    aggregationSort.reset();
+    delete spillMerger;
+    spillMerger = nullptr;
+    if (pool_ != nullptr) {
+        pool_->unregisterSpillable(this);
+    }
+
+    if (pool_ != nullptr && omniruntime::telemetry::IsReclaimVerboseEnabled()) {
+        const int64_t usedAfter = pool_->currentBytes();
+        std::fprintf(stderr,
+            "[OMNI-HASHAGG] event=finished_state_release operator=%p has_spill=%d used_before=%ld used_after=%ld freed=%ld reserved=%ld\n",
+            static_cast<void *>(this), static_cast<int>(hasSpill),
+            static_cast<long>(usedBefore), static_cast<long>(usedAfter),
+            static_cast<long>(std::max<int64_t>(0, usedBefore - usedAfter)),
+            static_cast<long>(pool_->reservedBytes()));
     }
 }
 } // end of namespace op

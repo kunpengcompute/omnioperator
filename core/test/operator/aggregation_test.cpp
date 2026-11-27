@@ -2,12 +2,14 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2020-2024. All rights reserved.
  */
 
+#include <algorithm>
 #include <vector>
 #include <iostream>
 #include <thread>
 #include <cstdlib>
 #include <mutex>
 #include <cstdarg>
+#include <string_view>
 #include <gtest/gtest.h>
 #include "operator/aggregation/aggregator/all_aggregators.h"
 #include "operator/aggregation/aggregator/aggregator_util.h"
@@ -21,6 +23,9 @@
 #include "util/test_agg_util.h"
 #include "operator/aggregation/aggregator/aggregator_factory.h"
 #include "operator/aggregation/aggregator/corr_aggregator.h"
+#include "memory/omni_task_memory_pool.h"
+#include "memory/pool_listener.h"
+#include "operator/reclaim_context.h"
 #include "type/decimal128.h"
 #include "util/type_util.h"
 
@@ -421,7 +426,7 @@ void PerfTestOriginal(int64_t moduleAddr, VectorBatch **input, std::vector<DataT
     // create operator
     HashAggregationOperatorFactory *nativeOperatorFactory =
         reinterpret_cast<HashAggregationOperatorFactory *>(moduleAddr);
-    auto groupBy = nativeOperatorFactory->CreateOperator();
+    auto groupBy = nativeOperatorFactory->CreateOperator(nullptr);
 
     // execution
     for (int32_t i = 0; i < VEC_BATCH_NUM; ++i) {
@@ -443,7 +448,7 @@ void PerfTest(int64_t moduleAddr, VectorBatch **input, int32_t vecBatchNum, int3
     // create operatory
     HashAggregationOperatorFactory *nativeOperatorFactory =
         reinterpret_cast<HashAggregationOperatorFactory *>(moduleAddr);
-    auto groupBy = nativeOperatorFactory->CreateOperator();
+    auto groupBy = nativeOperatorFactory->CreateOperator(nullptr);
 
     // execution
     for (int pageIndex = 0; pageIndex < vecBatchNum; ++pageIndex) {
@@ -469,7 +474,7 @@ void PerfTestNonGroup(int64_t moduleAddr, bool codegenMode, VectorBatch **input,
     if (codegenMode) {
         aggregation = CreateTestOperator(nativeOperatorFactory);
     } else {
-        aggregation = nativeOperatorFactory->CreateOperator();
+        aggregation = nativeOperatorFactory->CreateOperator(nullptr);
     }
 
     // execution
@@ -509,7 +514,7 @@ TEST(HashAggregationOperatorTest, verify_correctness)
         std::vector<uint32_t>(), true, true, false);
 
     // operator 1 (partial)
-    auto aggPartial1 = aggPartialFactory->CreateOperator();
+    auto aggPartial1 = aggPartialFactory->CreateOperator(nullptr);
     aggPartial1->Init();
     for (int32_t i = 0; i < vecBatchNum; ++i) {
         aggPartial1->AddInput(input1[i]);
@@ -523,7 +528,7 @@ TEST(HashAggregationOperatorTest, verify_correctness)
     VectorBatch **input2 = BuildAggInput(vecBatchNum, rowSize, cardinality, 2, 5, groupTypes, aggTypes);
 
     // operator 2 (partial)
-    auto aggPartial2 = aggPartialFactory->CreateOperator();
+    auto aggPartial2 = aggPartialFactory->CreateOperator(nullptr);
     aggPartial2->Init();
     for (int32_t i = 0; i < vecBatchNum; ++i) {
         aggPartial2->AddInput(input2[i]);
@@ -542,7 +547,7 @@ TEST(HashAggregationOperatorTest, verify_correctness)
         std::vector<DataTypePtr>({ LongType(), DoubleType(), LongType(), LongType(), LongType() }),
         std::vector<uint32_t>(), false, false, false);
 
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->Init();
 
     aggFinal->AddInput(outputVecBatch1);
@@ -635,7 +640,7 @@ void TestGroupArrayMapRegular(std::shared_ptr<DataType> groupType)
                                                          {LongType(), DoubleType(), LongType(), LongType(),
                                                           LongType()}),
                                                  std::vector<uint32_t>(), true, false, false);
-    auto groupByNULL = aggFactory->CreateOperator();
+    auto groupByNULL = aggFactory->CreateOperator(nullptr);
     groupByNULL->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -728,7 +733,7 @@ void TestGroupArrayMapWithoutAgg(std::shared_ptr<DataType> groupType)
                                                  groupTypes, aggFuncTypes, std::vector<uint32_t>({}),
                                                  aggTypes, aggTypes,
                                                  std::vector<uint32_t>(), true, false, false);
-    auto groupByNULL = aggFactory->CreateOperator();
+    auto groupByNULL = aggFactory->CreateOperator(nullptr);
     groupByNULL->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -836,7 +841,7 @@ void TestGroupArrayMapResize(std::shared_ptr<DataType> groupType)
                                                          {LongType(), DoubleType(), LongType(), LongType(),
                                                           LongType()}),
                                                  std::vector<uint32_t>(), true, false, false);
-    auto groupByNULL = aggFactory->CreateOperator();
+    auto groupByNULL = aggFactory->CreateOperator(nullptr);
     groupByNULL->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -917,7 +922,7 @@ void TestGroupArrayMapResizeWithoutAgg(std::shared_ptr<DataType> groupType)
                                                  groupTypes, aggFuncTypes, std::vector<uint32_t>({}),
                                                  aggTypes, aggTypes,
                                                  std::vector<uint32_t>(), true, false, false);
-    auto groupByNULL = aggFactory->CreateOperator();
+    auto groupByNULL = aggFactory->CreateOperator(nullptr);
     groupByNULL->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -1028,7 +1033,7 @@ void TestGroupArrayMapSwitch(std::shared_ptr<DataType> groupType)
                                                          {LongType(), DoubleType(), LongType(), LongType(),
                                                           LongType()}),
                                                  std::vector<uint32_t>(), true, false, false);
-    auto groupByNULL = aggFactory->CreateOperator();
+    auto groupByNULL = aggFactory->CreateOperator(nullptr);
     groupByNULL->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -1114,7 +1119,7 @@ void TestGroupArrayMapSwitchWithoutAgg(std::shared_ptr<DataType> groupType)
                                                  aggTypes,
                                                  aggTypes,
                                                  std::vector<uint32_t>(), true, false, false);
-    auto groupByNULL = aggFactory->CreateOperator();
+    auto groupByNULL = aggFactory->CreateOperator(nullptr);
     groupByNULL->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -1178,7 +1183,7 @@ TEST(HashAggregationOperatorTest, verify_varchar_vector_correctness)
         std::vector<DataTypePtr>({ LongType(), VarcharType(1), VarcharType(4) }), std::vector<uint32_t>(), true, false,
         false);
     auto resultTypes = std::vector<DataTypePtr>({ LongType(), VarcharType(1), VarcharType(4) });
-    auto groupByVarChar = aggFactory->CreateOperator();
+    auto groupByVarChar = aggFactory->CreateOperator(nullptr);
     groupByVarChar->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -1226,7 +1231,7 @@ TEST(HashAggregationOperatorTest, verify_char_vector_correctness)
         std::vector<DataTypePtr>({ LongType(), CharType(1), CharType(4) }), std::vector<uint32_t>(), true, false,
         false);
 
-    auto groupByVarChar = aggFactory->CreateOperator();
+    auto groupByVarChar = aggFactory->CreateOperator(nullptr);
     groupByVarChar->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -1282,7 +1287,7 @@ TEST(HashAggregationOperatorTest, verify_null_correctness)
         std::vector<DataTypePtr>({ LongType(), LongType(), LongType(), LongType(), LongType() }),
         std::vector<DataTypePtr>({ LongType(), DoubleType(), LongType(), LongType(), LongType() }),
         std::vector<uint32_t>(), true, false, false);
-    auto groupByNULL = aggFactory->CreateOperator();
+    auto groupByNULL = aggFactory->CreateOperator(nullptr);
     groupByNULL->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -1326,7 +1331,7 @@ TEST(HashAggregationOperatorTest, verfify_correctness_group_by_agg_same_cols)
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_SUM, OMNI_AGGREGATION_TYPE_SUM }),
         std::vector<uint32_t>({ 0, 1 }), std::vector<DataTypePtr>({ LongType(), LongType() }),
         std::vector<DataTypePtr>({ LongType(), LongType() }), std::vector<uint32_t>(), true, false, false);
-    auto groupBy = aggFactory->CreateOperator();
+    auto groupBy = aggFactory->CreateOperator(nullptr);
     groupBy->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -1385,7 +1390,7 @@ TEST(HashAggregationOperatorTest, verify_distinct_correctness)
         std::vector<DataTypePtr>({ LongType(), LongType(),
         ContainerType(std::vector<DataTypePtr> { DoubleType(), LongType() }), LongType(), LongType() }),
         std::vector<uint32_t>({ 6, 7, 8, 9, 10 }), true, true, false);
-    auto aggregatePartial = aggPartialFactory->CreateOperator();
+    auto aggregatePartial = aggPartialFactory->CreateOperator(nullptr);
     aggregatePartial->Init();
     aggregatePartial->AddInput(vecBatch1);
 
@@ -1400,7 +1405,7 @@ TEST(HashAggregationOperatorTest, verify_distinct_correctness)
         ContainerType(std::vector<DataTypePtr> { DoubleType(), LongType() }), LongType(), LongType() }),
         std::vector<DataTypePtr>({ LongType(), LongType(), DoubleType(), LongType(), LongType() }),
         std::vector<uint32_t>(), false, false, false);
-    auto aggregateFinal = aggFinalFactory->CreateOperator();
+    auto aggregateFinal = aggFinalFactory->CreateOperator(nullptr);
     aggregateFinal->Init();
     aggregateFinal->AddInput(outputVecBatch);
 
@@ -1458,7 +1463,7 @@ TEST(HashAggregationOperatorTest, verify_first_val)
     aggPartialFactory->Init();
 
     // operator 1 (partial)
-    auto aggPartial1 = aggPartialFactory->CreateOperator();
+    auto aggPartial1 = aggPartialFactory->CreateOperator(nullptr);
     aggPartial1->Init();
     for (int32_t i = 0; i < vecBatchNum; ++i) {
         aggPartial1->AddInput(input1[i]);
@@ -1472,7 +1477,7 @@ TEST(HashAggregationOperatorTest, verify_first_val)
     VectorBatch **input2 = BuildAggInput(vecBatchNum, rowSize, cardinality, 1, 2, groupTypes, aggTypes);
 
     // operator 2 (partial)
-    auto aggPartial2 = aggPartialFactory->CreateOperator();
+    auto aggPartial2 = aggPartialFactory->CreateOperator(nullptr);
     aggPartial2->Init();
     for (int32_t i = 0; i < vecBatchNum; ++i) {
         aggPartial2->AddInput(input2[i]);
@@ -1498,7 +1503,7 @@ TEST(HashAggregationOperatorTest, verify_first_val)
         aggOutputTypes1, aggFuncTypes, maskColsVector1, inputRaws1, outputPartials1);
     aggFinalFactory->Init();
 
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->Init();
 
     aggFinal->AddInput(outputVecBatch1);
@@ -1553,7 +1558,7 @@ TEST(HashAggregationOperatorTest, verify_last_val)
         aggInputTypes0, aggOutputTypes0, aggFuncTypes, maskColsVector0, inputRaws0, outputPartials0);
     aggPartialFactory->Init();
 
-    auto aggPartial1 = aggPartialFactory->CreateOperator();
+    auto aggPartial1 = aggPartialFactory->CreateOperator(nullptr);
     aggPartial1->Init();
     for (int32_t i = 0; i < vecBatchNum; ++i) {
         aggPartial1->AddInput(input1[i]);
@@ -1566,7 +1571,7 @@ TEST(HashAggregationOperatorTest, verify_last_val)
 
     VectorBatch **input2 = BuildAggInput(vecBatchNum, rowSize, cardinality, 1, 2, groupTypes, aggTypes);
 
-    auto aggPartial2 = aggPartialFactory->CreateOperator();
+    auto aggPartial2 = aggPartialFactory->CreateOperator(nullptr);
     aggPartial2->Init();
     for (int32_t i = 0; i < vecBatchNum; ++i) {
         aggPartial2->AddInput(input2[i]);
@@ -1591,7 +1596,7 @@ TEST(HashAggregationOperatorTest, verify_last_val)
         aggOutputTypes1, aggFuncTypes, maskColsVector1, inputRaws1, outputPartials1);
     aggFinalFactory->Init();
 
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->Init();
 
     aggFinal->AddInput(outputVecBatch1);
@@ -1760,7 +1765,7 @@ TEST(AggregationOperatorTest, min_max_varchar)
     std::vector<DataTypePtr> partialOutputTypes { VarcharType(100), VarcharType(100) };
     auto aggPartialFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1 }), types,
         partialOutputTypes, std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     int32_t vecBatchCount = aggPartial->GetOutput(&outputVecBatch);
@@ -1770,7 +1775,7 @@ TEST(AggregationOperatorTest, min_max_varchar)
     std::vector<DataTypePtr> finalOutputTypes { VarcharType(100), VarcharType(100) };
     auto aggFinalFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch);
 
     VectorBatch *finalOutputVecBatch = nullptr;
@@ -1827,7 +1832,7 @@ TEST(AggregationOperatorTest, min_max_varchar_without_nulls)
     std::vector<DataTypePtr> partialOutputTypes { VarcharType(100), VarcharType(100) };
     auto aggPartialFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1 }), types,
         partialOutputTypes, std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     int32_t vecBatchCount = aggPartial->GetOutput(&outputVecBatch);
@@ -1837,7 +1842,7 @@ TEST(AggregationOperatorTest, min_max_varchar_without_nulls)
     std::vector<DataTypePtr> finalOutputTypes { VarcharType(100), VarcharType(100) };
     auto aggFinalFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch);
 
     VectorBatch *finalOutputVecBatch = nullptr;
@@ -1916,7 +1921,7 @@ TEST(AggregationOperatorTest, min_max_varchar_mix_withnull)
     std::vector<DataTypePtr> partialOutputTypes { VarcharType(30), VarcharType(30), VarcharType(30), VarcharType(30) };
     auto aggPartialFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         types, partialOutputTypes, std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     int32_t vecBatchCount = aggPartial->GetOutput(&outputVecBatch);
@@ -1926,7 +1931,7 @@ TEST(AggregationOperatorTest, min_max_varchar_mix_withnull)
     std::vector<DataTypePtr> finalOutputTypes { VarcharType(30), VarcharType(30), VarcharType(30), VarcharType(30) };
     auto aggFinalFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch);
 
     VectorBatch *finalOutputVecBatch = nullptr;
@@ -1967,7 +1972,7 @@ TEST(AggregationOperatorTest, min_max_varchar_mix_withoutnull)
     std::vector<DataTypePtr> partialOutputTypes { VarcharType(30), VarcharType(30), VarcharType(30), VarcharType(30) };
     auto aggPartialFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         types, partialOutputTypes, std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     int32_t vecBatchCount = aggPartial->GetOutput(&outputVecBatch);
@@ -1977,7 +1982,7 @@ TEST(AggregationOperatorTest, min_max_varchar_mix_withoutnull)
     std::vector<DataTypePtr> finalOutputTypes { VarcharType(30), VarcharType(30), VarcharType(30), VarcharType(30) };
     auto aggFinalFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch);
 
     VectorBatch *finalOutputVecBatch = nullptr;
@@ -2059,7 +2064,7 @@ TEST(AggregationOperatorTest, min_max_varchar_dict_withnull)
     std::vector<DataTypePtr> partialOutputTypes { VarcharType(30), VarcharType(30), VarcharType(30), VarcharType(30) };
     auto aggPartialFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         types, partialOutputTypes, std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     int32_t vecBatchCount = aggPartial->GetOutput(&outputVecBatch);
@@ -2069,7 +2074,7 @@ TEST(AggregationOperatorTest, min_max_varchar_dict_withnull)
     std::vector<DataTypePtr> finalOutputTypes { VarcharType(30), VarcharType(30), VarcharType(30), VarcharType(30) };
     auto aggFinalFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch);
 
     VectorBatch *finalOutputVecBatch = nullptr;
@@ -2127,7 +2132,7 @@ TEST(AggregationOperatorTest, min_max_varchar_dict_withoutnull)
     std::vector<DataTypePtr> partialOutputTypes { VarcharType(30), VarcharType(30), VarcharType(30), VarcharType(30) };
     auto aggPartialFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         types, partialOutputTypes, std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     int32_t vecBatchCount = aggPartial->GetOutput(&outputVecBatch);
@@ -2137,7 +2142,7 @@ TEST(AggregationOperatorTest, min_max_varchar_dict_withoutnull)
     std::vector<DataTypePtr> finalOutputTypes { VarcharType(30), VarcharType(30), VarcharType(30), VarcharType(30) };
     auto aggFinalFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch);
 
     VectorBatch *finalOutputVecBatch = nullptr;
@@ -2181,7 +2186,7 @@ TEST(AggregationOperatorTest, sum_avg)
         ContainerType(std::vector<DataTypePtr> { DoubleType(), LongType() }), AVG_IMMEDIATE_VARBINARY };
     auto aggPartialFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         aggTypes, partialOutputTypes, std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(input);
 
     VectorBatch *outputVecBatch = nullptr;
@@ -2193,7 +2198,7 @@ TEST(AggregationOperatorTest, sum_avg)
         Decimal128Type(20, 5) };
     auto aggFinalFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch);
 
     VectorBatch *finalOutputVecBatch = nullptr;
@@ -2256,7 +2261,7 @@ TEST(AggregationOperatorTest, decimal128)
     auto aggPartialFactory =
         CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3, 4, 5, 6, 7 }), aggTypes,
         partialOutputTypes, std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(input);
     VectorBatch *outputVecBatch = nullptr;
     int32_t tableCount = aggPartial->GetOutput(&outputVecBatch);
@@ -2269,7 +2274,7 @@ TEST(AggregationOperatorTest, decimal128)
     auto aggFinalFactory =
         CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3, 4, 5, 6, 7 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch);
     VectorBatch *finalOutputVecBatch = nullptr;
     tableCount = aggFinal->GetOutput(&finalOutputVecBatch);
@@ -2313,7 +2318,7 @@ TEST(HashAggregationOperatorTest, group_by_agg_same_cols)
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_SUM, OMNI_AGGREGATION_TYPE_SUM }),
         std::vector<uint32_t>({ 0, 1 }), std::vector<DataTypePtr>({ LongType(), LongType() }),
         std::vector<DataTypePtr>({ LongType(), LongType() }), std::vector<uint32_t>(), true, false, false);
-    auto groupBy = aggFactory->CreateOperator();
+    auto groupBy = aggFactory->CreateOperator(nullptr);
     groupBy->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -2347,7 +2352,7 @@ TEST(HashAggregationOperatorTest, varchar_vector_correctness)
         std::vector<uint32_t>(
         { OMNI_AGGREGATION_TYPE_COUNT_COLUMN, OMNI_AGGREGATION_TYPE_MIN, OMNI_AGGREGATION_TYPE_MAX }),
         std::vector<uint32_t>({ 1, 2, 3 }), aggTypes, outputTypes, std::vector<uint32_t>(), true, false, false);
-    auto groupByVarChar = aggFactory->CreateOperator();
+    auto groupByVarChar = aggFactory->CreateOperator(nullptr);
     groupByVarChar->Init();
 
     for (int32_t i = 0; i < vecBatchNum; ++i) {
@@ -2397,7 +2402,7 @@ TEST(AggregationOperatorTest, verify_correctness)
         aggTypes, partialOutputTypes, std::vector<uint32_t>(), true, true, false);
 
     // partial first operator
-    auto aggPartial1 = aggPartialFactory->CreateOperator();
+    auto aggPartial1 = aggPartialFactory->CreateOperator(nullptr);
     for (int32_t i = 0; i < vecBatchNum; ++i) {
         aggPartial1->AddInput(input1[i]);
     }
@@ -2411,7 +2416,7 @@ TEST(AggregationOperatorTest, verify_correctness)
     ASSERT(!(input2 == nullptr));
 
     // partial second operator
-    auto aggPartial2 = aggPartialFactory->CreateOperator();
+    auto aggPartial2 = aggPartialFactory->CreateOperator(nullptr);
     for (int32_t i = 0; i < vecBatchNum; ++i) {
         aggPartial2->AddInput(input2[i]);
     }
@@ -2424,7 +2429,7 @@ TEST(AggregationOperatorTest, verify_correctness)
     std::vector<DataTypePtr> finalOutputTypes { LongType(), DoubleType(), LongType(), LongType(), LongType() };
     auto aggFinalFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3, 4 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch1);
     aggFinal->AddInput(outputVecBatch2);
 
@@ -2473,7 +2478,7 @@ TEST(AggregationOperatorTest, verify_agg_distinct)
     auto aggPartialFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3, 4 }),
         std::vector<DataTypePtr>({ LongType(), LongType(), LongType(), LongType(), LongType() }), partialOutputTypes,
         std::vector<uint32_t>({ 5, 6, 7, 8, 9 }), true, true, false);
-    auto aggPartial = aggPartialFactory->CreateOperator();
+    auto aggPartial = aggPartialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch1);
 
     VectorBatch *outputVecBatch = nullptr;
@@ -2484,7 +2489,7 @@ TEST(AggregationOperatorTest, verify_agg_distinct)
     std::vector<DataTypePtr> finalOutputTypes { LongType(), LongType(), DoubleType(), LongType(), LongType() };
     auto aggFinalFactory = CreateAggregationOperatorFactory(aggFuncTypes, std::vector<uint32_t>({ 0, 1, 2, 3, 4 }),
         partialOutputTypes, finalOutputTypes, std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = aggFinalFactory->CreateOperator();
+    auto aggFinal = aggFinalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(outputVecBatch);
 
     VectorBatch *finalOutputVecBatch = nullptr;
@@ -2524,7 +2529,7 @@ TEST(AggregationOperatorTest, avg_correctness_test)
     auto aggFactory = CreateAggregationOperatorFactory(std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_AVG }),
         std::vector<uint32_t>({ 0 }), aggTypes, std::vector<DataTypePtr>({ DoubleType() }), std::vector<uint32_t>(),
         true, false, false);
-    auto aggregate = aggFactory->CreateOperator();
+    auto aggregate = aggFactory->CreateOperator(nullptr);
     for (int32_t i = 0; i < vecBatchNum; ++i) {
         aggregate->AddInput(input[i]);
     }
@@ -2554,7 +2559,7 @@ TEST(AggregationOperatorTest, min_max_varchar_correctness)
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_MIN, OMNI_AGGREGATION_TYPE_MAX }),
         std::vector<uint32_t>({ 0, 1 }), types, std::vector<DataTypePtr>({ VarcharType(10), VarcharType(10) }),
         std::vector<uint32_t>(), true, false, false);
-    auto aggOperator = aggFactory->CreateOperator();
+    auto aggOperator = aggFactory->CreateOperator(nullptr);
     aggOperator->AddInput(vecBatch);
     VectorBatch *outputVecBatch = nullptr;
     int32_t vecBatchCount = aggOperator->GetOutput(&outputVecBatch);
@@ -2772,7 +2777,7 @@ TEST(HashAggregationOperatorTest, compare_perf)
         aggOutputTypes2Wrap, aggFuncTypeVector, maskColsVector, inputRaw2Wrap, outputPartial2Wrap);
     nativeOperatorFactory2->Init();
     std::cout << "after create factory" << std::endl;
-    auto groupBy = nativeOperatorFactory2->CreateOperator();
+    auto groupBy = nativeOperatorFactory2->CreateOperator(nullptr);
 
     VectorBatch **input2 =
         BuildAggInput(VEC_BATCH_NUM, ROW_PER_VEC_BATCH, CARDINALITY, 2, 2, groupInputTypes.Get(), aggInputTypes.Get());
@@ -2836,7 +2841,7 @@ TEST(HashAggregationOperatorTest, multi_stage)
 
     uintptr_t partialFactoryAddr1 = CreateHashFactoryWithoutJit(parameters1);
     auto partialFactory1 = reinterpret_cast<omniruntime::op::HashAggregationOperatorFactory *>(partialFactoryAddr1);
-    auto partialOperator1 = partialFactory1->CreateOperator();
+    auto partialOperator1 = partialFactory1->CreateOperator(nullptr);
     for (int32_t i = 0; i < VEC_BATCH_NUM; ++i) {
         partialOperator1->AddInput(input1[i]);
     }
@@ -2862,7 +2867,7 @@ TEST(HashAggregationOperatorTest, multi_stage)
 
     uintptr_t partialFactoryAddr2 = CreateHashFactoryWithoutJit(parameters2);
     auto partialFactory2 = reinterpret_cast<omniruntime::op::HashAggregationOperatorFactory *>(partialFactoryAddr2);
-    auto partialOperator2 = partialFactory2->CreateOperator();
+    auto partialOperator2 = partialFactory2->CreateOperator(nullptr);
     for (int32_t i = 0; i < VEC_BATCH_NUM; ++i) {
         partialOperator2->AddInput(input2[i]);
     }
@@ -2884,7 +2889,7 @@ TEST(HashAggregationOperatorTest, multi_stage)
 
     uintptr_t finalFactoryAddr = CreateHashFactoryWithoutJit(parameters3);
     auto finalFactory = reinterpret_cast<omniruntime::op::HashAggregationOperatorFactory *>(finalFactoryAddr);
-    auto operator2 = finalFactory->CreateOperator();
+    auto operator2 = finalFactory->CreateOperator(nullptr);
     operator2->AddInput(resultFromPartial1);
     operator2->AddInput(resultFromPartial2);
     VectorBatch *resultFromFinal = nullptr;
@@ -2929,7 +2934,7 @@ TEST(HashAggregationOperatorTest, supported_type_test)
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_SUM, OMNI_AGGREGATION_TYPE_SUM }),
         std::vector<uint32_t>({ 2, 3 }), std::vector<DataTypePtr>({ LongType(), LongType() }),
         std::vector<DataTypePtr>({ LongType(), DoubleType() }), std::vector<uint32_t>(), true, false, false);
-    auto groupBy = aggFactory->CreateOperator();
+    auto groupBy = aggFactory->CreateOperator(nullptr);
     groupBy->Init();
 
     for (int32_t i = 0; i < VEC_BATCH_NUM; ++i) {
@@ -2955,7 +2960,7 @@ TEST(HashAggregationOperatorTest, supported_type_test)
         std::vector<DataTypePtr>({ Date32DataType::Instance(), Date32DataType::Instance() }),
         std::vector<DataTypePtr>({ Date32DataType::Instance(), Date32DataType::Instance() }), std::vector<uint32_t>(),
         true, false, false);
-    groupBy = aggFactory->CreateOperator();
+    groupBy = aggFactory->CreateOperator(nullptr);
     groupBy->Init();
 
     for (int32_t i = 0; i < VEC_BATCH_NUM; ++i) {
@@ -2987,7 +2992,7 @@ TEST(HashAggregationOperatorTest, supported_type_test)
         std::vector<DataTypePtr>({ IntType() }), std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_SUM }),
         std::vector<uint32_t>({ 1 }), std::vector<DataTypePtr>({ LongType() }),
         std::vector<DataTypePtr>({ LongType() }), std::vector<uint32_t>(), true, false, false);
-    groupBy = aggFactory->CreateOperator();
+    groupBy = aggFactory->CreateOperator(nullptr);
     groupBy->Init();
 
     for (int32_t i = 0; i < VEC_BATCH_NUM; ++i) {
@@ -3034,7 +3039,7 @@ TEST(HashAggregationOperatorTest, TestSerializedMultiVecBatch)
         std::vector<DataTypePtr>({ IntType() }), std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_SUM }),
         std::vector<uint32_t>({ 1 }), std::vector<DataTypePtr>({ LongType() }),
         std::vector<DataTypePtr>({ LongType() }), std::vector<uint32_t>(), true, false, false);
-    auto groupBy = aggFactory->CreateOperator();
+    auto groupBy = aggFactory->CreateOperator(nullptr);
     groupBy->Init();
 
     for (int32_t i = 0; i < 2; ++i) {
@@ -3056,6 +3061,420 @@ TEST(HashAggregationOperatorTest, TestSerializedMultiVecBatch)
     op::Operator::DeleteOperator(groupBy);
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
+}
+
+TEST(HashAggregationOperatorTest, ReleasesFinishedHashStateBeforeClose)
+{
+    constexpr int32_t kRows = 10000;
+    omniruntime::mem::OmniTaskMemoryPool pool(nullptr);
+    auto *input = new VectorBatch(kRows);
+    auto *keys = new Vector<int64_t>(kRows, &pool);
+    auto *values = new Vector<int64_t>(kRows, &pool);
+    for (int32_t row = 0; row < kRows; ++row) {
+        // Keep the key range sparse so the test exercises normal hashmap
+        // capacity, not the compact array-map optimization.
+        keys->SetValue(row, static_cast<int64_t>(row) * 1000003);
+        values->SetValue(row, 1);
+    }
+    input->Append(keys);
+    input->Append(values);
+
+    auto factory = CreateHashAggregationOperatorFactory(
+        std::vector<uint32_t>({0}), std::vector<DataTypePtr>({LongType()}),
+        std::vector<uint32_t>({OMNI_AGGREGATION_TYPE_SUM}), std::vector<uint32_t>({1}),
+        std::vector<DataTypePtr>({LongType()}), std::vector<DataTypePtr>({LongType()}),
+        std::vector<uint32_t>(), true, false, false);
+    auto *aggregation = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+    ASSERT_NE(aggregation, nullptr);
+    aggregation->SetRowCountPerBatch(kRows);
+    aggregation->AddInput(input);
+
+    const int64_t usedBeforeOutput = pool.currentBytes();
+    ASSERT_GT(usedBeforeOutput, 0);
+
+    VectorBatch *output = nullptr;
+    EXPECT_EQ(aggregation->GetOutput(&output), 1);
+    ASSERT_NE(output, nullptr);
+    EXPECT_EQ(output->GetRowCount(), kRows);
+    EXPECT_TRUE(aggregation->isFinished());
+    EXPECT_EQ(aggregation->GetHashMapUniqueKeys(), 0);
+    EXPECT_TRUE(pool.snapshotSpillables().empty());
+    EXPECT_LT(pool.currentBytes(), usedBeforeOutput);
+
+    VectorHelper::FreeVecBatch(output);
+    op::Operator::DeleteOperator(aggregation);
+    EXPECT_EQ(pool.currentBytes(), 0);
+}
+
+TEST(HashAggregationOperatorTest, ReinitializesReleasedHashmapBeforeMoreInput)
+{
+    constexpr int32_t kRowsPerBatch = 2048;
+    omniruntime::mem::OmniTaskMemoryPool pool(nullptr);
+    const auto makeInput = [&](int64_t firstKey) {
+        auto *input = new VectorBatch(kRowsPerBatch);
+        auto *keys = new Vector<int64_t>(kRowsPerBatch, &pool);
+        auto *values = new Vector<int64_t>(kRowsPerBatch, &pool);
+        for (int32_t row = 0; row < kRowsPerBatch; ++row) {
+            // Stay sparse enough to force the normal hashmap while keeping
+            // spilled keys inside the legacy std::stoi unspill range.
+            keys->SetValue(row, (firstKey + row) * 500003);
+            values->SetValue(row, 1);
+        }
+        input->Append(keys);
+        input->Append(values);
+        return input;
+    };
+
+    std::vector<uint32_t> groupByCols({0});
+    DataTypes groupInputTypes(std::vector<DataTypePtr>({LongType()}));
+    auto aggInputCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t>({1}));
+    auto aggInputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    auto aggOutputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    std::vector<uint32_t> aggFuncTypes({OMNI_AGGREGATION_TYPE_SUM});
+    std::vector<uint32_t> maskCols({static_cast<uint32_t>(-1)});
+    std::vector<bool> inputRaws({true});
+    std::vector<bool> outputPartials({true});
+    std::vector<int8_t> hasAggFilters({static_cast<int8_t>(-1)});
+    SparkSpillConfig spillConfig(GenerateSpillPath(), INT32_MAX, 0);
+    OperatorConfig operatorConfig(spillConfig);
+    auto factory = std::make_unique<HashAggregationOperatorFactory>(groupByCols, groupInputTypes,
+        aggInputCols, aggInputTypes, aggOutputTypes, aggFuncTypes, maskCols, inputRaws,
+        outputPartials, hasAggFilters, operatorConfig, AggregationNode::Step::K_SINGLE);
+    factory->Init();
+    auto *aggregation = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+    ASSERT_NE(aggregation, nullptr);
+    ASSERT_FALSE(aggregation->IsStepPartials());
+    aggregation->SetRowCountPerBatch(kRowsPerBatch);
+    aggregation->setNoMoreInput(false);
+
+    aggregation->AddInput(makeInput(0));
+    ASSERT_EQ(aggregation->GetHashMapUniqueKeys(), kRowsPerBatch);
+    ASSERT_GT(pool.currentBytes(), 0);
+    ASSERT_GT(aggregation->reclaimableBytes(), 0);
+    EXPECT_GT(aggregation->reclaim(1), 0);
+    EXPECT_EQ(aggregation->GetHashMapUniqueKeys(), 0);
+
+    aggregation->AddInput(makeInput(kRowsPerBatch));
+    EXPECT_EQ(aggregation->GetHashMapUniqueKeys(), kRowsPerBatch);
+    aggregation->setNoMoreInput(true);
+
+    int32_t outputRows = 0;
+    while (!aggregation->isFinished()) {
+        VectorBatch *output = nullptr;
+        aggregation->GetOutput(&output);
+        if (output != nullptr) {
+            outputRows += output->GetRowCount();
+            VectorHelper::FreeVecBatch(output);
+        }
+    }
+    EXPECT_EQ(outputRows, kRowsPerBatch * 2);
+
+    op::Operator::DeleteOperator(aggregation);
+    EXPECT_EQ(pool.currentBytes(), 0);
+}
+
+TEST(HashAggregationOperatorTest, ReclaimsSerializedKeysAcrossInputBatches)
+{
+    // Two input batches produce more than one serialized spill run; a later
+    // batch then exercises another reclaim before the merger reads all files.
+    constexpr int32_t kRowsPerBatch = 33000;
+    omniruntime::mem::OmniTaskMemoryPool pool(nullptr);
+    const auto makeInput = [&](int32_t firstKey) {
+        std::vector<std::string> keys(kRowsPerBatch);
+        std::vector<int64_t> itemKeys(kRowsPerBatch);
+        std::vector<int32_t> dates(kRowsPerBatch);
+        std::vector<int32_t> counts(kRowsPerBatch, 1);
+        for (int32_t row = 0; row < kRowsPerBatch; ++row) {
+            keys[row] = "item description " + std::to_string(firstKey + row);
+            itemKeys[row] = firstKey + row;
+            dates[row] = 11000 + row % 365;
+        }
+        DataTypes types(std::vector<DataTypePtr>({VarcharType(50), LongType(), Date32Type(DateUnit::DAY), IntType()}));
+        return CreateVectorBatch(types, kRowsPerBatch, keys.data(), itemKeys.data(), dates.data(), counts.data());
+    };
+
+    std::vector<uint32_t> groupByCols({0, 1, 2});
+    DataTypes groupInputTypes(std::vector<DataTypePtr>({VarcharType(50), LongType(), Date32Type(DateUnit::DAY)}));
+    auto aggInputCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t>({3}));
+    auto aggInputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({IntType()})));
+    auto aggOutputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    std::vector<uint32_t> aggFuncTypes({OMNI_AGGREGATION_TYPE_COUNT_COLUMN});
+    std::vector<uint32_t> maskCols({static_cast<uint32_t>(-1)});
+    std::vector<bool> inputRaws({true});
+    std::vector<bool> outputPartials({true});
+    std::vector<int8_t> hasAggFilters({static_cast<int8_t>(-1)});
+    SparkSpillConfig spillConfig(GenerateSpillPath(), INT32_MAX, 0);
+    OperatorConfig operatorConfig(spillConfig);
+    auto factory = std::make_unique<HashAggregationOperatorFactory>(groupByCols, groupInputTypes,
+        aggInputCols, aggInputTypes, aggOutputTypes, aggFuncTypes, maskCols, inputRaws,
+        outputPartials, hasAggFilters, operatorConfig, AggregationNode::Step::K_SINGLE);
+    factory->Init();
+    auto *aggregation = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+    ASSERT_NE(aggregation, nullptr);
+    aggregation->SetRowCountPerBatch(kRowsPerBatch);
+    aggregation->setNoMoreInput(false);
+
+    for (int32_t batch = 0; batch < 3; ++batch) {
+        aggregation->AddInput(makeInput(batch * kRowsPerBatch));
+        if (batch >= 1) {
+            ASSERT_EQ(aggregation->GetHashMapUniqueKeys(), batch == 1 ? kRowsPerBatch * 2 : kRowsPerBatch);
+            ASSERT_GT(aggregation->reclaimableBytes(), 0);
+            ASSERT_GT(aggregation->reclaim(1), 0);
+            EXPECT_EQ(aggregation->GetHashMapUniqueKeys(), 0);
+        }
+    }
+    aggregation->setNoMoreInput(true);
+    int32_t outputRows = 0;
+    std::vector<bool> seen(kRowsPerBatch * 3, false);
+    while (!aggregation->isFinished()) {
+        VectorBatch *output = nullptr;
+        aggregation->GetOutput(&output);
+        if (output != nullptr) {
+            outputRows += output->GetRowCount();
+            auto *names = static_cast<Vector<LargeStringContainer<std::string_view>> *>(output->Get(0));
+            auto *itemKeys = static_cast<Vector<int64_t> *>(output->Get(1));
+            auto *dates = static_cast<Vector<int32_t> *>(output->Get(2));
+            auto *counts = static_cast<Vector<int64_t> *>(output->Get(3));
+            for (int32_t row = 0; row < output->GetRowCount(); ++row) {
+                const int64_t key = itemKeys->GetValue(row);
+                ASSERT_GE(key, 0);
+                ASSERT_LT(key, static_cast<int64_t>(seen.size()));
+                EXPECT_FALSE(seen[key]);
+                seen[key] = true;
+                const std::string_view name = names->GetValue(row);
+                EXPECT_EQ(std::string(name.data(), name.size()), "item description " + std::to_string(key));
+                EXPECT_EQ(dates->GetValue(row), 11000 + (key % kRowsPerBatch) % 365);
+                EXPECT_EQ(counts->GetValue(row), 1);
+            }
+            VectorHelper::FreeVecBatch(output);
+        }
+    }
+    EXPECT_EQ(outputRows, kRowsPerBatch * 3);
+    EXPECT_TRUE(std::all_of(seen.begin(), seen.end(), [](bool value) { return value; }));
+    op::Operator::DeleteOperator(aggregation);
+    EXPECT_EQ(pool.currentBytes(), 0);
+}
+
+namespace {
+// Plays Spark: when the partial aggregation pre-reserves before growing, spill
+// the task first and then grant the reservation.
+class SpillOnEnsureInputFitsListener : public omniruntime::mem::PoolListener {
+public:
+    void allocationChanged(int64_t diff) override
+    {
+        if (diff <= 0 || pool == nullptr || reclaiming) {
+            return;
+        }
+        const auto request = CurrentReservationRequest();
+        if (request.site == nullptr ||
+            std::string_view(request.site) != "HashAggregationOperator::EnsureInputFits") {
+            return;
+        }
+        ++requests;
+        requestorReclaimable = request.requestor != nullptr && !request.requestor->isInNonReclaimableSection();
+        reclaiming = true;
+        freed += pool->reclaim(diff);
+        reclaiming = false;
+    }
+    omniruntime::mem::OmniTaskMemoryPool *pool = nullptr;
+    bool reclaiming = false;
+    bool requestorReclaimable = false;
+    int requests = 0;
+    int64_t freed = 0;
+};
+} // namespace
+
+TEST(HashAggregationOperatorTest, PartialAggregationSpillsDuringInputReservation)
+{
+    // Growth inside AddInput is not reclaimable, so partial aggregation must
+    // reserve before each batch and spill itself there under pressure.
+    constexpr int32_t kRowsPerBatch = 200000;
+    constexpr int32_t kKeyRanges = 3;
+    constexpr int32_t kBatches = 6;
+    SpillOnEnsureInputFitsListener listener;
+    omniruntime::mem::OmniTaskMemoryPool pool(&listener);
+    listener.pool = &pool;
+    const auto makeInput = [&](int32_t firstKey) {
+        auto *input = new VectorBatch(kRowsPerBatch);
+        auto *keys = new Vector<int64_t>(kRowsPerBatch, &pool);
+        auto *values = new Vector<int64_t>(kRowsPerBatch, &pool);
+        for (int32_t row = 0; row < kRowsPerBatch; ++row) {
+            // Sparse keys force the normal hashmap and stay inside the legacy
+            // std::stoi unspill range.
+            keys->SetValue(row, static_cast<int64_t>(firstKey + row) * 3001);
+            values->SetValue(row, 1);
+        }
+        input->Append(keys);
+        input->Append(values);
+        return input;
+    };
+
+    std::vector<uint32_t> groupByCols({0});
+    DataTypes groupInputTypes(std::vector<DataTypePtr>({LongType()}));
+    auto aggInputCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t>({1}));
+    auto aggInputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    auto aggOutputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    std::vector<uint32_t> aggFuncTypes({OMNI_AGGREGATION_TYPE_SUM});
+    std::vector<uint32_t> maskCols({static_cast<uint32_t>(-1)});
+    std::vector<bool> inputRaws({true});
+    std::vector<bool> outputPartials({true});
+    std::vector<int8_t> hasAggFilters({static_cast<int8_t>(-1)});
+    SparkSpillConfig spillConfig(GenerateSpillPath(), INT32_MAX, 0);
+    OperatorConfig operatorConfig(spillConfig);
+    auto factory = std::make_unique<HashAggregationOperatorFactory>(groupByCols, groupInputTypes,
+        aggInputCols, aggInputTypes, aggOutputTypes, aggFuncTypes, maskCols, inputRaws,
+        outputPartials, hasAggFilters, operatorConfig, AggregationNode::Step::K_PARTIAL);
+    factory->Init();
+    auto *aggregation = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+    ASSERT_NE(aggregation, nullptr);
+    ASSERT_TRUE(aggregation->IsStepPartials());
+    aggregation->SetRowCountPerBatch(kRowsPerBatch);
+    aggregation->setNoMoreInput(false);
+
+    for (int32_t batch = 0; batch < kBatches; ++batch) {
+        // Every key range arrives twice, so spilled runs must merge.
+        auto *input = makeInput((batch % kKeyRanges) * kRowsPerBatch);
+        op::Operator::NonReclaimableSection section(aggregation);
+        aggregation->AddInput(input);
+    }
+    EXPECT_GT(listener.requests, 0);
+    EXPECT_TRUE(listener.requestorReclaimable);
+    EXPECT_GT(listener.freed, 0);
+
+    aggregation->setNoMoreInput(true);
+    std::vector<int64_t> sums(kRowsPerBatch * kKeyRanges, 0);
+    while (!aggregation->isFinished()) {
+        VectorBatch *output = nullptr;
+        aggregation->GetOutput(&output);
+        if (output != nullptr) {
+            auto *keys = static_cast<Vector<int64_t> *>(output->Get(0));
+            auto *values = static_cast<Vector<int64_t> *>(output->Get(1));
+            for (int32_t row = 0; row < output->GetRowCount(); ++row) {
+                const int64_t key = keys->GetValue(row);
+                ASSERT_EQ(key % 3001, 0);
+                ASSERT_GE(key / 3001, 0);
+                ASSERT_LT(key / 3001, static_cast<int64_t>(sums.size()));
+                sums[key / 3001] += values->GetValue(row);
+            }
+            VectorHelper::FreeVecBatch(output);
+        }
+    }
+    EXPECT_TRUE(std::all_of(sums.begin(), sums.end(), [](int64_t sum) { return sum == kBatches / kKeyRanges; }));
+    EXPECT_GT(aggregation->GetSpilledBytes(), 0);
+    op::Operator::DeleteOperator(aggregation);
+    EXPECT_EQ(pool.currentBytes(), 0);
+}
+
+namespace {
+// Plays Spark for one task with a fixed execution share: grants until the
+// share is used, then spills the task once for a pre-reservation and denies
+// what still does not fit. The caller repays what the spill freed.
+class TaskShareListener : public omniruntime::mem::PoolListener {
+public:
+    explicit TaskShareListener(int64_t share) : share(share) {}
+    void allocationChanged(int64_t diff) override
+    {
+        if (diff > 0 && granted + diff > share && pool != nullptr && !reclaiming &&
+            CurrentReservationRequest().site != nullptr) {
+            reclaiming = true;
+            const int64_t freed = pool->reclaim(diff);
+            reclaiming = false;
+            granted -= freed;
+            spills += freed > 0 ? 1 : 0;
+            if (granted + diff > share) {
+                throw omniruntime::mem::ReservationDenied("task share used");
+            }
+        }
+        granted += diff;
+    }
+    omniruntime::mem::OmniTaskMemoryPool *pool = nullptr;
+    const int64_t share;
+    int64_t granted = 0;
+    bool reclaiming = false;
+    int spills = 0;
+};
+} // namespace
+
+TEST(HashAggregationOperatorTest, SpillRunsUseTheRoomOtherOperatorsLeave)
+{
+    // Another operator of the task holds 90% of the Spark share. The
+    // aggregation must still fill the remaining 64 MB before it spills, not
+    // spill every batch because the task as a whole is large.
+    constexpr int64_t kShare = int64_t{640} << 20;
+    constexpr int64_t kOther = kShare / 10 * 9;
+    constexpr int32_t kRowsPerBatch = 65536;
+    constexpr int32_t kKeyRanges = 32;
+    constexpr int32_t kBatches = kKeyRanges * 2;
+    TaskShareListener listener(kShare);
+    omniruntime::mem::OmniTaskMemoryPool pool(&listener);
+    listener.pool = &pool;
+    auto *other = new Vector<int64_t>(kOther / sizeof(int64_t), &pool);
+    const auto makeInput = [&](int32_t firstKey) {
+        auto *input = new VectorBatch(kRowsPerBatch);
+        auto *keys = new Vector<int64_t>(kRowsPerBatch, &pool);
+        auto *values = new Vector<int64_t>(kRowsPerBatch, &pool);
+        for (int32_t row = 0; row < kRowsPerBatch; ++row) {
+            keys->SetValue(row, static_cast<int64_t>(firstKey + row) * 3001);
+            values->SetValue(row, 1);
+        }
+        input->Append(keys);
+        input->Append(values);
+        return input;
+    };
+
+    std::vector<uint32_t> groupByCols({0});
+    DataTypes groupInputTypes(std::vector<DataTypePtr>({LongType()}));
+    auto aggInputCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t>({1}));
+    auto aggInputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    auto aggOutputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>({LongType()})));
+    std::vector<uint32_t> aggFuncTypes({OMNI_AGGREGATION_TYPE_SUM});
+    std::vector<uint32_t> maskCols({static_cast<uint32_t>(-1)});
+    std::vector<bool> inputRaws({true});
+    std::vector<bool> outputPartials({false});
+    std::vector<int8_t> hasAggFilters({static_cast<int8_t>(-1)});
+    SparkSpillConfig spillConfig(GenerateSpillPath(), INT32_MAX, 0);
+    OperatorConfig operatorConfig(spillConfig);
+    auto factory = std::make_unique<HashAggregationOperatorFactory>(groupByCols, groupInputTypes,
+        aggInputCols, aggInputTypes, aggOutputTypes, aggFuncTypes, maskCols, inputRaws,
+        outputPartials, hasAggFilters, operatorConfig, AggregationNode::Step::K_SINGLE);
+    factory->Init();
+    auto *aggregation = static_cast<HashAggregationOperator *>(factory->CreateOperator(&pool));
+    ASSERT_NE(aggregation, nullptr);
+    aggregation->SetRowCountPerBatch(kRowsPerBatch);
+    aggregation->setNoMoreInput(false);
+
+    for (int32_t batch = 0; batch < kBatches; ++batch) {
+        // Every key range arrives twice, so spilled runs must merge.
+        auto *input = makeInput((batch % kKeyRanges) * kRowsPerBatch);
+        op::Operator::NonReclaimableSection section(aggregation);
+        aggregation->AddInput(input);
+    }
+    // A batch takes about 8 MB of table here, so a run fills the room in about
+    // seven batches; spilling at every batch would be 63 runs.
+    EXPECT_GT(listener.spills, 0);
+    EXPECT_LE(listener.spills, kBatches / 4) << "spilled " << aggregation->GetSpilledBytes() << " bytes";
+
+    aggregation->setNoMoreInput(true);
+    std::vector<int64_t> sums(kRowsPerBatch * kKeyRanges, 0);
+    while (!aggregation->isFinished()) {
+        VectorBatch *output = nullptr;
+        aggregation->GetOutput(&output);
+        if (output != nullptr) {
+            auto *keys = static_cast<Vector<int64_t> *>(output->Get(0));
+            auto *values = static_cast<Vector<int64_t> *>(output->Get(1));
+            for (int32_t row = 0; row < output->GetRowCount(); ++row) {
+                const int64_t key = keys->GetValue(row);
+                ASSERT_EQ(key % 3001, 0);
+                ASSERT_LT(key / 3001, static_cast<int64_t>(sums.size()));
+                sums[key / 3001] += values->GetValue(row);
+            }
+            VectorHelper::FreeVecBatch(output);
+        }
+    }
+    EXPECT_TRUE(std::all_of(sums.begin(), sums.end(), [](int64_t sum) { return sum == kBatches / kKeyRanges; }));
+    op::Operator::DeleteOperator(aggregation);
+    delete other;
+    EXPECT_EQ(pool.currentBytes(), 0);
 }
 
 TEST(HashAggregationOperatorTest, test_hashagg_same_key_cross_spill_file)
@@ -3102,7 +3521,7 @@ TEST(HashAggregationOperatorTest, test_hashagg_same_key_cross_spill_file)
     auto hashAggOperatorFactory = new HashAggregationOperatorFactory(groupByCol, groupInputTypes, aggInputColsWrap,
         aggInputTypesWrap, aggOutputTypesWrap, aggFuncTypes, maskColsVector, inputRaws, outputPartials, operatorConfig);
     hashAggOperatorFactory->Init();
-    auto *hashAggOperator = static_cast<HashAggregationOperator *>(hashAggOperatorFactory->CreateOperator());
+    auto *hashAggOperator = static_cast<HashAggregationOperator *>(hashAggOperatorFactory->CreateOperator(nullptr));
     hashAggOperator->AddInput(vecBatch0);
     hashAggOperator->AddInput(vecBatch1);
     hashAggOperator->AddInput(vecBatch2);
@@ -3151,7 +3570,7 @@ TEST(AggregatorTest, try_sum_test)
     int32_t rowCnt=200;
     auto sumFactory=new TrySumSparkAggregatorFactory();
     std::vector<int32_t>channel0={0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumAgg = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     sumAgg->SetExecutionContext(executionContext.get());
@@ -3182,7 +3601,7 @@ TEST(AggregatorTest, try_sum_overflow_test)
     int32_t rowCnt=2;
     auto sumFactory=new TrySumSparkAggregatorFactory();
     std::vector<int32_t>channel0={0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumAgg = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
                                                *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     sumAgg->SetExecutionContext(executionContext.get());
@@ -3213,7 +3632,7 @@ TEST(AggregatorTest, sum_test)
     std::vector<int32_t> channal0 = { 0 };
     std::vector<int32_t> channal3 = { 3 };
     // sum test types : long + decimal + dictionary + null
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumLong = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, true, false, false);
     sumLong->SetExecutionContext(executionContext.get());
@@ -3282,7 +3701,7 @@ TEST(AggregatorTest, min_test)
     std::vector<int32_t> channal5 = { 5 };
     std::vector<int32_t> channal6 = { 6 };
     // min test types : long + decimal + varchar + dictionary + null
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto minLong = minFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, true, false, false);
     minLong->SetExecutionContext(executionContext.get());
@@ -3404,7 +3823,7 @@ TEST(AggregatorTest, max_test)
     std::vector<int32_t> channal5 = { 5 };
     std::vector<int32_t> channal6 = { 6 };
     // max test types : long + decimal + varchar + dictionary + null
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto maxLong = maxFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, true, false, false);
     maxLong->SetExecutionContext(executionContext.get());
@@ -3520,7 +3939,7 @@ TEST(AggregatorTest, verify_decimal_presision_improvement)
     auto avgFactory = new AverageAggregatorFactory();
     std::vector<int32_t> channel0 = { 0 };
     ConfigUtil::SetSupportDecimalPrecisionImprovementRule(SupportDecimalPrecisionImprovementRule::IS_SUPPORT);
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgDeciAgg1 = avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(25, 8)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(35, 10)).get()), channel0, true, false, true);
     avgDeciAgg1->SetExecutionContext(executionContext.get());
@@ -3582,7 +4001,7 @@ TEST(AggregatorTest, avg_test)
     std::vector<int32_t> channal1 = { 1 };
     std::vector<int32_t> channal3 = { 3 };
     // avg test types : long + decimal + dictionary + null
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgLong = avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(DoubleType()).get()), channal0, true, false, false);
     avgLong->SetExecutionContext(executionContext.get());
@@ -3637,7 +4056,7 @@ TEST(AggregatorTest, spark_sum_decimal64_normal)
 {
     auto sumFactory = new SumSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumDeciAggPartial =
         sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal64Type(18, 6)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(28, 6)).get()), channal0, true, true);
@@ -3692,7 +4111,7 @@ TEST(AggregatorTest, spark_sum_decimal128_normal)
 {
     auto sumFactory = new SumSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumDeciAggPartial =
         sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(25, 8)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(35, 8)).get()), channal0, true, true);
@@ -3747,7 +4166,7 @@ TEST(AggregatorTest, spark_sum_decimal128_overflow_throw_exception_when_isOverfl
 {
     auto sumFactory = new SumSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumDeciAggPartial =
         sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 0)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 0)).get()), channal0, true, true, false);
@@ -3806,7 +4225,7 @@ TEST(AggregatorTest, spark_sum_decimal128_overflow_return_null_when_isOverflowAs
 {
     auto sumFactory = new SumSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumDeciAggPartial =
         sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 0)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 0)).get()), channal0, true, true, true);
@@ -3860,7 +4279,7 @@ TEST(AggregatorTest, spark_avg_decimal64_normal)
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgDeciAggPartial =
         avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal64Type(18, 6)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(28, 6)).get()), channal0, true, true);
@@ -3919,7 +4338,7 @@ TEST(AggregatorTest, spark_avg_decimal128_normal)
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgDeciAggPartial =
         avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(25, 8)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(35, 8)).get()), channal0, true, true);
@@ -3976,7 +4395,7 @@ TEST(AggregatorTest, spark_avg_decimal128_result_decimal64)
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgDeciAggPartial =
         avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(19, 8)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal64Type(18, 8)).get()), channal0, false, false);
@@ -4014,7 +4433,7 @@ TEST(AggregatorTest, spark_avg_decimal128_overflow_throw_exception_when_isOverfl
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgDeciAggPartial =
         avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 0)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 0)).get()), channal0, true, true, false);
@@ -4072,7 +4491,7 @@ TEST(AggregatorTest, spark_avg_decimal128_overflow_return_null_when_isOverflowAs
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgDeciAggPartial =
         avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 0)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 0)).get()), channal0, true, true, true);
@@ -4125,7 +4544,7 @@ TEST(AggregatorTest, spark_avg_decimal128_count_cast_to_wider_type_overflow_retu
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgDeciAggPartial =
         avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 38)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(38, 38)).get()), channal0, true, true, true);
@@ -4181,7 +4600,7 @@ TEST(AggregatorTest, spark_avg_decimal128_normal_when_inputRaw_is_true_and_outpu
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgDeciWindow = avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(Decimal128Type(22, 0)).get()),
         *(AggregatorUtil::WrapWithDataTypes(Decimal128Type(26, 4)).get()), channal0, true, false, true);
     avgDeciWindow->SetExecutionContext(executionContext.get());
@@ -4226,7 +4645,7 @@ TEST(AggregatorTest, spark_sum_short_normal)
 {
     auto sumFactory = new SumSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumShortAggPartial = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(ShortType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, true, true);
     sumShortAggPartial->SetExecutionContext(executionContext.get());
@@ -4265,7 +4684,7 @@ TEST(AggregatorTest, spark_sum_int_normal)
 {
     auto sumFactory = new SumSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumIntAggPartial = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, true, true);
     sumIntAggPartial->SetExecutionContext(executionContext.get());
@@ -4304,7 +4723,7 @@ TEST(AggregatorTest, spark_sum_long_normal)
 {
     auto sumFactory = new SumSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumLongAggPartial = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, true, true);
     sumLongAggPartial->SetExecutionContext(executionContext.get());
@@ -4343,7 +4762,7 @@ TEST(AggregatorTest, spark_sum_long_overflow)
 {
     auto sumFactory = new SumSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumLongAggPartial = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, true, true);
     sumLongAggPartial->SetExecutionContext(executionContext.get());
@@ -4396,7 +4815,7 @@ TEST(AggregatorTest, spark_sum_long_final_stage)
     auto *vecBatch1 = new VectorBatch(1);
     vecBatch1->Append(longVec1);
 
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumLongAggFinal = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, false, false);
     sumLongAggFinal->SetExecutionContext(executionContext.get());
@@ -4426,7 +4845,7 @@ TEST(AggregatorTest, spark_sum_double_normal)
 {
     auto sumFactory = new SumSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumDoubleAggPartial = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(DoubleType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(DoubleType()).get()), channal0, true, true);
     sumDoubleAggPartial->SetExecutionContext(executionContext.get());
@@ -4466,7 +4885,7 @@ TEST(AggregatorTest, spark_avg_short_normal)
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgShortAggPartial = avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(ShortType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(DoubleType()).get()), channal0, true, true);
     avgShortAggPartial->SetExecutionContext(executionContext.get());
@@ -4510,7 +4929,7 @@ TEST(AggregatorTest, spark_avg_int_normal)
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgIntAggPartial = avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(DoubleType()).get()), channal0, true, true);
     avgIntAggPartial->SetExecutionContext(executionContext.get());
@@ -4555,7 +4974,7 @@ TEST(AggregatorTest, spark_avg_long_normal)
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgLongAggPartial = avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(DoubleType()).get()), channal0, true, true);
     avgLongAggPartial->SetExecutionContext(executionContext.get());
@@ -4600,7 +5019,7 @@ TEST(AggregatorTest, spark_avg_double_normal)
 {
     auto avgFactory = new AverageSparkAggregatorFactory();
     std::vector<int32_t> channal0 = { 0, 1 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgDoubleAggPartial = avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(DoubleType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(DoubleType()).get()), channal0, true, true);
     avgDoubleAggPartial->SetExecutionContext(executionContext.get());
@@ -4642,7 +5061,7 @@ TEST(AggregatorTest, first_short_ignorenull_test)
 {
     auto firstIgnoreNullFactory = new FirstAggregatorFactory(OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL);
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto firstIgnoreNullIntAggPartial =
         firstIgnoreNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(ShortType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(ShortType()).get()), channal0, true, true);
@@ -4723,7 +5142,7 @@ TEST(AggregatorTest, first_int_ignorenull_test)
 {
     auto firstIgnoreNullFactory = new FirstAggregatorFactory(OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL);
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto firstIgnoreNullIntAggPartial =
         firstIgnoreNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(IntType()).get()), channal0, true, true);
@@ -4804,7 +5223,7 @@ TEST(AggregatorTest, first_int_includenull_test)
 {
     auto firstWithNullFactory = new FirstAggregatorFactory(OMNI_AGGREGATION_TYPE_FIRST_INCLUDENULL);
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto firstWithNullIntAggPartial =
         firstWithNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(IntType()).get()), channal0, true, true);
@@ -4862,7 +5281,7 @@ TEST(AggregatorTest, first_int_ignorenull_2steps_test)
     auto firstIgnoreNullFactory = new FirstAggregatorFactory(OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL);
 
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto firstIgnoreNullIntAggPartial =
         firstIgnoreNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, true, true);
@@ -4953,7 +5372,7 @@ TEST(AggregatorTest, last_short_ignorenull_test)
 {
     auto lastIgnoreNullFactory = new LastAggregatorFactory(OMNI_AGGREGATION_TYPE_LAST_IGNORENULL);
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto lastIgnoreNullShortAggPartial =
         lastIgnoreNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(ShortType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(ShortType()).get()), channal0, true, true);
@@ -5018,7 +5437,7 @@ TEST(AggregatorTest, last_int_ignorenull_test)
 {
     auto lastIgnoreNullFactory = new LastAggregatorFactory(OMNI_AGGREGATION_TYPE_LAST_IGNORENULL);
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto lastIgnoreNullIntAggPartial =
         lastIgnoreNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(IntType()).get()), channal0, true, true);
@@ -5073,7 +5492,7 @@ TEST(AggregatorTest, last_int_includenull_test)
 {
     auto lastWithNullFactory = new LastAggregatorFactory(OMNI_AGGREGATION_TYPE_LAST_INCLUDENULL);
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto lastWithNullIntAggPartial =
         lastWithNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(IntType()).get()), channal0, true, true);
@@ -5116,7 +5535,7 @@ TEST(AggregatorTest, last_int_ignorenull_2steps_test)
     auto lastIgnoreNullFactory = new LastAggregatorFactory(OMNI_AGGREGATION_TYPE_LAST_IGNORENULL);
 
     std::vector<int32_t> channal0 = { 0 };
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto lastIgnoreNullIntAggPartial =
         lastIgnoreNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channal0, true, true);
@@ -5425,7 +5844,7 @@ TEST(AggregatorTest, max_agg_extrame_value_test)
     std::vector<int32_t> channal4 = { 4 };
     std::vector<int32_t> channal5 = { 5 };
     // max test types : long + decimal + varchar + dictionary + null
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto maxBoolean = maxFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(BooleanType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(BooleanType()).get()), channal0, true, false, false);
     maxBoolean->SetExecutionContext(executionContext.get());
@@ -5770,7 +6189,7 @@ TEST(HashAggregationOperatorTest, test_hashagg_groupbysingle_spill)
     auto hashAggOperatorFactory = new HashAggregationOperatorFactory(groupByCol, groupInputTypes, aggInputColsWrap,
                                                                      aggInputTypesWrap, aggOutputTypesWrap, aggFuncTypes, maskColsVector, inputRaws, outputPartials, operatorConfig);
     hashAggOperatorFactory->Init();
-    auto *hashAggOperator = static_cast<HashAggregationOperator *>(hashAggOperatorFactory->CreateOperator());
+    auto *hashAggOperator = static_cast<HashAggregationOperator *>(hashAggOperatorFactory->CreateOperator(nullptr));
     hashAggOperator->AddInput(vecBatch0);
     hashAggOperator->AddInput(vecBatch1);
     hashAggOperator->AddInput(vecBatch2);
@@ -5810,14 +6229,14 @@ TEST(HashAggregationOperatorTest, test_step) {
                                                                          aggInputTypesWrap, aggOutputTypesWrap, aggFuncTypes, maskColsVector,
                                                                          inputRaws, outputPartials, hasAggFilters, operatorConfig,AggregationNode::Step::K_PARTIAL);
         hashAggOperatorFactory->Init();
-        auto *hashAggOperator = static_cast<HashAggregationOperator *>(hashAggOperatorFactory->CreateOperator());
+        auto *hashAggOperator = static_cast<HashAggregationOperator *>(hashAggOperatorFactory->CreateOperator(nullptr));
         EXPECT_EQ(true, hashAggOperator->IsStepPartials());
 
         auto hashAggOperatorFactory2 = new HashAggregationOperatorFactory(groupByCol, groupInputTypes, aggInputColsWrap,
                                                                     aggInputTypesWrap, aggOutputTypesWrap, aggFuncTypes, maskColsVector,
                                                                     inputRaws, outputPartials, hasAggFilters, operatorConfig,AggregationNode::Step::K_SINGLE);
         hashAggOperatorFactory2->Init();
-        auto *hashAggOperator2 = static_cast<HashAggregationOperator *>(hashAggOperatorFactory2->CreateOperator());
+        auto *hashAggOperator2 = static_cast<HashAggregationOperator *>(hashAggOperatorFactory2->CreateOperator(nullptr));
         EXPECT_EQ(false, hashAggOperator2->IsStepPartials());
         omniruntime::op::Operator::DeleteOperator(hashAggOperator);
         delete hashAggOperatorFactory;
@@ -6279,7 +6698,7 @@ TEST(AggregatorTest, sum_const_vector_long_test)
     const int32_t rowCount = 5;
     auto sumFactory = new SumAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumLong = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     sumLong->SetExecutionContext(executionContext.get());
@@ -6311,7 +6730,7 @@ TEST(AggregatorTest, sum_const_vector_int_test)
     const int32_t rowCount = 5;
     auto sumFactory = new SumAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumInt = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     sumInt->SetExecutionContext(executionContext.get());
@@ -6343,7 +6762,7 @@ TEST(AggregatorTest, count_column_const_vector_test)
     const int32_t rowCount = 5;
     auto countFactory = new CountColumnAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto countLong = countFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     countLong->SetExecutionContext(executionContext.get());
@@ -6368,7 +6787,7 @@ TEST(AggregatorTest, count_all_const_vector_test)
     const int32_t rowCount = 5;
     auto countAllFactory = new CountAllAggregatorFactory();
     std::vector<int32_t> channel0 = {-1};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto countAll = countAllFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(NoneType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     countAll->SetExecutionContext(executionContext.get());
@@ -6393,7 +6812,7 @@ TEST(AggregatorTest, min_const_vector_long_test)
     const int32_t rowCount = 5;
     auto minFactory = new MinAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto minLong = minFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     minLong->SetExecutionContext(executionContext.get());
@@ -6423,7 +6842,7 @@ TEST(AggregatorTest, min_const_vector_int_test)
     const int32_t rowCount = 5;
     auto minFactory = new MinAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto minInt = minFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     minInt->SetExecutionContext(executionContext.get());
@@ -6453,7 +6872,7 @@ TEST(AggregatorTest, max_const_vector_long_test)
     const int32_t rowCount = 5;
     auto maxFactory = new MaxAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto maxLong = maxFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     maxLong->SetExecutionContext(executionContext.get());
@@ -6478,7 +6897,7 @@ TEST(AggregatorTest, max_const_vector_int_test)
     const int32_t rowCount = 5;
     auto maxFactory = new MaxAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto maxInt = maxFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     maxInt->SetExecutionContext(executionContext.get());
@@ -6503,7 +6922,7 @@ TEST(AggregatorTest, max_const_vector_boolean_test)
     const int32_t rowCount = 5;
     auto maxFactory = new MaxAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto maxBool = maxFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(BooleanType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(BooleanType()).get()), channel0, true, false, false);
     maxBool->SetExecutionContext(executionContext.get());
@@ -6528,7 +6947,7 @@ TEST(AggregatorTest, min_const_vector_boolean_test)
     const int32_t rowCount = 5;
     auto minFactory = new MinAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto minBool = minFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(BooleanType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(BooleanType()).get()), channel0, true, false, false);
     minBool->SetExecutionContext(executionContext.get());
@@ -6558,7 +6977,7 @@ TEST(AggregatorTest, avg_const_vector_long_test)
     const int32_t rowCount = 5;
     auto avgFactory = new AverageAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto avgLong = avgFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(DoubleType()).get()), channel0, true, false, false);
     avgLong->SetExecutionContext(executionContext.get());
@@ -6589,7 +7008,7 @@ TEST(AggregatorTest, try_sum_const_vector_long_test)
     const int32_t rowCount = 5;
     auto sumFactory = new TrySumSparkAggregatorFactory();
     std::vector<int32_t> channel0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto sumAgg = sumFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(LongType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(LongType()).get()), channel0, true, false, false);
     sumAgg->SetExecutionContext(executionContext.get());
@@ -6710,7 +7129,7 @@ TEST(AggregatorTest, first_int_ignorenull_const_vector_test)
 {
     auto firstIgnoreNullFactory = new FirstAggregatorFactory(OMNI_AGGREGATION_TYPE_FIRST_IGNORENULL);
     std::vector<int32_t> channal0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto firstAgg = firstIgnoreNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(IntType()).get()), channal0, true, true);
     firstAgg->SetExecutionContext(executionContext.get());
@@ -6750,7 +7169,7 @@ TEST(AggregatorTest, last_int_ignorenull_const_vector_test)
 {
     auto lastIgnoreNullFactory = new LastAggregatorFactory(OMNI_AGGREGATION_TYPE_LAST_IGNORENULL);
     std::vector<int32_t> channal0 = {0};
-    auto executionContext = std::make_unique<ExecutionContext>();
+    auto executionContext = std::make_unique<ExecutionContext>(4096, nullptr);
     auto lastAgg = lastIgnoreNullFactory->CreateAggregator(*(AggregatorUtil::WrapWithDataTypes(IntType()).get()),
         *(AggregatorUtil::WrapWithDataTypes(IntType()).get()), channal0, true, true);
     lastAgg->SetExecutionContext(executionContext.get());

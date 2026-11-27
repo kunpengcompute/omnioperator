@@ -189,7 +189,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNInstruct)
     TopNOperatorFactory *topNOperatorFactoryWithoutJit =
         new TopNOperatorFactory(sourceTypes, expectedDataSize, 0, sortCols, ascendings, nullFirsts, 1);
     auto s2 = clock();
-    auto topNOp = topNOperatorFactoryWithoutJit->CreateOperator();
+    auto topNOp = topNOperatorFactoryWithoutJit->CreateOperator(nullptr);
     perfUtil->Init();
     perfUtil->Reset();
     perfUtil->Start();

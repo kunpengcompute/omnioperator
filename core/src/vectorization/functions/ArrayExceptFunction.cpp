@@ -61,7 +61,7 @@ struct DoubleEqual {
 
 template <typename T>
 void ArrayExceptFunction::ProcessTyped(ArrayVector *leftArray, ArrayVector *rightArray,
-    ArrayVector *resultArray, int32_t rowSize) const
+    ArrayVector *resultArray, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto leftElementVector = leftArray->GetElementVector();
     auto rightElementVector = rightArray->GetElementVector();
@@ -77,7 +77,7 @@ void ArrayExceptFunction::ProcessTyped(ArrayVector *leftArray, ArrayVector *righ
         }
     }
 
-    auto *newElementVector = new Vector<T>(maxElements > 0 ? maxElements : 1);
+    auto *newElementVector = new Vector<T>(maxElements > 0 ? maxElements : 1, pool);
     int64_t newElementIndex = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -137,7 +137,7 @@ void ArrayExceptFunction::ProcessTyped(ArrayVector *leftArray, ArrayVector *righ
 
 template <>
 void ArrayExceptFunction::ProcessTyped<float>(ArrayVector *leftArray, ArrayVector *rightArray,
-    ArrayVector *resultArray, int32_t rowSize) const
+    ArrayVector *resultArray, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto leftElementVector = leftArray->GetElementVector();
     auto rightElementVector = rightArray->GetElementVector();
@@ -153,7 +153,7 @@ void ArrayExceptFunction::ProcessTyped<float>(ArrayVector *leftArray, ArrayVecto
         }
     }
 
-    auto *newElementVector = new Vector<float>(maxElements > 0 ? maxElements : 1);
+    auto *newElementVector = new Vector<float>(maxElements > 0 ? maxElements : 1, pool);
     int64_t newElementIndex = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -213,7 +213,7 @@ void ArrayExceptFunction::ProcessTyped<float>(ArrayVector *leftArray, ArrayVecto
 
 template <>
 void ArrayExceptFunction::ProcessTyped<double>(ArrayVector *leftArray, ArrayVector *rightArray,
-    ArrayVector *resultArray, int32_t rowSize) const
+    ArrayVector *resultArray, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto leftElementVector = leftArray->GetElementVector();
     auto rightElementVector = rightArray->GetElementVector();
@@ -229,7 +229,7 @@ void ArrayExceptFunction::ProcessTyped<double>(ArrayVector *leftArray, ArrayVect
         }
     }
 
-    auto *newElementVector = new Vector<double>(maxElements > 0 ? maxElements : 1);
+    auto *newElementVector = new Vector<double>(maxElements > 0 ? maxElements : 1, pool);
     int64_t newElementIndex = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -288,7 +288,7 @@ void ArrayExceptFunction::ProcessTyped<double>(ArrayVector *leftArray, ArrayVect
 }
 
 void ArrayExceptFunction::ProcessString(ArrayVector *leftArray, ArrayVector *rightArray,
-    ArrayVector *resultArray, int32_t rowSize) const
+    ArrayVector *resultArray, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const
 {
     auto leftElementVector = leftArray->GetElementVector();
     auto rightElementVector = rightArray->GetElementVector();
@@ -307,7 +307,7 @@ void ArrayExceptFunction::ProcessString(ArrayVector *leftArray, ArrayVector *rig
     }
 
     auto *newElementVector = new Vector<LargeStringContainer<std::string_view>>(
-        maxElements > 0 ? maxElements : 1);
+        maxElements > 0 ? maxElements : 1, pool);
     int64_t newElementIndex = 0;
 
     for (int32_t row = 0; row < rowSize; ++row) {
@@ -402,7 +402,7 @@ void ArrayExceptFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
     int32_t rowSize = context->GetResultRowSize();
     auto leftElementVector = leftArray->GetElementVector();
 
-    auto *resultArray = new ArrayVector(rowSize);
+    auto *resultArray = new ArrayVector(rowSize, context->GetPool());
 
     if (leftElementVector == nullptr) {
         for (int32_t row = 0; row < rowSize; ++row) {
@@ -424,29 +424,29 @@ void ArrayExceptFunction::Apply(std::stack<BaseVector *> &args, const DataTypePt
 
     switch (elementTypeId) {
         case OMNI_BYTE:
-            ProcessTyped<int8_t>(leftArray, rightArray, resultArray, rowSize);
+            ProcessTyped<int8_t>(leftArray, rightArray, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_SHORT:
-            ProcessTyped<int16_t>(leftArray, rightArray, resultArray, rowSize);
+            ProcessTyped<int16_t>(leftArray, rightArray, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_INT:
-            ProcessTyped<int32_t>(leftArray, rightArray, resultArray, rowSize);
+            ProcessTyped<int32_t>(leftArray, rightArray, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_LONG:
-            ProcessTyped<int64_t>(leftArray, rightArray, resultArray, rowSize);
+            ProcessTyped<int64_t>(leftArray, rightArray, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_FLOAT:
-            ProcessTyped<float>(leftArray, rightArray, resultArray, rowSize);
+            ProcessTyped<float>(leftArray, rightArray, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_DOUBLE:
-            ProcessTyped<double>(leftArray, rightArray, resultArray, rowSize);
+            ProcessTyped<double>(leftArray, rightArray, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_BOOLEAN:
-            ProcessTyped<bool>(leftArray, rightArray, resultArray, rowSize);
+            ProcessTyped<bool>(leftArray, rightArray, resultArray, rowSize, context->GetPool());
             break;
         case OMNI_VARCHAR:
         case OMNI_CHAR:
-            ProcessString(leftArray, rightArray, resultArray, rowSize);
+            ProcessString(leftArray, rightArray, resultArray, rowSize, context->GetPool());
             break;
         default:
             delete resultArray;

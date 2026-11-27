@@ -59,7 +59,7 @@ public:
     }
 
     static BaseVector* CreateInt64Vector(const std::vector<int64_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_LONG, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, values.size());
         auto* typedVec = static_cast<Vector<int64_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -68,7 +68,7 @@ public:
     }
 
     static BaseVector* CreateTimestampVector(const std::vector<int64_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_TIMESTAMP, values.size());
         auto* typedVec = static_cast<Vector<int64_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -77,7 +77,7 @@ public:
     }
 
     static BaseVector* CreateInt32Vector(const std::vector<int32_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_INT, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, values.size());
         auto* typedVec = static_cast<Vector<int32_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -86,7 +86,7 @@ public:
     }
 
     static BaseVector* CreateDate32Vector(const std::vector<int32_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_DATE32, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_DATE32, values.size());
         auto* typedVec = static_cast<Vector<int32_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -104,7 +104,7 @@ public:
 
         auto outType = (outputType == OMNI_TIMESTAMP) ?
             TimestampType() : LongType();
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         int32_t sz = 0;
         if (!args.empty()) {
             std::stack<BaseVector*> tmpArgs = args;

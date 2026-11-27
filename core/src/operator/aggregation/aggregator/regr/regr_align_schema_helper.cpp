@@ -1,5 +1,9 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ *
+ * Every Vector<T> allocation in this translation unit is pool-bound.
+ * The trailing OmniTaskMemoryPool *pool parameter flows from
+ * TypedAggregator::pool_ in the calling regr aggregator subclass.
  */
 #include "operator/aggregation/aggregator/regr/regr_align_schema_helper.h"
 #include "operator/aggregation/aggregator/regr/regr_numeric.h"
@@ -11,6 +15,7 @@
 
 namespace omniruntime::op {
 
+using omniruntime::mem::OmniTaskMemoryPool;
 using omniruntime::vec::BaseVector;
 using omniruntime::vec::NullsBuffer;
 using omniruntime::vec::NullsHelper;
@@ -63,12 +68,13 @@ inline void CopyPartialCellDouble(
 } // namespace
 
 std::shared_ptr<NullsHelper> RegrAlignMergeYxNullsWithFilter(const std::shared_ptr<NullsHelper> &yxNull,
-    Vector<bool> *filterVec, bool filterIsActive, int32_t rowCount)
+    Vector<bool> *filterVec, bool filterIsActive, int32_t rowCount, omniruntime::mem::OmniTaskMemoryPool *pool)
 {
     if (!filterIsActive) {
         return yxNull;
     }
-    auto buf = std::make_shared<NullsBuffer>(rowCount);
+    auto buf = std::make_shared<NullsBuffer>(rowCount, nullptr, 0,
+        pool != nullptr ? pool->getBoundAllocator() : nullptr);
     auto merged = std::make_shared<NullsHelper>(buf);
     auto *fp = UnsafeVector::GetRawValues(filterVec);
     for (int32_t i = 0; i < rowCount; ++i) {
@@ -81,39 +87,39 @@ std::shared_ptr<NullsHelper> RegrAlignMergeYxNullsWithFilter(const std::shared_p
     return merged;
 }
 
-void RegrAlignAppendEmptyVarPop3(VectorBatch *result)
+void RegrAlignAppendEmptyVarPop3(VectorBatch *result, OmniTaskMemoryPool *pool)
 {
-    result->Append(new Vector<double>(0));
-    result->Append(new Vector<double>(0));
-    result->Append(new Vector<double>(0));
+    result->Append(new Vector<double>(0, pool));
+    result->Append(new Vector<double>(0, pool));
+    result->Append(new Vector<double>(0, pool));
 }
 
-void RegrAlignAppendEmptyCov4(VectorBatch *result)
+void RegrAlignAppendEmptyCov4(VectorBatch *result, OmniTaskMemoryPool *pool)
 {
     for (int c = 0; c < 4; ++c) {
-        result->Append(new Vector<double>(0));
+        result->Append(new Vector<double>(0, pool));
     }
 }
 
-void RegrAlignAppendEmptyPearson6(VectorBatch *result)
+void RegrAlignAppendEmptyPearson6(VectorBatch *result, OmniTaskMemoryPool *pool)
 {
     for (int c = 0; c < 6; ++c) {
-        result->Append(new Vector<double>(0));
+        result->Append(new Vector<double>(0, pool));
     }
 }
 
-void RegrAlignAppendEmptySlope7(VectorBatch *result)
+void RegrAlignAppendEmptySlope7(VectorBatch *result, OmniTaskMemoryPool *pool)
 {
     for (int c = 0; c < 7; ++c) {
-        result->Append(new Vector<double>(0));
+        result->Append(new Vector<double>(0, pool));
     }
 }
 
-void RegrAlignAppendVarPop3AllNullRows(VectorBatch *result, int32_t rowCount)
+void RegrAlignAppendVarPop3AllNullRows(VectorBatch *result, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
-    auto *nVec = new Vector<double>(rowCount);
-    auto *avgVec = new Vector<double>(rowCount);
-    auto *m2Vec = new Vector<double>(rowCount);
+    auto *nVec = new Vector<double>(rowCount, pool);
+    auto *avgVec = new Vector<double>(rowCount, pool);
+    auto *m2Vec = new Vector<double>(rowCount, pool);
     for (int32_t i = 0; i < rowCount; ++i) {
         nVec->SetNull(i);
         avgVec->SetNull(i);
@@ -124,10 +130,10 @@ void RegrAlignAppendVarPop3AllNullRows(VectorBatch *result, int32_t rowCount)
     result->Append(m2Vec);
 }
 
-void RegrAlignAppendCov4AllNullRows(VectorBatch *result, int32_t rowCount)
+void RegrAlignAppendCov4AllNullRows(VectorBatch *result, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
     for (int c = 0; c < 4; ++c) {
-        auto *v = new Vector<double>(rowCount);
+        auto *v = new Vector<double>(rowCount, pool);
         for (int32_t i = 0; i < rowCount; ++i) {
             v->SetNull(i);
         }
@@ -135,10 +141,10 @@ void RegrAlignAppendCov4AllNullRows(VectorBatch *result, int32_t rowCount)
     }
 }
 
-void RegrAlignAppendPearson6AllNullRows(VectorBatch *result, int32_t rowCount)
+void RegrAlignAppendPearson6AllNullRows(VectorBatch *result, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
     for (int c = 0; c < 6; ++c) {
-        auto *v = new Vector<double>(rowCount);
+        auto *v = new Vector<double>(rowCount, pool);
         for (int32_t i = 0; i < rowCount; ++i) {
             v->SetNull(i);
         }
@@ -146,10 +152,10 @@ void RegrAlignAppendPearson6AllNullRows(VectorBatch *result, int32_t rowCount)
     }
 }
 
-void RegrAlignAppendSlope7AllNullRows(VectorBatch *result, int32_t rowCount)
+void RegrAlignAppendSlope7AllNullRows(VectorBatch *result, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
     for (int c = 0; c < 7; ++c) {
-        auto *v = new Vector<double>(rowCount);
+        auto *v = new Vector<double>(rowCount, pool);
         for (int32_t i = 0; i < rowCount; ++i) {
             v->SetNull(i);
         }
@@ -158,11 +164,11 @@ void RegrAlignAppendSlope7AllNullRows(VectorBatch *result, int32_t rowCount)
 }
 
 void RegrAlignAppendVarPop3RawFromX(VectorBatch *result, BaseVector *xVec,
-    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount)
+    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
-    auto *nVec = new Vector<double>(rowCount);
-    auto *avgVec = new Vector<double>(rowCount);
-    auto *m2Vec = new Vector<double>(rowCount);
+    auto *nVec = new Vector<double>(rowCount, pool);
+    auto *avgVec = new Vector<double>(rowCount, pool);
+    auto *m2Vec = new Vector<double>(rowCount, pool);
     for (int32_t i = 0; i < rowCount; ++i) {
         if (RegrAlignRowSkipped(rowSkip, i) || xVec->IsNull(i)) {
             nVec->SetNull(i);
@@ -183,11 +189,11 @@ void RegrAlignAppendVarPop3RawFromX(VectorBatch *result, BaseVector *xVec,
 }
 
 void RegrAlignAppendVarPop3RawFromY(VectorBatch *result, BaseVector *yVec,
-    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount)
+    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
-    auto *nVec = new Vector<double>(rowCount);
-    auto *avgVec = new Vector<double>(rowCount);
-    auto *m2Vec = new Vector<double>(rowCount);
+    auto *nVec = new Vector<double>(rowCount, pool);
+    auto *avgVec = new Vector<double>(rowCount, pool);
+    auto *m2Vec = new Vector<double>(rowCount, pool);
     for (int32_t i = 0; i < rowCount; ++i) {
         if (RegrAlignRowSkipped(rowSkip, i) || yVec->IsNull(i)) {
             nVec->SetNull(i);
@@ -205,12 +211,12 @@ void RegrAlignAppendVarPop3RawFromY(VectorBatch *result, BaseVector *yVec,
 }
 
 void RegrAlignAppendCov4Raw(VectorBatch *result, BaseVector *yVec, BaseVector *xVec,
-    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount)
+    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
-    auto *v0 = new Vector<double>(rowCount);
-    auto *v1 = new Vector<double>(rowCount);
-    auto *v2 = new Vector<double>(rowCount);
-    auto *v3 = new Vector<double>(rowCount);
+    auto *v0 = new Vector<double>(rowCount, pool);
+    auto *v1 = new Vector<double>(rowCount, pool);
+    auto *v2 = new Vector<double>(rowCount, pool);
+    auto *v3 = new Vector<double>(rowCount, pool);
     for (int32_t i = 0; i < rowCount; ++i) {
         if (RegrAlignRowSkipped(rowSkip, i) || yVec->IsNull(i) || xVec->IsNull(i)) {
             v0->SetNull(i);
@@ -233,14 +239,14 @@ void RegrAlignAppendCov4Raw(VectorBatch *result, BaseVector *yVec, BaseVector *x
 }
 
 void RegrAlignAppendPearson6RawStd(VectorBatch *result, BaseVector *yVec, BaseVector *xVec,
-    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount)
+    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
-    auto *cntVec = new Vector<double>(rowCount);
-    auto *meanXVec = new Vector<double>(rowCount);
-    auto *meanYVec = new Vector<double>(rowCount);
-    auto *c2Vec = new Vector<double>(rowCount);
-    auto *m2XVec = new Vector<double>(rowCount);
-    auto *m2YVec = new Vector<double>(rowCount);
+    auto *cntVec = new Vector<double>(rowCount, pool);
+    auto *meanXVec = new Vector<double>(rowCount, pool);
+    auto *meanYVec = new Vector<double>(rowCount, pool);
+    auto *c2Vec = new Vector<double>(rowCount, pool);
+    auto *m2XVec = new Vector<double>(rowCount, pool);
+    auto *m2YVec = new Vector<double>(rowCount, pool);
     for (int32_t i = 0; i < rowCount; ++i) {
         if (RegrAlignRowSkipped(rowSkip, i) || yVec->IsNull(i) || xVec->IsNull(i)) {
             cntVec->SetNull(i);
@@ -280,14 +286,14 @@ void RegrAlignAppendPearson6RawStd(VectorBatch *result, BaseVector *yVec, BaseVe
 }
 
 void RegrAlignAppendPearson6RawR2Layout(VectorBatch *result, BaseVector *yVec, BaseVector *xVec,
-    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount)
+    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
-    auto *cntVec = new Vector<double>(rowCount);
-    auto *meanXVec = new Vector<double>(rowCount);
-    auto *meanYVec = new Vector<double>(rowCount);
-    auto *c2Vec = new Vector<double>(rowCount);
-    auto *m2XVec = new Vector<double>(rowCount);
-    auto *m2YVec = new Vector<double>(rowCount);
+    auto *cntVec = new Vector<double>(rowCount, pool);
+    auto *meanXVec = new Vector<double>(rowCount, pool);
+    auto *meanYVec = new Vector<double>(rowCount, pool);
+    auto *c2Vec = new Vector<double>(rowCount, pool);
+    auto *m2XVec = new Vector<double>(rowCount, pool);
+    auto *m2YVec = new Vector<double>(rowCount, pool);
     for (int32_t i = 0; i < rowCount; ++i) {
         if (RegrAlignRowSkipped(rowSkip, i) || yVec->IsNull(i) || xVec->IsNull(i)) {
             cntVec->SetNull(i);
@@ -327,15 +333,15 @@ void RegrAlignAppendPearson6RawR2Layout(VectorBatch *result, BaseVector *yVec, B
 }
 
 void RegrAlignAppendSlope7Raw(VectorBatch *result, BaseVector *yVec, BaseVector *xVec,
-    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount)
+    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
-    auto *v0 = new Vector<double>(rowCount);
-    auto *v1 = new Vector<double>(rowCount);
-    auto *v2 = new Vector<double>(rowCount);
-    auto *v3 = new Vector<double>(rowCount);
-    auto *v4 = new Vector<double>(rowCount);
-    auto *v5 = new Vector<double>(rowCount);
-    auto *v6 = new Vector<double>(rowCount);
+    auto *v0 = new Vector<double>(rowCount, pool);
+    auto *v1 = new Vector<double>(rowCount, pool);
+    auto *v2 = new Vector<double>(rowCount, pool);
+    auto *v3 = new Vector<double>(rowCount, pool);
+    auto *v4 = new Vector<double>(rowCount, pool);
+    auto *v5 = new Vector<double>(rowCount, pool);
+    auto *v6 = new Vector<double>(rowCount, pool);
     for (int32_t i = 0; i < rowCount; ++i) {
         if (RegrAlignRowSkipped(rowSkip, i) || yVec->IsNull(i) || xVec->IsNull(i)) {
             v0->SetNull(i);
@@ -380,7 +386,7 @@ void RegrAlignAppendPartialSlices(VectorBatch *result, VectorBatch *input, const
 
 void RegrAlignAppendPartialColumnsWithSkip(VectorBatch *result, VectorBatch *input,
     const std::vector<int32_t> &channels, int32_t numCols, int32_t rowCount,
-    const std::shared_ptr<NullsHelper> &rowSkip, bool firstColIsLong)
+    const std::shared_ptr<NullsHelper> &rowSkip, bool firstColIsLong, OmniTaskMemoryPool *pool)
 {
     if (rowSkip == nullptr) {
         RegrAlignAppendPartialSlices(result, input, channels, numCols, rowCount);
@@ -394,12 +400,12 @@ void RegrAlignAppendPartialColumnsWithSkip(VectorBatch *result, VectorBatch *inp
         srcCols.push_back(input->Get(channels[static_cast<size_t>(c)]));
     }
     if (firstColIsLong) {
-        dstCols.push_back(new Vector<int64_t>(rowCount));
+        dstCols.push_back(new Vector<int64_t>(rowCount, pool));
     } else {
-        dstCols.push_back(new Vector<double>(rowCount));
+        dstCols.push_back(new Vector<double>(rowCount, pool));
     }
     for (int32_t c = 1; c < numCols; ++c) {
-        dstCols.push_back(new Vector<double>(rowCount));
+        dstCols.push_back(new Vector<double>(rowCount, pool));
     }
     for (int32_t i = 0; i < rowCount; ++i) {
         bool skip = (*rowSkip)[i];
@@ -422,18 +428,18 @@ void RegrAlignAppendPartialColumnsWithSkip(VectorBatch *result, VectorBatch *inp
     }
 }
 
-void RegrAlignAppendEmptyReplacementPartial3(VectorBatch *result)
+void RegrAlignAppendEmptyReplacementPartial3(VectorBatch *result, OmniTaskMemoryPool *pool)
 {
-    result->Append(new Vector<double>(0));
-    result->Append(new Vector<double>(0));
-    result->Append(new Vector<double>(0));
+    result->Append(new Vector<double>(0, pool));
+    result->Append(new Vector<double>(0, pool));
+    result->Append(new Vector<double>(0, pool));
 }
 
-void RegrAlignAppendReplacementPartial3AllNullRows(VectorBatch *result, int32_t rowCount)
+void RegrAlignAppendReplacementPartial3AllNullRows(VectorBatch *result, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
-    auto *nVec = new Vector<double>(rowCount);
-    auto *avgVec = new Vector<double>(rowCount);
-    auto *m2Vec = new Vector<double>(rowCount);
+    auto *nVec = new Vector<double>(rowCount, pool);
+    auto *avgVec = new Vector<double>(rowCount, pool);
+    auto *m2Vec = new Vector<double>(rowCount, pool);
     for (int32_t i = 0; i < rowCount; ++i) {
         nVec->SetNull(i);
         avgVec->SetNull(i);
@@ -445,11 +451,11 @@ void RegrAlignAppendReplacementPartial3AllNullRows(VectorBatch *result, int32_t 
 }
 
 void RegrAlignAppendReplacementPartial3RawDouble(VectorBatch *result, BaseVector *valVec,
-    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount)
+    const std::shared_ptr<NullsHelper> &rowSkip, int32_t rowCount, OmniTaskMemoryPool *pool)
 {
-    auto *nVec = new Vector<double>(rowCount);
-    auto *avgVec = new Vector<double>(rowCount);
-    auto *m2Vec = new Vector<double>(rowCount);
+    auto *nVec = new Vector<double>(rowCount, pool);
+    auto *avgVec = new Vector<double>(rowCount, pool);
+    auto *m2Vec = new Vector<double>(rowCount, pool);
     for (int32_t i = 0; i < rowCount; ++i) {
         if (RegrAlignRowSkipped(rowSkip, i) || valVec->IsNull(i)) {
             nVec->SetNull(i);

@@ -133,7 +133,7 @@ public:
 
         auto elementVector = arrayVector->GetElementVector();
         auto result = VectorHelper::CreateDictionaryVector(dicIndex, rowSize, elementVector.get(),
-            elementVector->GetTypeId());
+            elementVector->GetTypeId(), false, context->GetPool());
         for (auto i = 0; i < rowSize; i++) {
             if (dicIndex[i] == -1) {
                 result->SetNull(i);

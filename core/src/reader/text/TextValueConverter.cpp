@@ -41,7 +41,7 @@ std::unique_ptr<vec::BaseVector> TextValueConverter::CastOwned(
     if (fromType->GetId() == toType->GetId()) {
         return input;
     }
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, input->GetPool());
     context.SetConfig(queryConfig_);
     context.SetResultRowSize(input->GetSize());
     context.SetThrowOnError(false);
@@ -129,14 +129,14 @@ std::unique_ptr<vec::BaseVector> TextValueConverter::ApplyFormatFunction(
     if (function == nullptr) {
         throw std::runtime_error("Text time conversion function is not registered: " + functionName);
     }
-    op::ExecutionContext context;
+    op::ExecutionContext context(4096, input->GetPool());
     context.SetConfig(queryConfig_);
     context.SetResultRowSize(input->GetSize());
     context.SetThrowOnError(false);
     std::stack<vec::BaseVector*> arguments;
     arguments.push(input.release());
     arguments.push(new vec::ConstVector<std::string_view>(
-        std::string_view(format), type::OMNI_VARCHAR, context.GetResultRowSize()));
+        std::string_view(format), type::OMNI_VARCHAR, context.GetResultRowSize(), context.GetPool()));
     vec::BaseVector* result = nullptr;
     const auto resultType = outputType == type::OMNI_TIMESTAMP
         ? type::TimestampType()
@@ -158,7 +158,7 @@ std::unique_ptr<vec::BaseVector> TextValueConverter::DecodeTimestampFormats(
     }
     const auto size = strings->GetSize();
     std::unique_ptr<vec::BaseVector> output(
-        vec::VectorHelper::CreateFlatVector(type::OMNI_TIMESTAMP, size));
+        vec::VectorHelper::CreateFlatVector(strings->GetPool(), type::OMNI_TIMESTAMP, size));
     auto* timestamps = static_cast<vec::Vector<int64_t>*>(output.get());
     for (int32_t row = 0; row < size; ++row) {
         output->SetNull(row);

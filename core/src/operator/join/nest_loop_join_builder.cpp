@@ -42,14 +42,16 @@ std::vector<int32_t> &NestedLoopJoinBuildOperatorFactory::GetbuildOutputCols()
     return this->buildOutputCols;
 }
 
-Operator *NestedLoopJoinBuildOperatorFactory::CreateOperator()
+// Pool-bound override
+Operator *NestedLoopJoinBuildOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    return new NestedLoopJoinBuildOperator(this->vectorBatch, buildTypes);
+    return new NestedLoopJoinBuildOperator(pool, this->vectorBatch, buildTypes);
 }
 
-NestedLoopJoinBuildOperator::NestedLoopJoinBuildOperator(std::unique_ptr<VectorBatch> &vectorBatch,
-    DataTypes &buildTypes)
-    : inputVectorBatch(vectorBatch), buildTypes(buildTypes)
+// Pool-bound ctor — same body, chains Operator(pool).
+NestedLoopJoinBuildOperator::NestedLoopJoinBuildOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    std::unique_ptr<VectorBatch> &vectorBatch, DataTypes &buildTypes)
+    : Operator(pool), inputVectorBatch(vectorBatch), buildTypes(buildTypes)
 {
     SetOperatorName(metricsNameNestedLoopJoinBuilder);
 }
@@ -125,7 +127,7 @@ int32_t NestedLoopJoinBuildOperator::GetOutput(omniruntime::vec::VectorBatch **o
         for (int32_t i = 0; i < vecCnt; i++) {
             BaseVector *vector = inputVectorBatches[0]->Get(i);
             DataTypeId vectorDataTypeId = vector->GetTypeId();
-            BaseVector *destVector = VectorHelper::CreateComplexVector(buildTypes.Get()[i].get(), inputRowCnt);
+            BaseVector *destVector = VectorHelper::CreateComplexVector(this->pool(), buildTypes.Get()[i].get(), inputRowCnt);
             int32_t index = 0;
             for (int32_t j = 0; j < batchCnt; j++) {
                 BaseVector *sourceVector = inputVectorBatches[j]->Get(i);
@@ -145,7 +147,7 @@ int32_t NestedLoopJoinBuildOperator::GetOutput(omniruntime::vec::VectorBatch **o
     } else {
         auto &buildTypeList = buildTypes.Get();
         for (const DataTypePtr &dataTypePtr : buildTypeList) {
-            BaseVector *destVector = VectorHelper::CreateComplexVector(dataTypePtr.get(), 0);
+            BaseVector *destVector = VectorHelper::CreateComplexVector(this->pool(), dataTypePtr.get(), 0);
             vectorBatchPtr->Append(destVector);
         }
     }

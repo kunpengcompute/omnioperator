@@ -4,12 +4,22 @@
 
 #include "gtest/gtest.h"
 #include "memory/simple_arena_allocator.h"
+#include "allocator.h"
 
 namespace omniruntime::mem::test {
+// TU-local stand-in for the retired Allocator singleton (allocator.h `= delete`).
+// Null-pool Allocator = the legacy-bridge unaccounted path; same process-wide
+// lifetime and no-accounting semantics the old singleton had.
+static Allocator *TestAllocator()
+{
+    static Allocator allocator(nullptr);
+    return &allocator;
+}
+
 TEST(SimpleArenaAllocator, testAllocate)
 {
     int64_t chunkSize = 4096;
-    SimpleArenaAllocator arena(chunkSize);
+    SimpleArenaAllocator arena(chunkSize, TestAllocator());
 
     // Small allocations should come from the same chunk.
     int64_t smallSize = 100;
@@ -32,7 +42,7 @@ TEST(SimpleArenaAllocator, testAllocate)
 TEST(SimpleArenaAllocator, testAllocateContinueSmallSize)
 {
     int64_t chunkSize = 4096;
-    SimpleArenaAllocator arena(chunkSize);
+    SimpleArenaAllocator arena(chunkSize, TestAllocator());
     int64_t smallSize = 100;
     uint8_t const * start = arena.Allocate(smallSize);
     EXPECT_NE(start, nullptr);
@@ -48,7 +58,7 @@ TEST(SimpleArenaAllocator, testAllocateContinueSmallSize)
 TEST(SimpleArenaAllocator, testAllocateContinueLargeSize)
 {
     int64_t chunkSize = 4096;
-    SimpleArenaAllocator arena(chunkSize);
+    SimpleArenaAllocator arena(chunkSize, TestAllocator());
     int64_t smallSize = 100;
     uint8_t const * start = arena.Allocate(smallSize);
     EXPECT_NE(start, nullptr);
@@ -66,7 +76,7 @@ TEST(SimpleArenaAllocator, testAllocateContinueLargeSize)
 TEST(SimpleArenaAllocator, testResetSmallToBig)
 {
     int64_t chunkSize = 4096;
-    SimpleArenaAllocator arena(chunkSize);
+    SimpleArenaAllocator arena(chunkSize, TestAllocator());
 
     int64_t smallSize = 100;
     auto p = arena.Allocate(smallSize);
@@ -93,7 +103,7 @@ TEST(SimpleArenaAllocator, testResetSmallToBig)
 TEST(SimpleArenaAllocator, testResetFromBigToSmall)
 {
     int64_t chunkSize = 4096;
-    SimpleArenaAllocator arena(chunkSize);
+    SimpleArenaAllocator arena(chunkSize, TestAllocator());
 
     int64_t largeSize = 100 * chunkSize;
     auto p = arena.Allocate(largeSize);
@@ -118,7 +128,7 @@ TEST(SimpleArenaAllocator, testResetFromBigToSmall)
 
 TEST(SimpleArenaAllocator, testAllocateZeroSize)
 {
-    auto *arena = new SimpleArenaAllocator();
+    auto *arena = new SimpleArenaAllocator(4096, TestAllocator());
     int64_t allocatedSize = 1024;
     uint8_t *noZeroAddr = arena->Allocate(allocatedSize);
     EXPECT_NE(noZeroAddr, nullptr);

@@ -38,7 +38,7 @@ TEST(VectorizationTest, SimpleFunction)
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(1);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -68,7 +68,7 @@ TEST(VectorizationTest, AddInt)
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(1);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -105,7 +105,7 @@ TEST(VectorizationTest, SubInt)
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(1);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -143,7 +143,7 @@ TEST(VectorizationTest, MulInt)
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(1);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -181,7 +181,7 @@ TEST(VectorizationTest, DivideInt)
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(1);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -219,7 +219,7 @@ TEST(VectorizationTest, RemainderInt)
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(1);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -256,7 +256,7 @@ TEST(VectorizationTest, Filter)
     VectorBatch *input = CreateVectorBatch(inputTypes, rowSize, col1, col2);
     input->Get(0)->SetNull(1);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

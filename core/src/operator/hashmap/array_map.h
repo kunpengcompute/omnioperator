@@ -26,11 +26,17 @@ public:
     using ResultType = InsertResult<ValueType>;
 
 public:
-    ArrayMap(int64_t defaultSize = 16)
+    // Pool-bound ctor: pass a pre-constructed Allocator so all allocations route
+    // to the caller's pool.
+    ArrayMap(int64_t defaultSize, Allocator alloc) : allocator(std::move(alloc))
     {
         allocator.Allocate(defaultSize * sizeof(Slot), &address);
         allocator.Allocate(sizeof(Slot), &nullAddress);
-        isAssigned = new bool[defaultSize];
+        // Route the presence bitmap through the pool-bound allocator we already hold
+        // instead of an unaccounted raw new bool[keyRange]. Sized to the
+        // integer-key RANGE, taken on the common dense-_sk join/group-by path.
+        allocator.Allocate(sizeof(bool) * defaultSize, &isAssignedAddress);
+        isAssigned = reinterpret_cast<bool *>(isAssignedAddress);
         memset(isAssigned, 0, sizeof(bool) * defaultSize);
         slots = reinterpret_cast<Slot *>(address);
         nullSlot = reinterpret_cast<Slot>(nullAddress);
@@ -50,6 +56,12 @@ public:
     size_t GetElementsSize() const
     {
         return elementsSize;
+    }
+
+    /// Approximate resident bytes: slot buffer (`capacity` is already in bytes) + null slot + assign bitmap.
+    ALWAYS_INLINE uint64_t GetAllocatedBytes() const
+    {
+        return capacity + sizeof(Slot) + static_cast<uint64_t>(size) * sizeof(bool);
     }
 
     ALWAYS_INLINE void AddElementsSize(size_t size)
@@ -105,6 +117,11 @@ public:
         return size;
     }
 
+    uint64_t AllocatedBytes() const
+    {
+        return capacity + sizeof(Slot) + sizeof(bool) * static_cast<uint64_t>(size);
+    }
+
     ALWAYS_INLINE ValueType TransformPtr(int64_t ptr)
     {
         return reinterpret_cast<ValueType>(ptr);
@@ -149,7 +166,8 @@ public:
         }
         allocator.Release(address, capacity);
         allocator.Release(nullAddress, sizeof(Slot));
-        delete[] isAssigned;
+        // Symmetric pool-bound free of the presence bitmap.
+        allocator.Release(isAssignedAddress, sizeof(bool) * size);
     }
 
 private:
@@ -171,6 +189,7 @@ private:
 
     uint8_t *address;
     uint8_t *nullAddress;
+    uint8_t *isAssignedAddress = nullptr;
     Allocator allocator;
     ValueType *slots;
     ValueType nullSlot;

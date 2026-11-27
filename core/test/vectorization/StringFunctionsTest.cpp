@@ -42,7 +42,7 @@ TEST(StringFunctionTest, sha1) {
     std::vector<bool> expectedNulls = {false, false, false, false, false};
     std::string functionName = "sha1";
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-    BaseVector* inputVec = VectorHelper::CreateFlatVector(OMNI_VARBINARY, values.size());
+    BaseVector* inputVec = VectorHelper::CreateFlatVector(nullptr, OMNI_VARBINARY, values.size());
     auto* inputVector = dynamic_cast<VarcharVector*>(inputVec);
     for (int32_t i = 0; i < values.size(); ++i) {
         std::string_view lsv(values[i]);
@@ -55,7 +55,7 @@ TEST(StringFunctionTest, sha1) {
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName <<" not found ";
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(values.size());
 
     std::stack<BaseVector*> args;
@@ -100,7 +100,7 @@ TEST(StringFunctionTest, sha2) {
     std::vector<bool> expectedNulls = {false, false, false, false, false};
     std::string functionName = "sha2";
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-    BaseVector* inputVec = VectorHelper::CreateFlatVector(OMNI_VARBINARY, values.size());
+    BaseVector* inputVec = VectorHelper::CreateFlatVector(nullptr, OMNI_VARBINARY, values.size());
     auto* inputVector = dynamic_cast<VarcharVector*>(inputVec);
     for (int32_t i = 0; i < values.size(); ++i) {
         std::string_view lsv(values[i]);
@@ -108,7 +108,7 @@ TEST(StringFunctionTest, sha2) {
         nulls[i] ? inputVector->SetNull(i) : inputVector->SetNotNull(i);
     }
 
-    BaseVector* inputVec2 = VectorHelper::CreateFlatVector(OMNI_INT, values.size());
+    BaseVector* inputVec2 = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, values.size());
     auto* inputVector2 = dynamic_cast<Vector<int32_t>*>(inputVec2);
     for (int32_t i = 0; i < values2.size(); ++i) {
         inputVector2->SetValue(i, values2[i]);
@@ -120,7 +120,7 @@ TEST(StringFunctionTest, sha2) {
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName <<" not found ";
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(values.size());
 
     std::stack<BaseVector*> args;
@@ -164,7 +164,7 @@ TEST(StringFunctionTest, md5) {
     std::vector<bool> expectedNulls = {false, false, false, false, false};
     std::string functionName = "Md5";
     using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
-    BaseVector* inputVec = VectorHelper::CreateFlatVector(OMNI_VARBINARY, values.size());
+    BaseVector* inputVec = VectorHelper::CreateFlatVector(nullptr, OMNI_VARBINARY, values.size());
     auto* inputVector = dynamic_cast<VarcharVector*>(inputVec);
     for (int32_t i = 0; i < values.size(); ++i) {
         std::string_view lsv(values[i]);
@@ -177,7 +177,7 @@ TEST(StringFunctionTest, md5) {
     auto vectorFunction = VectorFunction::Find(signature);
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName <<" not found ";
 
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(values.size());
 
     std::stack<BaseVector*> args;

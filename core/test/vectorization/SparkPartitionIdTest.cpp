@@ -65,7 +65,7 @@ void TestSparkPartitionIdOperation(
     ASSERT_NE(vectorFunction, nullptr) << "Function " << functionName << " creation failed";
     
     // Create execution context
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     
     // Prepare empty arguments stack (no input arguments)
@@ -153,7 +153,7 @@ TEST_F(SparkPartitionIdTest, DefaultPartitionId) {
     
     // Create execution context
     int32_t rowSize = 5;
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     
     // Execute function
@@ -205,7 +205,7 @@ TEST_F(SparkPartitionIdTest, ConstantResultAcrossRows) {
     ASSERT_NE(vectorFunction, nullptr);
     
     // Create execution context
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     
     // Execute function

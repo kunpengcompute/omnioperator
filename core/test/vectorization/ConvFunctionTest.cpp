@@ -276,7 +276,7 @@ TEST(ConvFunctionTest, VectorFunctionApply) {
     strVec->SetValue(2, sv2);
     strVec->SetValue(3, sv3);
 
-    vec::BaseVector* fromBaseVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    vec::BaseVector* fromBaseVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     fromBaseVec->SetIsField(true);
     auto* fromBaseVector = static_cast<Vector<int32_t>*>(fromBaseVec);
     fromBaseVector->SetValue(0, 10);
@@ -285,7 +285,7 @@ TEST(ConvFunctionTest, VectorFunctionApply) {
     fromBaseVector->SetValue(3, 36); 
     for (int32_t i = 0; i < rowSize; ++i) fromBaseVector->SetNotNull(i);
 
-    vec::BaseVector* toBaseVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    vec::BaseVector* toBaseVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     toBaseVec->SetIsField(true);
     auto* toBaseVector = static_cast<Vector<int32_t>*>(toBaseVec);
     toBaseVector->SetValue(0, 2);   
@@ -301,7 +301,7 @@ TEST(ConvFunctionTest, VectorFunctionApply) {
 
     vec::BaseVector* resultVector = nullptr;
     auto varcharType = std::make_shared<DataType>(OMNI_VARCHAR);
-    ExecutionContext context;
+    ExecutionContext context(4096, nullptr);
     context.SetResultRowSize(rowSize);
     std::stack<vec::BaseVector*> args;
     args.push(inputVec);
@@ -351,14 +351,14 @@ TEST(ConvFunctionTest, ConvExprEval) {
     inputStrVec->SetValue(1, sv1);
     inputStrVec->SetValue(2, sv2);
 
-    vec::BaseVector* fromVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    vec::BaseVector* fromVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     auto* fromVector = static_cast<Vector<int32_t>*>(fromVec);
     fromVector->SetValue(0, 10);
     fromVector->SetValue(1, 10);
     fromVector->SetValue(2, 36);
     for (int32_t i = 0; i < rowSize; ++i) fromVector->SetNotNull(i);
 
-    vec::BaseVector* toVec = VectorHelper::CreateFlatVector(OMNI_INT, rowSize);
+    vec::BaseVector* toVec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, rowSize);
     auto* toVector = static_cast<Vector<int32_t>*>(toVec);
     toVector->SetValue(0, 2);
     toVector->SetValue(1, 16);
@@ -372,7 +372,7 @@ TEST(ConvFunctionTest, ConvExprEval) {
 
     VectorHelper::PrintVecBatch(&input);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(&input, context);

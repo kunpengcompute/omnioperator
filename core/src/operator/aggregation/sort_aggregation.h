@@ -22,14 +22,15 @@ class SortAggregationOperatorFactory;
 
 class SortAggregationOperator : public AggregationCommonOperator {
 public:
-    SortAggregationOperator(std::vector<ColumnIndex> &groupByCols,
+    // Pool-bound ctor — forwards pool to AggregationCommonOperator(pool, ...).
+    SortAggregationOperator(omniruntime::mem::OmniTaskMemoryPool *pool, std::vector<ColumnIndex> &groupByCols,
         std::vector<std::vector<int32_t>> &aggInputCols, uint32_t aggInputColsSize,
         std::vector<DataTypes> &aggInputTypes, std::vector<DataTypes> &aggOutputTypes,
         std::vector<std::unique_ptr<Aggregator>> &&aggs, std::vector<bool> &inputRaws,
         std::vector<bool> &outputPartials, const std::vector<int8_t> &hasAggFilters,
         const OperatorConfig &operatorConfig, std::vector<uint32_t> aggFuncTypesVector,
         AggregationNode::Step step)
-        : AggregationCommonOperator(std::move(aggs), inputRaws, outputPartials),
+        : AggregationCommonOperator(pool, std::move(aggs), inputRaws, outputPartials),
           groupByCols(groupByCols),
           aggInputCols(aggInputCols),
           aggInputColsSize(aggInputColsSize),
@@ -125,7 +126,8 @@ public:
 
     ~SortAggregationOperatorFactory() override = default;
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
     OmniStatus Init() override;
 

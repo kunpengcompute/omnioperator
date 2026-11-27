@@ -130,7 +130,8 @@ private:
     std::vector<vec::BaseVector *> vecBatch_;
     std::stack<vec::BaseVector *> inputValues_;
     int32_t rowSize;
-    mem::Allocator *allocator = mem::Allocator::GetAllocator();
+    // Allocator bound to the ExecutionContext pool; set in ctors.
+    mem::Allocator *allocator = nullptr;
 
     // When set, the evaluator evaluates a compacted subset of the batch rows:
     // the selection bits are over full-batch coordinates and activePos_ holds the

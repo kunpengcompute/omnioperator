@@ -24,6 +24,7 @@
 #include "operator/sort/sort_expr.h"
 #include "operator/topn/topn_expr.h"
 #include "operator/topnsort/topn_sort_expr.h"
+#include "util/telemetry.h"
 #include "operator/union/union.h"
 #include "operator/window/window_expr.h"
 #include "operator/window/window_group_limit_expr.h"
@@ -37,9 +38,11 @@
 #include "operator/join/join_sub_partitioner.h"
 #include "connectors/hive/HiveConnector.h"
 #include "util/debug.h"
-#include "operator/config/operator_config.h"
 
-#include <climits>
+#include "expression/expressions.h"
+
+#include <cstdio>
+#include <cstdlib>
 
 namespace omniruntime::compute {
 
@@ -72,6 +75,16 @@ bool ResolveDynamicFilterPushdownEnabled(const config::QueryConfig &queryConfig)
 // Returns ture if source nodes must run in a separate pipeline
 bool MustStartNewPipeline(int sourceId) { return sourceId != 0; }
 
+/// Spill key gate: INT / LONG / DATE32 / VARCHAR keys — accepts BOTH plain field keys (FIELD_E)
+/// and expression keys (cast / arithmetic / substr / ...). The WithExpr build & probe operators
+/// project every key expression into a materialized column BEFORE the sub-partitioner runs
+/// (OperatorUtil::CreateProjections + ProjectVectors), so what the spiller actually hashes is a
+/// real column and the only thing that matters here is the key's *return type* — not whether it
+/// is a bare field. Return type is gated against the set HashKeyColumn can hash
+/// (BOOLEAN/INT/LONG/DATE32/VARCHAR). DATE32 shares the int32 HashPrimitiveColumn path with OMNI_INT.
+/// No OMNI_CHAR: Spark normalizes char(N)/varchar(N) to StringType (CharVarcharUtils), so a char
+/// key reaches native as OMNI_VARCHAR. Target restore keeps one resident table slot;
+/// JoinSpillState serializes the projected build schema for expression keys.
 bool AreJoinSpillKeysSupported(const std::shared_ptr<const HashJoinNode> &joinNode)
 {
     auto keysOk = [](const std::vector<omniruntime::expressions::Expr *> &keys) {
@@ -82,6 +95,7 @@ bool AreJoinSpillKeysSupported(const std::shared_ptr<const HashJoinNode> &joinNo
             if (key == nullptr) {
                 return false;
             }
+            // Field or expression key alike — gate on the projected return type only.
             const auto id = key->GetReturnTypeId();
             if (id != omniruntime::type::OMNI_INT && id != omniruntime::type::OMNI_LONG &&
                 id != omniruntime::type::OMNI_DATE32 && id != omniruntime::type::OMNI_VARCHAR &&
@@ -94,6 +108,9 @@ bool AreJoinSpillKeysSupported(const std::shared_ptr<const HashJoinNode> &joinNo
     return keysOk(joinNode->LeftKeys()) && keysOk(joinNode->RightKeys());
 }
 
+/// V1 base: INNER and LEFT_SEMI. V2-A Step 1: LEFT/RIGHT Opposite
+/// (Gluten forces LEFT->buildRight, RIGHT->buildLeft).
+/// V2-A Step 2 (S2-1): FULL + SameSide LEFT/RIGHT (build = outer side) — SameSide/Full + visited.
 bool IsJoinSpillSupported(const std::shared_ptr<const HashJoinNode> &joinNode)
 {
     if (joinNode->IsNullAware()) {
@@ -112,10 +129,32 @@ bool IsJoinSpillSupported(const std::shared_ptr<const HashJoinNode> &joinNode)
     return AreJoinSpillKeysSupported(joinNode);
 }
 
-std::shared_ptr<omniruntime::op::Operator> createOperator(
-    OperatorFactory* factory, const std::shared_ptr<const PlanNode>& planNode)
+namespace {
+bool UseJoinSpillSubPartitions(const std::shared_ptr<const HashJoinNode> &joinNode,
+    const config::QueryConfig &queryConfig, const op::JoinSubPartitionConfig &subPartCfg)
 {
-    std::shared_ptr<omniruntime::op::Operator> operatorPtr(factory->CreateOperator());
+    // Broadcast joins do not create a JoinSpillState or partition their build input.
+    // Opening N table slots for them makes the probe route to unbuilt slots 1..N-1.
+    return !joinNode->IsBHJ() && joinNode->IsShuffle() && queryConfig.joinSpillEffective() && subPartCfg.IsEnabled() &&
+        IsJoinSpillSupported(joinNode);
+}
+} // namespace
+
+// Pool is threaded through from OmniTask::Next → LocalPlanner::plan(..., pool)
+// → planDetail(..., pool) → createOperator(..., pool).
+// The production JNI path (gluten WholeStageResultIterator → OmniTask::Next)
+// supplies the per-task pool decoded from nmmHandle; C++ unit-test scaffolds
+// that do not have a JNI handle pass nullptr and hit the no-pool path inside
+// individual operator factories.
+//
+// NOTE: OmniTask::Next() is the production JNI plan-exec path — gluten's
+// WholeStageResultIterator::Next() drives it. Passing nullptr unconditionally
+// causes a SIGSEGV when codegen .so's CreateFlatVector(pool, ...) dereferences it.
+std::shared_ptr<omniruntime::op::Operator> createOperator(
+    OperatorFactory* factory, const std::shared_ptr<const PlanNode>& planNode,
+    omniruntime::mem::OmniTaskMemoryPool* pool)
+{
+    std::shared_ptr<omniruntime::op::Operator> operatorPtr(factory->CreateOperator(pool));
     operatorPtr->setNoMoreInput(false);
     operatorPtr->SetPlanNodeId(planNode->Id());
     if (operatorPtr->operatorType().empty()) {
@@ -221,13 +260,19 @@ std::pair<OperatorFactory*, HashBuilderOperatorFactory*> createHashBuilderOperat
     const config::QueryConfig& queryConfig)
 {
     if (HasExprBuildKeys(joinNode)) {
+        // Target spill restores one sub-partition at a time into slot 0.
+        const int32_t hashTableCount = 1;
         auto hashBuilderWithExprOperatorFactory =
-            HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(joinNode, queryConfig);
+            HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(
+                joinNode, queryConfig, hashTableCount);
         auto hashBuilderOperatorFactory = hashBuilderWithExprOperatorFactory->GetHashBuilderOperatorFactory();
         return std::make_pair(hashBuilderWithExprOperatorFactory, hashBuilderOperatorFactory);
     } else {
+        const int32_t hashTableCount = 1;
+
+        /// Keep one resident table slot for the target's restore protocol.
         auto hashBuilderOperatorFactory =
-            HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(joinNode, 1);
+            HashBuilderOperatorFactory::CreateHashBuilderOperatorFactory(joinNode, hashTableCount);
         return std::make_pair(hashBuilderOperatorFactory, hashBuilderOperatorFactory);
     }
 }
@@ -238,7 +283,8 @@ void planDetail(
     std::vector<std::shared_ptr<OmniDriver>>* drivers,
     std::vector<OperatorFactory*>* factories,
     const config::QueryConfig& queryConfig,
-    std::shared_ptr<SplitsStore> splitsStore)
+    std::shared_ptr<SplitsStore> splitsStore,
+    omniruntime::mem::OmniTaskMemoryPool* pool)
 {
     OperatorFactory* factory = nullptr;
     if (!currentOperators) {
@@ -255,7 +301,8 @@ void planDetail(
         for (int32_t i = 0; i < sources.size(); ++i) {
             bool newPipeline = MustStartNewPipeline(i);
             planDetail(sources[i], newPipeline ? nullptr : currentOperators,
-                newPipeline ? &builderDrivers[i] : drivers, newPipeline ? nullptr : factories, queryConfig, splitsStore);
+                newPipeline ? &builderDrivers[i] : drivers, newPipeline ? nullptr : factories, queryConfig, splitsStore,
+                pool);
         }
     }
 
@@ -267,60 +314,109 @@ void planDetail(
 
         // Determine factory pair: either fresh build or cache-reuse for BHJ.
         std::pair<OperatorFactory*, op::HashBuilderOperatorFactory*> res;
+        std::shared_ptr<op::BroadcastCacheLeaseSlot> cacheLeaseSlot;
 
-        if (isBHJ && buildOnce && !htId.empty()) {
+        // Outer/full joins mutate per-row visited flags in the shared table.
+        // Dynamic filter generation also mutates cached table metadata. Keep
+        // the first cache rollout on read-only inner probes.
+        if (isBHJ && joinNode->IsInnerJoin() &&
+            !ResolveDynamicFilterPushdownEnabled(queryConfig) && buildOnce && !htId.empty()) {
             auto& cache = op::BroadcastHashTableCache::getInstance();
-            if (cache.tryClaimBuild(htId)) {
-                // This task wins the build race. Build normally, then publish to cache.
+            auto acquisition = cache.acquire(htId);
+            if (acquisition.builder != nullptr) {
+                cacheLeaseSlot = std::make_shared<op::BroadcastCacheLeaseSlot>();
                 res = createHashBuilderOperatorPairFactory(joinNode, queryConfig);
-                // Mark the factory so operators know to publish after build.
                 res.second->SetBroadcastHashTableId(htId);
+                res.second->SetCacheBuildTicket(std::move(acquisition.builder));
+                res.second->SetCacheLeaseSlot(cacheLeaseSlot);
+            } else if (acquisition.reader) {
+                cacheLeaseSlot = std::make_shared<op::BroadcastCacheLeaseSlot>();
+                cacheLeaseSlot->lease = std::move(acquisition.reader);
+                res = createHashBuilderFromCachedVariants(
+                    joinNode, queryConfig, cacheLeaseSlot->lease.get(), htId);
             } else {
-                // Another task is building (or already done). Wait for the cached table.
-                op::HashTableVariants* cachedVariants = cache.waitAndGet(htId);
-                if (cachedVariants != nullptr) {
-                    // Inject the pre-built hash table. No spill for BHJ.
-                    res = createHashBuilderFromCachedVariants(joinNode, queryConfig, cachedVariants, htId);
-                } else {
-                    // Fallback: cache entry was invalidated during wait; build from scratch.
-                    res = createHashBuilderOperatorPairFactory(joinNode, queryConfig);
-                    res.second->SetBroadcastHashTableId(htId);
-                    // Re-try claiming (will succeed if nobody else is trying now).
-                    cache.tryClaimBuild(htId);
-                }
+                // Shutdown has stopped cache admission. Build for this task only.
+                res = createHashBuilderOperatorPairFactory(joinNode, queryConfig);
             }
         } else {
             res = createHashBuilderOperatorPairFactory(joinNode, queryConfig);
         }
 
         auto subPartCfg = op::JoinSubPartitionConfig::FromQueryConfig(queryConfig);
-        const bool joinSpillEnabled = !isBHJ && joinNode->IsShuffle() && queryConfig.spillEnabled() &&
-            queryConfig.joinSpillEnabled() && IsJoinSpillSupported(joinNode);
+        const bool joinSpillV1Enabled = UseJoinSpillSubPartitions(joinNode, queryConfig, subPartCfg);
         std::shared_ptr<op::JoinSpillState> joinSpillState = nullptr;
-        if (joinSpillEnabled) {
+        if (joinSpillV1Enabled) {
+            // Spill/replay must use the schema HashBuilder actually writes: GetBuildTypes() is
+            // RightOutputType for field keys, or the projected schema (outputs + expr key columns)
+            // for expression keys. RightOutputType alone would omit expr keys and break restore.
             joinSpillState = std::make_shared<op::JoinSpillState>(queryConfig.SpillDir(),
                 res.second->GetBuildTypes(), *joinNode->LeftOutputType(), subPartCfg.numSubPartitions);
-            joinSpillState->SetInitialRuntimeLayout(op::JoinBuildRuntimeLayout::Single);
-            joinSpillState->SetSpillJoinType(joinNode->GetJoinType(), joinNode->GetBuildSide());
             auto spillConfig = std::make_shared<op::SparkSpillConfig>(true, queryConfig.SpillDir(),
                 queryConfig.maxSpillBytes(), INT32_MAX, queryConfig.memFraction(),
                 queryConfig.SpillWriteBufferSize(), queryConfig.SpillEnableCompress());
             res.second->SetSpillConfig(spillConfig);
         }
-        res.second->SetJoinSpillPolicy(joinSpillEnabled, subPartCfg);
+        // maxSpillRunRows is unused; pass 0. Pool-driven reclaim and the debug-only EOB force
+        // are independent knobs.
+        res.second->SetJoinSpillSubPartitionPolicy(joinSpillV1Enabled, /*maxSpillRunRows=*/0, subPartCfg,
+            queryConfig.passiveReclaimEffective(), queryConfig.forceBuildGroupSpillEffective(),
+            queryConfig.spillableReservationGrowthPct());
         res.second->SetJoinSpillState(joinSpillState);
         res.second->SetDynamicFilterPushdownEnabled(ResolveDynamicFilterPushdownEnabled(queryConfig));
+        // Without a join filter, semi/anti/existence probes only test key presence, so
+        // duplicate build rows are never read and need not stay resident.
+        const auto joinType = joinNode->GetJoinType();
+        if ((joinType == OMNI_JOIN_TYPE_LEFT_SEMI || joinType == OMNI_JOIN_TYPE_LEFT_ANTI ||
+                joinType == OMNI_JOIN_TYPE_EXISTENCE) &&
+            joinNode->Filter() == nullptr && !joinNode->IsNullAware() && !joinNode->IsBuildLeft()) {
+            res.second->SetDistinctBuild(true);
+        }
         if (isBHJ && !res.second->IsPrebuilt() && !HasExprBuildKeys(joinNode)) {
             res.second->SetBroadcastParallelBuildPolicy(
                 op::BroadcastParallelBuildPolicy::FromQueryConfig(queryConfig));
         }
+
+        // The target join spill protocol always hands off one resident slot. The pool
+        // layer only adds passive reclaim and reservation admission around that path.
+        if (joinSpillV1Enabled) {
+            res.second->SetJoinSpillHandoffSessionEnabled(true);
+            if (joinSpillState != nullptr) {
+                joinSpillState->SetInitialRuntimeLayout(op::JoinBuildRuntimeLayout::Single);
+            }
+        }
+        if (omniruntime::telemetry::IsReclaimVerboseEnabled()) {
+            std::fprintf(stderr,
+                "[OmniRuntime][JoinSpill][passive-reclaim] event=plan "
+                "planNodeId=%s spillEnabled=%d joinSpill=%d handoff=%d "
+                "passiveEnabled=%d passiveEffective=%d forceEob=%d prebuilt=%d isBHJ=%d "
+                "isShuffle=%d subPartitions=%u keysSupported=%d "
+                "v1=%d handoffSession=%d\n",
+                joinNode->Id().c_str(),
+                queryConfig.spillEnabled() ? 1 : 0,
+                queryConfig.joinSpillEnabled() ? 1 : 0,
+                queryConfig.joinSpillHandoffEnabled() ? 1 : 0,
+                queryConfig.passiveReclaimEnabled() ? 1 : 0,
+                queryConfig.passiveReclaimEffective() ? 1 : 0,
+                queryConfig.forceBuildGroupSpillEffective() ? 1 : 0,
+                res.second->IsPrebuilt() ? 1 : 0,
+                isBHJ ? 1 : 0,
+                joinNode->IsShuffle() ? 1 : 0,
+                subPartCfg.numSubPartitions,
+                AreJoinSpillKeysSupported(joinNode) ? 1 : 0,
+                joinSpillV1Enabled ? 1 : 0,
+                joinSpillV1Enabled ? 1 : 0);
+            std::fflush(stderr);
+        }
         auto builderDriver = builderDrivers[1][0];
-        builderDriver->operators()->emplace_back(createOperator(res.first, joinNode));
-        // Join spill: keep HashBuilder factory on the build driver so HT /
-        // buildTypes / buildHashCols stay valid until HashBuilder finishes.
-        // HashBuilder stays blocked until handoff Complete (FULL/SameSide:
-        // ProbeFinished only after LookupOuterJoin, via FinishFullTableProbeAfterOuter).
-        if (joinSpillEnabled) {
+        if (cacheLeaseSlot != nullptr) {
+            builderDriver->HoldLifetime(cacheLeaseSlot);
+        }
+        builderDriver->operators()->emplace_back(createOperator(res.first, joinNode, pool));
+        // With handoff, keep the HashBuilder factory on the build driver: operators hold a raw
+        // JoinSpillState* while the factory owns the shared_ptr; destroying the factory with the
+        // probe driver would free the state while build is still blocked on restore.
+        // Without spill/handoff, register on `factories` as other joins do (unchanged lifetime).
+        if (joinSpillV1Enabled) {
             builderDriver->operatorFactories()->emplace_back(res.first);
         } else {
             factories->emplace_back(res.first);
@@ -333,6 +429,9 @@ void planDetail(
             factory =
                 LookupJoinWithExprOperatorFactory::CreateLookupJoinWithExprOperatorFactory(joinNode, res.second, queryConfig);
         }
+        if (cacheLeaseSlot != nullptr) {
+            factory->HoldLifetime(cacheLeaseSlot);
+        }
     } else if (auto sortMergejoinNode = std::dynamic_pointer_cast<const MergeJoinNode>(planNode)) {
         auto streamedTableWithExprOperatorFactoryV2 =
             StreamedTableWithExprOperatorFactoryV2::CreateStreamedTableWithExprOperatorFactoryV2(
@@ -341,7 +440,7 @@ void planDetail(
             BufferedTableWithExprOperatorFactoryV2::CreateBufferedTableWithExprOperatorFactoryV2(
                 sortMergejoinNode, reinterpret_cast<int64_t>(streamedTableWithExprOperatorFactoryV2), queryConfig);
         auto builderDriver = builderDrivers[1][0];
-        builderDriver->operators()->emplace_back(createOperator(bufferedTableWithExprOperatorFactoryV2, sortMergejoinNode));
+        builderDriver->operators()->emplace_back(createOperator(bufferedTableWithExprOperatorFactoryV2, sortMergejoinNode, pool));
         factories->emplace_back(bufferedTableWithExprOperatorFactoryV2);
         factory = streamedTableWithExprOperatorFactoryV2;
     } else if (auto nestedLoopJoinNode = std::dynamic_pointer_cast<const NestedLoopJoinNode>(planNode)) {
@@ -350,14 +449,14 @@ void planDetail(
         auto nestedLoopJoinLookupWrapperOperatorFactory =
             NestLoopJoinLookupWrapperOperatorFactory::CreateNestLoopJoinLookupWrapperOperatorFactory(nestedLoopJoinNode, nestedLoopJoinBuilderOperatorFactory, queryConfig);
         auto builderDriver = builderDrivers[1][0];
-        builderDriver->operators()->emplace_back(createOperator(nestedLoopJoinBuilderOperatorFactory, nestedLoopJoinNode));
+        builderDriver->operators()->emplace_back(createOperator(nestedLoopJoinBuilderOperatorFactory, nestedLoopJoinNode, pool));
         factories->emplace_back(nestedLoopJoinBuilderOperatorFactory);
         factory = nestedLoopJoinLookupWrapperOperatorFactory;
     } else {
         factory = createOperatorFactory(planNode, queryConfig, splitsStore);
     }
 
-    auto currentOperator = createOperator(factory, planNode);
+    auto currentOperator = createOperator(factory, planNode, pool);
     currentOperator->setInputOperatorCnt(sources.size());
     currentOperators->emplace_back(currentOperator);
     factories->emplace_back(factory);
@@ -402,14 +501,16 @@ void LocalPlanner::plan(
     const PlanFragment& fragment,
     std::vector<std::shared_ptr<OmniDriver>>* drivers,
     const config::QueryConfig& queryConfig,
-    std::shared_ptr<SplitsStore> splitsStore)
+    std::shared_ptr<SplitsStore> splitsStore,
+    omniruntime::mem::OmniTaskMemoryPool* pool)
 {
     planDetail(fragment.planNode,
         nullptr,
         drivers,
         nullptr,
         queryConfig,
-        splitsStore);
+        splitsStore,
+        pool);
     (*drivers)[0]->outputDriver = true;
 
     buildOperatorStats(drivers);

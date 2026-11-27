@@ -37,8 +37,9 @@ uint32_t HashUtil::HashArraySize(uint32_t expected, float f)
     }
 }
 
-std::unique_ptr<omniruntime::vec::Vector<int32_t>> HashUtil::ComputePartitionIds(
-        std::vector<omniruntime::vec::BaseVector *> &vecs, int32_t partitionNum, int32_t rowCount)
+std::unique_ptr<::omniruntime::vec::Vector<int32_t>> HashUtil::ComputePartitionIds(
+        std::vector<::omniruntime::vec::BaseVector *> &vecs, int32_t partitionNum, int32_t rowCount,
+        ::omniruntime::mem::OmniTaskMemoryPool *taskPool)
 {
     auto colCount = vecs.size();
     std::vector<uint32_t> partitionIds(rowCount, MM3HASH_SEED);
@@ -91,7 +92,12 @@ std::unique_ptr<omniruntime::vec::Vector<int32_t>> HashUtil::ComputePartitionIds
                 throw omniruntime::exception::OmniException("UNSUPPORTED_ERROR", omniExceptionInfo);
         }
     }
-    auto ret = std::make_unique<omniruntime::vec::Vector<int>>(rowCount, type::OMNI_INT);
+    // Use the pool-bound 3-arg ctor when a per-task pool was supplied (production
+    // gluten path via the JNI helper). Falls back to the legacy 2-arg ctor for
+    // callers that have not been migrated (tests / null-pool case).
+    auto ret = (taskPool != nullptr)
+        ? std::make_unique<omniruntime::vec::Vector<int>>(rowCount, taskPool, type::OMNI_INT)
+        : std::make_unique<omniruntime::vec::Vector<int>>(rowCount, type::OMNI_INT);
 
     for (int32_t row = 0; row < rowCount; row++) {
         ret->SetValue(row, Pmod(partitionIds[row], partitionNum));

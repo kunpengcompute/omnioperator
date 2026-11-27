@@ -141,7 +141,7 @@ public:
         }
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
 
         auto *resultVector = reinterpret_cast<Vector<double> *>(result);

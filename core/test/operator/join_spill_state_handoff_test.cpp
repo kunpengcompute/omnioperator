@@ -3,7 +3,9 @@
  * Description: Compact JoinSpillState coverage for the upstream branch.
  */
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <memory>
 #include <unistd.h>
@@ -26,6 +28,39 @@ using omniruntime::OMNI_JOIN_TYPE_FULL;
 using omniruntime::OMNI_JOIN_TYPE_INNER;
 using omniruntime::OMNI_JOIN_TYPE_LEFT;
 using omniruntime::OMNI_JOIN_TYPE_RIGHT;
+
+TEST(JoinSpillCleanupTest, UnreadFilesAreRemovedWithoutTouchingOtherSessions)
+{
+    char rootTemplate[] = "/tmp/omni-join-cleanup-XXXXXX";
+    const char *created = mkdtemp(rootTemplate);
+    ASSERT_NE(created, nullptr);
+    const std::filesystem::path root(created);
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code error; std::filesystem::remove_all(path, error); }
+    } cleanup{root};
+    DataTypes types({LongType(), LongType()});
+    auto first = std::make_unique<JoinSpillState>(root.string(), types, types, 4);
+    auto second = std::make_unique<JoinSpillState>(root.string(), types, types, 4);
+    const auto firstDir = std::filesystem::path(first->ProbeSubPartitionDir(0, 0));
+    const auto secondDir = std::filesystem::path(second->ProbeSubPartitionDir(0, 0));
+    const auto firstSession = firstDir.parent_path().parent_path().parent_path();
+    const auto secondSession = secondDir.parent_path().parent_path().parent_path();
+    ASSERT_NE(firstSession, secondSession);
+    std::ofstream(firstDir / "unread.bin") << "unread spill";
+    std::ofstream(secondDir / "unread.bin") << "other session";
+    std::ofstream(root / "keep.bin") << "parent-owned";
+    std::filesystem::create_directory_symlink(secondSession, firstDir / "other-session-link");
+    first->AbandonProbe();
+    first.reset();
+    EXPECT_FALSE(std::filesystem::exists(firstSession));
+    EXPECT_TRUE(std::filesystem::exists(secondDir / "unread.bin"));
+    EXPECT_TRUE(std::filesystem::exists(root / "keep.bin"));
+    second.reset();
+    EXPECT_FALSE(std::filesystem::exists(secondSession));
+    EXPECT_TRUE(std::filesystem::exists(root / "keep.bin"));
+}
+
 namespace {
 DataTypes LongTypes()
 {

@@ -133,7 +133,7 @@ TEST(BatchFunctionTest, IntArith)
     int32_t right[2] = { -20, 20 };
     int32_t expect[2];
     bool isNull[2] = { false, false };
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
 
     expect[0] = -30;
@@ -210,7 +210,7 @@ TEST(BatchFunctionTest, LongArith)
     int64_t right[2] = { -20L, 20L };
     int64_t expect[2];
     bool isNull[2] = { false, false };
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
 
     expect[0] = -30L;
@@ -467,7 +467,7 @@ TEST(BatchFunctionTest, Decimal128Cmp)
 TEST(BatchFunctionTest, CastDecimalToDecimal)
 {
     int32_t rowCnt = 2;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     int64_t decimal64Val[2] = { 1234567L, INT64_MAX };
@@ -528,7 +528,7 @@ TEST(BatchFunctionTest, CastDecimalToDecimal)
 TEST(BatchFunctionTest, CastBasicTypeToDecimal)
 {
     int32_t rowCnt = 1;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t intVal[1] = { 1234567 };
     int64_t longVal[1] = { INT32_MAX };
@@ -579,7 +579,7 @@ TEST(BatchFunctionTest, CastBasicTypeToDecimal)
 TEST(BatchFunctionTest, CastDecimalToBasicType)
 {
     int32_t rowCnt = 1;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t decimal64Val[1] = { 1234567 };
     Decimal128 decimal128Val[1];
@@ -624,7 +624,7 @@ TEST(BatchFunctionTest, CastDecimalToBasicType)
 TEST(BatchFunctionTest, MakeDecimal)
 {
     int32_t rowCnt = 1;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int64_t col[1] = { 12345678L };
     int64_t output[1];
@@ -646,7 +646,7 @@ TEST(BatchFunctionTest, MakeDecimal)
 TEST(BatchFunctionTest, RoundDecimal)
 {
     int32_t rowCnt = 2;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     bool isNull[2] = {false, true};
     int32_t round[2] = {0, 0};
@@ -687,7 +687,7 @@ TEST(BatchFunctionTest, RoundDecimal)
 TEST(BatchFunctionTest, DecimalAdd)
 {
     int32_t rowCnt = 2;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     bool isAnyNull[2] = { false, false };
     Decimal128 output128[2];
@@ -783,7 +783,7 @@ TEST(BatchFunctionTest, DecimalAddRetNull)
 TEST(BatchFunctionTest, DecimalSubtract)
 {
     int32_t rowCnt = 2;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     bool isAnyNull[2] = { false, false };
     Decimal128 output128[2];
@@ -879,7 +879,7 @@ TEST(BatchFunctionTest, DecimalSubtractRetNull)
 TEST(BatchFunctionTest, DecimalMultiply)
 {
     int32_t rowCnt = 2;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     bool isAnyNull[2] = { false, false };
     Decimal128 output128[2];
@@ -979,7 +979,7 @@ TEST(BatchFunctionTest, DecimalMultiplyRetNull)
 TEST(BatchFunctionTest, DecimalDivide)
 {
     int32_t rowCnt = 2;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     bool isAnyNull[2] = { false, false };
     Decimal128 output128[2];
@@ -1109,7 +1109,7 @@ TEST(BatchFunctionTest, DecimalDivideRetNull)
 TEST(BatchFunctionTest, DecimalModulus)
 {
     int32_t rowCnt = 2;
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     bool isAnyNull[2] = { false, false };
     int64_t output64[2];
@@ -1292,7 +1292,7 @@ TEST(BatchFunctionTest, SpiltIndex)
 
 TEST(BatchFunctionTest, SubstrZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1320,7 +1320,7 @@ TEST(BatchFunctionTest, SubstrZh)
 
 TEST(BatchFunctionTest, SubstrZhWhenStartIndexEqualsZero)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1348,7 +1348,7 @@ TEST(BatchFunctionTest, SubstrZhWhenStartIndexEqualsZero)
 
 TEST(BatchFunctionTest, SubstrCharZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     int32_t width = 37;
@@ -1378,7 +1378,7 @@ TEST(BatchFunctionTest, SubstrCharZh)
 
 TEST(BatchFunctionTest, SubstrCharZhWhenStartIndexEqualsZero)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     int32_t width = 37;
@@ -1408,7 +1408,7 @@ TEST(BatchFunctionTest, SubstrCharZhWhenStartIndexEqualsZero)
 
 TEST(BatchFunctionTest, SubstrWithStartZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1436,7 +1436,7 @@ TEST(BatchFunctionTest, SubstrWithStartZh)
 
 TEST(BatchFunctionTest, SubstrWithStartZhWhenStartIndexEqualsZero)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1465,7 +1465,7 @@ TEST(BatchFunctionTest, SubstrWithStartZhWhenStartIndexEqualsZero)
 TEST(BatchFunctionTest, SubstrWithStartZhForSpark)
 {
     ConfigUtil::SetNegativeStartIndexOutOfBoundsRule(NegativeStartIndexOutOfBoundsRule::INTERCEPT_FROM_BEYOND);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 h";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1495,7 +1495,7 @@ TEST(BatchFunctionTest, SubstrWithStartZhForSpark)
 TEST(BatchFunctionTest, SubstrWithStartZhForSparkWhenStartIndexEqualsZero)
 {
     ConfigUtil::SetZeroStartIndexSupportRule(ZeroStartIndexSupportRule::IS_SUPPORT);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 h";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1525,7 +1525,7 @@ TEST(BatchFunctionTest, SubstrWithStartZhForSparkWhenStartIndexEqualsZero)
 TEST(BatchFunctionTest, SubstrWithStartEnForSpark)
 {
     ConfigUtil::SetNegativeStartIndexOutOfBoundsRule(NegativeStartIndexOutOfBoundsRule::INTERCEPT_FROM_BEYOND);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "apple";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1555,7 +1555,7 @@ TEST(BatchFunctionTest, SubstrWithStartEnForSpark)
 TEST(BatchFunctionTest, SubstrWithStartEnForSparkWhenStartIndexEqualsZero)
 {
     ConfigUtil::SetZeroStartIndexSupportRule(ZeroStartIndexSupportRule::IS_SUPPORT);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "apple";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1585,7 +1585,7 @@ TEST(BatchFunctionTest, SubstrWithStartEnForSparkWhenStartIndexEqualsZero)
 TEST(BatchFunctionTest, SubstrWithZhForSpark)
 {
     ConfigUtil::SetNegativeStartIndexOutOfBoundsRule(NegativeStartIndexOutOfBoundsRule::INTERCEPT_FROM_BEYOND);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 h";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1616,7 +1616,7 @@ TEST(BatchFunctionTest, SubstrWithZhForSpark)
 TEST(BatchFunctionTest, SubstrWithZhForSparkWhenStartIndexEqualsZero)
 {
     ConfigUtil::SetZeroStartIndexSupportRule(ZeroStartIndexSupportRule::IS_SUPPORT);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 h";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1647,7 +1647,7 @@ TEST(BatchFunctionTest, SubstrWithZhForSparkWhenStartIndexEqualsZero)
 TEST(BatchFunctionTest, SubstrWithEnForSpark)
 {
     ConfigUtil::SetNegativeStartIndexOutOfBoundsRule(NegativeStartIndexOutOfBoundsRule::INTERCEPT_FROM_BEYOND);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "apple";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1678,7 +1678,7 @@ TEST(BatchFunctionTest, SubstrWithEnForSpark)
 TEST(BatchFunctionTest, SubstrWithEnForSparkWhenStartIndexEqualsZero)
 {
     ConfigUtil::SetZeroStartIndexSupportRule(ZeroStartIndexSupportRule::IS_SUPPORT);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "apple";
     auto strLen = static_cast<int32_t>(str.length());
@@ -1708,7 +1708,7 @@ TEST(BatchFunctionTest, SubstrWithEnForSparkWhenStartIndexEqualsZero)
 
 TEST(BatchFunctionTest, SubstrCharWithStartZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     auto width = static_cast<int32_t>(str.length());
@@ -1737,7 +1737,7 @@ TEST(BatchFunctionTest, SubstrCharWithStartZh)
 
 TEST(BatchFunctionTest, SubstrCharWithStartZhWhenStartIndexEqualsZero)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::string str = "时欧基乌斯侧后解 hello! 回复哦黑色的and magic粉色的圣诞袜";
     auto width = static_cast<int32_t>(str.length());
@@ -1840,7 +1840,7 @@ TEST(BatchFunctionTest, LikeCharZh)
 
 TEST(BatchFunctionTest, ReplaceStrStrStrZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> str { "apple", "粉色的圣诞袜", "粉色de圣诞袜", "粉色de圣诞袜", "粉色de圣诞袜",
         "",      "粉色de圣诞袜" };
@@ -1877,7 +1877,7 @@ TEST(BatchFunctionTest, ReplaceStrStrStrZh)
 
 TEST(BatchFunctionTest, ReplaceWithoutRepZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> str { "apple", "apple", "粉色的圣诞袜", "粉色的圣诞袜", "粉色de圣诞袜", "粉色de圣诞袜" };
     std::vector<int32_t> strLen { 5, 5, 18, 18, 17, 17 };
@@ -1905,7 +1905,7 @@ TEST(BatchFunctionTest, ReplaceWithoutRepZh)
 
 TEST(BatchFunctionTest, ConcatStrStrZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> ap { "你是Chinese?", "", "pink圣诞袜" };
     std::vector<int32_t> apLen { 14, 0, 13 };
@@ -1930,7 +1930,7 @@ TEST(BatchFunctionTest, ConcatStrStrZh)
 
 TEST(BatchFunctionTest, ConcatCharCharZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> ap { "粉色de圣诞袜", "*黑色*",      "Hei你好吗",    "Oh我很好",
         "Hei你好吗   ", "Oh我很好  ",  "   Hei你好吗", "   Oh我很好",
@@ -1984,7 +1984,7 @@ TEST(BatchFunctionTest, ConcatCharCharZh)
 
 TEST(BatchFunctionTest, ConcatCharStrZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> ap { "*你是谁呢*", "我很OK", "*你是谁呢*", "我很OK", "*你是谁呢*", "" };
     std::vector<int32_t> aWidth { 6, 10, 10 };
@@ -2018,7 +2018,7 @@ TEST(BatchFunctionTest, ConcatCharStrZh)
 
 TEST(BatchFunctionTest, ConcatStrCharZh)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> ap { "粉色de圣诞袜", "*黑色*", "粉色de圣诞袜", "*黑色*", "粉色de圣诞袜   ", "" };
     std::vector<std::string> bp { "*黑色*", "粉色de圣诞袜", "*黑色*", "粉色de圣诞袜", "", "粉色de圣诞袜   " };
@@ -2052,7 +2052,7 @@ TEST(BatchFunctionTest, ConcatStrCharZh)
 
 TEST(BatchFunctionTest, ConcatStrStrRetNull)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> ap { "你是Chinese?", "", "pink圣诞袜" };
     std::vector<int32_t> apLen { 14, 0, 13 };
@@ -2077,7 +2077,7 @@ TEST(BatchFunctionTest, ConcatStrStrRetNull)
 
 TEST(BatchFunctionTest, ConcatCharCharRetNull)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> ap { "粉色de圣诞袜", "*黑色*",      "Hei你好吗",    "Oh我很好",
         "Hei你好吗   ", "Oh我很好  ",  "   Hei你好吗", "   Oh我很好",
@@ -2131,7 +2131,7 @@ TEST(BatchFunctionTest, ConcatCharCharRetNull)
 
 TEST(BatchFunctionTest, ConcatCharStrRetNull)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> ap { "*你是谁呢*", "我很OK", "*你是谁呢*", "我很OK", "*你是谁呢*", "" };
     std::vector<int32_t> aWidth { 6, 10, 10 };
@@ -2165,7 +2165,7 @@ TEST(BatchFunctionTest, ConcatCharStrRetNull)
 
 TEST(BatchFunctionTest, ConcatStrCharRetNull)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> ap { "粉色de圣诞袜", "*黑色*", "粉色de圣诞袜", "*黑色*", "粉色de圣诞袜   ", "" };
     std::vector<std::string> bp { "*黑色*", "粉色de圣诞袜", "*黑色*", "粉色de圣诞袜", "", "粉色de圣诞袜   " };
@@ -2199,7 +2199,7 @@ TEST(BatchFunctionTest, ConcatStrCharRetNull)
 
 TEST(BatchFunctionTest, CastStrWithDiffWidths)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> srcStr { "cast乌s斯侧后解", "cast乌s斯解", "cast乌s斯侧后解", "cast乌s" };
     std::vector<int32_t> srcWidth { 18, 18 };
@@ -2227,7 +2227,7 @@ TEST(BatchFunctionTest, CastStrWithDiffWidths)
 
 TEST(BatchFunctionTest, CastStrWithDiffWidthsRetNull)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> srcStr { "cast乌s斯侧后解", "cast乌s斯解", "cast乌s斯侧后解", "cast乌s" };
     std::vector<int32_t> srcWidth { 18, 18 };
@@ -2324,7 +2324,7 @@ TEST(BatchFunctionTest, BatchCastStringToDate)
 {
     // year-month-day
     ConfigUtil::SetStringToDateFormatRule(StringToDateFormatRule::ALLOW_REDUCED_PRECISION);
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> srcStr { "1970-01-03", "1969-12-31", "1453-05-29", "   1453-05-29   ",
         "   1 453-05-29   " };
@@ -2350,7 +2350,7 @@ TEST(BatchFunctionTest, BatchCastStringToDate)
 
 TEST(BatchFunctionTest, BatchCastStringToInt)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     std::vector<std::string> srcStr = { "2147483648",
         "2123123123147483648",
@@ -2404,7 +2404,7 @@ TEST(BatchFunctionTest, BatchCastStringToInt)
 
 TEST(BatchFunctionTest, BatchCastStringToLong)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     std::vector<std::string> srcStr { "23423",
@@ -2627,7 +2627,7 @@ TEST(BatchFunctionTest, BatchFromUnixTimeRetNull)
 {
     const int32_t rowCnt = 4;
     bool outputNull[rowCnt];
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int64_t timestamps[rowCnt] = {615999600, 488822400, 0, -100};
     std::string fmtStrs[] = {"%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"};
@@ -2738,7 +2738,7 @@ TEST(BatchFunctionTest, BatchGreatest)
 
 TEST(BatchFunctionTest, BatchGreatestDecimal64)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int64_t xValue[] = {127, 0, 128, 0, 12800};
     bool xIsNull[] = {false, true, false, true, false};
@@ -2772,7 +2772,7 @@ TEST(BatchFunctionTest, BatchGreatestDecimal64)
 
 TEST(BatchFunctionTest, BatchGreatestDecimal128)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     Decimal128 xValue[] = {Decimal128(0, 127), Decimal128(0, 0), Decimal128(0, 128), Decimal128(0, 0),
                            Decimal128(0, 12800)};
@@ -2834,7 +2834,7 @@ TEST(BatchFunctionTest, BatchEmptyToNull)
 
 TEST(BatchFunctionTest, BatchStaticInvokeVarcharTypeWriteSideCheck)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t  limit = 4;
     std::vector<std::string> srcStrVec{ "abc", "abcd", "abcde", "abc ", "abcd ", "abced ", "测试超过长度", "测试长度"};
@@ -2866,7 +2866,7 @@ TEST(BatchFunctionTest, BatchStaticInvokeVarcharTypeWriteSideCheck)
 
 TEST(BatchFunctionTest, BatchStaticInvokeCharReadPadding)
 {
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     auto contextPtr = reinterpret_cast<int64_t>(context);
     int32_t  limit = 4;
     std::vector<std::string> srcStrVec{ "1", "12", "123", "1234", "12345", "123456", "测试超过长度", "测试"};

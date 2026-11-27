@@ -31,7 +31,7 @@ using omniruntime::compute::OmniDriver;
 class TestPipeOperator : public omniruntime::op::Operator
 {
 public:
-    TestPipeOperator() : omniruntime::op::Operator() {}
+    TestPipeOperator() : omniruntime::op::Operator(nullptr) {}
 
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override
     {
@@ -52,7 +52,7 @@ public:
 class TestSourceOperator : public omniruntime::op::Operator
 {
 public:
-    TestSourceOperator() : omniruntime::op::Operator() {}
+    TestSourceOperator() : omniruntime::op::Operator(nullptr) {}
 
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override
     {
@@ -73,7 +73,7 @@ public:
 class TestSinkOperator : public omniruntime::op::Operator
 {
 public:
-    TestSinkOperator() : omniruntime::op::Operator() {}
+    TestSinkOperator() : omniruntime::op::Operator(nullptr) {}
 
     bool needsInput() override
     {

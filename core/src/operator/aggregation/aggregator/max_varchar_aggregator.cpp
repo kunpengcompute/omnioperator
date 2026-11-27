@@ -170,7 +170,7 @@ void MaxVarcharAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchemaInternal(VectorBa
 {
     int rowCount = originVector->GetSize();
     auto maxVector = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(
-            VectorHelper::CreateFlatVector(OUT_ID, rowCount));
+            VectorHelper::CreateFlatVector(this->pool_, OUT_ID, rowCount));
     auto vector = reinterpret_cast<T *>(originVector);
     for (int index = 0; index < rowCount; ++index) {
         if ((*nullMap)[index]) {

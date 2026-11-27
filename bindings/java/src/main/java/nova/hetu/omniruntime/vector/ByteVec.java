@@ -18,6 +18,10 @@ public class ByteVec extends FixedWidthVec {
         super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, ByteDataType.BYTE);
     }
 
+    public ByteVec(int size, long nmmHandle) {
+        super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, ByteDataType.BYTE, nmmHandle);
+    }
+
     public ByteVec(long nativeVector) {
         super(nativeVector, ByteDataType.BYTE, BYTES);
     }

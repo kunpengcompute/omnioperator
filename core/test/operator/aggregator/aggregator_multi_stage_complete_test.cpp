@@ -127,7 +127,7 @@ static void RunAggregatorTest(std::unique_ptr<AggregatorTester> tester, const bo
 
     op::Operator *aggPartial1;
     try {
-        aggPartial1 = partialFactory->CreateOperator();
+        aggPartial1 = partialFactory->CreateOperator(nullptr);
     } catch (OmniException &e) {
         if (!isSupported) {
             return;
@@ -138,7 +138,7 @@ static void RunAggregatorTest(std::unique_ptr<AggregatorTester> tester, const bo
 
     op::Operator *aggPartial2;
     try {
-        aggPartial2 = partialFactory->CreateOperator();
+        aggPartial2 = partialFactory->CreateOperator(nullptr);
     } catch (OmniException &e) {
         op::Operator::DeleteOperator(aggPartial1);
         if (!isSupported) {
@@ -150,7 +150,7 @@ static void RunAggregatorTest(std::unique_ptr<AggregatorTester> tester, const bo
 
     op::Operator *aggFinal;
     try {
-        aggFinal = finalFactory->CreateOperator();
+        aggFinal = finalFactory->CreateOperator(nullptr);
     } catch (OmniException &e) {
         op::Operator::DeleteOperator(aggPartial1);
         op::Operator::DeleteOperator(aggPartial2);
@@ -344,7 +344,7 @@ static void RunAggregatorTestWithAdaptivePartialAgg(std::unique_ptr<AggregatorTe
 
     op::Operator *aggPartial1;
     try {
-        aggPartial1 = partialFactory->CreateOperator();
+        aggPartial1 = partialFactory->CreateOperator(nullptr);
     } catch (OmniException &e) {
         if (!isSupported) {
             return;
@@ -355,7 +355,7 @@ static void RunAggregatorTestWithAdaptivePartialAgg(std::unique_ptr<AggregatorTe
 
     op::Operator *aggFinal;
     try {
-        aggFinal = finalFactory->CreateOperator();
+        aggFinal = finalFactory->CreateOperator(nullptr);
     } catch (OmniException &e) {
         op::Operator::DeleteOperator(aggPartial1);
         if (!isSupported) {

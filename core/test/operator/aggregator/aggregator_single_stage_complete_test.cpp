@@ -425,7 +425,7 @@ static void RunAggregatorTest(std::unique_ptr<AggregatorTester> tester, const bo
 
     op::Operator *agg;
     try {
-        agg = factory->CreateOperator();
+        agg = factory->CreateOperator(nullptr);
     } catch (OmniException &e) {
         if (!isSupported) {
             return;

@@ -246,7 +246,7 @@ template <type::DataTypeId COL2_ID>
 void MaxByComplexAggregator<COL2_ID>::AlignAggSchema(VectorBatch *result, VectorBatch *inputVecBatch)
 {
     MinMaxByComplexAlignAggSchema<COL2_ID>(result, inputVecBatch, channels, inputRaw, targetColTypeId_,
-        targetColDataType_);
+        targetColDataType_, this->pool_);
 }
 
 template <type::DataTypeId COL2_ID>
@@ -254,7 +254,7 @@ void MaxByComplexAggregator<COL2_ID>::AlignAggSchemaWithFilter(VectorBatch *resu
     const int32_t filterIndex)
 {
     MinMaxByComplexAlignAggSchemaWithFilter<COL2_ID>(result, inputVecBatch, channels, inputRaw, filterIndex,
-        targetColTypeId_, targetColDataType_);
+        targetColTypeId_, targetColDataType_, this->pool_);
 }
 
 template <type::DataTypeId COL2_ID>
@@ -264,7 +264,7 @@ void MaxByComplexAggregator<COL2_ID>::ProcessAlignAggSchema(VectorBatch *result,
     (void)nullMap;
     (void)aggFilter;
     if (originVector == nullptr) {
-        MinMaxByComplexAlignAppendEmptyPartial2(result, COL2_ID, targetColDataType_);
+        MinMaxByComplexAlignAppendEmptyPartial2(result, COL2_ID, targetColDataType_, this->pool_);
     }
 }
 

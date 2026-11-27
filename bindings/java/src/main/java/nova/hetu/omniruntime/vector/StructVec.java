@@ -18,12 +18,23 @@ public class StructVec extends ComplexVec {
     private Vec[] children;
 
     public StructVec(StructDataType type, int size) {
-        this(type, size, false);
+        this(type, size, false, 0L);
     }
 
     public StructVec(StructDataType type, int size, boolean isEmpty) {
-        this(isEmpty ? newEmptyComplexVectorNative(size, OMNI_ENCODING_STRUCT.ordinal(), type.getFieldTypes())
-                : newComplexVectorNative(size, OMNI_ENCODING_STRUCT.ordinal(), type.getFieldTypes()), type, size, isEmpty);
+        this(type, size, isEmpty, 0L);
+    }
+
+    // Pool-aware ctors. nmmHandle is the per-task OmniTaskMemoryPool address so the
+    // complex wrapper's top-level validity buffer is pool-accounted (0L = no pool).
+    // Mirrors Vec's nmmHandle convention.
+    public StructVec(StructDataType type, int size, long nmmHandle) {
+        this(type, size, false, nmmHandle);
+    }
+
+    public StructVec(StructDataType type, int size, boolean isEmpty, long nmmHandle) {
+        this(isEmpty ? newEmptyComplexVectorNative(size, OMNI_ENCODING_STRUCT.ordinal(), type.getFieldTypes(), nmmHandle)
+                : newComplexVectorNative(size, OMNI_ENCODING_STRUCT.ordinal(), type.getFieldTypes(), nmmHandle), type, size, isEmpty);
     }
     
     public StructVec(long nativeVector, StructDataType type) {

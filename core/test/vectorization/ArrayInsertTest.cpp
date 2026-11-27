@@ -52,7 +52,7 @@ TEST_F(ArrayInsertTest, InsertIntAtFront)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -100,7 +100,7 @@ TEST_F(ArrayInsertTest, InsertIntAtMiddle)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -145,7 +145,7 @@ TEST_F(ArrayInsertTest, InsertPosExceedsSize)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -191,7 +191,7 @@ TEST_F(ArrayInsertTest, NegativePosition)
             new LiteralExpr(false, boolType)
         }, arrayType);
 
-        auto context = new ExecutionContext();
+        auto context = new ExecutionContext(4096, nullptr);
         context->SetResultRowSize(rowSize);
 
         ExprEval e(input, context);
@@ -227,7 +227,7 @@ TEST_F(ArrayInsertTest, NegativePosition)
             new LiteralExpr(false, boolType)
         }, arrayType);
 
-        auto context = new ExecutionContext();
+        auto context = new ExecutionContext(4096, nullptr);
         context->SetResultRowSize(rowSize);
 
         ExprEval e(input, context);
@@ -273,7 +273,7 @@ TEST_F(ArrayInsertTest, NegativePositionLegacy)
         new LiteralExpr(true, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -318,7 +318,7 @@ TEST_F(ArrayInsertTest, NegativePosExtendsLeft)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -362,7 +362,7 @@ TEST_F(ArrayInsertTest, NullItemInsert)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -408,7 +408,7 @@ TEST_F(ArrayInsertTest, MultipleRows)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -461,7 +461,7 @@ TEST_F(ArrayInsertTest, DoubleArrayInsert)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -508,7 +508,7 @@ TEST_F(ArrayInsertTest, FloatArrayInsert)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -554,7 +554,7 @@ TEST_F(ArrayInsertTest, LongArrayInsert)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -600,7 +600,7 @@ TEST_F(ArrayInsertTest, InsertAtEnd)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -645,7 +645,7 @@ TEST_F(ArrayInsertTest, InsertIntoEmptyArray)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -688,7 +688,7 @@ TEST_F(ArrayInsertTest, NegativePosExtendsLeftLegacy)
         new LiteralExpr(true, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -748,7 +748,7 @@ TEST_F(ArrayInsertTest, InsertWithColumnItem)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(vectorBatch, context);
@@ -797,7 +797,7 @@ TEST_F(ArrayInsertTest, ShortArrayInsert)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -843,7 +843,7 @@ TEST_F(ArrayInsertTest, ByteArrayInsert)
         new LiteralExpr(false, boolType)
     }, arrayType);
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

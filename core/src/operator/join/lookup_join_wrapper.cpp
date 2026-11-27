@@ -31,17 +31,19 @@ LookupJoinWrapperOperatorFactory *LookupJoinWrapperOperatorFactory::CreateLookup
     return new LookupJoinWrapperOperatorFactory(*lookupJoinWithExprOperatorFactory, *lookupOuterJoinWithExprOperatorFactory, isNeedOuterJoin);
 }
 
-Operator *LookupJoinWrapperOperatorFactory::CreateOperator()
+Operator *LookupJoinWrapperOperatorFactory::CreateOperator(mem::OmniTaskMemoryPool *pool)
 {
-    auto lookupJoinWithExprOperator = dynamic_cast<LookupJoinWithExprOperator*>(lookupJoinWithExprOperatorFactory->CreateOperator());
-    auto lookupOuterJoinWithExprOperator = dynamic_cast<LookupOuterJoinWithExprOperator*>(lookupOuterJoinWithExprOperatorFactory->CreateOperator());
-    auto pLookupJoinWrapperOperator = new LookupJoinWrapperOperator(*lookupJoinWithExprOperator, *lookupOuterJoinWithExprOperator, isNeedOuterJoin);
+    auto lookupJoinWithExprOperator = dynamic_cast<LookupJoinWithExprOperator*>(lookupJoinWithExprOperatorFactory->CreateOperator(pool));
+    auto lookupOuterJoinWithExprOperator = dynamic_cast<LookupOuterJoinWithExprOperator*>(lookupOuterJoinWithExprOperatorFactory->CreateOperator(pool));
+    auto pLookupJoinWrapperOperator = new LookupJoinWrapperOperator(pool, *lookupJoinWithExprOperator, *lookupOuterJoinWithExprOperator, isNeedOuterJoin);
     return pLookupJoinWrapperOperator;
 }
 
-LookupJoinWrapperOperator::LookupJoinWrapperOperator(LookupJoinWithExprOperator &lookupJoinWithExprOperator,
+LookupJoinWrapperOperator::LookupJoinWrapperOperator(mem::OmniTaskMemoryPool *pool,
+    LookupJoinWithExprOperator &lookupJoinWithExprOperator,
     LookupOuterJoinWithExprOperator &lookupOuterJoinWithExprOperator, bool isNeedOuterJoin)
-    : lookupOuterJoinWithExprOperator(&lookupOuterJoinWithExprOperator),
+    : Operator(pool),
+      lookupOuterJoinWithExprOperator(&lookupOuterJoinWithExprOperator),
       lookupJoinWithExprOperator(&lookupJoinWithExprOperator),
       isNeedOuterJoin(isNeedOuterJoin)
 {

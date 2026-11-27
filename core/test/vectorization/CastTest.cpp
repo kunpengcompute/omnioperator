@@ -98,7 +98,7 @@ public:
     
     template<typename T>
     static BaseVector* CreateNumericVector(const std::vector<T>& values, DataTypeId typeId) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(typeId, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, typeId, values.size());
         auto* typedVec = static_cast<Vector<T>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -125,7 +125,7 @@ public:
         ASSERT_NE(function, nullptr) << "Cast function not found for signature";
         
         auto outputType = std::make_shared<DataType>(outputTypeId);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(input->GetSize());
         std::stack<BaseVector*> args;
         args.push(input);

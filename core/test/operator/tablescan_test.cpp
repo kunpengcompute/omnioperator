@@ -41,10 +41,11 @@ public:
 class MockConnector : public Connector {
 public:
     explicit MockConnector(const std::string& id) : Connector(id) {}
-    MOCK_METHOD3(createDataSource, std::unique_ptr<connector::DataSource>(
+    MOCK_METHOD4(createDataSource, std::unique_ptr<connector::DataSource>(
             const type::RowTypePtr&,
             const std::shared_ptr<ConnectorTableHandle>&,
-            const std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>&));
+            const std::unordered_map<std::string, std::shared_ptr<connector::ColumnHandle>>&,
+            omniruntime::mem::OmniTaskMemoryPool*));
 
     // Mock supportsIndexLookup function
     MOCK_CONST_METHOD0(supportsIndexLookup, bool());
@@ -65,7 +66,7 @@ std::shared_ptr<const TableScanNode> sharedMockNode(mockNode);
 std::shared_ptr<Connector> connector1 = std::make_shared<omniruntime::connector::hive::HiveConnector>("test", nullptr);
 registerConnector(connector1);
 
-TableScanOperator op(sharedMockNode, 1000, nullptr);
+TableScanOperator op(nullptr, sharedMockNode, 1000, nullptr);
 
 // Test
 EXPECT_EQ(op.AddInput(nullptr), 0);
@@ -86,13 +87,13 @@ auto mockDataSource = std::make_unique<MockDataSource>();
 // 保存一个指向 mockDataSource 的原始指针，以便后续设置其 next 方法的行为
 MockDataSource* rawMockDataSourcePtr = mockDataSource.get();
 
-EXPECT_CALL(*connector1, createDataSource(_, _, _)).WillRepeatedly(Return(ByMove(std::move(mockDataSource))));
+EXPECT_CALL(*connector1, createDataSource(_, _, _, _)).WillRepeatedly(Return(ByMove(std::move(mockDataSource))));
 EXPECT_CALL(*rawMockDataSourcePtr, next(_)).WillOnce(Return(std::make_optional<omniruntime::vec::VectorBatch*>(new omniruntime::vec::VectorBatch(1))));
 
 std::shared_ptr<Connector> sharedConnector(connector1);
 registerConnector(sharedConnector);
 
-TableScanOperator op(sharedMockNode, 1000, mockSplitsStore);
+TableScanOperator op(nullptr, sharedMockNode, 1000, mockSplitsStore);
 VectorBatch* output = nullptr;
 
 // Test
@@ -109,7 +110,7 @@ std::shared_ptr<const TableScanNode> sharedMockNode(mockNode);
 std::shared_ptr<Connector> connector1 = std::make_shared<omniruntime::connector::hive::HiveConnector>("test", nullptr);
 registerConnector(connector1);
 
-TableScanOperator op(sharedMockNode, 1000, nullptr);
+TableScanOperator op(nullptr, sharedMockNode, 1000, nullptr);
 
 // Test
 EXPECT_EQ(op.Close(), OMNI_STATUS_NORMAL);
@@ -122,7 +123,7 @@ std::shared_ptr<const TableScanNode> sharedMockNode(mockNode);
 std::shared_ptr<Connector> connector1 = std::make_shared<omniruntime::connector::hive::HiveConnector>("test", nullptr);
 registerConnector(connector1);
 
-TableScanOperator op(sharedMockNode, 1000, nullptr);
+TableScanOperator op(nullptr, sharedMockNode, 1000, nullptr);
 
 EXPECT_FALSE(op.isFinished());
 unregisterConnector(connector1->connectorId());

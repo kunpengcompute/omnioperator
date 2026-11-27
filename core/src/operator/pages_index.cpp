@@ -40,8 +40,9 @@ void ConstructVectorRadixSort(const uint8_t *vaStart, int32_t length, BaseVector
     bool hasDictionary, uint32_t radixRowWidth, BaseVector *outputVector);
 
 // function implements for class PagesIndex
-PagesIndex::PagesIndex(const DataTypes &types, bool pdqSortEnabled, bool inplacePdqSortEnabled, bool timSortEnabled)
-    : typesCount(types.GetSize()), hasDictionaries(typesCount, false),
+PagesIndex::PagesIndex(const DataTypes &types, bool pdqSortEnabled, bool inplacePdqSortEnabled,
+    bool timSortEnabled, omniruntime::mem::OmniTaskMemoryPool *ownerPool)
+    : ownerPool_(ownerPool), typesCount(types.GetSize()), hasDictionaries(typesCount, false),
       hasNulls(typesCount, false), dataTypes(types), pdqSortEnabled(pdqSortEnabled),
       inplacePdqSortEnabled(inplacePdqSortEnabled), timSortEnabled(timSortEnabled)
 {}
@@ -78,6 +79,7 @@ void PagesIndex::AddVecBatch(omniruntime::vec::VectorBatch *vecBatch)
 {
     inputVecBatches.emplace_back(vecBatch);
     rowCount += vecBatch->GetRowCount();
+    retainedBytes += vecBatch->EstimateFlatSize();
 }
 
 void PagesIndex::Prepare()
@@ -2469,6 +2471,7 @@ void PagesIndex::Clear()
     inplaceSortColumn = nullptr;
 
     rowCount = 0;
+    retainedBytes = 0;
     totalNullCount = 0;
     VectorHelper::FreeVecBatches(inputVecBatches);
     inputVecBatches.clear();

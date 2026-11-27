@@ -830,7 +830,12 @@ InExpr::InExpr(std::vector<Expr *> args)
     arguments = std::move(args);
 
     auto inputDataType = arguments[0]->dataType;
-    auto vector = VectorHelper::CreateFlatVectorShared(inputDataType->GetId(), arguments.size()-1);
+    // Plan-parse-time constant vector. InExpr is built from JSONParser / parser.cpp
+    // at plan compilation; ExecutionContext / per-task pool is not in scope
+    // (compilation happens before operator instantiation). The resulting
+    // `constantRowVec` is small (one element per IN-list literal) and lives the
+    // duration of the plan, not per-batch.
+    auto vector = VectorHelper::CreateFlatVectorShared(nullptr, inputDataType->GetId(), arguments.size()-1);
     for (int i = 1; i < arguments.size(); i++)
     {
         auto literalExpr = dynamic_cast<LiteralExpr *>(arguments[i]);
@@ -874,7 +879,7 @@ InExpr::InExpr(std::vector<Expr *> args)
         }
     }
     ArrayType arrayType(inputDataType);
-    auto arrayVector = VectorHelper::CreateComplexVector(&arrayType, 1);
+    auto arrayVector = VectorHelper::CreateComplexVector(nullptr, &arrayType, 1);
     dynamic_cast<ArrayVector *>(arrayVector)->SetValue(0, vector.get());
     std::vector<DataTypeId> argTypes = {inputDataType->GetId(), OMNI_ARRAY};
     auto signature = std::make_shared<FunctionSignature>("in", argTypes, dataType->GetId());

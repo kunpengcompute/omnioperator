@@ -255,7 +255,7 @@ void RegrReplacementAggregator::AlignAggSchema(VectorBatch *result, VectorBatch 
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyReplacementPartial3(result);
+        RegrAlignAppendEmptyReplacementPartial3(result, this->pool_);
         return;
     }
     if (!inputRaw) {
@@ -265,7 +265,7 @@ void RegrReplacementAggregator::AlignAggSchema(VectorBatch *result, VectorBatch 
     std::shared_ptr<NullsHelper> nullMap;
     GetVector(inputVecBatch, 0, rc, &nullMap);
     BaseVector *valVec = inputVecBatch->Get(channels[0]);
-    RegrAlignAppendReplacementPartial3RawDouble(result, valVec, nullMap, rc);
+    RegrAlignAppendReplacementPartial3RawDouble(result, valVec, nullMap, rc, this->pool_);
 }
 
 void RegrReplacementAggregator::AlignAggSchemaWithFilter(VectorBatch *result, VectorBatch *inputVecBatch,
@@ -273,20 +273,20 @@ void RegrReplacementAggregator::AlignAggSchemaWithFilter(VectorBatch *result, Ve
 {
     int32_t rc = inputVecBatch->GetRowCount();
     if (rc == 0) {
-        RegrAlignAppendEmptyReplacementPartial3(result);
+        RegrAlignAppendEmptyReplacementPartial3(result, this->pool_);
         return;
     }
     auto *filterVec = static_cast<Vector<bool> *>(inputVecBatch->Get(filterIndex));
     bool needFilter = DoNeedHandleAggFilter(filterVec, 0, rc);
     std::shared_ptr<NullsHelper> baseNull;
     GetVector(inputVecBatch, 0, rc, &baseNull);
-    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(baseNull, filterVec, needFilter, rc);
+    std::shared_ptr<NullsHelper> rowSkip = RegrAlignMergeYxNullsWithFilter(baseNull, filterVec, needFilter, rc, this->pool_);
     if (!inputRaw) {
-        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 3, rc, rowSkip, false);
+        RegrAlignAppendPartialColumnsWithSkip(result, inputVecBatch, channels, 3, rc, rowSkip, false, this->pool_);
         return;
     }
     BaseVector *valVec = inputVecBatch->Get(channels[0]);
-    RegrAlignAppendReplacementPartial3RawDouble(result, valVec, rowSkip, rc);
+    RegrAlignAppendReplacementPartial3RawDouble(result, valVec, rowSkip, rc, this->pool_);
 }
 
 void RegrReplacementAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseVector *originVector,
@@ -295,10 +295,10 @@ void RegrReplacementAggregator::ProcessAlignAggSchema(VectorBatch *result, BaseV
     (void)nullMap;
     (void)aggFilter;
     if (originVector == nullptr) {
-        RegrAlignAppendEmptyReplacementPartial3(result);
+        RegrAlignAppendEmptyReplacementPartial3(result, this->pool_);
         return;
     }
-    RegrAlignAppendReplacementPartial3AllNullRows(result, originVector->GetSize());
+    RegrAlignAppendReplacementPartial3AllNullRows(result, originVector->GetSize(), this->pool_);
 }
 
 std::vector<DataTypePtr> RegrReplacementAggregator::GetSpillType()

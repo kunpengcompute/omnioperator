@@ -26,22 +26,34 @@
 #include "util/bit_util.h"
 #include "reader/common/RowSet.h"
 
+// Forward-declare OmniTaskMemoryPool to avoid pulling in the full pool header.
+namespace omniruntime::mem { class OmniTaskMemoryPool; }
+
 namespace omniruntime::reader {
 
+    // Trailing optional pool param: non-null uses Vector<T>(numValues, pool, dataTypeId)
+    // primary ctor for per-task accounting on AddMemory/SubMemory listener events
+    // (Spark TMM visibility). nullptr falls through to the [[deprecated]] no-pool
+    // Vector ctor (nullBridge path; for legacy and test contexts).
     std::unique_ptr<omniruntime::vec::BaseVector> makeFixedLengthVector(uint64_t numValues,
-        omniruntime::type::DataTypeId dataTypeId);
+        omniruntime::type::DataTypeId dataTypeId,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeDoubleVector(uint64_t numValues,
-        omniruntime::type::DataTypeId dataTypeId);
+        omniruntime::type::DataTypeId dataTypeId,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeVarcharVector(uint64_t numValues,
-        omniruntime::type::DataTypeId dataTypeId);
+        omniruntime::type::DataTypeId dataTypeId,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeDecimalVector(uint64_t numValues,
-        omniruntime::type::DataTypeId dataTypeId);
+        omniruntime::type::DataTypeId dataTypeId,
+        omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
 
     std::unique_ptr<omniruntime::vec::BaseVector> makeNewVector(uint64_t numValues, const ::orc::Type* baseTp,
-          omniruntime::type::DataTypeId dataTypeId);
+          omniruntime::type::DataTypeId dataTypeId,
+          omniruntime::mem::OmniTaskMemoryPool *pool = nullptr);
 
     class OmniRleDecoderV2 : public ::orc::RleDecoderV2 {
     public:

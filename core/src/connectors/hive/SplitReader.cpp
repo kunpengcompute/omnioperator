@@ -162,13 +162,19 @@ SplitReader::SplitReader(
     const std::unordered_map <std::string, std::shared_ptr<HiveColumnHandle>> * partitionKeys,
     const std::shared_ptr<const HiveConfig> &hiveConfig,
     const type::RowTypePtr &readerOutputType,
-    const std::shared_ptr <codegen::ScanSpec> &scanSpec)
+    const std::shared_ptr <codegen::ScanSpec> &scanSpec,
+    omniruntime::mem::OmniTaskMemoryPool *taskPool)
     : hiveSplit_(hiveSplit),
       hiveTableHandle_(hiveTableHandle),
       partitionKeys_(partitionKeys),
       hiveConfig_(hiveConfig),
       readerOutputType_(readerOutputType),
       pool_(omniruntime::mem::GetMemoryPool()),
+      taskPool_(taskPool),
+      // The ORC pool adapter is constructed
+      // unconditionally; when taskPool_ is null its malloc/free fall back to
+      // std::malloc/free (no per-task accounting, ORC-default behaviour).
+      orcPoolAdapter_(taskPool),
       scanSpec_(scanSpec),
       emptySplit_(false)
 {
@@ -181,7 +187,8 @@ std::unique_ptr <SplitReader> SplitReader::create(
     const std::unordered_map <std::string, std::shared_ptr<HiveColumnHandle>> *partitionKeys,
     const std::shared_ptr<const HiveConfig> &hiveConfig,
     const type::RowTypePtr &readerOutputType,
-    const std::shared_ptr <codegen::ScanSpec> &scanSpec)
+    const std::shared_ptr <codegen::ScanSpec> &scanSpec,
+    omniruntime::mem::OmniTaskMemoryPool *taskPool)
 {
     return std::make_unique<SplitReader>(
         hiveSplit,
@@ -189,7 +196,8 @@ std::unique_ptr <SplitReader> SplitReader::create(
         partitionKeys,
         hiveConfig,
         readerOutputType,
-        scanSpec);
+        scanSpec,
+        taskPool);
 }
 
 void SplitReader::prepareSplit(omniruntime::type::RowTypePtr &rowType, uint64_t batchLen)
@@ -230,8 +238,13 @@ uint64_t SplitReader::next(vec::VectorBatch **output_, int *omniTypeId, uint64_t
     }
     if (fileRowType_->size() > output->GetVectorCount()) {
         for (int i = output->GetVectorCount(); i < fileRowType_->size(); ++i) {
-            auto missingFieldVec = vec::VectorHelper::CreateFlatVector(fileRowType_->children_()[i]->GetId(),
-                batchRowSize);
+            // Use the per-task accounting pool threaded from TableScanOperator
+            // via Connector/HiveDataSource.
+            // taskPool_ may still be nullptr in legacy test rigs that bypass
+            // TableScanOperator — that falls back to the [[deprecated]] no-pool
+            // CreateFlatVector overload (accounting skipped, behaviour unchanged).
+            auto missingFieldVec = vec::VectorHelper::CreateFlatVector(taskPool_,
+                fileRowType_->children_()[i]->GetId(), batchRowSize);
             for (int j = 0; j < batchRowSize; ++j) {
                 omniruntime::vec::VectorHelper::SetValue(missingFieldVec, j, nullptr);
             }
@@ -264,7 +277,17 @@ void SplitReader::createReader()
             enhancementJson, hiveSplit_->customSplitInfo, hiveConfig_);
     }
     baseReaderOpts_->ParseEnhanceJson(enhancementJson, hiveSplit_->fileFormat);
-    configureReaderOptions(hiveConfig_, hiveSplit_, baseReaderOpts_);
+    // Pass the per-task adapter
+    // so the ORC branch in configureReaderOptions wires our pool into
+    // orc::ReaderOptions::setMemoryPool. Adapter lifetime is this
+    // SplitReader's lifetime; the resulting orc::Reader (baseReader_) is
+    // also our member, so the adapter outlives it via reverse-destruction.
+    configureReaderOptions(hiveConfig_, hiveSplit_, baseReaderOpts_, &orcPoolAdapter_);
+    // Stash the per-task pool on
+    // ReaderOptions so OrcRowReader's omniBuildReader call propagates it down
+    // to every ColumnReader (output Vector ctors will then use the pool-bound
+    // primary ctor instead of the [[deprecated]] no-pool bridge).
+    baseReaderOpts_->SetTaskPool(taskPool_);
     baseReader_ = omniruntime::reader::GetReaderFactory(hiveSplit_->fileFormat)
         ->CreateReader(baseReaderOpts_);
 }

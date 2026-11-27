@@ -5,6 +5,12 @@
 
 #include "window.h"
 #include "lead_lag_function.h"
+#include "operator/reclaim_context.h"
+#include "util/telemetry.h"
+
+#include <algorithm>
+#include <limits>
+#include <string>
 
 using namespace std;
 using namespace omniruntime::vec;
@@ -113,9 +119,10 @@ WindowOperatorFactory *WindowOperatorFactory::CreateWindowOperatorFactory(const 
     return operatorFactory;
 }
 
-Operator *WindowOperatorFactory::CreateOperator()
+// Pool-bound override
+Operator *WindowOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    auto windowOperator = new WindowOperator(sourceTypes, outputCols, outputColsCount, windowFunctionTypes,
+    auto windowOperator = new WindowOperator(pool, sourceTypes, outputCols, outputColsCount, windowFunctionTypes,
         windowFunctionCount, partitionCols, partitionCount, preGroupedCols, preGroupedCount, sortCols, sortAscendings,
         sortNullFirsts, sortColCount, preSortedChannelPrefix, expectedPositions, allTypes, argumentChannels,
         argumentChannelsCount, windowFrameTypes, windowFrameStartTypes, windowFrameStartChannels, windowFrameEndTypes,
@@ -124,8 +131,10 @@ Operator *WindowOperatorFactory::CreateOperator()
     return windowOperator;
 }
 
-WindowOperator::WindowOperator(const type::DataTypes &sourceTypes, std::vector<int32_t> &outputCols,
-    int32_t outputColsCount, std::vector<int32_t> &windowFunctionTypes, int32_t windowFunctionCount,
+// Pool-bound ctor chains Operator(pool).
+WindowOperator::WindowOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+    const type::DataTypes &sourceTypes, std::vector<int32_t> &outputCols, int32_t outputColsCount,
+    std::vector<int32_t> &windowFunctionTypes, int32_t windowFunctionCount,
     std::vector<int32_t> &partitionCols, int32_t partitionCount, std::vector<int32_t> &preGroupedCols,
     int32_t preGroupedCount, std::vector<int32_t> &sortCols, std::vector<int32_t> &sortAscendings,
     std::vector<int32_t> &sortNullFirsts, int32_t sortColCount, int32_t preSortedChannelPrefix,
@@ -134,7 +143,8 @@ WindowOperator::WindowOperator(const type::DataTypes &sourceTypes, std::vector<i
     const std::vector<int32_t> &windowFrameStartTypes, const std::vector<int32_t> &windowFrameStartChannels,
     const std::vector<int32_t> &windowFrameEndTypes, const std::vector<int32_t> &windowFrameEndChannels,
     const std::vector<WindowFunctionOptions> &windowFunctionOptions, const OperatorConfig &operatorConfig)
-    : sourceTypes(sourceTypes),
+    : Operator(pool),
+      sourceTypes(sourceTypes),
       typesCount(sourceTypes.GetSize()),
       outputCols(outputCols),
       outputColsCount(outputColsCount),
@@ -162,15 +172,21 @@ WindowOperator::WindowOperator(const type::DataTypes &sourceTypes, std::vector<i
       windowFunctionOptions(windowFunctionOptions),
       operatorConfig(operatorConfig)
 {
+    InitFromCtor(sortCols, sortAscendings, sortNullFirsts, sortColCount);
+}
+
+void WindowOperator::InitFromCtor(std::vector<int32_t> &paramSortCols,
+    std::vector<int32_t> &paramSortAscendings, std::vector<int32_t> &paramSortNullFirsts, int32_t paramSortColCount)
+{
     for (int32_t i = 0; i < partitionCount; i++) {
         this->sortCols.push_back(partitionCols[i]);
         this->sortAscendings.push_back(true);
         this->sortNullFirsts.push_back(false);
     }
-    for (int32_t i = partitionCount; i < partitionCount + sortColCount; i++) {
-        this->sortCols.push_back(sortCols[i - partitionCount]);
-        this->sortAscendings.push_back(sortAscendings[i - partitionCount]);
-        this->sortNullFirsts.push_back(sortNullFirsts[i - partitionCount]);
+    for (int32_t i = partitionCount; i < partitionCount + paramSortColCount; i++) {
+        this->sortCols.push_back(paramSortCols[i - partitionCount]);
+        this->sortAscendings.push_back(paramSortAscendings[i - partitionCount]);
+        this->sortNullFirsts.push_back(paramSortNullFirsts[i - partitionCount]);
     }
 
     if (sourceTypes.GetSize() == 1 && sourceTypes.GetType(0)->GetId() != OMNI_VARCHAR &&
@@ -182,9 +198,9 @@ WindowOperator::WindowOperator(const type::DataTypes &sourceTypes, std::vector<i
 
 OmniStatus WindowOperator::Init()
 {
-    OmniStatus ret = OMNI_STATUS_NORMAL;
+    OmniStatus ret = Operator::Init();
     pagesIndex = std::make_unique<PagesIndex>(sourceTypes, operatorConfig.PdqSortEnabled(),
-        operatorConfig.InplacePdqSortEnabled(), operatorConfig.TimSortEnabled());
+        operatorConfig.InplacePdqSortEnabled(), operatorConfig.TimSortEnabled(), pool_);
     for (int32_t i = 0; i < windowFunctionCount; i++) {
         auto type = windowFunctionTypes[i];
         auto windowFrame = std::make_unique<WindowFrameInfo>(static_cast<FrameType>(windowFrameTypes[i]),
@@ -280,12 +296,132 @@ OmniStatus WindowOperator::Init()
         }
     }
     SetOperatorName(metricsNameWindow);
+    if (ret == OMNI_STATUS_NORMAL && pool_ != nullptr && operatorConfig.GetSpillConfig()->IsSpillEnabled()) {
+        pool_->registerSpillable(this);
+    }
     return ret;
 }
 
 WindowOperator::~WindowOperator()
 {
+    if (pool_ != nullptr) {
+        pool_->unregisterSpillable(this);
+    }
     delete pendingInput;
+}
+
+int64_t WindowOperator::EstimateInputReservation(const VectorBatch *vecBatch) const
+{
+    const auto add = [](uint64_t left, uint64_t right) {
+        constexpr uint64_t max = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+        return left > max - std::min(right, max) ? max : left + right;
+    };
+    const auto multiply = [](uint64_t left, uint64_t right) {
+        constexpr uint64_t max = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+        return right != 0 && left > max / right ? max : left * right;
+    };
+
+    const uint64_t incomingRows = static_cast<uint64_t>(vecBatch->GetRowCount());
+    const uint64_t columns = static_cast<uint64_t>(sourceTypes.GetSize());
+
+    // PagesIndex retains the already pool-accounted input by pointer, so its
+    // flat bytes must not be reserved a second time. Generic PagesIndex sort
+    // materializes an 8-byte address, an 8-byte value and, in the worst case,
+    // a 4-byte varchar length for each row.
+    constexpr uint64_t kSortScratchPerRow = 2 * sizeof(uint64_t) + sizeof(uint32_t);
+    const uint64_t sortScratch = multiply(incomingRows, kSortScratchPerRow);
+    const uint64_t indexScratch = multiply(columns, sizeof(BaseVector *));
+    return static_cast<int64_t>(add(sortScratch, indexScratch));
+}
+
+void WindowOperator::EnsureReservationPctsCached()
+{
+    if (reservationPctsCached_) {
+        return;
+    }
+    // QueryConfig is immutable for the lifetime of a query, so the clamped
+    // percentages are safe to cache. Read lazily instead of in the constructor:
+    // on the wrapper path the ExecutionContext receives its config after the
+    // operator object exists.
+    const auto queryConfig = executionContext->queryConfig();
+    minSpillableReservationPct_ = std::max<int32_t>(queryConfig.minSpillableReservationPct(), 0);
+    spillableReservationGrowthPct_ = std::max<int32_t>(queryConfig.spillableReservationGrowthPct(), 0);
+    reservationPctsCached_ = true;
+}
+
+void WindowOperator::ReserveForInput(const VectorBatch *vecBatch)
+{
+    if (pool_ == nullptr || !operatorConfig.GetSpillConfig()->IsSpillEnabled() ||
+        pagesIndex->GetRowCount() == 0) {
+        return;
+    }
+    const auto multiply = [](uint64_t left, uint64_t right) {
+        constexpr uint64_t max = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+        return right != 0 && left > max / right ? max : left * right;
+    };
+    const uint64_t increment = static_cast<uint64_t>(EstimateInputReservation(vecBatch));
+    const uint64_t currentUsage = static_cast<uint64_t>(std::max<int64_t>(pool_->currentBytes(), 0));
+    EnsureReservationPctsCached();
+    const uint64_t minimumReservation =
+        multiply(currentUsage, static_cast<uint64_t>(minSpillableReservationPct_)) / 100;
+    const uint64_t availableReservation = static_cast<uint64_t>(pool_->availableReservation());
+    if (availableReservation >= minimumReservation &&
+        availableReservation > multiply(increment, 2)) {
+        return;
+    }
+    const uint64_t growthReservation =
+        multiply(currentUsage, static_cast<uint64_t>(spillableReservationGrowthPct_)) / 100;
+    const int64_t target = static_cast<int64_t>(std::max(multiply(increment, 2), growthReservation));
+    ReservationRequestSection request(
+        this, reclaimableName(), "WindowOperator::ReserveForInput", target);
+    ReclaimableReservationSection safeReservation(this);
+    if (!pool_->maybeReserve(target) && omniruntime::telemetry::IsReclaimVerboseEnabled()) {
+        // Window uses the same best-effort contract as Velox's SortBuffer:
+        // failed pre-reservation does not preempt the normal allocation path.
+        std::fprintf(stderr,
+            "[OMNI-WINDOW] event=ensure_input_fits outcome=reservation_denied pool=%p incoming_rows=%ld target=%ld used=%ld reserved=%ld\n",
+            static_cast<void *>(pool_), static_cast<long>(vecBatch->GetRowCount()),
+            static_cast<long>(target), static_cast<long>(pool_->currentBytes()),
+            static_cast<long>(pool_->reservedBytes()));
+    }
+}
+
+void WindowOperator::ReserveForSort()
+{
+    if (pool_ == nullptr || !operatorConfig.GetSpillConfig()->IsSpillEnabled() ||
+        spiller != nullptr || pagesIndex->GetRowCount() == 0) {
+        return;
+    }
+    constexpr uint64_t kMax = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+    const auto add = [](uint64_t left, uint64_t right) {
+        constexpr uint64_t max = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+        return left > max - std::min(right, max) ? max : left + right;
+    };
+    const auto multiply = [](uint64_t left, uint64_t right) {
+        constexpr uint64_t max = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+        return right != 0 && left > max / right ? max : left * right;
+    };
+    constexpr uint64_t kSortScratchPerRow = 2 * sizeof(uint64_t) + sizeof(uint32_t);
+    const uint64_t rows = pagesIndex->GetRowCount();
+    const uint64_t columns = sourceTypes.GetSize();
+    const uint64_t batches = pagesIndex->GetVectorBatchSize();
+    uint64_t estimate = multiply(rows, kSortScratchPerRow);
+    estimate = add(estimate, multiply(multiply(columns, batches), sizeof(BaseVector *)));
+    estimate = add(estimate, multiply(columns, sizeof(BaseVector **)));
+    constexpr uint64_t kReservationCushion = 1ULL << 20;
+    estimate = add(estimate, kReservationCushion);
+    const int64_t target = static_cast<int64_t>(std::min(estimate, kMax));
+
+    ReservationRequestSection request(
+        this, reclaimableName(), "WindowOperator::ReserveForSort", target);
+    ReclaimableReservationSection safeReservation(this);
+    if (!pool_->maybeReserve(target) && omniruntime::telemetry::IsReclaimVerboseEnabled()) {
+        std::fprintf(stderr,
+            "[OMNI-WINDOW] event=ensure_sort_fits outcome=reservation_denied pool=%p rows=%lu target=%ld used=%ld reserved=%ld\n",
+            static_cast<void *>(pool_), static_cast<unsigned long>(rows),
+            static_cast<long>(target), static_cast<long>(pool_->currentBytes()),
+            static_cast<long>(pool_->reservedBytes()));
+    }
 }
 
 int32_t WindowOperator::AddInput(VectorBatch *vecBatch)
@@ -296,18 +432,16 @@ int32_t WindowOperator::AddInput(VectorBatch *vecBatch)
         ResetInputVecBatch();
         return 0;
     }
+    // Keep only the selected rows; compacting first lets the reservation below size itself by
+    // the batch that is kept.
+    VectorHelper::CompactSparseDictionaries(vecBatch, pool());
+    // Reservation happens before totalRowCount and PagesIndex mutation, so the
+    // active operator can safely participate in synchronous arbitration.
+    ReserveForInput(vecBatch);
     UpdateAddInputInfo(rowCount);
     totalRowCount += rowCount;
     pagesIndex->AddVecBatch(vecBatch);
     ResetInputVecBatch();
-    if (operatorConfig.GetSpillConfig()->NeedSpill(pagesIndex.get())) {
-        auto result = SpillToDisk();
-        pagesIndex->Clear();
-        executionContext->GetArena()->Reset();
-        if (result != ErrorCode::SUCCESS) {
-            throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
-        }
-    }
     return 0;
 }
 
@@ -333,12 +467,23 @@ void WindowOperator::PrepareOutput()
         outputTypes.push_back(allTypes.GetType(finalOutputCols[colIdx]));
     }
 
+    // Like Velox SortBuffer::ensureSortFits, establish headroom for the
+    // complete-run scratch before PagesIndex becomes non-reclaimable. A
+    // synchronous arbitration may spill this operator and set spiller.
+    ReserveForSort();
     if (spiller == nullptr) {
         Initialization();
         if (totalRowCount == 0) {
             return;
         }
         FinishPagesIndex();
+        // Match Velox SortWindowBuild::noMoreInput(): once the resident rows
+        // have been partitioned and sorted, the input/sort preparation phase
+        // is complete. Keep live PagesIndex bytes billed, but return unused
+        // pre-reserved headroom before the potentially long output drain.
+        if (pool_ != nullptr) {
+            pool_->releaseUnusedReservation();
+        }
     } else {
         maxRowCountPerVecBatch = OperatorUtil::GetMaxRowCount(sourceTypes.GetSize());
     }
@@ -420,7 +565,7 @@ void WindowOperator::GetOutputFromMemory(VectorBatch **outputVecBatch)
     auto output = std::make_unique<VectorBatch>(rowCount);
     auto outputPtr = output.get();
     DataTypes dataTypes(outputTypes);
-    VectorHelper::AppendVectors(outputPtr, dataTypes, rowCount);
+    VectorHelper::AppendVectors(outputPtr, dataTypes, rowCount, this->pool());
 
     try {
         ProcessData(outputPtr, rowCount);
@@ -539,6 +684,46 @@ uint64_t WindowOperator::GetSpilledBytes()
     return spilledBytes;
 }
 
+uint64_t WindowOperator::reclaimableBytes() const
+{
+    if (!operatorConfig.GetSpillConfig()->IsSpillEnabled() || pagesIndex == nullptr ||
+        pagesIndex->GetRowCount() == 0 || hasPrepare ||
+        spillMerger != nullptr || rowCountOutputted != 0 ||
+        reclaimInProgress_.load(std::memory_order_acquire)) {
+        return 0;
+    }
+    const uint64_t retained = pagesIndex->GetRetainedBytes();
+    const uint64_t arena = executionContext->GetArena()->ReclaimableBytesOnReset();
+    const uint64_t bytes = arena > std::numeric_limits<uint64_t>::max() - retained
+        ? std::numeric_limits<uint64_t>::max()
+        : retained + arena;
+    return std::max<uint64_t>(1, bytes);
+}
+
+int64_t WindowOperator::reclaim(int64_t targetBytes)
+{
+    if (targetBytes <= 0 || pool_ == nullptr || isInNonReclaimableSection() || reclaimableBytes() == 0) {
+        return 0;
+    }
+    bool expected = false;
+    if (!reclaimInProgress_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+        return 0;
+    }
+    struct ResetFlag {
+        std::atomic<bool> &flag;
+        ~ResetFlag() { flag.store(false, std::memory_order_release); }
+    } resetFlag{reclaimInProgress_};
+
+    const int64_t before = pool_->currentBytes();
+    const auto result = SpillToDisk();
+    if (UNLIKELY(result != ErrorCode::SUCCESS)) {
+        throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
+    }
+    pagesIndex->Clear();
+    executionContext->GetArena()->Reset();
+    return std::max<int64_t>(0, before - pool_->currentBytes());
+}
+
 ErrorCode WindowOperator::SpillToDisk()
 {
     auto rowCount = pagesIndex->GetRowCount();
@@ -564,6 +749,7 @@ ErrorCode WindowOperator::SpillToDisk()
 
     LogDebug("Spill data to disk starting in window operator, rowCount=%lld\n", rowCount);
     auto result = spiller->Spill(pagesIndex.get(), canInplaceSort, false, this);
+    stats_.spillScratchPeakBytes = std::max(stats_.spillScratchPeakBytes, spiller->ScratchPeakBytes());
     UpdateSpillTimesInfo();
     LogDebug("Spill data to disk finished in window operator, rowCount=%lld\n", rowCount);
     return result;
@@ -597,8 +783,9 @@ void WindowOperator::GetOutputFromDisk(VectorBatch **outputVecBatch)
             throw omniruntime::exception::OmniException(GetErrorCode(result), GetErrorMessage(result));
         }
         auto spillFiles = spiller->FinishSpill();
+        stats_.spilledFiles = spillFiles.size();
         UpdateSpillFileInfo(spillFiles.size());
-        spillMerger = spiller->CreateSpillMerger(spillFiles, spiller->isSpillCompressEnable());
+        spillMerger = spiller->CreateSpillMerger(spillFiles, spiller->isSpillCompressEnable(), this->pool());
         if (spillMerger == nullptr) {
             delete spiller;
             spiller = nullptr;
@@ -609,17 +796,26 @@ void WindowOperator::GetOutputFromDisk(VectorBatch **outputVecBatch)
 
         currentBatch = spillMerger->CurrentBatch();
         currentRowIdx = spillMerger->CurrentRowIndex();
+
+        // This is the spilled equivalent of the resident preparation
+        // boundary above. The final run is on disk and the merge reader now
+        // owns the external state, so input/sort headroom is obsolete. Velox
+        // SortWindowBuild releases its pool reservation at the same point,
+        // after creating the ordered spill reader and before producing output.
+        if (pool_ != nullptr) {
+            pool_->releaseUnusedReservation();
+        }
     }
 
     int32_t rowCount = min(maxRowCount, totalRowCount - rowCountOutputted);
     auto output = std::make_unique<VectorBatch>(rowCount);
     auto outputPtr = output.get();
     DataTypes dataTypes(outputTypes);
-    VectorHelper::AppendVectors(outputPtr, dataTypes, rowCount);
+    VectorHelper::AppendVectors(outputPtr, dataTypes, rowCount, this->pool());
     if (this->spillOutBatch == nullptr) {
         DataTypes inDataTypes(sourceTypes);
         this->spillOutBatch = new VectorBatch(totalRowCount - rowCountOutputted);
-        VectorHelper::AppendVectors(this->spillOutBatch, inDataTypes, totalRowCount - rowCountOutputted);
+        VectorHelper::AppendVectors(this->spillOutBatch, inDataTypes, totalRowCount - rowCountOutputted, this->pool());
     }
 
     try {

@@ -61,3 +61,8 @@ dtframe_
 log
 test_report.json
 coverage_lcov*
+.arrow-build/
+.m2-docker/
+/build/
+/open_source/
+/test_lz4_compress.data

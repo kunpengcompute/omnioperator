@@ -18,6 +18,10 @@ public class FloatVec extends FixedWidthVec {
         super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, FloatDataType.FLOAT);
     }
 
+    public FloatVec(int size, long nmmHandle) {
+        super(size * BYTES, size, VecEncoding.OMNI_VEC_ENCODING_FLAT, FloatDataType.FLOAT, nmmHandle);
+    }
+
     public FloatVec(long nativeVector) {
         super(nativeVector, FloatDataType.FLOAT, BYTES);
     }

@@ -29,7 +29,7 @@ public:
         // Create result first (using size from stack top) so result does not reuse an arg's memory
         const auto size = args.top()->GetSize();
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
 
         // Args are pushed in call order (year, month, day), so stack top = day; pop order = day, month, year

@@ -46,7 +46,7 @@ void ArrayContainsFunction::Apply(std::stack<BaseVector *> &args, const DataType
 
     int32_t rowSize = context->GetResultRowSize();
 
-    result = VectorHelper::CreateFlatVector(OMNI_BOOLEAN, rowSize);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_BOOLEAN, rowSize);
     auto *resultVec = dynamic_cast<Vector<bool> *>(result);
     if (resultVec == nullptr) {
         delete arrayArg;

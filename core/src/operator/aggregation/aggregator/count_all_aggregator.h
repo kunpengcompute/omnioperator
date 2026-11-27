@@ -39,7 +39,7 @@ public:
         const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter) override
     {
         int rowCount = result->GetRowCount();
-        auto countVector = reinterpret_cast<Vector<int64_t> *>(VectorHelper::CreateFlatVector(OMNI_LONG, rowCount));
+        auto countVector = reinterpret_cast<Vector<int64_t> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_LONG, rowCount));
         int64_t *valueAddr = reinterpret_cast<int64_t *>(GetValuesFromVector<OMNI_LONG>(countVector));
         // each element is initialized to 1.
         std::fill_n(valueAddr, rowCount, 1);

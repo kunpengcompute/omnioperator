@@ -35,25 +35,27 @@ public:
         ExecutionContext *context) const override;
 
 private:
+    // Pool plumbed through to ConstructXxx helpers.
     template <typename T>
     void ConstructArray(const std::vector<BaseVector *> &argVectors, BaseVector *&result,
-        int32_t rowSize, DataTypeId elementTypeId) const;
+        int32_t rowSize, DataTypeId elementTypeId, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     void ConstructArrayVarchar(const std::vector<BaseVector *> &argVectors, BaseVector *&result,
-        int32_t rowSize) const;
+        int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     void ConstructArrayNested(const std::vector<BaseVector *> &argVectors, BaseVector *&result,
-        int32_t rowSize) const;
+        int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     void ConstructArrayMap(const std::vector<BaseVector *> &argVectors, BaseVector *&result,
-        int32_t rowSize) const;
+        int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     void ConstructArrayStruct(const std::vector<BaseVector *> &argVectors, BaseVector *&result,
-        int32_t rowSize) const;
+        int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
-    void ConstructEmptyArray(BaseVector *&result, int32_t rowSize) const;
+    void ConstructEmptyArray(BaseVector *&result, int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
-    static BaseVector* CreateVectorLike(BaseVector* source, int32_t size);
+    static BaseVector* CreateVectorLike(BaseVector* source, int32_t size,
+        omniruntime::mem::OmniTaskMemoryPool *pool);
 
     template <typename T>
     static T GetValue(BaseVector *vec, int32_t row);

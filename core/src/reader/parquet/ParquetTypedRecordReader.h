@@ -31,6 +31,9 @@ using ResizableBuffer = ::arrow::ResizableBuffer;
 using namespace omniruntime::vec;
 using namespace omniruntime::vec::unsafe;
 
+// Forward-declare OmniTaskMemoryPool to avoid pulling in the full pool header.
+namespace omniruntime::mem { class OmniTaskMemoryPool; }
+
 namespace omniruntime::reader {
     constexpr int64_t kMinLevelBatchSize = 1024;
     constexpr int32_t PARQUET_MAX_DECIMAL64_DIGITS = 18;
@@ -173,6 +176,15 @@ namespace omniruntime::reader {
         virtual void SetPageReader(std::unique_ptr<parquet::PageReader> reader) = 0;
 
         virtual BaseVector* GetBaseVec() = 0;
+
+        // Per-task pool threaded down from ParquetReader (options_->GetTaskPool())
+        // via ParquetColumnReader::SetTaskPool fan-out. Stamped after construction,
+        // before the first read, so InitVec's Vector allocation is pool-accounted.
+        // nullptr is tolerated: the pool-bound Vector ctor falls back to the no-pool
+        // bridge. Symmetric with ORC's OmniColumnReader::taskPool_ / SetTaskPool.
+        virtual void SetTaskPool(omniruntime::mem::OmniTaskMemoryPool *pool) { taskPool_ = pool; }
+
+        omniruntime::mem::OmniTaskMemoryPool *taskPool_ = nullptr;
 
         /// \brief Decoded definition levels
         int16_t* def_levels() const {
@@ -486,7 +498,8 @@ namespace omniruntime::reader {
         }
 
         virtual void InitVec(int64_t capacity) {
-            vec_ = new Vector<V>(capacity);
+            // Pool-bound ctor; this->taskPool_ may be nullptr (no-pool bridge fallback).
+            vec_ = new Vector<V>(capacity, this->taskPool_);
             ResizeParquetVec(capacity);
             if (nullable_values_) {
                 nulls_ = unsafe::UnsafeBaseVector::GetNulls(vec_);
@@ -873,7 +886,8 @@ namespace omniruntime::reader {
         }
 
         void InitVec(int64_t capacity) override {
-            vec_ = new Vector<LargeStringContainer<std::string_view>>(capacity);
+            // Pool-bound ctor; this->taskPool_ may be nullptr (no-pool bridge fallback).
+            vec_ = new Vector<LargeStringContainer<std::string_view>>(capacity, this->taskPool_);
             if (nullable_values_) {
                 nulls_ = unsafe::UnsafeBaseVector::GetNulls(vec_);
             }

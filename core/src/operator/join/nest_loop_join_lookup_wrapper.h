@@ -20,7 +20,9 @@ public:
     ~NestLoopJoinLookupWrapperOperatorFactory() override;
     static NestLoopJoinLookupWrapperOperatorFactory *CreateNestLoopJoinLookupWrapperOperatorFactory(std::shared_ptr<const NestedLoopJoinNode> planNode,
         NestedLoopJoinBuildOperatorFactory* builderOperatorFactory, const config::QueryConfig& queryConfig);
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     NestLoopJoinLookupOperatorFactory *nestLoopJoinLookupOperatorFactory;
@@ -28,7 +30,9 @@ private:
 
 class NestLoopJoinLookupWrapperOperator : public Operator {
 public:
-    explicit NestLoopJoinLookupWrapperOperator(NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory);
+    // Pool-bound ctor — wrapper remembers pool to forward to inner factory at InitOperator() time.
+    NestLoopJoinLookupWrapperOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        NestLoopJoinLookupOperatorFactory &nestLoopJoinLookupOperatorFactory);
     ~NestLoopJoinLookupWrapperOperator() override;
     void InitOperator();
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override;
@@ -46,6 +50,8 @@ public:
 private:
     NestLoopJoinLookupOperator *nestLoopJoinLookupOperator;
     NestLoopJoinLookupOperatorFactory *nestLoopJoinLookupOperatorFactory;
+    // Pool to forward to inner factory at deferred InitOperator() time (nullptr in legacy path).
+    omniruntime::mem::OmniTaskMemoryPool *deferredInnerPool_ = nullptr;
 };
 
 }

@@ -48,7 +48,7 @@ void ReverseFunction::ApplyReverseString(BaseVector *argVector, BaseVector *&res
 {
     // Get size from context (handles constant vectors correctly)
     int32_t size = context->GetResultRowSize();
-    result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+    result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
 
     // Process each row
     for (int32_t row = 0; row < size; ++row) {
@@ -83,7 +83,7 @@ void ReverseFunction::ApplyReverseArray(BaseVector *argVector, BaseVector *&resu
     auto inputElementVector = arrayVec->GetElementVector();
 
     // Create a new ArrayVector for the result
-    auto *resultArray = new ArrayVector(rowSize);
+    auto *resultArray = new ArrayVector(rowSize, context->GetPool());
 
     // Handle case where element vector is null (empty arrays)
     // According to Spark behavior, reverse of empty array should return empty array
@@ -111,9 +111,9 @@ void ReverseFunction::ApplyReverseArray(BaseVector *argVector, BaseVector *&resu
 
     // Create new element vector of the same type
     if (elementTypeId == OMNI_VARCHAR || elementTypeId == OMNI_CHAR) {
-        newElementVector = VectorHelper::CreateStringVector(totalElements);
+        newElementVector = VectorHelper::CreateStringVector(context->GetPool(), totalElements);
     } else {
-        newElementVector = VectorHelper::CreateFlatVector(elementTypeId, totalElements);
+        newElementVector = VectorHelper::CreateFlatVector(context->GetPool(), elementTypeId, totalElements);
     }
 
     int64_t newElementIndex = 0;

@@ -32,7 +32,7 @@ namespace omniruntime::vectorization {
             auto valueElements = srcMapVec->GetValueVector();
 
             int32_t totalRows = inputVec->GetSize();
-            result = new ArrayVector(totalRows);
+            result = new ArrayVector(totalRows, context->GetPool());
             auto *dstArrayVec = dynamic_cast<ArrayVector *>(result);
 
             if (isKeys) {

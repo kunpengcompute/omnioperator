@@ -23,6 +23,7 @@
 #include "PredicateCondition.h"
 #include <set>
 #include "../common/TimeRebaseInfo.h"
+#include "memory/omni_task_memory_pool.h"
 
 namespace common {
     std::unique_ptr<PredicateCondition> BuildVecPredicateCondition(nlohmann::json &json, int32_t columnCount);
@@ -37,8 +38,13 @@ namespace common {
             std::unique_ptr<common::TimeRebaseInfo> rebaseInfo
     );
 
+    // The trailing OmniTaskMemoryPool* threads the per-task pool through to the hot
+    // Vector allocation at PredicateUtil.cpp:426. All in-tree callers (OrcReader.cpp:22
+    // and ParquetReader.cpp:60) pass an explicit pool. Any future caller MUST thread
+    // pool through explicitly.
     bool GetFlatBaseVectorsFromBitMark(std::vector<BaseVector *> &baseVectors, std::vector<BaseVector *> &result,
-        uint8_t *bitMark, int32_t vectorSize, const std::set<int32_t>& isNullSet, const std::set<int32_t>& isNotNullSet);
+        uint8_t *bitMark, int32_t vectorSize, const std::set<int32_t>& isNullSet, const std::set<int32_t>& isNotNullSet,
+        omniruntime::mem::OmniTaskMemoryPool *pool);
 }
 
 #endif //PREDICATEUTIL_H

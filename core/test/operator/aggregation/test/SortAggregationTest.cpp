@@ -94,7 +94,7 @@ protected:
 
 TEST_F(SortAggregationTest, BasicIntGroupBy_Sum) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch = MakeIntBatch({1, 1, 1, 2, 2, 3}, {10, 20, 30, 40, 50, 60});
     op->AddInput(batch);
     op->SetNoMoreInput();
@@ -117,7 +117,7 @@ TEST_F(SortAggregationTest, BasicIntGroupBy_Sum) {
 
 TEST_F(SortAggregationTest, EmptyBatchInput) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *emptyBatch = MakeIntBatch({}, {});
     op->AddInput(emptyBatch);
     op->SetNoMoreInput();
@@ -131,7 +131,7 @@ TEST_F(SortAggregationTest, EmptyBatchInput) {
 
 TEST_F(SortAggregationTest, GroupSpanningTwoBatches) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch1 = MakeIntBatch({1, 1}, {10, 20});
     auto *batch2 = MakeIntBatch({1, 1}, {30, 40});
     op->AddInput(batch1);
@@ -154,7 +154,7 @@ TEST_F(SortAggregationTest, GroupSpanningTwoBatches) {
 
 TEST_F(SortAggregationTest, SingleGroup_AllSameKey) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch = MakeIntBatch({7, 7, 7, 7, 7}, {10, 20, 30, 40, 50});
     op->AddInput(batch);
     op->SetNoMoreInput();
@@ -173,7 +173,7 @@ TEST_F(SortAggregationTest, SingleGroup_AllSameKey) {
 
 TEST_F(SortAggregationTest, SingleRowInput) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch = MakeIntBatch({42}, {100});
     op->AddInput(batch);
     op->SetNoMoreInput();
@@ -192,7 +192,7 @@ TEST_F(SortAggregationTest, SingleRowInput) {
 
 TEST_F(SortAggregationTest, NoMoreInputWithoutData) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     op->SetNoMoreInput();
     VectorBatch *output = nullptr;
     op->GetOutput(&output);
@@ -204,7 +204,7 @@ TEST_F(SortAggregationTest, NoMoreInputWithoutData) {
 
 TEST_F(SortAggregationTest, NullGroupKey) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch = MakeIntBatchWithNulls(
         {1, 0, 1, 0, 2}, {false, true, false, true, false},
         {10, 20, 30, 40, 50}, {false, false, false, false, false});
@@ -221,7 +221,7 @@ TEST_F(SortAggregationTest, NullGroupKey) {
 
 TEST_F(SortAggregationTest, NullAggValues_Sum) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch = MakeIntBatchWithNulls(
         {1, 1, 1}, {false, false, false},
         {10, 0, 30}, {false, true, false});
@@ -238,7 +238,7 @@ TEST_F(SortAggregationTest, NullAggValues_Sum) {
 
 TEST_F(SortAggregationTest, MultipleGroupChangesInOneBatch) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch = MakeIntBatch({1, 1, 2, 2, 3, 3, 4, 4, 5, 5},
         {1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
     op->AddInput(batch);
@@ -254,7 +254,7 @@ TEST_F(SortAggregationTest, MultipleGroupChangesInOneBatch) {
 
 TEST_F(SortAggregationTest, GroupStartsInOneBatchEndsInNext) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch1 = MakeIntBatch({1, 1, 2}, {10, 20, 100});
     auto *batch2 = MakeIntBatch({2, 2, 3, 3}, {200, 300, 400, 500});
     op->AddInput(batch1);
@@ -271,7 +271,7 @@ TEST_F(SortAggregationTest, GroupStartsInOneBatchEndsInNext) {
 
 TEST_F(SortAggregationTest, KeyTransitionAtBatchBoundary) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch1 = MakeIntBatch({1, 1}, {10, 20});
     auto *batch2 = MakeIntBatch({2, 2}, {30, 40});
     op->AddInput(batch1);
@@ -294,7 +294,7 @@ TEST_F(SortAggregationTest, KeyTransitionAtBatchBoundary) {
 
 TEST_F(SortAggregationTest, LargeGroupSize) {
     auto *factory = CreateSumFactory({0}, {{1}});
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     int32_t numRows = 1000;
     std::vector<int32_t> keys(numRows, 1);
     std::vector<int64_t> values(numRows);
@@ -337,7 +337,7 @@ TEST_F(SortAggregationTest, MultipleAggFunctions) {
         aggFuncTypes, maskCols, inputRaws, outputPartials, hasAggFilters,
         config, AggregationNode::Step::K_SINGLE);
     factory->Init();
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     auto *batch = MakeIntBatch({1, 1, 1}, {10, 20, 30});
     op->AddInput(batch);
     op->SetNoMoreInput();

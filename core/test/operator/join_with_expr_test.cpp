@@ -4,18 +4,27 @@
  */
 
 #include "gtest/gtest.h"
+#include "memory/omni_task_memory_pool.h"
+#include "memory/pool_listener.h"
+#include "compute/reason.h"
+#include "join_spill_dual_run_test_util.h"
 #include "operator/join/hash_builder_expr.h"
+#include "operator/join/join_spill_state.h"
+#include "operator/join/join_sub_partitioner.h"
 #include "operator/join/lookup_join_expr.h"
 #include "operator/join/lookup_outer_join_expr.h"
 #include "vector/vector_helper.h"
 #include "util/test_util.h"
 #include "expression/jsonparser/jsonparser.h"
+#include "util/config/QueryConfig.h"
 
 using namespace omniruntime::op;
 using namespace omniruntime::vec;
 using namespace omniruntime::expressions;
 using namespace std;
 using namespace TestUtil;
+using omniruntime::compute::BlockingReason;
+using omniruntime::compute::ContinueFuture;
 
 namespace JoinWithExprTest {
 void DeleteJoinExprOperatorFactory(HashBuilderWithExprOperatorFactory *hashBuilderOperatorFactory,
@@ -96,9 +105,14 @@ TEST(JoinWithExprTest, TestInnerEqualityJoinOnKeyWithExpr)
         probeTypes, probeOutputCols, probeOutputColsCount, probeHashKeys, probeHashKeysCount, buildOutputCols,
         buildOutputColsCount, buildOutputTypes, (int64_t)hashBuilderFactory, nullptr, false, overflowConfig);
     auto lookupJoinWithExprOperator = CreateTestOperator(lookupJoinWithExprOperatorFactory);
+    lookupJoinWithExprOperator->setNoMoreInput(false);
+    EXPECT_TRUE(lookupJoinWithExprOperator->needsInput());
     lookupJoinWithExprOperator->AddInput(probeVecBatch);
+    // The expression wrapper must honor the inner LookupJoin backpressure while this batch is resident.
+    EXPECT_FALSE(lookupJoinWithExprOperator->needsInput());
     VectorBatch *lookupJoinOutputVecBatch = nullptr;
     lookupJoinWithExprOperator->GetOutput(&lookupJoinOutputVecBatch);
+    EXPECT_TRUE(lookupJoinWithExprOperator->needsInput());
 
     const int32_t expectedDataSize = 2;
     int64_t expectedDatas[4][expectedDataSize] = {
@@ -117,6 +131,250 @@ TEST(JoinWithExprTest, TestInnerEqualityJoinOnKeyWithExpr)
     omniruntime::op::Operator::DeleteOperator(lookupJoinWithExprOperator);
     DeleteJoinExprOperatorFactory(hashBuilderWithExprOperatorFactory, lookupJoinWithExprOperatorFactory);
     delete overflowConfig;
+}
+
+class ProjectionReclaimListener : public omniruntime::mem::PoolListener {
+public:
+    std::function<void()> onAllocation;
+    void allocationChanged(int64_t delta) override
+    {
+        if (delta > 0 && onAllocation) {
+            auto callback = std::move(onAllocation);
+            onAllocation = nullptr;
+            callback();
+        }
+    }
+};
+
+join_spill_dual_run::RunResult RunExprKeyArm(
+    join_spill_dual_run::SpillMode mode,
+    const join_spill_dual_run::BatchFactory &buildBatchFactory,
+    const join_spill_dual_run::BatchFactory &probeBatchFactory, bool projectionReclaim = false)
+{
+    using namespace join_spill_dual_run;
+    ScopedTempDirectory spillRoot("expr-key");
+    const bool forceSpill = mode == SpillMode::ForcedSpillPathA;
+    const DataTypes inputTypes({LongType(), LongType()});
+    auto *overflowConfig = new OverflowConfig();
+    std::vector<Expr *> buildHashKeys = {
+        new BinaryExpr(omniruntime::expressions::Operator::ADD,
+            new FieldExpr(0, LongType()), new LiteralExpr(0L, LongType()), LongType())};
+    auto *hashExprFactory = HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(
+        OMNI_JOIN_TYPE_INNER, inputTypes, buildHashKeys, /*hashTableCount=*/1, overflowConfig);
+    auto *hashFactory = hashExprFactory->GetHashBuilderOperatorFactory();
+
+    JoinSubPartitionConfig subPartCfg;
+    subPartCfg.numSubPartitions = 4;
+    subPartCfg.startPartitionBit = 0;
+    subPartCfg.activeSubPartition = 0;
+    const DataTypes projectedTypes({LongType(), LongType(), LongType()});
+    auto state = std::make_shared<JoinSpillState>(
+        spillRoot.path().string(), hashFactory->GetBuildTypes(), projectedTypes, 4);
+    state->SetHandoffSessionEnabled(true);
+    hashFactory->SetJoinSpillSubPartitionPolicy(true, /*maxSpillRunRows=*/0, subPartCfg,
+        /*passiveReclaimEnabled=*/projectionReclaim,
+        /*forceBuildGroupSpillAfterNoMoreInput=*/forceSpill && !projectionReclaim);
+    hashFactory->SetJoinSpillState(state);
+    hashFactory->SetJoinSpillHandoffSessionEnabled(true);
+
+    std::vector<Expr *> probeHashKeys = {
+        new BinaryExpr(omniruntime::expressions::Operator::ADD,
+            new FieldExpr(0, LongType()), new LiteralExpr(0L, LongType()), LongType())};
+    int32_t outputCols[] = {0, 1};
+    const config::QueryConfig queryConfig({
+        {config::QueryConfig::kSpillEnabled, "true"},
+        {config::QueryConfig::kJoinSpillEnabled, "true"},
+        {config::QueryConfig::kJoinSpillHandoffEnabled, "true"},
+        {config::QueryConfig::kForceBuildGroupSpillAfterNoMoreInput,
+            forceSpill && !projectionReclaim ? "true" : "false"},
+        {config::QueryConfig::kSpillNumPartitionBits, "2"},
+        {config::QueryConfig::kSpillStartPartitionBit, "0"}});
+    auto *lookupExprFactory = new LookupJoinWithExprOperatorFactory(inputTypes, outputCols, 2,
+        probeHashKeys, 1, outputCols, 2, inputTypes, reinterpret_cast<int64_t>(hashFactory), nullptr,
+        /*isShuffleExchangeBuildPlan=*/false, overflowConfig, queryConfig);
+
+    ProjectionReclaimListener listener;
+    omniruntime::mem::OmniTaskMemoryPool pool(&listener);
+    auto *build = hashExprFactory->CreateOperator(&pool);
+    auto *probe = lookupExprFactory->CreateOperator(&pool);
+    build->setNoMoreInput(false);
+    build->AddInput(buildBatchFactory());
+    if (projectionReclaim) {
+        auto *nextBatch = buildBatchFactory();
+        bool called = false;
+        listener.onAllocation = [&]() {
+            called = true;
+            pool.reclaim(1);
+            EXPECT_GT(state->BuildSpilledRows(), 0);
+        };
+        build->AddInput(nextBatch);
+        listener.onAllocation = nullptr;
+        EXPECT_TRUE(called);
+        EXPECT_GT(state->BuildSpilledRows(), 0);
+    }
+    build->setNoMoreInput(true);
+
+    RunResult result;
+    size_t observedSpillFileCount = CountRegularFiles(spillRoot.path());
+    bool probeFed = false;
+    bool sawPathA = false;
+    bool sawRestore = false;
+    int32_t guard = 0;
+    if (!forceSpill) {
+        VectorBatch *out = nullptr;
+        build->GetOutput(&out);
+        if (out != nullptr) {
+            VectorHelper::FreeVecBatch(out);
+        }
+        JoinHandoffSnapshot snapshot;
+        if (!state->TryGetHandoffForProbe(&snapshot) || snapshot.numDistinct == 0 ||
+            !snapshot.spillPartitionIds.empty() || snapshot.restoredPartitionId.has_value()) {
+            throw std::runtime_error("resident expr-key arm did not receive a full-table handoff");
+        }
+        probe->setNoMoreInput(false);
+        probe->AddInput(probeBatchFactory());
+        probe->setNoMoreInput(true);
+        probeFed = true;
+        for (; guard < 100000 && !probe->isFinished(); ++guard) {
+            out = nullptr;
+            probe->GetOutput(&out);
+            if (out != nullptr) {
+                ++result.outputBatchCount;
+                AppendCanonicalRowsAndFree(out, &result.rows);
+            }
+        }
+        out = nullptr;
+        build->GetOutput(&out);
+        if (out != nullptr) {
+            VectorHelper::FreeVecBatch(out);
+        }
+    } else {
+        for (; guard < 100000; ++guard) {
+        if (!build->isFinished()) {
+            ContinueFuture future;
+            if (build->IsBlocked(&future) == BlockingReason::kNotBlocked) {
+                VectorBatch *out = nullptr;
+                build->GetOutput(&out);
+                if (out != nullptr) {
+                    VectorHelper::FreeVecBatch(out);
+                }
+            }
+        }
+        const auto phase = state->GetHandoffPhase();
+        observedSpillFileCount = std::max(observedSpillFileCount, CountRegularFiles(spillRoot.path()));
+        sawPathA = sawPathA || phase == JoinHandoffPhase::ProbePathA;
+        sawRestore = sawRestore || (sawPathA && phase == JoinHandoffPhase::RestoreRound);
+        JoinHandoffSnapshot snapshot;
+        if (!probeFed && state->TryGetHandoffForProbe(&snapshot)) {
+            probe->setNoMoreInput(false);
+            probe->AddInput(probeBatchFactory());
+            probe->setNoMoreInput(true);
+            probeFed = true;
+        }
+        if (probeFed) {
+            ContinueFuture future;
+            if (probe->IsBlocked(&future) == BlockingReason::kNotBlocked) {
+                VectorBatch *out = nullptr;
+                probe->GetOutput(&out);
+                if (out != nullptr) {
+                    ++result.outputBatchCount;
+                    AppendCanonicalRowsAndFree(out, &result.rows);
+                }
+            }
+        }
+        if (state->GetHandoffPhase() == JoinHandoffPhase::Complete && build->isFinished() &&
+            probe->isFinished()) {
+            break;
+        }
+        }
+    }
+
+    const bool guardExhausted = guard >= 100000;
+    const std::string guardDetails = "expr-key dual-run guard exhausted mode=" +
+        std::to_string(static_cast<int>(mode)) + " phase=" +
+        std::to_string(static_cast<int>(state->GetHandoffPhase())) + " buildStatus=" +
+        std::to_string(static_cast<int>(build->GetStatus())) + " probeStatus=" +
+        std::to_string(static_cast<int>(probe->GetStatus()));
+    result.buildSpilledRows = state->BuildSpilledRows();
+    result.probeSpilledRows = static_cast<LookupJoinWithExprOperator *>(probe)
+        ->GetLookupJoinOperator()->ProbeSpilledRows();
+    result.spillFileCount = observedSpillFileCount;
+    result.sawPathA = sawPathA;
+    result.sawRestore = sawRestore;
+    result.finalPhase = state->GetHandoffPhase();
+
+    omniruntime::op::Operator::DeleteOperator(probe);
+    omniruntime::op::Operator::DeleteOperator(build);
+    delete lookupExprFactory;
+    delete hashExprFactory;
+    Expr::DeleteExprs(probeHashKeys);
+    Expr::DeleteExprs(buildHashKeys);
+    delete overflowConfig;
+    if (guardExhausted) {
+        throw std::runtime_error(guardDetails);
+    }
+    return result;
+}
+
+TEST(JoinWithExprTest, TestInnerEqualityJoinOnExprKeyThroughSpillRestore)
+{
+    using namespace join_spill_dual_run;
+    JoinSubPartitionConfig subPartCfg;
+    subPartCfg.numSubPartitions = 4;
+    subPartCfg.startPartitionBit = 0;
+    subPartCfg.activeSubPartition = 0;
+    const DataTypes projectedTypes({LongType(), LongType(), LongType()});
+    auto findKeyForSubPartition = [&](uint32_t target) {
+        JoinSubPartitioner partitioner(subPartCfg);
+        const std::vector<int32_t> projectedHashCols = {2};
+        for (int64_t key = 0; key < 10000; ++key) {
+            auto *batch = new VectorBatch(1);
+            for (int32_t col = 0; col < 3; ++col) {
+                auto *vector = new Vector<int64_t>(1);
+                vector->SetValue(0, key);
+                batch->Append(vector);
+            }
+            const auto buckets =
+                partitioner.PartitionRowsByKeyColumns(batch, projectedTypes, projectedHashCols);
+            VectorHelper::FreeVecBatch(batch);
+            if (!buckets.empty() && buckets[0] == target) {
+                return key;
+            }
+        }
+        return int64_t{-1};
+    };
+    const int64_t keySp1 = findKeyForSubPartition(1);
+    const int64_t keySp2 = findKeyForSubPartition(2);
+    ASSERT_GE(keySp1, 0);
+    ASSERT_GE(keySp2, 0);
+    auto makeBatch = [](const std::vector<int64_t> &keys, const std::vector<int64_t> &values) {
+        auto *batch = new VectorBatch(static_cast<int32_t>(keys.size()));
+        auto *keyVector = new Vector<int64_t>(static_cast<int32_t>(keys.size()));
+        auto *valueVector = new Vector<int64_t>(static_cast<int32_t>(values.size()));
+        for (size_t row = 0; row < keys.size(); ++row) {
+            keyVector->SetValue(static_cast<int32_t>(row), keys[row]);
+            valueVector->SetValue(static_cast<int32_t>(row), values[row]);
+        }
+        batch->Append(keyVector);
+        batch->Append(valueVector);
+        return batch;
+    };
+    BatchFactory buildFactory = [&]() { return makeBatch({keySp1, keySp2}, {101, 102}); };
+    BatchFactory probeFactory = [&]() { return makeBatch({keySp1, keySp2}, {201, 202}); };
+    ScenarioScheduler scheduler;
+    scheduler.residentFullTable = [&](const BatchFactory &build, const BatchFactory &probe) {
+        return RunExprKeyArm(SpillMode::NoSpill, build, probe);
+    };
+    scheduler.forcedSpillPathARestore = [&](const BatchFactory &build, const BatchFactory &probe) {
+        return RunExprKeyArm(SpillMode::ForcedSpillPathA, build, probe);
+    };
+
+    const auto resident = RunResidentFullTableNoSpill(scheduler, buildFactory, probeFactory);
+    const auto spilled = RunForcedSpillPathARestore(scheduler, buildFactory, probeFactory);
+    AssertTupleMultisetEqual(resident, spilled);
+    AssertNoSpillEvidence(resident);
+    AssertSpillEvidence(spilled);
+    EXPECT_EQ(2u, resident.rows.size());
 }
 
 TEST(JoinWithExprTest, TestInnerEqualityJoinOnKeyWithoutExpr)
@@ -1314,7 +1572,7 @@ TEST(JoinWithExprTest, TestFullEqualityJoinOnKeyWithExpr)
     auto lookupOuterJoinFactory = LookupOuterJoinWithExprOperatorFactory::CreateLookupOuterJoinWithExprOperatorFactory(
         probeTypes, probeOutputCols, probeOutputColsCount, probeHashKeys, probeHashKeysCount, buildOutputCols,
         buildOutputTypes, (int64_t)hashBuilderFactory);
-    auto lookupOuterJoinWithExprOperator = lookupOuterJoinFactory->CreateOperator();
+    auto lookupOuterJoinWithExprOperator = lookupOuterJoinFactory->CreateOperator(nullptr);
     lookupJoinWithExprOperator->AddInput(probeVecBatch);
     VectorBatch *lookupJoinOutputVecBatch = nullptr;
     lookupJoinWithExprOperator->GetOutput(&lookupJoinOutputVecBatch);
@@ -1587,7 +1845,7 @@ TEST(JoinWithExprTest, TestFullEqualityJoinOnKeyWithoutExpr)
         LookupOuterJoinWithExprOperatorFactory::CreateLookupOuterJoinWithExprOperatorFactory(probeTypes,
         probeOutputCols, probeOutputColsCount, probeHashKeys, probeHashKeysCount, buildOutputCols, buildOutputTypes,
         (int64_t)hashBuilderFactory);
-    auto lookupOuterJoinWithExprOperator = lookupOuterJoinWithExprFactory->CreateOperator();
+    auto lookupOuterJoinWithExprOperator = lookupOuterJoinWithExprFactory->CreateOperator(nullptr);
     lookupJoinWithExprOperator->AddInput(probeVecBatch);
     VectorBatch *lookupJoinOutputVecBatch = nullptr;
     lookupJoinWithExprOperator->GetOutput(&lookupJoinOutputVecBatch);
@@ -1690,23 +1948,23 @@ TEST(JoinWithExprTest, TestInnerEqualityJoinAddInputTwoVecBatch)
 
     std::vector<VectorBatch *> lookupJoinOutput;
     lookupJoinWithExprOperator->setNoMoreInput(false);
+    auto drainCurrentBatch = [&]() {
+        for (int guard = 0; guard < 1000 && !lookupJoinWithExprOperator->needsInput(); ++guard) {
+            VectorBatch *outputVecBatch = nullptr;
+            lookupJoinWithExprOperator->GetOutput(&outputVecBatch);
+            if (outputVecBatch != nullptr) lookupJoinOutput.push_back(outputVecBatch);
+        }
+        ASSERT_TRUE(lookupJoinWithExprOperator->needsInput());
+    };
     lookupJoinWithExprOperator->AddInput(probeVecBatch0);
-    while (!lookupJoinWithExprOperator->needsInput() &&
-        lookupJoinWithExprOperator->GetStatus() != OMNI_STATUS_FINISHED) {
-        VectorBatch *outputVecBatch = nullptr;
-        lookupJoinWithExprOperator->GetOutput(&outputVecBatch);
-        if (outputVecBatch != nullptr) {
-            lookupJoinOutput.push_back(outputVecBatch);
-        }
-    }
+    drainCurrentBatch();
     lookupJoinWithExprOperator->AddInput(probeVecBatch1);
+    drainCurrentBatch();
     lookupJoinWithExprOperator->noMoreInput();
-    while (lookupJoinWithExprOperator->GetStatus() != OMNI_STATUS_FINISHED) {
+    for (int guard = 0; guard < 1000 && !lookupJoinWithExprOperator->isFinished(); ++guard) {
         VectorBatch *outputVecBatch = nullptr;
         lookupJoinWithExprOperator->GetOutput(&outputVecBatch);
-        if (outputVecBatch != nullptr) {
-            lookupJoinOutput.push_back(outputVecBatch);
-        }
+        if (outputVecBatch != nullptr) lookupJoinOutput.push_back(outputVecBatch);
     }
 
     EXPECT_EQ(lookupJoinOutput.size(), 2);
@@ -1825,4 +2083,30 @@ TEST(JoinWithExprTest, TestBothJoinKeyAndFilterWithExpr)
     DeleteJoinExprOperatorFactory(hashBuilderWithExprOperatorFactory, lookupJoinWithExprOperatorFactory);
     delete overflowConfig;
 }
+}
+
+TEST(JoinWithExprTest, ProjectionAllocationReclaimsPriorBuildAndPreservesNextBatch)
+{
+    using namespace join_spill_dual_run;
+    auto batch = [](int copies) {
+        auto *result = new VectorBatch(copies * 2);
+        for (int col = 0; col < 2; ++col) {
+            auto *values = new Vector<int64_t>(copies * 2);
+            for (int row = 0; row < copies * 2; ++row) {
+                values->SetValue(row, row % 2 + 10 * col);
+            }
+            result->Append(values);
+        }
+        return result;
+    };
+    auto resident = JoinWithExprTest::RunExprKeyArm(SpillMode::NoSpill,
+        [&]() { return batch(2); }, [&]() { return batch(1); });
+    auto reclaimed = JoinWithExprTest::RunExprKeyArm(SpillMode::ForcedSpillPathA,
+        [&]() { return batch(1); }, [&]() { return batch(1); }, true);
+    std::sort(resident.rows.begin(), resident.rows.end());
+    std::sort(reclaimed.rows.begin(), reclaimed.rows.end());
+    ASSERT_EQ(resident.rows.size(), 4);
+    EXPECT_EQ(resident.rows, reclaimed.rows);
+    EXPECT_GT(reclaimed.buildSpilledRows, 0);
+    EXPECT_EQ(reclaimed.finalPhase, JoinHandoffPhase::Complete);
 }

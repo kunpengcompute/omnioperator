@@ -34,7 +34,9 @@ public:
         int32_t probeHashKeysCount, int32_t *buildOutputCols, const type::DataTypes &buildOutputTypes,
         int64_t hashBuilderFactoryAddr, BuildSide buildSide);
     ~LookupOuterJoinWithExprOperatorFactory() override;
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::unique_ptr<DataTypes> probeTypes; // all types for probe
@@ -45,11 +47,18 @@ private:
 
 class LookupOuterJoinWithExprOperator : public Operator {
 public:
-    explicit LookupOuterJoinWithExprOperator(LookupOuterJoinOperator *lookupJoinOperator);
+    // Pool-bound ctor chains Operator(pool)
+    LookupOuterJoinWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+        LookupOuterJoinOperator *lookupJoinOperator);
     ~LookupOuterJoinWithExprOperator() override;
     int32_t AddInput(omniruntime::vec::VectorBatch *vecBatch) override;
     int32_t GetOutput(omniruntime::vec::VectorBatch **outputVecBatch) override;
     OmniStatus Close() override;
+
+    uint64_t ReleaseBuildState()
+    {
+        return lookupOuterJoinOperator->ReleaseBuildState();
+    }
 
     void noMoreInput() override
     {

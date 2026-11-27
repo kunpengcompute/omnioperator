@@ -252,7 +252,7 @@ public:
         const auto size = inputArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_TIMESTAMP, size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_TIMESTAMP, size);
         }
 
         bool formatIsConst = (formatArg->GetEncoding() == OMNI_ENCODING_CONST);
@@ -357,11 +357,11 @@ public:
                 delete policyArg;
                 delete tzArg;
                 delete formatArg;
-                ApplyTimestamp(args, outputType, result);
+                ApplyTimestamp(context->GetPool(), args, outputType, result);
             } else if (inputTypeId == OMNI_DATE32 || inputTypeId == OMNI_INT) {
                 delete policyArg;
                 delete formatArg;
-                ApplyDate(args, outputType, result, sessionTz);
+                ApplyDate(context->GetPool(), args, outputType, result, sessionTz);
                 delete tzArg;
             } else {
                 // String path with explicit format and timezone
@@ -378,11 +378,11 @@ public:
 
             if (inputTypeId == OMNI_TIMESTAMP || inputTypeId == OMNI_LONG) {
                 delete formatArg;
-                ApplyTimestamp(args, outputType, result);
+                ApplyTimestamp(context->GetPool(), args, outputType, result);
             } else if (inputTypeId == OMNI_DATE32 || inputTypeId == OMNI_INT) {
                 delete formatArg;
                 const tz::TimeZone *sessionTz = getTimeZoneFromConfig(context->queryConfig());
-                ApplyDate(args, outputType, result, sessionTz);
+                ApplyDate(context->GetPool(), args, outputType, result, sessionTz);
             } else {
                 args.push(formatArg);
                 ApplyStringWithFormat(args, outputType, result, context);
@@ -394,10 +394,10 @@ public:
             if (inputTypeId == OMNI_VARCHAR || inputTypeId == OMNI_CHAR) {
                 ApplyStringDefault(args, outputType, result, context);
             } else if (inputTypeId == OMNI_TIMESTAMP || inputTypeId == OMNI_LONG) {
-                ApplyTimestamp(args, outputType, result);
+                ApplyTimestamp(context->GetPool(), args, outputType, result);
             } else if (inputTypeId == OMNI_DATE32 || inputTypeId == OMNI_INT) {
                 const tz::TimeZone *sessionTz = getTimeZoneFromConfig(context->queryConfig());
-                ApplyDate(args, outputType, result, sessionTz);
+                ApplyDate(context->GetPool(), args, outputType, result, sessionTz);
             } else {
                 args.pop();
                 OMNI_THROW("ToUnixTimestamp function Error",
@@ -472,7 +472,7 @@ private:
         const auto size = inputArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_LONG, size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_LONG, size);
         }
 
         std::string defaultFormat(kDefaultFormat);
@@ -523,7 +523,7 @@ private:
         const auto size = inputArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_LONG, size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_LONG, size);
         }
 
         bool formatIsConst = (formatArg->GetEncoding() == OMNI_ENCODING_CONST);
@@ -586,7 +586,8 @@ private:
         }
     }
 
-    void ApplyTimestamp(std::stack<BaseVector *> &args, const DataTypePtr &outputType,
+    void ApplyTimestamp(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::stack<BaseVector *> &args, const DataTypePtr &outputType,
         BaseVector *&result) const
     {
         auto inputArg = args.top();
@@ -595,7 +596,7 @@ private:
         const auto size = inputArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_LONG, size);
+            result = VectorHelper::CreateFlatVector(pool, OMNI_LONG, size);
         }
 
         for (int32_t row = 0; row < size; ++row) {
@@ -618,7 +619,8 @@ private:
         }
     }
 
-    void ApplyDate(std::stack<BaseVector *> &args, const DataTypePtr &outputType,
+    void ApplyDate(omniruntime::mem::OmniTaskMemoryPool *pool,
+        std::stack<BaseVector *> &args, const DataTypePtr &outputType,
         BaseVector *&result, const tz::TimeZone *sessionTz = nullptr) const
     {
         auto inputArg = args.top();
@@ -627,7 +629,7 @@ private:
         const auto size = inputArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(OMNI_LONG, size);
+            result = VectorHelper::CreateFlatVector(pool, OMNI_LONG, size);
         }
 
         for (int32_t row = 0; row < size; ++row) {

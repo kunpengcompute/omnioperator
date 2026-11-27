@@ -54,7 +54,7 @@
          auto fn = VectorFunction::Find(sig);
          ASSERT_NE(fn, nullptr);
          auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-         ExecutionContext ctx;
+         ExecutionContext ctx(4096, nullptr);
          ctx.SetResultRowSize(jsonVec->GetSize());
          std::stack<BaseVector*> args;
          args.push(jsonVec);

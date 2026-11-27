@@ -24,8 +24,10 @@ namespace omniruntime {
 
         class ExpandOperator : public Operator {
         public:
-            explicit ExpandOperator(std::vector<std::shared_ptr<ExpressionEvaluator>> &exprEvaluators)
-                : projectedVecs(nullptr), exprEvaluators(exprEvaluators)
+            // Pool-bound ctor chains Operator(pool)
+            ExpandOperator(omniruntime::mem::OmniTaskMemoryPool *pool,
+                std::vector<std::shared_ptr<ExpressionEvaluator>> &exprEvaluators)
+                : Operator(pool), projectedVecs(nullptr), exprEvaluators(exprEvaluators)
             {
             }
 
@@ -58,7 +60,9 @@ namespace omniruntime {
 
             ~ExpandOperatorFactory() override = default;
 
-            omniruntime::op::Operator *CreateOperator() override;
+            using OperatorFactory::CreateOperator;
+            // Pool-bound override
+            omniruntime::op::Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
         private:
             std::vector<std::shared_ptr<ExpressionEvaluator>> exprEvaluators;

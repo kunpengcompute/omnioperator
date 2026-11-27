@@ -26,7 +26,7 @@ TEST(BloomFilterTest, TestBloomFilterInit)
     VectorBatch *inputVectorBatch = CreateVectorBatch(inputTypes, rowNum, intVecData);
 
     auto *factory = BloomFilterOperatorFactory::CreateBloomFilterOperatorFactory(1);
-    omniruntime::op::Operator *op = factory->CreateOperator();
+    omniruntime::op::Operator *op = factory->CreateOperator(nullptr);
     op->AddInput(inputVectorBatch);
 
     VectorBatch *result = nullptr;
@@ -223,9 +223,9 @@ TEST(BloomFilterTest, TestBloomFilterAggregator)
     auto finalFactory = CreateFactory(finalAggFuncVector, finalInputTypeVector, finalOutputTypeVector,
         finalAggColIdxVector, finalAggMask, false, false);
 
-    omniruntime::op::Operator *aggPartial1 = partialFactory1->CreateOperator();
-    omniruntime::op::Operator *aggPartial2 = partialFactory2->CreateOperator();
-    omniruntime::op::Operator *aggFinal = finalFactory->CreateOperator();
+    omniruntime::op::Operator *aggPartial1 = partialFactory1->CreateOperator(nullptr);
+    omniruntime::op::Operator *aggPartial2 = partialFactory2->CreateOperator(nullptr);
+    omniruntime::op::Operator *aggFinal = finalFactory->CreateOperator(nullptr);
 
     aggPartial1->Init();
     aggPartial1->AddInput(inputVectorBatch1);
@@ -263,5 +263,47 @@ TEST(BloomFilterTest, TestBloomFilterAggregator)
     delete partialBf1;
     delete partialBf2;
     delete finalBf;
+}
+
+std::string SerializeBloomFilter(const std::vector<int64_t> &items)
+{
+    BloomFilter filter(8, BloomFilter::VERSION);
+    for (int64_t item : items) {
+        filter.PutLong(item);
+    }
+    std::string serialized(filter.GetSerializedSize(), '\0');
+    filter.Serialize(serialized.data());
+    return serialized;
+}
+
+TEST(BloomFilterTest, GetSharedReusesFilterWithSameBytes)
+{
+    const std::string bytes = SerializeBloomFilter({1, 42, 1000});
+    const std::string copy = bytes;
+    auto first = BloomFilter::GetShared(bytes.data(), bytes.size());
+    auto second = BloomFilter::GetShared(copy.data(), copy.size());
+    EXPECT_EQ(first.get(), second.get());
+    EXPECT_TRUE(first->MightContainLong(42));
+
+    const std::string other = SerializeBloomFilter({7});
+    auto third = BloomFilter::GetShared(other.data(), other.size());
+    EXPECT_NE(first.get(), third.get());
+    EXPECT_TRUE(third->MightContainLong(7));
+}
+
+TEST(BloomFilterTest, GetSharedRecreatesReleasedFilter)
+{
+    const std::string bytes = SerializeBloomFilter({3, 5});
+    std::weak_ptr<BloomFilter> released = BloomFilter::GetShared(bytes.data(), bytes.size());
+    EXPECT_TRUE(released.expired());
+    auto filter = BloomFilter::GetShared(bytes.data(), bytes.size());
+    EXPECT_TRUE(filter->MightContainLong(5));
+}
+
+TEST(BloomFilterTest, GetSharedRejectsTruncatedBytes)
+{
+    const std::string bytes = SerializeBloomFilter({11});
+    EXPECT_THROW(BloomFilter::GetShared(bytes.data(), bytes.size() - 1), omniruntime::exception::OmniException);
+    EXPECT_THROW(BloomFilter::GetShared(bytes.data(), 4), omniruntime::exception::OmniException);
 }
 }

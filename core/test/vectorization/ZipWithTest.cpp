@@ -78,7 +78,7 @@ TEST(ZipWithTest, SameSizeArrays)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -130,7 +130,7 @@ TEST(ZipWithTest, DifferentSizeArrays)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -193,7 +193,7 @@ TEST(ZipWithTest, NullArrayInput)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -251,7 +251,7 @@ TEST(ZipWithTest, EmptyArrays)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);
@@ -308,7 +308,7 @@ TEST(ZipWithTest, AllNullArrays)
         new LambdaExpr(addExpr, paramTypes, paramNameToIdxMap, IntType())
     }, std::make_shared<DataType>(OMNI_ARRAY));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
     ExprEval e(input, context);
     e.VisitExpr(expr);

@@ -56,9 +56,9 @@ OmniStatus ProjectionOperator::Close()
     return OMNI_STATUS_NORMAL;
 }
 
-omniruntime::op::Operator *ProjectionOperatorFactory::CreateOperator()
+omniruntime::op::Operator *ProjectionOperatorFactory::CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool)
 {
-    return new ProjectionOperator(this->exprEvaluator);
+    return new ProjectionOperator(pool, this->exprEvaluator);
 }
 } // namespace op
 } // namespace omniruntime

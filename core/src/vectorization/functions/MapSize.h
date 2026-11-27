@@ -23,7 +23,6 @@ public:
     void Apply(std::stack<BaseVector *> &args, const DataTypePtr &outputType, BaseVector *&result,
         ExecutionContext *context) const override
     {
-        std::cout << "using vectorization mapsize" << std::endl;
         if (args.empty()) {
             OMNI_THROW("MapSizeFunction Error:", "No arguments provided");
         }
@@ -33,7 +32,7 @@ public:
         auto mapArg = args.top();
         args.pop();
 
-        result = VectorHelper::CreateFlatVector(OMNI_INT, mapArg->GetSize());
+        result = VectorHelper::CreateFlatVector(context->GetPool(), OMNI_INT, mapArg->GetSize());
         if (!result) {
             OMNI_THROW("MapSizeFunction Error:", "Result vector is not a FlatVector<int32_t>");
         }

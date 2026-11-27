@@ -129,7 +129,7 @@ TEST(NativeSortMergeJoinTest, TestSmjOneTimeEqualCondition)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank = "";
-    auto *smjOp = new SortMergeJoinOperator(JoinType::OMNI_JOIN_TYPE_INNER, blank);
+    auto *smjOp = new SortMergeJoinOperator(nullptr, JoinType::OMNI_JOIN_TYPE_INNER, blank);
 
     std::vector<DataTypePtr> streamTypesVector = { IntType(), LongType() };
     DataTypes streamedTblTypes(streamTypesVector);
@@ -1752,7 +1752,7 @@ TEST(NativeSortMergeJoinTest, TestSmjStreamingGetOutput)
     // streamedTbl t1:  int a, Long b;
     // bufferedTbl t2: long c, int d;
     std::string blank = "";
-    SortMergeJoinOperator *smjOp = new SortMergeJoinOperator(JoinType::OMNI_JOIN_TYPE_INNER, blank);
+    SortMergeJoinOperator *smjOp = new SortMergeJoinOperator(nullptr, JoinType::OMNI_JOIN_TYPE_INNER, blank);
 
     std::vector<DataTypePtr> streamTypesVector = { IntType(), VarcharType(2000) };
     DataTypes streamedTblTypes(streamTypesVector);
@@ -1860,7 +1860,7 @@ TEST(NativeSortMergeJoinTest, TestSmjIterativeGetOutput)
     // streamedTbl t1:  int a, Long b;
     // bufferedTbl t2: long c, int d;
     std::string blank = "";
-    SortMergeJoinOperator *smjOp = new SortMergeJoinOperator(JoinType::OMNI_JOIN_TYPE_INNER, blank);
+    SortMergeJoinOperator *smjOp = new SortMergeJoinOperator(nullptr, JoinType::OMNI_JOIN_TYPE_INNER, blank);
 
     std::vector<DataTypePtr> streamTypesVector = { IntType(), VarcharType(2000) };
     DataTypes streamedTblTypes(streamTypesVector);
@@ -1969,7 +1969,7 @@ TEST(NativeSortMergeJoinTest, TestSmjOneLeftEqualMultiRight)
     string filter = "{\"exprType\":\"BINARY\",\"returnType\":4,\"operator\":\"EQUAL\",\"left\":{\"exprType\":"
         "\"FIELD_REFERENCE\",\"dataType\":2,\"colVal\":1},\"right\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":2,"
         "\"colVal\":2}}";
-    auto *smjOp = new SortMergeJoinOperator(JoinType::OMNI_JOIN_TYPE_INNER, filter);
+    auto *smjOp = new SortMergeJoinOperator(nullptr, JoinType::OMNI_JOIN_TYPE_INNER, filter);
 
     std::vector<DataTypePtr> streamTypesVector = { IntType(), LongType() };
     DataTypes streamedTblTypes(streamTypesVector);
@@ -2072,7 +2072,7 @@ TEST(NativeSortMergeJoinTest, TestSmjOneLeftEqualMultiRight)
 TEST(NativeSortMergeJoinTest, TestSmjFullOperatorArrayKey)
 {
     std::string blank = "";
-    auto *smjOp = new SortMergeJoinOperator(JoinType::OMNI_JOIN_TYPE_INNER, blank);
+    auto *smjOp = new SortMergeJoinOperator(nullptr, JoinType::OMNI_JOIN_TYPE_INNER, blank);
 
     std::vector<DataTypePtr> streamTypesVector = { ArrayDataType(IntType()), IntType() };
     DataTypes streamedTblTypes(streamTypesVector);
@@ -2184,7 +2184,7 @@ TEST(NativeSortMergeJoinTest, TestSmjFullOperatorStructKey)
 {
     using namespace omniruntime::type;
     std::string blank = "";
-    auto *smjOp = new SortMergeJoinOperator(JoinType::OMNI_JOIN_TYPE_INNER, blank);
+    auto *smjOp = new SortMergeJoinOperator(nullptr, JoinType::OMNI_JOIN_TYPE_INNER, blank);
 
     std::vector<DataTypePtr> fieldTypes = { IntType(), IntType() };
     auto structType = std::make_shared<RowType>(fieldTypes, std::vector<std::string>{"c0", "c1"});
@@ -2279,4 +2279,130 @@ TEST(NativeSortMergeJoinTest, TestSmjFullOperatorStructKey)
     VectorHelper::FreeVecBatch(result);
     omniruntime::op::Operator::DeleteOperator(smjOp);
 }
+}
+TEST(NativeSortMergeJoinTest, SparseMatchAfterSkewAcrossSingleRowBatches)
+{
+    DataTypes types(std::vector<DataTypePtr>{LongType()});
+    int32_t keys[] = {0};
+    DynamicPagesIndex streamed(types, keys, 1);
+    DynamicPagesIndex buffered(types, keys, 1);
+    auto append = [](DynamicPagesIndex& index, const std::vector<int64_t>& values) {
+        auto* batch = new VectorBatch(values.size());
+        auto* vector = new Vector<int64_t>(values.size(), nullptr);
+        for (size_t i = 0; i < values.size(); ++i) vector->SetValue(i, values[i]);
+        batch->Append(vector);
+        index.AddVecBatch(batch);
+    };
+    append(streamed, {1, 1});
+    for (int64_t start = 2; start <= 8192; start += 256) {
+        std::vector<int64_t> values;
+        for (int64_t value = start; value < start + 256 && value <= 8192; ++value) {
+            values.push_back(value);
+        }
+        append(streamed, values);
+    }
+    for (int i = 0; i < 100; ++i) append(buffered, {1});
+    append(buffered, {8192});
+    streamed.AddVecBatch(CreateEmptyVectorBatch(types));
+    buffered.AddVecBatch(CreateEmptyVectorBatch(types));
+    SortMergeJoinScanner scanner(types, keys, 1, &streamed, types, keys, &buffered,
+        JoinType::OMNI_JOIN_TYPE_INNER, false);
+    int matches = 0, tailMatches = 0;
+    bool finished = false;
+    for (int step = 0; step < 1000 && !finished; ++step) {
+        auto status = scanner.FindNextJoinRows();
+        std::vector<int8_t> matched, bufferedMatched;
+        std::vector<int64_t> left, right;
+        scanner.GetMatchedValueAddresses(matched, left, right, bufferedMatched);
+        ASSERT_EQ(left.size(), right.size());
+        for (size_t row = 0; row < left.size(); ++row) {
+            auto* leftVector = static_cast<Vector<int64_t>*>(streamed.GetColumn(DecodeSliceIndex(left[row]), 0));
+            auto* rightVector = static_cast<Vector<int64_t>*>(buffered.GetColumn(DecodeSliceIndex(right[row]), 0));
+            ASSERT_NE(leftVector, nullptr);
+            ASSERT_NE(rightVector, nullptr);
+            auto value = leftVector->GetValue(DecodePosition(left[row]));
+            EXPECT_EQ(value, rightVector->GetValue(DecodePosition(right[row])));
+            EXPECT_TRUE(value == 1 || value == 8192);
+            tailMatches += value == 8192;
+            ++matches;
+        }
+        finished = DecodeStreamedTblResult(status) == static_cast<int8_t>(JoinTableCode::SCAN_FINISHED) &&
+            DecodeBufferedTblResult(status) == static_cast<int8_t>(JoinTableCode::SCAN_FINISHED);
+    }
+    EXPECT_TRUE(finished);
+    EXPECT_EQ(matches, 201);
+    EXPECT_EQ(tailMatches, 1);
+    streamed.FreeAllRemainingVecBatch();
+    buffered.FreeAllRemainingVecBatch();
+}
+
+TEST(NativeSortMergeJoinTest, IncrementalSingleRowBufferedBatchesPreserveMatches)
+{
+    DataTypes types(std::vector<DataTypePtr>{LongType()});
+    int32_t keys[] = {0};
+    DynamicPagesIndex streamed(types, keys, 1);
+    DynamicPagesIndex buffered(types, keys, 1);
+    auto append = [](DynamicPagesIndex& index, const std::vector<int64_t>& values) {
+        auto* batch = new VectorBatch(values.size());
+        auto* vector = new Vector<int64_t>(values.size(), nullptr);
+        for (size_t i = 0; i < values.size(); ++i) vector->SetValue(i, values[i]);
+        batch->Append(vector);
+        index.AddVecBatch(batch);
+    };
+    append(streamed, {1, 1});
+    for (int64_t start = 2; start <= 8192; start += 256) {
+        std::vector<int64_t> values;
+        for (int64_t value = start; value < start + 256 && value <= 8192; ++value) {
+            values.push_back(value);
+        }
+        append(streamed, values);
+    }
+    append(buffered, {1});
+    int bufferedRows = 1;
+    int dataRequests = 0;
+    bool bufferedEof = false;
+    streamed.AddVecBatch(CreateEmptyVectorBatch(types));
+    SortMergeJoinScanner scanner(types, keys, 1, &streamed, types, keys, &buffered,
+        JoinType::OMNI_JOIN_TYPE_INNER, false);
+    int matches = 0, tailMatches = 0;
+    bool finished = false;
+    for (int step = 0; step < 1000 && !finished; ++step) {
+        auto status = scanner.FindNextJoinRows();
+        std::vector<int8_t> matched, bufferedMatched;
+        std::vector<int64_t> left, right;
+        scanner.GetMatchedValueAddresses(matched, left, right, bufferedMatched);
+        ASSERT_EQ(left.size(), right.size());
+        for (size_t row = 0; row < left.size(); ++row) {
+            auto* leftVector = static_cast<Vector<int64_t>*>(streamed.GetColumn(DecodeSliceIndex(left[row]), 0));
+            auto* rightVector = static_cast<Vector<int64_t>*>(buffered.GetColumn(DecodeSliceIndex(right[row]), 0));
+            ASSERT_NE(leftVector, nullptr);
+            ASSERT_NE(rightVector, nullptr);
+            auto value = leftVector->GetValue(DecodePosition(left[row]));
+            EXPECT_EQ(value, rightVector->GetValue(DecodePosition(right[row])));
+            EXPECT_TRUE(value == 1 || value == 8192);
+            tailMatches += value == 8192;
+            ++matches;
+        }
+        if (DecodeBufferedTblResult(status) == static_cast<int8_t>(JoinTableCode::NEED_DATA)) {
+            ASSERT_FALSE(bufferedEof);
+            ++dataRequests;
+            if (bufferedRows < 100) {
+                append(buffered, {1});
+            } else if (bufferedRows == 100) {
+                append(buffered, {8192});
+            } else {
+                buffered.AddVecBatch(CreateEmptyVectorBatch(types));
+                bufferedEof = true;
+            }
+            ++bufferedRows;
+        }
+        finished = DecodeStreamedTblResult(status) == static_cast<int8_t>(JoinTableCode::SCAN_FINISHED) &&
+            DecodeBufferedTblResult(status) == static_cast<int8_t>(JoinTableCode::SCAN_FINISHED);
+    }
+    EXPECT_TRUE(finished);
+    EXPECT_GE(dataRequests, 100);
+    EXPECT_EQ(matches, 201);
+    EXPECT_EQ(tailMatches, 1);
+    streamed.FreeAllRemainingVecBatch();
+    buffered.FreeAllRemainingVecBatch();
 }

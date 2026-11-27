@@ -91,14 +91,14 @@ class OneRowAdaptor {
 public:
     OneRowAdaptor() {}
 
-    void Init(const type::DataTypes &sourceTypes)
+    void Init(const type::DataTypes &sourceTypes, omniruntime::mem::OmniTaskMemoryPool *pool = nullptr)
     {
         static_assert(std::is_same<decltype(this->dataTypes), type::DataTypes>::value, "Type Mismatch!");
         this->dataTypes.GetSize();
         this->dataTypes = sourceTypes;
         this->totalTypeSize = dataTypes.GetSize();
         InitFunc();
-        InitMem();
+        InitMem(pool);
     }
 
     OneRowAdaptor(const OneRowAdaptor &oneRowAdaptor) = delete;
@@ -137,14 +137,14 @@ private:
         }
     }
 
-    void InitMem()
+    void InitMem(omniruntime::mem::OmniTaskMemoryPool *pool = nullptr)
     {
         if (rowVectorBatch != nullptr) {
             return;
         }
 
         rowVectorBatch = new VectorBatch(1);
-        VectorHelper::AppendVectors(rowVectorBatch, dataTypes, rowVectorBatch->GetRowCount());
+        VectorHelper::AppendVectors(rowVectorBatch, dataTypes, rowVectorBatch->GetRowCount(), pool);
     }
 
 private:

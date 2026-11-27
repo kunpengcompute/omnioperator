@@ -41,7 +41,8 @@ private:
     void SortStringElements(BaseVector *srcElem, BaseVector *dstElem,
         int64_t offset, int64_t size, bool ascending) const;
 
-    static BaseVector *CreateElementVectorByType(DataTypeId typeId, int64_t size);
+    static BaseVector *CreateElementVectorByType(DataTypeId typeId, int64_t size,
+        omniruntime::mem::OmniTaskMemoryPool *pool);
 
     static void CopyElementValue(BaseVector *srcElem, int32_t srcIdx,
         BaseVector *dstElem, int32_t dstIdx);

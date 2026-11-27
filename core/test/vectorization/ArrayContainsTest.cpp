@@ -46,7 +46,7 @@ TEST_F(ArrayContainsTest, IntegerArrayContainsFound)
         new LiteralExpr(static_cast<int32_t>(2), type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -83,7 +83,7 @@ TEST_F(ArrayContainsTest, IntegerArrayContainsNotFound)
         new LiteralExpr(static_cast<int32_t>(99), type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -118,7 +118,7 @@ TEST_F(ArrayContainsTest, EmptyArray)
         new LiteralExpr(static_cast<int32_t>(1), type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -166,7 +166,7 @@ TEST_F(ArrayContainsTest, ArrayWithNullElements)
         new LiteralExpr(static_cast<int32_t>(3), type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -205,7 +205,7 @@ TEST_F(ArrayContainsTest, LongArrayContains)
         new LiteralExpr(static_cast<int64_t>(200L), type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -240,7 +240,7 @@ TEST_F(ArrayContainsTest, DoubleArrayContains)
         new LiteralExpr(2.2, type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -275,7 +275,7 @@ TEST_F(ArrayContainsTest, BooleanArrayContains)
         new LiteralExpr(true, type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -310,7 +310,7 @@ TEST_F(ArrayContainsTest, NegativeNumbers)
         new LiteralExpr(static_cast<int32_t>(-3), type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -348,7 +348,7 @@ TEST_F(ArrayContainsTest, BoundaryValues)
         new LiteralExpr(kMin, type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -383,7 +383,7 @@ TEST_F(ArrayContainsTest, SingleElementArray)
         new LiteralExpr(static_cast<int32_t>(42), type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -419,7 +419,7 @@ TEST_F(ArrayContainsTest, FloatArrayContains)
         new LiteralExpr(2.5f, type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -454,7 +454,7 @@ TEST_F(ArrayContainsTest, ByteArrayContains)
         new LiteralExpr(static_cast<int8_t>(20), type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);
@@ -489,7 +489,7 @@ TEST_F(ArrayContainsTest, ShortArrayContains)
         new LiteralExpr(static_cast<int16_t>(2000), type)
     }, std::make_shared<DataType>(OMNI_BOOLEAN));
 
-    auto context = new ExecutionContext();
+    auto context = new ExecutionContext(4096, nullptr);
     context->SetResultRowSize(rowSize);
 
     ExprEval e(input, context);

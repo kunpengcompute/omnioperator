@@ -37,7 +37,7 @@ public:
         }
 
         int32_t totalRows = context->GetResultRowSize();
-        result = new MapVector(totalRows);
+        result = new MapVector(totalRows, context->GetPool());
         auto *dstMap = dynamic_cast<MapVector *>(result);
 
         DataTypeId keyTypeId = mapArgs[0]->GetKeyVector()->GetTypeId();
@@ -61,9 +61,9 @@ public:
         }
 
         auto combinedKeys = std::shared_ptr<BaseVector>(
-            VectorHelper::CreateFlatVector(static_cast<int32_t>(keyTypeId), totalEntries));
+            VectorHelper::CreateFlatVector(context->GetPool(), static_cast<int32_t>(keyTypeId), totalEntries));
         auto combinedValues = std::shared_ptr<BaseVector>(
-            VectorHelper::CreateFlatVector(static_cast<int32_t>(valueTypeId), totalEntries));
+            VectorHelper::CreateFlatVector(context->GetPool(), static_cast<int32_t>(valueTypeId), totalEntries));
 
         int64_t offset = 0;
         for (int32_t row = 0; row < totalRows; ++row) {

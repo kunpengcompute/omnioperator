@@ -24,7 +24,9 @@ public:
     static TopNWithExprOperatorFactory *CreateTopNWithExprOperatorFactory(
         std::shared_ptr<const TopNNode> planNode, const config::QueryConfig &queryConfig);
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::unique_ptr<DataTypes> sourceTypes;
@@ -35,8 +37,10 @@ private:
 
 class TopNWithExprOperator : public Operator {
 public:
-    TopNWithExprOperator(const type::DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
-        TopNOperator *topNOperator, const config::QueryConfig &queryConfig);
+    // Pool-bound ctor chains Operator(pool)
+    TopNWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+        std::vector<std::unique_ptr<Projection>> &projections, TopNOperator *topNOperator,
+        const config::QueryConfig &queryConfig);
 
     ~TopNWithExprOperator() override;
 

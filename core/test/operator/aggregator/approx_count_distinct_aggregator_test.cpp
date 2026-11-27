@@ -42,7 +42,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final)
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -55,7 +55,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final)
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);  // AddInput frees partialOutput; partialOutput string_view points at Partial state, so AddInput before DeleteOperator(aggPartial)
     op::Operator::DeleteOperator(aggPartial);
 
@@ -92,7 +92,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_den
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -103,7 +103,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_den
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -145,13 +145,13 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_mix
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
 
-    auto aggPartialSparse = partialFactory->CreateOperator();
+    auto aggPartialSparse = partialFactory->CreateOperator(nullptr);
     aggPartialSparse->AddInput(vecSparse);
     VectorBatch *partialSparseOut = nullptr;
     (void)aggPartialSparse->GetOutput(&partialSparseOut);
     ASSERT_NE(partialSparseOut, nullptr);
 
-    auto aggPartialDense = partialFactory->CreateOperator();
+    auto aggPartialDense = partialFactory->CreateOperator(nullptr);
     aggPartialDense->AddInput(vecDense);
     VectorBatch *partialDenseOut = nullptr;
     (void)aggPartialDense->GetOutput(&partialDenseOut);
@@ -161,7 +161,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_mix
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialSparseOut);
     aggFinal->AddInput(partialDenseOut);
     op::Operator::DeleteOperator(aggPartialSparse);
@@ -200,7 +200,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_int
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -211,7 +211,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_int
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -246,7 +246,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_boo
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -257,7 +257,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_boo
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -294,7 +294,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_var
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -305,7 +305,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_var
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -344,7 +344,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_cha
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -355,7 +355,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_cha
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -391,7 +391,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_tin
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -402,7 +402,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_tin
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -438,7 +438,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_sma
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -449,7 +449,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_sma
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -485,7 +485,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_flo
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -496,7 +496,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_flo
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -532,7 +532,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_dou
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -543,7 +543,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_dou
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -582,7 +582,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_var
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -593,7 +593,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_var
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -629,7 +629,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_tim
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -640,7 +640,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_tim
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -676,7 +676,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_dat
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -687,7 +687,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_dat
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -736,7 +736,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_group_by_partial_
         aggInputTypes,
         partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->Init();
     aggPartial->AddInput(vecBatch);
 
@@ -755,7 +755,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_group_by_partial_
         partialOutputTypes,
         finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->Init();
     aggFinal->AddInput(partialOutput);
 
@@ -805,7 +805,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_with_max_standard
     auto partialFactory = std::make_unique<AggregationOperatorFactory>(sourceTypes, aggFuncTypes, aggsInputColsVector,
         maskCols, aggsOutputTypesPartial, inputRaws, outputPartials, false);
     partialFactory->Init();
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
     VectorBatch *partialOutput = nullptr;
     (void)aggPartial->GetOutput(&partialOutput);
@@ -824,7 +824,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_with_max_standard
     auto finalFactory = std::make_unique<AggregationOperatorFactory>(partialSourceTypes, aggFuncTypes, finalInputCols,
         finalMask, aggsOutputTypesFinal, finalInputRaws, finalOutputPartials, false);
     finalFactory->Init();
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     VectorBatch *finalOutput = nullptr;
     (void)aggFinal->GetOutput(&finalOutput);
@@ -862,7 +862,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_dic
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -875,7 +875,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_dic
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 
@@ -908,7 +908,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_con
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), aggInputTypes, partialOutputTypes,
         std::vector<uint32_t>(), true, true, false);
-    auto aggPartial = partialFactory->CreateOperator();
+    auto aggPartial = partialFactory->CreateOperator(nullptr);
     aggPartial->AddInput(vecBatch);
 
     VectorBatch *partialOutput = nullptr;
@@ -920,7 +920,7 @@ TEST(ApproxCountDistinctAggregationTest, approx_count_distinct_partial_final_con
         std::vector<uint32_t>({ OMNI_AGGREGATION_TYPE_APPROX_COUNT_DISTINCT }),
         std::vector<uint32_t>({ 0 }), partialOutputTypes, finalOutputTypes,
         std::vector<uint32_t>(), false, false, false);
-    auto aggFinal = finalFactory->CreateOperator();
+    auto aggFinal = finalFactory->CreateOperator(nullptr);
     aggFinal->AddInput(partialOutput);
     op::Operator::DeleteOperator(aggPartial);
 

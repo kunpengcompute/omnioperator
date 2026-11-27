@@ -207,7 +207,7 @@ void CountColumnAggregator<IN_ID, OUT_ID>::ProcessAlignAggSchema(VectorBatch *re
     const std::shared_ptr<NullsHelper> nullMap, const bool aggFilter)
 {
     int rowCount = originVector->GetSize();
-    auto countVector = reinterpret_cast<Vector<int64_t> *>(VectorHelper::CreateFlatVector(OMNI_LONG, rowCount));
+    auto countVector = reinterpret_cast<Vector<int64_t> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_LONG, rowCount));
     if (nullMap != nullptr) {
         for (int index = 0; index < rowCount; ++index) {
             if ((*nullMap)[index]) {

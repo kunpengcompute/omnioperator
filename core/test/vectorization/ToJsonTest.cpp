@@ -45,7 +45,7 @@ public:
         const std::vector<std::vector<int32_t>>& intValues) {
         auto* rowVec = new RowVector(rowSize);
         for (size_t f = 0; f < fieldTypes.size(); ++f) {
-            auto* col = VectorHelper::CreateFlatVector(fieldTypes[f], rowSize);
+            auto* col = VectorHelper::CreateFlatVector(nullptr, fieldTypes[f], rowSize);
             auto* intVec = static_cast<Vector<int32_t>*>(col);
             for (int r = 0; r < rowSize; ++r) {
                 intVec->SetValue(r, intValues[f][r]);
@@ -66,7 +66,7 @@ public:
             totalElements += arr.size();
             offsets.push_back(static_cast<int64_t>(totalElements));
         }
-        auto elemVec = VectorHelper::CreateFlatVector(OMNI_LONG, static_cast<int32_t>(allElements.size()));
+        auto elemVec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, static_cast<int32_t>(allElements.size()));
         auto* longVec = static_cast<Vector<int64_t>*>(elemVec);
         for (size_t i = 0; i < allElements.size(); ++i) longVec->SetValue(i, allElements[i]);
         auto* arrVec = new ArrayVector(rowSize, std::shared_ptr<BaseVector>(elemVec));
@@ -83,7 +83,7 @@ public:
         keyVec->SetIsField(true);
         auto* keyStrVec = static_cast<Vector<LargeStringContainer<std::string_view>>*>(keyVec);
         for (size_t i = 0; i < allKeys.size(); ++i) keyStrVec->SetValue(i, std::string_view(allKeys[i]));
-        auto valVec = VectorHelper::CreateFlatVector(OMNI_LONG, static_cast<int32_t>(allValues.size()));
+        auto valVec = VectorHelper::CreateFlatVector(nullptr, OMNI_LONG, static_cast<int32_t>(allValues.size()));
         auto* valLongVec = static_cast<Vector<int64_t>*>(valVec);
         for (size_t i = 0; i < allValues.size(); ++i) valLongVec->SetValue(i, allValues[i]);
         auto* mapVec = new MapVector(rowSize);
@@ -100,7 +100,7 @@ public:
         auto fn = VectorFunction::Find(sig);
         ASSERT_NE(fn, nullptr);
         auto outputType = std::make_shared<DataType>(OMNI_VARCHAR);
-        ExecutionContext ctx;
+        ExecutionContext ctx(4096, nullptr);
         ctx.SetResultRowSize(inputVec->GetSize());
         std::stack<BaseVector*> args;
         args.push(inputVec);

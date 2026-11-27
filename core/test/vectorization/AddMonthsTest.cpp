@@ -53,7 +53,7 @@ public:
     }
     
     static BaseVector* CreateDate32Vector(const std::vector<int32_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_DATE32, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_DATE32, values.size());
         auto* typedVec = static_cast<Vector<int32_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -62,7 +62,7 @@ public:
     }
     
     static BaseVector* CreateInt32Vector(const std::vector<int32_t>& values) {
-        BaseVector* vec = VectorHelper::CreateFlatVector(OMNI_INT, values.size());
+        BaseVector* vec = VectorHelper::CreateFlatVector(nullptr, OMNI_INT, values.size());
         auto* typedVec = static_cast<Vector<int32_t>*>(vec);
         for (size_t i = 0; i < values.size(); ++i) {
             typedVec->SetValue(i, values[i]);
@@ -77,7 +77,7 @@ public:
         ASSERT_NE(function, nullptr) << "AddMonths function not found for signature";
         
         auto outputType = std::make_shared<DataType>(OMNI_DATE32);
-        ExecutionContext context;
+        ExecutionContext context(4096, nullptr);
         context.SetResultRowSize(dateVec->GetSize());
         std::stack<BaseVector*> args;
 

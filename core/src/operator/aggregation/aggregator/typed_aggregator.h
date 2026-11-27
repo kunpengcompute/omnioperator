@@ -130,6 +130,11 @@ class TypedAggregator : public Aggregator {
 public:
     ~TypedAggregator() override = default;
 
+    // Also binds `allocator` to the execution context's pool-bound allocator
+    // so no singleton call remains in operator code.
+    // Implementation in typed_aggregator.cpp.
+    void SetExecutionContext(ExecutionContext *executionContext) override;
+
     // Sort aggregation processes one row at a time. Keep this path aligned with
     // the existing no-group and hash-aggregation implementations so every
     // typed aggregator can be used by both aggregation operators.
@@ -169,7 +174,7 @@ public:
             // notSatisfiedArray can filter row which no need to aggregate
             // the nullMap: true means null
             // booleanVector: false means one row has been filtered
-            auto notSatisfied = std::make_shared<NullsHelper>(std::make_shared<NullsBuffer>(rowCount));
+            auto notSatisfied = std::make_shared<NullsHelper>(std::make_shared<NullsBuffer>(rowCount, nullptr, 0, allocator));
             if (nullMap == nullptr) {
                 for (int32_t i = 0; i < rowCount; ++i) {
                     notSatisfied->SetNull(i, not filterPtr[i]);
@@ -218,7 +223,7 @@ public:
             // notSatisfiedArray can filter row which no need to aggregate
             // the nullMap: true means null
             // booleanVector: false means one row has been filtered
-            auto notSatisfied = std::make_shared<NullsHelper>(std::make_shared<NullsBuffer>(rowCount));
+            auto notSatisfied = std::make_shared<NullsHelper>(std::make_shared<NullsBuffer>(rowCount, nullptr, 0, allocator));
             if (nullMap == nullptr) {
                 for (int32_t i = 0; i < rowCount; ++i) {
                     notSatisfied->SetNull(i, not filterPtr[i]);
@@ -252,7 +257,7 @@ public:
             // notSatisfiedArray can filter row which no need to aggregate
             // the nullMap: true means null
             // booleanVector: false means one row has been filtered
-            auto notSatisfied = std::make_shared<NullsHelper>(std::make_shared<NullsBuffer>(rowCount));
+            auto notSatisfied = std::make_shared<NullsHelper>(std::make_shared<NullsBuffer>(rowCount, nullptr, 0, allocator));
             if (nullMap == nullptr) {
                 for (int32_t i = 0; i < rowCount; ++i) {
                     notSatisfied->SetNull(i, not filterPtr[i]);
@@ -341,7 +346,9 @@ protected:
         }
     }
 
-    Allocator *allocator = Allocator::GetAllocator();
+    // Set from ExecutionContext in SetExecutionContext override.
+    // Initially nullptr; SetExecutionContext() is called before any use.
+    Allocator *allocator = nullptr;
 
     static inline bool CheckType(const DataTypeId actual, const DataTypeId expected)
     {

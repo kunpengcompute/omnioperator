@@ -33,12 +33,13 @@ public:
         ExecutionContext *context) const override;
 
 private:
+    // Pool is plumbed through to result-element CreateFlatVector.
     template <typename T>
     void ProcessRemove(ArrayVector *arrayVec, BaseVector *elementVec, BaseVector *&result,
-        int32_t rowSize, DataTypeId elementTypeId) const;
+        int32_t rowSize, DataTypeId elementTypeId, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 
     void ProcessRemoveVarchar(ArrayVector *arrayVec, BaseVector *elementVec, BaseVector *&result,
-        int32_t rowSize) const;
+        int32_t rowSize, omniruntime::mem::OmniTaskMemoryPool *pool) const;
 };
 
 } // namespace omniruntime::vectorization

@@ -36,7 +36,9 @@ public:
 
     ~SortWithExprOperatorFactory() override;
 
-    Operator *CreateOperator() override;
+    using OperatorFactory::CreateOperator;
+    // Pool-bound override
+    Operator *CreateOperator(omniruntime::mem::OmniTaskMemoryPool *pool) override;
 
 private:
     std::unique_ptr<DataTypes> sourceTypes;
@@ -47,10 +49,14 @@ private:
 
 class SortWithExprOperator : public Operator {
 public:
-    SortWithExprOperator(const type::DataTypes &sourceTypes, std::vector<std::unique_ptr<Projection>> &projections,
-        SortOperator *sortOperator, const config::QueryConfig& queryConfig);
+    // Pool-bound ctor chains Operator(pool)
+    SortWithExprOperator(omniruntime::mem::OmniTaskMemoryPool *pool, const type::DataTypes &sourceTypes,
+        std::vector<std::unique_ptr<Projection>> &projections, SortOperator *sortOperator,
+        const config::QueryConfig& queryConfig);
 
     ~SortWithExprOperator() override;
+
+    OmniStatus Init() override;
 
     int32_t AddInput(omniruntime::vec::VectorBatch *inputVecBatch) override;
 
@@ -62,12 +68,14 @@ public:
 
     void setNoMoreInput(bool noMoreInput) override
     {
+        Operator::NonReclaimableSection innerSection(sortOperator);
         noMoreInput_ = noMoreInput;
         sortOperator->setNoMoreInput(noMoreInput);
     }
 
     void noMoreInput() override
     {
+        Operator::NonReclaimableSection innerSection(sortOperator);
         noMoreInput_ = true;
         sortOperator->noMoreInput();
     }

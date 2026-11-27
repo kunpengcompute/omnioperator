@@ -104,7 +104,7 @@ public:
         const auto size = inputArg->GetSize();
 
         if (result == nullptr) {
-            result = VectorHelper::CreateFlatVector(outputType->GetId(), size);
+            result = VectorHelper::CreateFlatVector(context->GetPool(), outputType->GetId(), size);
         }
 
         const auto inputTypeId = inputArg->GetTypeId();

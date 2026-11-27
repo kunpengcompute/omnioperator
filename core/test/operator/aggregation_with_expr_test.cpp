@@ -2253,9 +2253,16 @@ TEST(HashAggregationWithExprOperatorTest, test_hashagg_spill_with_invalid_config
     auto aggWithExprOperatorFactory =
         new HashAggregationWithExprOperatorFactory(groupByKeys, groupByNum, aggAllKeys, aggFilters, sourceTypes,
         aggOutputTypesWrap, aggFuncTypes, maskCols, inputRawWrap, outputPartialWrap, operatorConfig);
-    auto aggWithExprOperator = aggWithExprOperatorFactory->CreateOperator();
+    omniruntime::mem::OmniTaskMemoryPool pool(nullptr);
+    auto aggWithExprOperator = dynamic_cast<HashAggregationWithExprOperator *>(
+        aggWithExprOperatorFactory->CreateOperator(&pool));
+    ASSERT_NE(aggWithExprOperator, nullptr);
+    aggWithExprOperator->setNoMoreInput(false);
     auto vecBatch = CreateVectorBatch(sourceTypes, dataSize, data1, data2);
-    EXPECT_THROW(aggWithExprOperator->AddInput(vecBatch), omniruntime::exception::OmniException);
+    EXPECT_NO_THROW(aggWithExprOperator->AddInput(vecBatch));
+    // Once a donor starts a destructive spill, a failure aborts reclaim via a nested
+    // runtime_error ("Native reclaim failed: ...") carrying the OmniException cause.
+    EXPECT_THROW(pool.reclaim(1), std::runtime_error);
 
     Expr::DeleteExprs(groupByKeys);
     Expr::DeleteExprs(aggAllKeys);

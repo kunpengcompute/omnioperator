@@ -58,7 +58,7 @@ TEST(EarlyFinishMarkingTest, testLimitOperator_IsEarlyFinish)
     auto *factory = LimitOperatorFactory::CreateLimitOperatorFactory(10, 0);
     ASSERT_NE(factory, nullptr);
 
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     ASSERT_NE(op, nullptr);
 
     EXPECT_TRUE(op->isEarlyFinish());
@@ -78,7 +78,7 @@ TEST(EarlyFinishMarkingTest, testDistinctLimitOperator_IsEarlyFinish)
         sourceTypes, distinctCols, sizeof(distinctCols) / sizeof(distinctCols[0]), -1, 10);
     ASSERT_NE(factory, nullptr);
 
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     ASSERT_NE(op, nullptr);
 
     EXPECT_TRUE(op->isEarlyFinish());
@@ -96,7 +96,7 @@ TEST(EarlyFinishMarkingTest, testTableScanOperator_IsEarlyFinish)
         std::make_shared<omniruntime::connector::hive::HiveConnector>("test", nullptr);
     registerConnector(connector);
 
-    TableScanOperator op(sharedMockNode, 1000, nullptr);
+    TableScanOperator op(nullptr, sharedMockNode, 1000, nullptr);
 
     EXPECT_TRUE(op.isEarlyFinish());
 
@@ -118,7 +118,7 @@ TEST(EarlyFinishMarkingTest, testSortOperator_NotEarlyFinish)
         sourceTypes, outputCols, 2, sortCols, ascendings, nullFirsts, 1);
     ASSERT_NE(factory, nullptr);
 
-    auto *op = factory->CreateOperator();
+    auto *op = factory->CreateOperator(nullptr);
     ASSERT_NE(op, nullptr);
 
     EXPECT_FALSE(op->isEarlyFinish());

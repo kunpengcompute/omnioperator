@@ -429,7 +429,7 @@ public:
         if constexpr (std::is_same_v<InRawType, ResultType>) {
             if (nullMap == nullptr) {
                 auto sumVector = VectorHelper::SliceVector(originVector, 0, rowCount);
-                auto countVector = VectorHelper::CreateFlatVector(OMNI_LONG, rowCount);
+                auto countVector = VectorHelper::CreateFlatVector(this->pool_, OMNI_LONG, rowCount);
                 int64_t *valueAddr = reinterpret_cast<int64_t *>(GetValuesFromVector<OMNI_LONG>(countVector));
                 std::fill_n(valueAddr, rowCount, 1);
                 result->Append(sumVector);
@@ -452,8 +452,8 @@ protected:
         const std::shared_ptr<NullsHelper> nullMap)
     {
         int rowCount = originVector->GetSize();
-        auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(OutDecimalId, rowCount));
-        auto countVector = reinterpret_cast<Vector<int64_t> *>(VectorHelper::CreateFlatVector(OMNI_LONG, rowCount));
+        auto sumVector = reinterpret_cast<Vector<ResultType> *>(VectorHelper::CreateFlatVector(this->pool_, OutDecimalId, rowCount));
+        auto countVector = reinterpret_cast<Vector<int64_t> *>(VectorHelper::CreateFlatVector(this->pool_, OMNI_LONG, rowCount));
 
         auto vector = reinterpret_cast<T *>(originVector);
         if (nullMap != nullptr) {

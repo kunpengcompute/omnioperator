@@ -74,16 +74,35 @@ public abstract class Vec implements Closeable {
     private AtomicBoolean isClosed = new AtomicBoolean(false);
 
     /**
-     * The routine will use the specialized vector allocator to allocate new vector.
+     * Pool-aware Vec ctor. The nmmHandle is the per-task OmniTaskMemoryPool*
+     * address obtained via OmniNativeMemoryManagerJniWrapper.getPoolAddress().
      *
      * @param capacityInBytes the capacity in bytes of vector
      * @param size the actual number of value of vector
      * @param encoding the encoding type of vector
      * @param datatype the data type of this vector
+     * @param nmmHandle per-task OmniTaskMemoryPool address (0 = no pool / test path)
      */
+    public Vec(int capacityInBytes, int size, VecEncoding encoding, DataType datatype, long nmmHandle) {
+        this(newVectorNative(size, encoding.ordinal(), datatype.getId().toValue(), capacityInBytes, nmmHandle),
+                capacityInBytes, size, datatype, true);
+    }
+
+    /**
+     * Legacy no-pool ctor. Retained as a bridge for callers without per-task pool
+     * context. Calls newVectorNative with nmmHandle=0L -> pool=nullptr on the
+     * native side. Prefer the pool-aware 5-arg ctor above when a pool is reachable.
+     *
+     * @param capacityInBytes the capacity in bytes of vector
+     * @param size the actual number of value of vector
+     * @param encoding the encoding type of vector
+     * @param datatype the data type of this vector
+     * @deprecated Prefer the pool-aware 5-arg ctor when a per-task pool is reachable.
+     */
+    @Deprecated
     public Vec(int capacityInBytes, int size, VecEncoding encoding, DataType datatype) {
-        this(newVectorNative(size, encoding.ordinal(), datatype.getId().toValue(), capacityInBytes), capacityInBytes,
-                size, datatype, true);
+        this(newVectorNative(size, encoding.ordinal(), datatype.getId().toValue(), capacityInBytes, 0L),
+                capacityInBytes, size, datatype, true);
     }
 
     public Vec(Vec dictionary, int[] ids, int capacityInBytes, DataType dataType) {
@@ -171,7 +190,8 @@ public abstract class Vec implements Closeable {
                 dataType, isWritable);
     }
 
-    private static native long newVectorNative(int size, int vecEncodingId, int dataTypeId, int capacityInBytes);
+    private static native long newVectorNative(int size, int vecEncodingId, int dataTypeId, int capacityInBytes,
+            long nmmHandle);
 
     private static native long newDictionaryVectorNative(long dictionaryNativeVector, int[] ids, int size,
             int dataTypeId);
