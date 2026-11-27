@@ -3,6 +3,7 @@
  */
 
 #include "large_string_container.h"
+#include <limits>
 
 namespace omniruntime::vec {
 template<typename RAW_DATA_TYPE>
@@ -41,6 +42,106 @@ void LargeStringContainer<RAW_DATA_TYPE>::SetValue(int index, const std::string_
     }
     offsets[index + 1] = needCapacityInBytes;
     lastOffsetPosition = index;
+}
+
+template<typename RAW_DATA_TYPE>
+void LargeStringContainer<RAW_DATA_TYPE>::SetValues(int32_t index, const std::string_view *values,
+    const uint8_t *nulls, int32_t count)
+{
+    if (index < 0 || count < 0 || index > size || count > size - index || (count > 0 && values == nullptr)) {
+        throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "invalid batch string range");
+    }
+    if (count == 0) {
+        return;
+    }
+
+    // The payload is append-only: changing an already materialized offset would also
+    // require moving every following value. Gaps are supported and FillSlots will
+    // propagate the current end offset over them.
+    const uint32_t nextPosition = lastOffsetPosition + 1;
+    if (static_cast<uint32_t>(index) < nextPosition) {
+        throw omniruntime::exception::OmniException(
+            "STRING_CONTAINER_ERROR", "batch string overwrite is not supported");
+    }
+
+    // Validate the whole payload before changing offsets or reallocating storage
+    // referenced by a source.
+    uint64_t bytes = offsets[nextPosition];
+    const auto bufferAddress = reinterpret_cast<uintptr_t>(bufferSupplier->Data());
+    for (int32_t i = 0; i < count; ++i) {
+        if (nulls != nullptr && nulls[i]) {
+            continue;
+        }
+        const auto &value = values[i];
+        if (value.size() > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) - bytes) {
+            throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "batch string offsets overflow");
+        }
+        if (!value.empty() && reinterpret_cast<uintptr_t>(value.data()) - bufferAddress < bufferSupplier->Capacity()) {
+            throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "batch string source aliases output");
+        }
+        bytes += value.size();
+    }
+
+    char *destination = GetBufferWithSpace(static_cast<uint32_t>(bytes));
+    FillSlots(index);
+    int32_t position = offsets[index];
+    for (int32_t i = 0; i < count; ++i) {
+        if (nulls == nullptr || !nulls[i]) {
+            const auto &value = values[i];
+            if (!value.empty()) {
+                memcpy(destination + position, value.data(), value.size());
+                position += static_cast<int32_t>(value.size());
+            }
+        }
+        offsets[index + i + 1] = position;
+    }
+    lastOffsetPosition = static_cast<uint32_t>(index + count - 1);
+}
+
+template<typename RAW_DATA_TYPE>
+void LargeStringContainer<RAW_DATA_TYPE>::SetValues(int32_t index, const std::string_view *values,
+    const uint8_t *nulls, int32_t count, uint64_t totalBytes)
+{
+    if (index < 0 || count < 0 || index > size || count > size - index || (count > 0 && values == nullptr)) {
+        throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "invalid batch string range");
+    }
+    if (count == 0) {
+        return;
+    }
+
+    // Payload is append-only, same contract as the validating overload.
+    const uint32_t nextPosition = lastOffsetPosition + 1;
+    if (static_cast<uint32_t>(index) < nextPosition) {
+        throw omniruntime::exception::OmniException(
+            "STRING_CONTAINER_ERROR", "batch string overwrite is not supported");
+    }
+
+    // The caller gathered these views from foreign storage and supplies the exact payload
+    // size, so the per-value overflow and aliasing scan collapses into one capacity check.
+    // index may follow an unmaterialized gap, so offsets[index] is not necessarily the
+    // current payload tail until FillSlots runs. Base the reservation on nextPosition,
+    // whose offset is already materialized, without materializing the gap prematurely.
+    const int32_t currentEndOffset = offsets[nextPosition];
+    const uint64_t maxOffset = static_cast<uint64_t>(std::numeric_limits<int32_t>::max());
+    if (currentEndOffset < 0 || totalBytes > maxOffset - static_cast<uint64_t>(currentEndOffset)) {
+        throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "batch string offsets overflow");
+    }
+    const uint64_t endOffset = static_cast<uint64_t>(currentEndOffset) + totalBytes;
+
+    char *destination = GetBufferWithSpace(static_cast<uint32_t>(endOffset));
+    FillSlots(index);
+    int32_t position = offsets[index];
+    for (int32_t i = 0; i < count; ++i) {
+        if (nulls == nullptr || !nulls[i]) {
+            const auto &value = values[i];
+            if (!value.empty()) {
+                memcpy(destination + position, value.data(), value.size());
+                position += static_cast<int32_t>(value.size());
+            }
+        }
+        offsets[index + i + 1] = position;
+    }
+    lastOffsetPosition = static_cast<uint32_t>(index + count - 1);
 }
 
 /* *
@@ -113,8 +214,32 @@ char* LargeStringContainer<RAW_DATA_TYPE>::ExpandBufferToCapacity(size_t toCapac
 template<typename RAW_DATA_TYPE>
 void LargeStringContainer<RAW_DATA_TYPE>::Expand(int32_t needSize)
 {
+    if (needSize < 0) {
+        throw omniruntime::exception::OmniException("STRING_CONTAINER_ERROR", "string container size invalid");
+    }
+    const int32_t oldSize = size;
+    // Reserve() can grow the container ahead of the vector's logical size. A later
+    // Vector::Expand() within that reservation must not shrink offsets: vector::resize
+    // would retain the allocation while memory accounting incorrectly reclaimed it.
+    if (needSize <= oldSize) {
+        return;
+    }
+    const size_t offsetCount = static_cast<size_t>(needSize) + 1;
+    // The ctor reports GetContainerCapacity() by the creation row count while ~Vector
+    // reclaims it by the FINAL row count, so the offsets growth bytes must be reported
+    // here; otherwise every grow leaves accounted permanently lower by 4*(grown rows).
+    const int64_t delta = static_cast<int64_t>(sizeof(int32_t)) *
+        (static_cast<int64_t>(needSize) - static_cast<int64_t>(oldSize));
+    // Report before allocating so a memory-cap failure leaves the container
+    // untouched. Roll the report back if std::vector growth itself fails.
+    omniruntime::mem::ThreadMemoryManager::ReportMemory(delta);
+    try {
+        offsets.resize(offsetCount);
+    } catch (...) {
+        omniruntime::mem::ThreadMemoryManager::ReclaimMemory(delta);
+        throw;
+    }
     size = needSize;
-    offsets.resize(needSize + 1);
 }
 
 template<typename RAW_DATA_TYPE>

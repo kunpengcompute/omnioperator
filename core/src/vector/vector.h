@@ -189,6 +189,11 @@ public:
         this->isSliced = isSliced;
     }
 
+    bool IsSliced() const
+    {
+        return isSliced;
+    }
+
     void SetIsField(const bool isField)
     {
         isField_ = isField;
@@ -742,6 +747,44 @@ public:
         container->SetValue(index, value);
     }
 
+    // Batch materialization is only valid for an independently allocated output vector.
+    void SetValues(int32_t index, const std::string_view *values, const uint8_t *nulls, int32_t count)
+    {
+        if (this->isSliced || this->offset != 0 || index < 0 || count < 0 ||
+            index > this->size || count > this->size - index) {
+            throw OmniException("OPERATOR_RUNTIME_ERROR", "invalid batch string output vector or range");
+        }
+        container->SetValues(index, values, nulls, count);
+        this->SetNulls(index, false, count);
+        if (nulls != nullptr) {
+            for (int32_t i = 0; i < count; ++i) {
+                if (nulls[i]) {
+                    BaseVector::SetNull(index + i);
+                }
+            }
+        }
+    }
+
+    // Same contract as the validating overload; totalBytes must be the exact sum of the
+    // non-null value lengths and the sources must not alias this vector's container buffer.
+    void SetValues(int32_t index, const std::string_view *values, const uint8_t *nulls, int32_t count,
+        uint64_t totalBytes)
+    {
+        if (this->isSliced || this->offset != 0 || index < 0 || count < 0 ||
+            index > this->size || count > this->size - index) {
+            throw OmniException("OPERATOR_RUNTIME_ERROR", "invalid batch string output vector or range");
+        }
+        container->SetValues(index, values, nulls, count, totalBytes);
+        this->SetNulls(index, false, count);
+        if (nulls != nullptr) {
+            for (int32_t i = 0; i < count; ++i) {
+                if (nulls[i]) {
+                    BaseVector::SetNull(index + i);
+                }
+            }
+        }
+    }
+
     /* *
      * Gets the value of the vector at the indicated index
      * @param index
@@ -757,6 +800,10 @@ public:
     {
         if (container && !this->isSliced) {
             container->ResetForReuse(this->size);
+            // Resize may have reduced the logical size while the shared null buffer
+            // still spans capacity. Clear it all before invalidating the cached flag.
+            this->nullsBuffer->SetNulls(0, false, this->capacity);
+            this->SetNullFlag(false);
         }
     }
 
@@ -859,22 +906,29 @@ public:
         }
 
         if (needCapacity <= this->capacity) {
-            this->size = needCapacity;
+            // Expand the string offsets before publishing the new logical size. The
+            // container reports memory and may throw MEM_CAP_EXCEEDED; committing size
+            // first would make an identical retry return early with undersized offsets.
             container->Expand(needCapacity);
+            this->size = needCapacity;
             return;
         }
 
         int32_t newCapacity = std::max(this->capacity * 2, needCapacity);
         int32_t oldSize = this->size;
 
+        // Stage every throwing operation in local state. Only publish the new null
+        // buffer/capacity/size after the string container has expanded successfully.
+        // This keeps the vector retryable if either allocation hits the memory cap.
         auto oldNullsBuffer = this->nullsBuffer;
-        this->nullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
+        auto newNullsBuffer = std::make_shared<NullsBuffer>(newCapacity);
         if (oldNullsBuffer != nullptr) {
-            this->nullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
+            newNullsBuffer->SetNulls(0, oldNullsBuffer.get(), oldSize);
         }
+        container->Expand(needCapacity);
+        this->nullsBuffer.swap(newNullsBuffer);
         this->capacity = newCapacity;
         this->size = needCapacity;
-        container->Expand(needCapacity);
     }
 
     void Reserve(int32_t suggestedCapacity, bool copyNulls, bool copyValues) override
@@ -882,15 +936,18 @@ public:
         if(suggestedCapacity <= this->capacity || this->offset != 0) {
             return;
         }
+        std::shared_ptr<NullsBuffer> newNullsBuffer;
         if (copyNulls && this->nullsBuffer != nullptr) {
-            auto oldNullsBuffer = std::move(this->nullsBuffer);
-            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
-            this->nullsBuffer->SetNulls(0, oldNullsBuffer.get(), this->size);
+            newNullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
+            newNullsBuffer->SetNulls(0, this->nullsBuffer.get(), this->size);
         } else {
-            this->nullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
+            newNullsBuffer = std::make_shared<NullsBuffer>(suggestedCapacity);
         }
-        this->capacity = suggestedCapacity;
+        // Keep the original vector intact when container memory accounting rejects
+        // the growth. A subsequent call with the same capacity must still retry.
         container->Expand(suggestedCapacity);
+        this->nullsBuffer.swap(newNullsBuffer);
+        this->capacity = suggestedCapacity;
     }
 
 private:

@@ -2,6 +2,9 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2023-2024. All rights reserved.
  */
 
+#include <algorithm>
+#include <functional>
+
 #include "unsafe_vector.h"
 #include "vector_batch.h"
 
@@ -64,19 +67,24 @@ void VectorBatch::ResizeVectorCount(size_t vectorCnt)
 
 void VectorBatch::FreeAllVectors()
 {
-    auto vectorSize = vectors.size();
-    std::unordered_set<BaseVector *> deleted;
-    for (size_t vecIndex = 0; vecIndex < vectorSize; ++vecIndex) {
-        if (deleted.count(vectors[vecIndex])) {
-            continue;
+    // Reuse the batch's pointer storage instead of allocating a temporary hash set.
+    constexpr size_t linearDedupLimit = 32;
+    auto uniqueEnd = vectors.begin();
+    if (vectors.size() <= linearDedupLimit) {
+        for (auto *vector : vectors) {
+            if (vector != nullptr && std::find(vectors.begin(), uniqueEnd, vector) == uniqueEnd) {
+                *uniqueEnd++ = vector;
+            }
         }
-        delete vectors[vecIndex];
-        try {
-            deleted.insert(vectors[vecIndex]);
-        } catch (const std::exception &e) {
-            throw std::runtime_error("fail to insert");
-        }
-        vectors[vecIndex] = nullptr;
+    } else {
+        // Bound the work for wide schemas; std::less provides a total pointer order.
+        std::sort(vectors.begin(), vectors.end(), std::less<BaseVector *>{});
+        uniqueEnd = std::unique(vectors.begin(), vectors.end());
+    }
+    // Finish all pointer comparisons before deleting any vector.
+    vectors.erase(uniqueEnd, vectors.end());
+    for (auto *vector : vectors) {
+        delete vector;
     }
     vectors.clear();
 }

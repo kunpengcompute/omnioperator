@@ -3,6 +3,8 @@
  * @Description: join result builder implementations
  */
 #include "sort_merge_join_resultBuilder.h"
+#include <algorithm>
+#include <cstring>
 #include <memory>
 #include "expression/jsonparser/jsonparser.h"
 #include "operator/pages_index.h"
@@ -11,12 +13,20 @@
 #include "util/compiler_util.h"
 #include "vector/array_vector.h"
 #include "vector/row_vector.h"
+#include "vector/unsafe_vector.h"
 #include "type/data_type.h"
 
 namespace omniruntime {
 namespace op {
 using namespace omniruntime::vec;
 using namespace omniruntime::type;
+
+namespace {
+// Segment-length cutover between the scalar and batched VARCHAR paths.
+constexpr int32_t BATCHED_VARCHAR_MIN_ROWS = 8;
+
+using VarcharVector = Vector<LargeStringContainer<std::string_view>>;
+}
 
 JoinResultBuilder::JoinResultBuilder(const std::vector<DataTypePtr> &leftTableOutputTypes, int32_t *leftTableOutputCols,
     int32_t leftTableOutputColsCount, int32_t originalLeftTableColsCount, DynamicPagesIndex *leftTablePagesIndex,
@@ -155,7 +165,6 @@ VectorBatch *JoinResultBuilder::NewEmptyVectorBatch(int32_t rowCount) const
     auto vectorBatch = std::make_unique<VectorBatch>(rowCount);
 
     for (auto &type : allTypes) {
-        // ARRAY/MAP/ROW must use CreateComplexVector; CreateFlatVector only supports primitive types
         vectorBatch->Append(VectorHelper::CreateComplexVector(type.get(), rowCount));
     }
     return vectorBatch.release();
@@ -257,14 +266,14 @@ void AddValueToBuildVector(BaseVector *inputVector, const DataTypePtr &inputData
     DYNAMIC_TYPE_DISPATCH(AddValueToVector, typeId, inputVector, inputRowId, outputVector, outputRowId);
 }
 
-void AddValuesToBuildVector(BaseVector *inputVector, const DataTypePtr &inputDataType, const std::vector<int32_t> &rows,
-    BaseVector *outputVector, int32_t outputRowId)
+void AddValuesToBuildVector(BaseVector *inputVector, const DataTypePtr &inputDataType, const int32_t *rows,
+    int32_t rowCount, BaseVector *outputVector, int32_t outputRowId)
 {
     auto typeId = inputDataType->GetId();
     if (typeId == type::OMNI_ARRAY) {
         auto *inputArr = static_cast<ArrayVector *>(inputVector);
         auto *outputArr = static_cast<ArrayVector *>(outputVector);
-        for (size_t i = 0; i < rows.size(); i++) {
+        for (int32_t i = 0; i < rowCount; i++) {
             int32_t inputRowId = rows[i];
             if (UNLIKELY(inputArr->IsNull(inputRowId))) {
                 outputArr->SetNull(outputRowId);
@@ -281,7 +290,7 @@ void AddValuesToBuildVector(BaseVector *inputVector, const DataTypePtr &inputDat
         const auto *rowType = static_cast<const RowType *>(inputDataType.get());
         auto *inputRow = static_cast<RowVector *>(inputVector);
         auto *outputRow = static_cast<RowVector *>(outputVector);
-        for (size_t i = 0; i < rows.size(); i++) {
+        for (int32_t i = 0; i < rowCount; i++) {
             int32_t inputRowId = rows[i];
             if (UNLIKELY(inputRow->IsNull(inputRowId))) {
                 outputRow->SetNull(outputRowId);
@@ -295,19 +304,7 @@ void AddValuesToBuildVector(BaseVector *inputVector, const DataTypePtr &inputDat
         }
         return;
     }
-    auto rowIds = rows.data();
-    auto rowIdsCount = rows.size();
-    DYNAMIC_TYPE_DISPATCH(AddValuesToVector, typeId, inputVector, rowIds, rowIdsCount, outputVector, outputRowId);
-}
-
-void AddValueNullToBuildVector(const DataTypePtr &dataType, BaseVector *vector, int32_t rowId)
-{
-    auto typeId = dataType->GetId();
-    if (typeId == type::OMNI_VARCHAR || typeId == type::OMNI_CHAR) {
-        static_cast<Vector<LargeStringContainer<std::string_view>> *>(vector)->SetNull(rowId);
-    } else {
-        vector->SetNull(rowId);
-    }
+    DYNAMIC_TYPE_DISPATCH(AddValuesToVector, typeId, inputVector, rows, rowCount, outputVector, outputRowId);
 }
 
 void JoinResultBuilder::ParsingAndOrganizationResultsForLeftTable(int32_t leftBatchId, int32_t leftRowId)
@@ -423,16 +420,20 @@ int32_t JoinResultBuilder::ConstructInnerJoinOutput()
     }
     auto initialBuildRowCount = buildRowCount;
     auto initialAddressOffset = addressOffset;
+    // CollectRowsInfo stores only eligible rows and stops when the current output batch is full.
+    // A large pending candidate window therefore must not determine the scratch capacity.
+    const int32_t remainingOutputRows = maxRowCount - initialBuildRowCount;
+    const int32_t reserveRows = std::min(inputSize - initialAddressOffset, remainingOutputRows);
     std::vector<std::pair<int32_t, int32_t>> leftMeta;
-    leftMeta.reserve(inputSize - initialAddressOffset);
+    leftMeta.reserve(reserveRows);
     std::vector<std::pair<int32_t, int32_t>> rightMeta;
-    rightMeta.reserve(inputSize - initialAddressOffset);
+    rightMeta.reserve(reserveRows);
     int32_t counter = buildRowCount;
     std::vector<bool> canFreeRights;
-    canFreeRights.reserve(inputSize - initialAddressOffset);
+    canFreeRights.reserve(reserveRows);
     auto result = CollectRowsInfo(leftMeta, rightMeta, canFreeRights, inputSize, counter);
 
-    // put all the positions belonging to the same batch together
+    // Group consecutive output positions that reference the same source batch.
     auto leftGroupedRowsPerBatchId = std::vector<std::pair<int32_t, std::vector<int32_t>>>();
     GroupByMeta(leftGroupedRowsPerBatchId, leftMeta);
     auto rightGroupedRowsPerBatchId = std::vector<std::pair<int32_t, std::vector<int32_t>>>();
@@ -442,7 +443,7 @@ int32_t JoinResultBuilder::ConstructInnerJoinOutput()
     int32_t prevBatchId = 0;
     for (auto &batchRows: leftGroupedRowsPerBatchId) { // go over the different batches
         auto batchId = batchRows.first;
-        auto rowIds = batchRows.second;
+        const auto &rowIds = batchRows.second;
         if (prevBatchId != batchId) {
             this->leftTablePagesIndex->FreeBeforeVecBatch(prevBatchId);
             prevBatchId = batchId;
@@ -452,9 +453,10 @@ int32_t JoinResultBuilder::ConstructInnerJoinOutput()
             auto inputDataType = leftTableOutputTypes[columnIdx];
             auto outputVector = buildVectorBatch->Get(columnIdx);
             auto inputVector = leftTablePagesIndex->GetColumn(batchId, columnIndex);
-            AddValuesToBuildVector(inputVector, inputDataType, rowIds, outputVector, buildRowCount);
+            CopyOutputSegment(inputVector, inputDataType, rowIds.data(), static_cast<int32_t>(rowIds.size()),
+                outputVector, buildRowCount);
         }
-        buildRowCount+= rowIds.size();
+        buildRowCount += static_cast<int32_t>(rowIds.size());
     }
     if (rightTableOutputColsCount > 0) {
         buildRowCount = initialBuildRowCount;
@@ -462,26 +464,207 @@ int32_t JoinResultBuilder::ConstructInnerJoinOutput()
     int32_t rightRowsCounter = 0;
     for (auto &batchRows: rightGroupedRowsPerBatchId) { // go over the different batches
         auto batchId = batchRows.first;
-        auto rowIds = batchRows.second;
+        const auto &rowIds = batchRows.second;
         for (int32_t columnIdx = 0; columnIdx < rightTableOutputColsCount; columnIdx++) {
             int32_t buildColumnIdx = leftTableOutputColsCount + columnIdx;
             auto columnIndex = rightTableOutputCols[columnIdx];
             auto inputDataType = rightTableOutputTypes[columnIdx];
             auto outputVector = buildVectorBatch->Get(buildColumnIdx);
             auto inputVector = rightTablePagesIndex->GetColumn(batchId, columnIndex);
-            AddValuesToBuildVector(inputVector, inputDataType, rowIds, outputVector, buildRowCount);
+            CopyOutputSegment(inputVector, inputDataType, rowIds.data(), static_cast<int32_t>(rowIds.size()),
+                outputVector, buildRowCount);
         }
-        auto rowsCount = rowIds.size();
+        const auto rowsCount = static_cast<int32_t>(rowIds.size());
         rightRowsCounter += rowsCount;
         if (canFreeRights[rightRowsCounter - 1]) {
             this->rightTablePagesIndex->FreeBeforeVecBatch(batchId);
         }
-        buildRowCount+= rowsCount;
+        buildRowCount += rowsCount;
     }
     buildRowCount = counter;
     buildVectorBatchRowCount = buildRowCount;
 
     return result;
+}
+
+void JoinResultBuilder::CopyOutputSegment(BaseVector *inputVector, const DataTypePtr &inputType,
+    const int32_t *rows, int32_t rowCount, BaseVector *outputVector, int32_t outputRowId)
+{
+    if (inputType->GetId() == type::OMNI_VARCHAR && rowCount >= BATCHED_VARCHAR_MIN_ROWS &&
+        TryBatchVarcharSegment(inputVector, outputVector, rows, rowCount, outputRowId)) {
+        return;
+    }
+    AddValuesToBuildVector(inputVector, inputType, rows, rowCount, outputVector, outputRowId);
+}
+
+void JoinResultBuilder::CopyOutputSelection(const std::vector<int32_t> &batchIds,
+    const std::vector<int32_t> &rowIds, DynamicPagesIndex *pagesIndex,
+    const std::vector<DataTypePtr> &outputTypes, const int32_t *outputCols, int32_t outputColsCount,
+    int32_t columnOffset, int32_t rowBase)
+{
+    // A segment is a maximal consecutive run in the output selection with the same
+    // batchId. Its rowIds may be arbitrary or repeated. Walking runs before columns
+    // avoids rescanning batchIds and copying rowIds for every output column.
+    const int32_t rowCount = static_cast<int32_t>(batchIds.size());
+    for (int32_t start = 0; start < rowCount;) {
+        const int32_t batchId = batchIds[start];
+        int32_t end = start + 1;
+        while (end < rowCount && batchIds[end] == batchId) {
+            ++end;
+        }
+        for (int32_t column = 0; column < outputColsCount; ++column) {
+            auto *outputVector = buildVectorBatch->Get(columnOffset + column);
+            if (batchId == JOIN_NULL_FLAG) {
+                SetRightNullRangeForColumn(outputVector, outputTypes[column], rowBase + start, rowBase + end);
+            } else {
+                auto *inputVector = pagesIndex->GetColumn(batchId, outputCols[column]);
+                CopyOutputSegment(inputVector, outputTypes[column], rowIds.data() + start, end - start,
+                    outputVector, rowBase + start);
+            }
+        }
+        start = end;
+    }
+}
+
+bool JoinResultBuilder::CanSliceLeftOutputVector(BaseVector *vector, const DataTypePtr &dataType)
+{
+    if (vector == nullptr || dataType == nullptr || vector->GetEncoding() != OMNI_FLAT ||
+        vector->GetTypeId() != dataType->GetId()) {
+        return false;
+    }
+
+    // Keep the fast path on the same flat scalar/string encodings that
+    // VectorHelper::SliceVector handles without changing the output encoding.
+    // Dictionary/const and complex vectors continue through CopyOutputSelection.
+    switch (dataType->GetId()) {
+        case type::OMNI_INT:
+        case type::OMNI_DATE32:
+        case type::OMNI_SHORT:
+        case type::OMNI_BYTE:
+        case type::OMNI_LONG:
+        case type::OMNI_TIMESTAMP:
+        case type::OMNI_DATE64:
+        case type::OMNI_DECIMAL64:
+        case type::OMNI_DECIMAL128:
+        case type::OMNI_DOUBLE:
+        case type::OMNI_FLOAT:
+        case type::OMNI_BOOLEAN:
+        case type::OMNI_VARBINARY:
+        case type::OMNI_VARCHAR:
+        case type::OMNI_CHAR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool JoinResultBuilder::TryBuildLeftUnmatchedSliceOutput(int32_t rowBase, bool batchFull)
+{
+    const int32_t rowCount = static_cast<int32_t>(leftOutputBatchIds.size());
+    // A sliced source batch is read-only and cannot be expanded on a later AddJoinValueAddresses call.
+    // Restrict the fast path to a full window, which the operator immediately hands to GetOutput.
+    if (!batchFull || rowBase != 0 || buildVectorBatch != nullptr || rowCount == 0 ||
+        leftTableOutputColsCount == 0 ||
+        leftOutputRowIds.size() != leftOutputBatchIds.size() ||
+        rightOutputBatchIds.size() != leftOutputBatchIds.size() ||
+        rightOutputRowIds.size() != leftOutputBatchIds.size()) {
+        return false;
+    }
+
+    const int32_t sourceBatchId = leftOutputBatchIds[0];
+    const int32_t sourceStartRow = leftOutputRowIds[0];
+    if (sourceBatchId < 0 || sourceStartRow < 0) {
+        return false;
+    }
+
+    for (int32_t row = 0; row < rowCount; ++row) {
+        if (rightOutputBatchIds[row] != JOIN_NULL_FLAG || leftOutputBatchIds[row] != sourceBatchId ||
+            static_cast<int64_t>(leftOutputRowIds[row]) != static_cast<int64_t>(sourceStartRow) + row) {
+            return false;
+        }
+    }
+
+    // Validate every source vector before allocating or publishing any output so
+    // an unsupported column leaves the original materializing path untouched.
+    for (int32_t column = 0; column < leftTableOutputColsCount; ++column) {
+        auto *source = leftTablePagesIndex->GetColumn(sourceBatchId, leftTableOutputCols[column]);
+        if (!CanSliceLeftOutputVector(source, leftTableOutputTypes[column]) || rowCount > source->GetSize() ||
+            sourceStartRow > source->GetSize() - rowCount) {
+            return false;
+        }
+    }
+
+    auto output = std::make_unique<VectorBatch>(rowCount);
+    for (int32_t column = 0; column < leftTableOutputColsCount; ++column) {
+        auto *source = leftTablePagesIndex->GetColumn(sourceBatchId, leftTableOutputCols[column]);
+        auto slice = std::unique_ptr<BaseVector>(VectorHelper::SliceVector(source, sourceStartRow, rowCount));
+        VectorHelper::SetVectorDataType(slice.get(), leftTableOutputTypes[column].get());
+        output->Append(slice.get());
+        slice.release();
+    }
+
+    // Keep the buffered side on the existing writable flat/complex encoding.
+    // In particular, do not share a BaseVector pointer across output batches.
+    for (int32_t column = 0; column < rightTableOutputColsCount; ++column) {
+        auto nullVector = std::unique_ptr<BaseVector>(
+            VectorHelper::CreateComplexVector(rightTableOutputTypes[column].get(), rowCount));
+        output->Append(nullVector.get());
+        nullVector.release();
+        SetRightNullRangeForColumn(output->Get(leftTableOutputColsCount + column),
+            rightTableOutputTypes[column], 0, rowCount);
+    }
+
+    buildVectorBatch = output.release();
+    return true;
+}
+
+bool JoinResultBuilder::TryBatchVarcharSegment(BaseVector *inputVector, BaseVector *outputVector, const int32_t *rows,
+    int32_t rowCount, int32_t outputRowId)
+{
+    // SetValues only supports an independently allocated output vector.
+    if (outputVector->GetEncoding() != OMNI_FLAT || outputVector->IsSliced() || outputVector->GetOffset() != 0) {
+        throw OmniException("OPERATOR_RUNTIME_ERROR", "invalid batched SMJ VARCHAR output vector");
+    }
+    // CONST/DICTIONARY sources keep the scalar path. Every check runs before the
+    // first output mutation, so a fallback leaves the batch exactly as the scalar
+    // path sees it; partially gathered scratch is simply discarded.
+    if (inputVector->GetEncoding() != OMNI_FLAT) {
+        return false;
+    }
+    auto *source = static_cast<VarcharVector *>(inputVector);
+    auto *target = static_cast<VarcharVector *>(outputVector);
+    // GetOffsets already includes the source slice offset and GetValues returns the
+    // container base, so views address the raw buffer with local row positions.
+    const char *bytes = unsafe::UnsafeStringVector::GetValues(source);
+    const int32_t *offsets = unsafe::UnsafeStringVector::GetOffsets(source);
+    batchVarcharValues.resize(rowCount);
+    batchVarcharNulls.resize(rowCount);
+    std::string_view *values = batchVarcharValues.data();
+    uint8_t *nullFlags = batchVarcharNulls.data();
+    // Accumulate the exact payload size so SetValues can skip its per-value
+    // validation scan. Sources come from PagesIndex pages and never alias this
+    // independently allocated output container.
+    uint64_t totalBytes = 0;
+    for (int32_t i = 0; i < rowCount; ++i) {
+        const int32_t row = rows[i];
+        // Nulls keep the per-row source semantics; a NULL row skips offset reads and
+        // leaves an empty view that SetValues ignores.
+        if (source->IsNull(row)) {
+            nullFlags[i] = 1;
+            values[i] = std::string_view{};
+            continue;
+        }
+        nullFlags[i] = 0;
+        // Rows of one source batch are gathered, not contiguous: build the view per
+        // row instead of memcpy-ing a source string region. Empty strings may have
+        // no allocated byte buffer, so avoid nullptr arithmetic.
+        const int32_t begin = offsets[row];
+        const auto size = static_cast<size_t>(offsets[row + 1] - begin);
+        values[i] = size == 0 ? std::string_view{} : std::string_view(bytes + begin, size);
+        totalBytes += size;
+    }
+    target->SetValues(outputRowId, values, nullFlags, rowCount, totalBytes);
+    return true;
 }
 
 int32_t JoinResultBuilder::ConstructLeftJoinOutput()
@@ -551,64 +734,60 @@ int32_t JoinResultBuilder::ConstructLeftJoinOutput()
         return 0;
     }
 
-    EnsureBuildVectorBatchCapacity(rowBase + numOutputRows);
+    if (!TryBuildLeftUnmatchedSliceOutput(rowBase, batchFull)) {
+        EnsureBuildVectorBatchCapacity(rowBase + numOutputRows);
 
-    for (int32_t columnIdx = 0; columnIdx < leftTableOutputColsCount; columnIdx++) {
-        int32_t outPos = rowBase;
-        int32_t segmentStart = 0;
-        while (segmentStart < numOutputRows) {
-            int32_t batchId = leftOutputBatchIds[segmentStart];
-            int32_t segmentEnd = segmentStart;
-            while (segmentEnd < numOutputRows && leftOutputBatchIds[segmentEnd] == batchId) {
-                segmentEnd++;
-            }
-            std::vector<int32_t> rowIds(leftOutputRowIds.begin() + segmentStart, leftOutputRowIds.begin() + segmentEnd);
-            if (batchId == JOIN_NULL_FLAG) {
-                for (int32_t r = 0; r < static_cast<int32_t>(rowIds.size()); r++) {
-                    AddValueNullToBuildVector(leftTableOutputTypes[columnIdx], buildVectorBatch->Get(columnIdx),
-                        outPos + r);
-                }
-            } else {
-                auto inputVector = leftTablePagesIndex->GetColumn(batchId, leftTableOutputCols[columnIdx]);
-                AddValuesToBuildVector(inputVector, leftTableOutputTypes[columnIdx], rowIds,
-                    buildVectorBatch->Get(columnIdx), outPos);
-            }
-            outPos += static_cast<int32_t>(rowIds.size());
-            segmentStart = segmentEnd;
-        }
+        CopyOutputSelection(leftOutputBatchIds, leftOutputRowIds, leftTablePagesIndex, leftTableOutputTypes,
+            leftTableOutputCols, leftTableOutputColsCount, 0, rowBase);
+        CopyOutputSelection(rightOutputBatchIds, rightOutputRowIds, rightTablePagesIndex, rightTableOutputTypes,
+            rightTableOutputCols, rightTableOutputColsCount, leftTableOutputColsCount, rowBase);
     }
 
-    for (int32_t columnIdx = 0; columnIdx < rightTableOutputColsCount; columnIdx++) {
-        int32_t buildColumnIdx = leftTableOutputColsCount + columnIdx;
-        int32_t outRow = 0;
-        while (outRow < numOutputRows) {
-            int32_t batchId = rightOutputBatchIds[outRow];
-            int32_t segmentStart = outRow;
-            while (outRow < numOutputRows && rightOutputBatchIds[outRow] == batchId) {
-                outRow++;
-            }
-            int32_t segmentEnd = outRow;
-            if (batchId == JOIN_NULL_FLAG) {
-                SetRightNullRangeForColumn(buildVectorBatch->Get(buildColumnIdx), rightTableOutputTypes[columnIdx],
-                    rowBase + segmentStart, rowBase + segmentEnd);
-            } else {
-                std::vector<int32_t> rowIds(rightOutputRowIds.begin() + segmentStart, rightOutputRowIds.begin() + segmentEnd);
-                auto inputVector = rightTablePagesIndex->GetColumn(batchId, rightTableOutputCols[columnIdx]);
-                AddValuesToBuildVector(inputVector, rightTableOutputTypes[columnIdx], rowIds,
-                    buildVectorBatch->Get(buildColumnIdx), rowBase + segmentStart);
-            }
-        }
-    }
-
-    // Input vectors are still needed while the output columns are copied. Release only
-    // after materialization, and only for addresses consumed by this output batch.
+    // Input vectors are still needed while the output columns are copied or sliced. Release only
+    // after the output batch is complete, and only for addresses consumed by this output batch.
+    // Streamed side: every address of this window is represented above, so the surviving
+    // streamed readers are the scanner's pending pre-row key comparison (streamedPinBatchId,
+    // wired by the operator) and this builder's pending unmatched row (preStreamedBatchId,
+    // always the last processed row here). Free everything strictly below the lowest pin;
+    // the PagesIndex monotonic guard makes repeated calls no-ops. Unmatched (right-null-
+    // padded) rows carry JOIN_NULL_FLAG on the buffered side but a valid streamed batch —
+    // skipping them would freeze the left watermark for joins whose output is dominated
+    // by unmatched rows (q3_3 retains ~1000 batches that way).
+    int32_t minConsumedInWindow = INT32_MAX;
+    bool hasStreamedAddress = false;
     for (int32_t processedAddress = addressStart; processedAddress < addressOffset; processedAddress++) {
-        const int32_t leftBatchId = DecodeSliceIndex(streamedTableValueAddresses[processedAddress]);
-        const int32_t rightBatchId = DecodeSliceIndex(bufferedTableValueAddresses[processedAddress]);
-        if (leftBatchId == JOIN_NULL_FLAG || rightBatchId == JOIN_NULL_FLAG) {
-            continue;
+        const int32_t leftBatchId = static_cast<int32_t>(DecodeSliceIndex(streamedTableValueAddresses[processedAddress]));
+        const int32_t rightBatchId = static_cast<int32_t>(DecodeSliceIndex(bufferedTableValueAddresses[processedAddress]));
+        if (rightBatchId != JOIN_NULL_FLAG) {
+            FreeRightVectorBatches(isPreKeyMatched[processedAddress], leftBatchId, rightBatchId);
         }
-        FreeVectorBatches(isPreKeyMatched[processedAddress], leftBatchId, rightBatchId);
+        if (leftBatchId >= 0) {
+            hasStreamedAddress = true;
+            if (leftBatchId < minConsumedInWindow) {
+                minConsumedInWindow = leftBatchId;
+            }
+        }
+    }
+    if (hasStreamedAddress) {
+        int32_t streamedFreeLimit = minConsumedInWindow;
+        // Matched-group lease: with duplicated buffered keys a matched group spans
+        // several streamed batches and is consumed over multiple output windows; the
+        // floor of every address consumed so far stays guarding those batches until
+        // the group completes (cleared in Clear()).
+        if (minConsumedStreamedBatchId < streamedFreeLimit) {
+            streamedFreeLimit = minConsumedStreamedBatchId;
+        }
+        if (streamedPinBatchId < streamedFreeLimit) {
+            streamedFreeLimit = streamedPinBatchId;
+        }
+        if (preStreamedBatchId >= 0 && preStreamedBatchId < streamedFreeLimit) {
+            streamedFreeLimit = preStreamedBatchId;
+        }
+        leftTablePagesIndex->FreeBeforeVecBatch(streamedFreeLimit);
+
+        // Publish this window's consumed floor only after the release. Do not track
+        // streamedFreeLimit: it may include a temporary scanner or pending-row pin.
+        TrackConsumedStreamedBatch(minConsumedInWindow);
     }
 
     buildRowCount = rowBase + numOutputRows;
@@ -828,6 +1007,14 @@ void JoinResultBuilder::FreeVectorBatches(bool isPreMatched, int32_t leftBatchId
 {
     if (!isPreMatched && leftBatchId > lastUnMatchedStreamedBatchId) {
         leftTablePagesIndex->FreeBeforeVecBatch(leftBatchId);
+        rightTablePagesIndex->FreeBeforeVecBatch(rightBatchId);
+        lastUnMatchedStreamedBatchId = leftBatchId;
+    }
+}
+
+void JoinResultBuilder::FreeRightVectorBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId)
+{
+    if (!isPreMatched && leftBatchId > lastUnMatchedStreamedBatchId) {
         rightTablePagesIndex->FreeBeforeVecBatch(rightBatchId);
         lastUnMatchedStreamedBatchId = leftBatchId;
     }

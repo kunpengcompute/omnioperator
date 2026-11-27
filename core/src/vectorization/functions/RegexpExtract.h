@@ -40,7 +40,9 @@ private:
     void ApplyRegexpExtract(BaseVector *strVec, BaseVector *patternVec, BaseVector *groupIdxVec,
         BaseVector *&result, const DataTypePtr &outputType, ExecutionContext *context) const;
 
-    // Extract a string using regex pattern and group index
-    std::string ExtractRegex(const std::string_view &str, const std::string_view &pattern, int32_t groupIdx) const;
+    // Extract a string using regex pattern and group index.
+    // The returned view points into the input string, which outlives the call.
+    std::string_view ExtractRegex(const std::string_view &str, const std::string_view &pattern,
+        int32_t groupIdx) const;
 };
 }

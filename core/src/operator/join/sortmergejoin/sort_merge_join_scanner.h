@@ -139,6 +139,12 @@ public:
         std::vector<int64_t> &streamedTblValueAddresses, std::vector<int64_t> &bufferedTblValueAddresses,
         std::vector<int8_t> &isSameBufferedKeyMatched);
 
+    // The streamed batch the scanner may still read for its pending pre-row key
+    // comparison on the next FindNextJoinRows call. The result builder must not
+    // free this batch after materializing the current window. Returns INT32_MAX
+    // when no real streamed row is pinned (unset or synthetic pre address).
+    int32_t GetStreamedPinBatchId() const;
+
     ~SortMergeJoinScanner();
 
 private:
@@ -230,15 +236,51 @@ private:
         return !streamedValueAddress.empty() && !bufferedValueAddress.empty();
     }
 
+    ALWAYS_INLINE int64_t GetCurrentStreamedValueAddress()
+    {
+        return streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition, streamedAddressCursor);
+    }
+
+    ALWAYS_INLINE int64_t GetCurrentBufferedValueAddress()
+    {
+        return bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition, bufferedAddressCursor);
+    }
+
     ALWAYS_INLINE int32_t CompareCurRowKeys()
     {
-        auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
-        auto bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+        auto streamedValueAddr = GetCurrentStreamedValueAddress();
+        auto bufferedValueAddr = GetCurrentBufferedValueAddress();
         auto streamedBatchId = DecodeSliceIndex(streamedValueAddr);
         auto streamedRowId = DecodePosition(streamedValueAddr);
         auto bufferedBatchId = DecodeSliceIndex(bufferedValueAddr);
         auto bufferedRowId = DecodePosition(bufferedValueAddr);
         return CompareRowKeys(streamedBatchId, streamedRowId, bufferedBatchId, bufferedRowId);
+    }
+
+    ALWAYS_INLINE void CacheStreamedKeyColumns(uint32_t streamedBatchId)
+    {
+        for (int i = 0; i < keyColsCount; ++i) {
+            cachedStreamedKeyColumns[i] =
+                streamedPagesIndex->GetColumn(streamedBatchId, streamedTableKeysCols[i]);
+        }
+    }
+
+    ALWAYS_INLINE int32_t CompareCurrentBufferedRowWithCachedStreamed(uint32_t streamedRowId)
+    {
+        auto bufferedValueAddr = GetCurrentBufferedValueAddress();
+        auto bufferedBatchId = DecodeSliceIndex(bufferedValueAddr);
+        auto bufferedRowId = DecodePosition(bufferedValueAddr);
+        for (int i = 0; i < keyColsCount; ++i) {
+            auto streamColId = streamedTableKeysCols[i];
+            auto bufferedColumn = bufferedPagesIndex->GetColumn(bufferedBatchId, bufferedTableKeysCols[i]);
+            auto com = keyCompareFuncs[streamColId](cachedStreamedKeyColumns[i], streamedRowId,
+                bufferedColumn, bufferedRowId);
+            if (com != 0) {
+                return com;
+            }
+        }
+
+        return 0;
     }
 
     ALWAYS_INLINE int32_t CompareStreamedRowKeys(int64_t leftRowIndex, int64_t rightRowIndex)
@@ -290,6 +332,7 @@ private:
     int32_t *streamedTableKeysCols;
     int32_t *bufferedTableKeysCols;
     int32_t keyColsCount;
+    std::vector<vec::BaseVector *> cachedStreamedKeyColumns;
 
     // for non-inner-join
     bool onlyBufferedFirstMatch = false;
@@ -303,6 +346,8 @@ private:
     int32_t bufferedPagesIndexPosition;
     DynamicPagesIndex *streamedPagesIndex;
     DynamicPagesIndex *bufferedPagesIndex;
+    DynamicPagesIndex::AddressCursor streamedAddressCursor;
+    DynamicPagesIndex::AddressCursor bufferedAddressCursor;
     int64_t preStreamedValueAddress;
     int32_t preStreamedPagesIndexPosition;
     std::unique_ptr<JoinStatus> preStatus;

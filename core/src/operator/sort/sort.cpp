@@ -317,6 +317,11 @@ void SortOperator::GetOutputFromMemory(VectorBatch **outputVecBatch)
         // second step sort
         Sort();
         hasSorted = true;
+        // 地址数组已定型：物化输出路径（StructCopy 深拷贝）开启源批增量释放，
+        // 已全部输出的源批可随输出游标提前释放，峰值从 2N 降至约 N
+        if (!canInplaceSort && !canRadixSort) {
+            pagesIndex->PrepareIncrementalRelease();
+        }
     }
 
     // third step, get sorted vector batches
@@ -348,6 +353,8 @@ void SortOperator::GetOutputFromMemory(VectorBatch **outputVecBatch)
     }
 
     rowCountOutputted += rowCountToOutput;
+    // 本轮窗口已深拷贝完成，释放所有行都已输出的源批（未激活时为空操作）
+    pagesIndex->ReleaseConsumedBatches(static_cast<int64_t>(rowCountOutputted));
     *outputVecBatch = result.release();
 }
 
@@ -455,6 +462,22 @@ void SortOperator::SetSpillOutputVecBatch(VectorBatch *outputVecBatch, int32_t &
             case OMNI_ARRAY:
                 SetSpillOutputArrayVector(outputVector, offset, rowCount, outputCol);
                 break;
+            case OMNI_ROW: {
+                auto *outputRow = static_cast<RowVector *>(outputVector);
+                for (int32_t j = 0; j < rowCount; ++j) {
+                    auto *batch = batches[j];
+                    auto inputRowIdx = rowIdxes[j];
+                    auto *inputRow = static_cast<RowVector *>(batch->Get(outputCol));
+                    const int32_t outputRowIdx = offset + j;
+                    if (inputRow->IsNull(inputRowIdx)) {
+                        outputRow->SetNull(outputRowIdx);
+                    } else {
+                        std::unique_ptr<RowVector> slice(inputRow->Slice(inputRowIdx, 1, false));
+                        outputRow->Append(slice.get(), outputRowIdx, 1);
+                    }
+                }
+                break;
+            }
             default:
                 std::string errStr = "Do not support the data type" + std::to_string(outputTypeId) + " in SetSpillOutputVecBatch.";
                 throw omniruntime::exception::OmniException("OPERATOR_RUNTIME_ERROR", errStr);

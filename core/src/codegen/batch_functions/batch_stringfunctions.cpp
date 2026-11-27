@@ -8,6 +8,7 @@
 #include "type/data_operations.h"
 #include "type/date32.h"
 #include "codegen/functions/md5.h"
+#include "codegen/functions/stringfunctions.h"
 
 #ifdef _WIN32
 #else
@@ -808,16 +809,11 @@ extern "C" DLLEXPORT void BatchToLowerChar(int64_t contextPtr, uint8_t **str, in
 extern "C" DLLEXPORT void BatchLikeStr(uint8_t **str, int32_t *strLen, uint8_t **regexToMatch, int32_t *regexLen,
     bool *isAnyNull, bool *output, int32_t rowCnt)
 {
-    std::string s;
     for (int32_t i = 0; i < rowCnt; i++) {
-        if (isAnyNull[i]) {
-            output[i] = false;
-            continue;
-        }
-        s = std::string(reinterpret_cast<char *>(str[i]), strLen[i]);
-        std::string r = std::string(reinterpret_cast<char *>(regexToMatch[i]), regexLen[i]);
-        std::wregex re(StringUtil::ToWideString(r));
-        output[i] = regex_match(StringUtil::ToWideString(s), re);
+        // Reuse the scalar matcher: it recognises exact/prefix/suffix/contains
+        // patterns and keeps complex compiled regexes in a small TLS cache.
+        output[i] = LikeStr(reinterpret_cast<const char *>(str[i]), strLen[i],
+            reinterpret_cast<const char *>(regexToMatch[i]), regexLen[i], isAnyNull[i]);
     }
 }
 
@@ -825,19 +821,8 @@ extern "C" DLLEXPORT void BatchLikeChar(uint8_t **str, int32_t strWidth, int32_t
     int32_t *regexLen, bool *isAnyNull, bool *output, int32_t rowCnt)
 {
     for (int i = 0; i < rowCnt; i++) {
-        if (isAnyNull[i]) {
-            output[i] = false;
-            continue;
-        }
-        int32_t paddingCount =
-            strWidth - omniruntime::Utf8Util::CountCodePoints(reinterpret_cast<const char *>(str[i]), strLen[i]);
-        std::string originalStr;
-        originalStr.reserve(strLen[i] + paddingCount);
-        originalStr.append(reinterpret_cast<char *>(str[i]), strLen[i]);
-        originalStr.append(paddingCount, ' ');
-        std::string r = std::string(reinterpret_cast<char *>(regexToMatch[i]), regexLen[i]);
-        std::wregex re(StringUtil::ToWideString(r));
-        output[i] = regex_match(StringUtil::ToWideString(originalStr), re);
+        output[i] = LikeChar(reinterpret_cast<const char *>(str[i]), strWidth, strLen[i],
+            reinterpret_cast<const char *>(regexToMatch[i]), regexLen[i], isAnyNull[i]);
     }
 }
 

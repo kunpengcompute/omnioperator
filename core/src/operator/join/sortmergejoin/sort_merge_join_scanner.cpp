@@ -48,6 +48,9 @@ SortMergeJoinScanner::SortMergeJoinScanner(const DataTypes &streamedTableKeysTyp
             scanFindNextRow = &SortMergeJoinScanner::ErrorJoin;
             break;
     }
+    if (joinType == JoinType::OMNI_JOIN_TYPE_LEFT || joinType == JoinType::OMNI_JOIN_TYPE_LEFT_ANTI) {
+        cachedStreamedKeyColumns.resize(keyColsCount);
+    }
 
     keyCompareFuncs.resize(streamedTableKeysTypes.GetSize());
     for (int i = 0; i < streamedTableKeysTypes.GetSize(); ++i) {
@@ -100,6 +103,17 @@ SortMergeJoinScanner::SortMergeJoinScanner(const DataTypes &streamedTableKeysTyp
 
 SortMergeJoinScanner::~SortMergeJoinScanner() {}
 
+int32_t SortMergeJoinScanner::GetStreamedPinBatchId() const
+{
+    // -1 doubles as both the unset sentinel and (via (uint32)-1<<32|(uint32)-1) the
+    // synthetic null-row address. Address 0 (batch0/row0) is a REAL row and must pin.
+    if (preStreamedValueAddress == -1) {
+        return INT32_MAX;
+    }
+    const int32_t batchId = static_cast<int32_t>(DecodeSliceIndex(static_cast<uint64_t>(preStreamedValueAddress)));
+    return batchId >= 0 ? batchId : INT32_MAX;
+}
+
 int64_t SortMergeJoinScanner::FindNextJoinRows()
 {
     (this->*scanFindNextRow)();
@@ -110,6 +124,17 @@ int32_t SortMergeJoinScanner::GetMatchedValueAddresses(std::vector<int8_t> &isMa
     std::vector<int64_t> &streamedTblValueAddresses, std::vector<int64_t> &bufferedTblValueAddresses,
     std::vector<int8_t> &isBufferedKeyMatched)
 {
+    if (isMatched.empty() && streamedTblValueAddresses.empty() && bufferedTblValueAddresses.empty() &&
+        isBufferedKeyMatched.empty()) {
+        // Transfer the result buffers without copying. swap also gives the scanner
+        // any capacity retained by the empty destination buffers for the next scan.
+        isMatched.swap(isPreKeyMatched);
+        streamedTblValueAddresses.swap(streamedValueAddress);
+        bufferedTblValueAddresses.swap(bufferedValueAddress);
+        isBufferedKeyMatched.swap(isSameBufferedKeyMatched);
+        return 0;
+    }
+
     isMatched.insert(isMatched.end(), isPreKeyMatched.begin(), isPreKeyMatched.end());
     streamedTblValueAddresses.insert(streamedTblValueAddresses.end(), streamedValueAddress.begin(),
         streamedValueAddress.end());
@@ -240,7 +265,7 @@ void SortMergeJoinScanner::FullOuterJoin()
                 return;
             } else if (PreKeyMatchedWithNullValue()) {
                 // The new streamed row has the same join key as the previous row, so return the same matches.
-                SavePrevMatchingRowsForFullOuter(streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition), 1);
+                SavePrevMatchingRowsForFullOuter(GetCurrentStreamedValueAddress(), 1);
                 return RunFullOuterJoin();
             }
         }
@@ -261,7 +286,7 @@ void SortMergeJoinScanner::FullOuterJoin()
                 return;
             }
             if (PreKeyMatchedWithNullValue()) {
-                SavePrevMatchingRowsForFullOuter(streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition), 1);
+                SavePrevMatchingRowsForFullOuter(GetCurrentStreamedValueAddress(), 1);
                 return RunFullOuterJoin();
             }
         }
@@ -320,7 +345,7 @@ void SortMergeJoinScanner::RunFullOuterJoin()
             break;
         }
         if (PreKeyMatchedWithNullValue()) {
-            SavePrevMatchingRowsForFullOuter(streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition), 1);
+            SavePrevMatchingRowsForFullOuter(GetCurrentStreamedValueAddress(), 1);
             continue;
         }
 
@@ -379,10 +404,20 @@ template <JoinType templateJoinType> bool SortMergeJoinScanner::LeftOuterFindJoi
         }
         return false;
     }
-    latestCompareStat = CompareCurRowKeys();
+    const auto streamedValueAddr = GetCurrentStreamedValueAddress();
+    const auto streamedBatchId = DecodeSliceIndex(streamedValueAddr);
+    const auto streamedRowId = DecodePosition(streamedValueAddr);
+    const auto bufferedValueAddr = GetCurrentBufferedValueAddress();
+    const auto bufferedBatchId = DecodeSliceIndex(bufferedValueAddr);
+    const auto bufferedRowId = DecodePosition(bufferedValueAddr);
+    latestCompareStat = CompareRowKeys(streamedBatchId, streamedRowId, bufferedBatchId, bufferedRowId);
+    if (latestCompareStat > 0) {
+        // The streamed row stays fixed while the buffered side catches up.
+        CacheStreamedKeyColumns(streamedBatchId);
+    }
     while (latestCompareStat > 0) { // skip buffered compare >0 value condition
         if (AdvancedBufferedJoinKey()) {
-            latestCompareStat = CompareCurRowKeys();
+            latestCompareStat = CompareCurrentBufferedRowWithCachedStreamed(streamedRowId);
         } else {
             if (bufferedPagesIndex->IsDataFinish(bufferedPagesIndexPosition)) {
                 BufferMissingRows<templateJoinType>();
@@ -565,12 +600,12 @@ bool SortMergeJoinScanner::AdvancedBufferedJoinKey()
 
 template <JoinType templateJoinType> void SortMergeJoinScanner::BufferMatchingRows()
 {
-    auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
+    auto streamedValueAddr = GetCurrentStreamedValueAddress();
     preStreamedValueAddress = streamedValueAddr;
     preStreamedPagesIndexPosition = streamedPagesIndexPosition;
     preBufferedValueAddress.clear();
     preBufferedKeyMatched.clear();
-    int64_t bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+    int64_t bufferedValueAddr = GetCurrentBufferedValueAddress();
     if constexpr (templateJoinType == OMNI_JOIN_TYPE_INNER || templateJoinType == OMNI_JOIN_TYPE_LEFT) {
         preBufferedValueAddress.emplace_back(bufferedValueAddr);
     } else {
@@ -584,7 +619,7 @@ template <JoinType templateJoinType> void SortMergeJoinScanner::BufferMatchingRo
     auto streamBatchId = DecodeSliceIndex(streamedValueAddr);
     auto streamRowId = DecodePosition(streamedValueAddr);
     while (AdvancedBufferedToRowWithNullFreeJoinKey()) {
-        bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+        bufferedValueAddr = GetCurrentBufferedValueAddress();
         auto bufferBatchId = DecodeSliceIndex(bufferedValueAddr);
         auto bufferRowId = DecodePosition(bufferedValueAddr);
         latestCompareStat = CompareRowKeys(streamBatchId, streamRowId, bufferBatchId, bufferRowId);
@@ -606,18 +641,18 @@ template <JoinType templateJoinType> void SortMergeJoinScanner::BufferMatchingRo
 
 void SortMergeJoinScanner::BufferMatchingRowsForFullOuter()
 {
-    auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
+    auto streamedValueAddr = GetCurrentStreamedValueAddress();
     preStreamedValueAddress = streamedValueAddr;
     preStreamedPagesIndexPosition = streamedPagesIndexPosition;
     preBufferedValueAddress.clear();
-    int64_t bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+    int64_t bufferedValueAddr = GetCurrentBufferedValueAddress();
     preBufferedValueAddress.emplace_back(bufferedValueAddr);
     preBufferedPagesIndexPosition = bufferedPagesIndexPosition;
 
     auto streamBatchId = DecodeSliceIndex(streamedValueAddr);
     auto streamRowId = DecodePosition(streamedValueAddr);
     while (AdvancedBufferedJoinKey()) {
-        bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+        bufferedValueAddr = GetCurrentBufferedValueAddress();
         auto bufferBatchId = DecodeSliceIndex(bufferedValueAddr);
         auto bufferRowId = DecodePosition(bufferedValueAddr);
         latestCompareStat = CompareRowKeys(streamBatchId, streamRowId, bufferBatchId, bufferRowId);
@@ -645,7 +680,7 @@ bool SortMergeJoinScanner::HandleLeftOuterStreamedNullAndBufferedDataFinishedSit
 
 template <JoinType templateJoinType> void SortMergeJoinScanner::BufferMissingRows()
 {
-    auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
+    auto streamedValueAddr = GetCurrentStreamedValueAddress();
     preStreamedValueAddress = streamedValueAddr;
     preStreamedPagesIndexPosition = streamedPagesIndexPosition;
     preBufferedValueAddress.clear();
@@ -666,7 +701,7 @@ template <JoinType templateJoinType> void SortMergeJoinScanner::BufferMissingRow
 
 void SortMergeJoinScanner::BufferMissingRowsForFullOuter()
 {
-    auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
+    auto streamedValueAddr = GetCurrentStreamedValueAddress();
     preStreamedValueAddress = streamedValueAddr;
     preStreamedPagesIndexPosition = streamedPagesIndexPosition;
     preBufferedValueAddress.clear();
@@ -685,7 +720,7 @@ void SortMergeJoinScanner::StreamMissingRowsForCompareValue()
     preBufferedValueAddress.clear();
     int64_t bufferedValueAddr;
     do {
-        bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+        bufferedValueAddr = GetCurrentBufferedValueAddress();
         preBufferedValueAddress.emplace_back(bufferedValueAddr);
         preBufferedPagesIndexPosition = bufferedPagesIndexPosition;
     } while (AdvancedBufferedJoinKey() && ((latestCompareStat = CompareCurRowKeys()) > 0));
@@ -758,7 +793,7 @@ void SortMergeJoinScanner::StreamMissingRowsForStreamIsFinished()
     preBufferedValueAddress.clear();
     int64_t bufferedValueAddr;
     do {
-        bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+        bufferedValueAddr = GetCurrentBufferedValueAddress();
         preBufferedValueAddress.emplace_back(bufferedValueAddr);
     } while (AdvancedBufferedJoinKey());
     SavePrevMatchingRowsForFullOuter(preStreamedValueAddress, 0);
@@ -771,7 +806,7 @@ void SortMergeJoinScanner::StreamMissingRowsForNullBuffered()
     preBufferedValueAddress.clear();
     int64_t bufferedValueAddr;
     do {
-        bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndexPosition);
+        bufferedValueAddr = GetCurrentBufferedValueAddress();
         preBufferedValueAddress.emplace_back(bufferedValueAddr);
         preBufferedPagesIndexPosition = bufferedPagesIndexPosition;
         curBufferRowMatchFlag = true;
@@ -799,7 +834,7 @@ bool SortMergeJoinScanner::PreKeyMatched()
     if (preStreamedValueAddress == -1 || preBufferedValueAddress.empty()) {
         return false;
     }
-    auto curValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
+    auto curValueAddr = GetCurrentStreamedValueAddress();
     bool isMatched = CompareStreamedRowKeys(preStreamedValueAddress, curValueAddr) == 0;
     return isMatched;
 }
@@ -814,7 +849,7 @@ bool SortMergeJoinScanner::PreKeyMatchedWithNullValue()
         // if one of them contain NULL return mismatch
         return false;
     }
-    auto curValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
+    auto curValueAddr = GetCurrentStreamedValueAddress();
     bool isMatched = CompareStreamedRowKeys(preStreamedValueAddress, curValueAddr) == 0;
     return isMatched;
 }
@@ -822,7 +857,7 @@ bool SortMergeJoinScanner::PreKeyMatchedWithNullValue()
 // isMatched = 1 means true, 0 means false
 template <JoinType templateJoinType> void SortMergeJoinScanner::SavePrevMatchingRows(int8_t isMatched)
 {
-    auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
+    auto streamedValueAddr = GetCurrentStreamedValueAddress();
     auto matchedRowCount = preBufferedValueAddress.size();
     bufferedValueAddress.insert(bufferedValueAddress.end(), preBufferedValueAddress.begin(),
         preBufferedValueAddress.end());
@@ -848,8 +883,8 @@ bool SortMergeJoinScanner::NeedBufferedData()
     if (bufferedPagesIndex->IsDataFinish()) {
         return false;
     }
-    auto streamedValueAddr = streamedPagesIndex->GetValueAddresses(streamedPagesIndexPosition);
-    auto bufferedValueAddr = bufferedPagesIndex->GetValueAddresses(bufferedPagesIndex->GetPositionCount() - 1);
+    auto streamedValueAddr = GetCurrentStreamedValueAddress();
+    auto bufferedValueAddr = bufferedPagesIndex->GetLastValueAddress();
     if (bufferedValueAddr > -1) {
         auto streamedBatchId = DecodeSliceIndex(streamedValueAddr);
         auto streamedRowId = DecodePosition(streamedValueAddr);

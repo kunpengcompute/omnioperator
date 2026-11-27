@@ -3,6 +3,7 @@
  * @Description: pages index implementations
  */
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include "vector/vector.h"
 #include "vector/array_vector.h"
@@ -2007,6 +2008,7 @@ void PagesIndex::GetOutput(int32_t *outputCols, int32_t outputColsCount, VectorB
     BaseVector ***inputVecBatches = this->columns;
     uint64_t *vaStart = valueAddresses + offset;
 
+
     for (int32_t j = 0; j < outputColsCount; j++) {
         const int32_t outputCol = outputCols[j];
         const int32_t colTypeId = sourceTypes[outputCol];
@@ -2152,14 +2154,16 @@ template <bool hasNull, bool hasDictionary>
 static ALWAYS_INLINE void SetValueRow(BaseVector *inputVector, int32_t inputIndex, BaseVector *outputVector,
     int32_t outputIndex)
 {
+    auto *outputRow = static_cast<RowVector *>(outputVector);
     if constexpr (hasNull) {
         if (UNLIKELY(inputVector->IsNull(inputIndex))) {
-            outputVector->SetNull(outputIndex);
+            // Set the null state on the ROW and its children. Calling BaseVector::SetNull
+            // through outputVector leaves nested ARRAY offsets at their zero-initialized values.
+            outputRow->SetNull(outputIndex);
             return;
         }
     }
     auto *inputRow = static_cast<RowVector *>(inputVector);
-    auto *outputRow = static_cast<RowVector *>(outputVector);
     auto *slice = inputRow->Slice(inputIndex, 1, false);
     outputRow->Append(slice, outputIndex, 1);
     delete slice;
@@ -2343,6 +2347,9 @@ NO_INLINE void ConstructVectorRadixSort(const uint8_t *vaStart, int32_t length, 
 void PagesIndex::SetSpillVecBatch(vec::VectorBatch *spillVecBatch, std::vector<int32_t> &outputCols, uint64_t rowOffset,
     bool canInplaceSort, bool canRadixSort)
 {
+    // Spill batches are reused and rewritten from row zero. Resize only changes the
+    // logical size, so reset top-level string offsets and null state explicitly.
+    VectorHelper::ResetVarcharVectorsForReuse(spillVecBatch);
     const int32_t outputColsCount = static_cast<int32_t>(outputCols.size());
     const int32_t offset = static_cast<int32_t>(rowOffset);
     const int32_t rowCount = spillVecBatch->GetRowCount();
@@ -2352,6 +2359,53 @@ void PagesIndex::SetSpillVecBatch(vec::VectorBatch *spillVecBatch, std::vector<i
         GetOutputRadixSort(outputCols.data(), outputColsCount, spillVecBatch, dataTypes.GetIds(), offset, rowCount);
     } else {
         GetOutput(outputCols.data(), outputColsCount, spillVecBatch, dataTypes.GetIds(), offset, rowCount);
+    }
+}
+
+void PagesIndex::PrepareIncrementalRelease()
+{
+    incrementalReleaseActive = false;
+    batchReleaseOrder.clear();
+    releaseCursor = 0;
+    // Only activate when Prepare() has established the address arrays and a source batch exists.
+    if (valueAddresses == nullptr || columns == nullptr || inputVecBatches.empty()) {
+        return;
+    }
+    const int32_t batchCount = static_cast<int32_t>(inputVecBatches.size());
+    // Single linear scan: rows are traversed in sort order; the last position each batch is accessed,
+    // which is its last occurrence in the sorted result.
+    std::vector<int64_t> lastSortedPos(batchCount, -1);
+    for (uint32_t row = 0; row < rowCount; ++row) {
+        lastSortedPos[DecodeSliceIndex(valueAddresses[row])] = row;
+    }
+    batchReleaseOrder.reserve(batchCount);
+    for (int32_t batchIdx = 0; batchIdx < batchCount; ++batchIdx) {
+        batchReleaseOrder.emplace_back(lastSortedPos[batchIdx], batchIdx);
+    }
+    std::sort(batchReleaseOrder.begin(), batchReleaseOrder.end());
+    incrementalReleaseActive = true;
+}
+
+void PagesIndex::ReleaseConsumedBatches(int64_t consumedRowCount)
+{
+    if (!incrementalReleaseActive) {
+        return;
+    }
+    while (releaseCursor < batchReleaseOrder.size()) {
+        const auto &entry = batchReleaseOrder[releaseCursor];
+        if (entry.first >= consumedRowCount) {
+            break;
+        }
+        // All rows have been deep-copied to the delivery batch; no further references from output windows.
+        auto *&slot = inputVecBatches[static_cast<size_t>(entry.second)];
+        if (slot != nullptr) {
+            VectorHelper::FreeVecBatch(slot);
+            slot = nullptr;
+            for (uint32_t colIdx = 0; colIdx < typesCount; ++colIdx) {
+                columns[colIdx][entry.second] = nullptr;
+            }
+        }
+        ++releaseCursor;
     }
 }
 
@@ -2374,6 +2428,10 @@ void PagesIndex::Clear()
 
     rowCount = 0;
     totalNullCount = 0;
+    // Incremental release state reset: residual source batches are uniformly released by FreeVecBatches (released slots are empty).
+    incrementalReleaseActive = false;
+    releaseCursor = 0;
+    batchReleaseOrder.clear();
     VectorHelper::FreeVecBatches(inputVecBatches);
     inputVecBatches.clear();
 }

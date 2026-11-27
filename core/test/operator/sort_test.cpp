@@ -11,6 +11,7 @@
 #include <tuple>
 #include <algorithm>
 #include <random>
+#include <unordered_map>
 #include "gtest/gtest.h"
 #include "operator/sort/sort.h"
 #include "vector/vector_helper.h"
@@ -24,6 +25,7 @@
 #include "vector/row_vector.h"
 #include "type/data_type.h"
 #include "type/decimal128.h"
+#include "util/config/QueryConfig.h"
 #include "util/type_util.h"
 
 using namespace omniruntime::op;
@@ -45,6 +47,35 @@ using DoubleVector = NativeAndVectorType<DataTypeId::OMNI_DOUBLE>::vector;
 using ShortVector = NativeAndVectorType<DataTypeId::OMNI_SHORT>::vector;
 using CharVector = NativeAndVectorType<DataTypeId::OMNI_CHAR>::vector;
 using VarcharVector = NativeAndVectorType<DataTypeId::OMNI_VARCHAR>::vector;
+
+class SortReleaseCountingIntVector : public Vector<int32_t> {
+public:
+    SortReleaseCountingIntVector(int32_t firstValue, int32_t &destructionCount)
+        : Vector<int32_t>(2), destructionCount(destructionCount)
+    {
+        SetValue(0, firstValue);
+        SetValue(1, firstValue + 1);
+    }
+
+    ~SortReleaseCountingIntVector() override
+    {
+        ++destructionCount;
+    }
+
+private:
+    int32_t &destructionCount;
+};
+
+VectorBatch *CreateSortReleaseBatch(int32_t firstValue, int32_t &destructionCount)
+{
+    auto *batch = new VectorBatch(2);
+    batch->Append(new SortReleaseCountingIntVector(firstValue, destructionCount));
+    auto *secondary = new Vector<int32_t>(2);
+    secondary->SetValue(0, firstValue + 100);
+    secondary->SetValue(1, firstValue + 101);
+    batch->Append(secondary);
+    return batch;
+}
 
 void DeleteSortOperatorFactory(SortOperatorFactory *sortOperatorFactory)
 {
@@ -76,6 +107,57 @@ void BuildSortTestData(VectorBatch **vecBatches, int32_t columnCount)
         }
         vecBatches[i] = vecBatch;
     }
+}
+
+TEST(NativeOmniSortTest, StructCopyReleasesCompletedSourceBatchesPerOutputWindow)
+{
+    DataTypes sourceTypes(std::vector<DataTypePtr>{IntType(), IntType()});
+    int32_t outputCols[] = {0, 1};
+    // Two keys keep this test off both the one-column inplace path and radix sort,
+    // so SortOperator must use GetOutputWithStructCopy and incremental release.
+    int32_t sortCols[] = {0, 1};
+    int32_t ascendings[] = {true, true};
+    int32_t nullFirsts[] = {true, true};
+    const omniruntime::config::QueryConfig twoRowOutputConfig(
+        std::unordered_map<std::string, std::string>{
+            {omniruntime::config::QueryConfig::KMaxBatchRowCount, "2"}});
+    auto *operatorFactory = SortOperatorFactory::CreateSortOperatorFactory(sourceTypes, outputCols, 2,
+        sortCols, ascendings, nullFirsts, 2, OperatorConfig(), twoRowOutputConfig);
+    auto *sortOperator = dynamic_cast<SortOperator *>(CreateTestOperator(operatorFactory));
+    ASSERT_NE(sortOperator, nullptr);
+
+    std::vector<int32_t> destroyed(3, 0);
+    sortOperator->AddInput(CreateSortReleaseBatch(0, destroyed[0]));
+    sortOperator->AddInput(CreateSortReleaseBatch(2, destroyed[1]));
+    sortOperator->AddInput(CreateSortReleaseBatch(4, destroyed[2]));
+    EXPECT_EQ(destroyed, std::vector<int32_t>({0, 0, 0}));
+    sortOperator->noMoreInput();
+
+    for (int32_t window = 0; window < 3; ++window) {
+        VectorBatch *output = nullptr;
+        sortOperator->GetOutput(&output);
+        ASSERT_NE(output, nullptr);
+        ASSERT_EQ(output->GetRowCount(), 2);
+        auto *primary = static_cast<Vector<int32_t> *>(output->Get(0));
+        auto *secondary = static_cast<Vector<int32_t> *>(output->Get(1));
+        for (int32_t row = 0; row < 2; ++row) {
+            const int32_t expected = window * 2 + row;
+            EXPECT_EQ(primary->GetValue(row), expected);
+            EXPECT_EQ(secondary->GetValue(row), expected + 100);
+        }
+        for (int32_t batch = 0; batch < 3; ++batch) {
+            EXPECT_EQ(destroyed[batch], batch <= window ? 1 : 0)
+                << "window=" << window << ", batch=" << batch;
+        }
+        VectorHelper::FreeVecBatch(output);
+    }
+
+    EXPECT_EQ(sortOperator->GetStatus(), OMNI_STATUS_FINISHED);
+    omniruntime::op::Operator::DeleteOperator(sortOperator);
+    DeleteSortOperatorFactory(operatorFactory);
+    // The final PagesIndex::Clear and operator destruction must not release a
+    // source batch for a second time after its slot was nulled.
+    EXPECT_EQ(destroyed, std::vector<int32_t>({1, 1, 1}));
 }
 
 TEST(NativeOmniSortTest, TestSortPerformance)
@@ -3839,6 +3921,94 @@ TEST(NativeOmniSortTest, TestSortStructNestedArrayAsc)
     VectorHelper::FreeVecBatch(expectVecBatch);
     omniruntime::op::Operator::DeleteOperator(sortOperator);
     DeleteSortOperatorFactory(operatorFactory);
+}
+
+TEST(NativeOmniSortTest, StructSpillAcrossReusedBuffersAndMergeBatches)
+{
+    using namespace omniruntime::type;
+    std::vector<DataTypePtr> rowFields;
+    rowFields.push_back(VarcharType());
+    rowFields.push_back(std::make_shared<omniruntime::type::ArrayType>(IntType()));
+    auto rowType = std::make_shared<omniruntime::type::RowType>(rowFields, std::vector<std::string>{"text", "array"});
+    std::vector<DataTypePtr> typeVec;
+    typeVec.push_back(IntType());
+    // Keep the second sort key primitive: SpillMerger does not support ROW keys.
+    // Two keys still force the ordinary PagesIndex path instead of radix sort.
+    typeVec.push_back(IntType());
+    typeVec.push_back(rowType);
+    DataTypes types(typeVec);
+    int32_t outputCols[] = {0, 1, 2}, sortCols[] = {0, 1}, ascending[] = {1, 1}, nullFirst[] = {1, 1};
+    // Each input produces two spill batches, including reuse of the writer's Struct output column.
+    const int rowsPerInput = OperatorUtil::GetMaxRowCount(types.Get(), outputCols, 3) + 3;
+    SparkSpillConfig spillConfig(GenerateSpillPath(), 64L << 20, 1);
+    auto *factory = SortOperatorFactory::CreateSortOperatorFactory(types, outputCols, 3, sortCols,
+        ascending, nullFirst, 2, OperatorConfig(spillConfig));
+    auto *op = static_cast<SortOperator *>(CreateTestOperator(factory));
+    for (int batch = 0; batch < 2; ++batch) {
+        auto *input = new VectorBatch(rowsPerInput);
+        auto *keys = new Vector<int32_t>(rowsPerInput);
+        auto *secondaryKeys = new Vector<int32_t>(rowsPerInput);
+        auto *payload = static_cast<RowVector *>(VectorHelper::CreateComplexVector(rowType.get(), rowsPerInput));
+        auto *text = static_cast<VarcharVector *>(payload->ChildAt(0).get());
+        auto *array = static_cast<ArrayVector *>(payload->ChildAt(1).get());
+        auto *elements = static_cast<Vector<int32_t> *>(array->GetElementVector().get());
+        elements->Expand(rowsPerInput * 2);
+        int element = 0;
+        for (int row = 0; row < rowsPerInput; ++row) {
+            int key = (rowsPerInput - 1 - row) * 2 + batch;
+            keys->SetValue(row, key);
+            secondaryKeys->SetValue(row, key + 100);
+            if (key % 11 == 0) {
+                payload->SetNull(row);
+                continue;
+            }
+            text->SetValue(row, std::to_string(key));
+            if (key % 7 == 0) {
+                array->SetNull(row);
+            } else {
+                array->SetSize(row, key % 3);
+                for (int i = 0; i < key % 3; ++i) {
+                    elements->SetValue(element++, key + i);
+                }
+            }
+        }
+        input->Append(keys);
+        input->Append(secondaryKeys);
+        input->Append(payload);
+        op->AddInput(input);
+    }
+    op->noMoreInput();
+    int expected = 0;
+    while (expected < rowsPerInput * 2) {
+        VectorBatch *output = nullptr;
+        op->GetOutput(&output);
+        ASSERT_NE(output, nullptr);
+        ASSERT_GT(output->GetRowCount(), 0);
+        auto *keys = static_cast<Vector<int32_t> *>(output->Get(0));
+        auto *secondaryKeys = static_cast<Vector<int32_t> *>(output->Get(1));
+        auto *payload = static_cast<RowVector *>(output->Get(2));
+        auto *array = static_cast<ArrayVector *>(payload->ChildAt(1).get());
+        for (int row = 0; row < output->GetRowCount(); ++row, ++expected) {
+            ASSERT_EQ(keys->GetValue(row), expected);
+            EXPECT_EQ(secondaryKeys->GetValue(row), expected + 100);
+            EXPECT_EQ(payload->IsNull(row), expected % 11 == 0);
+            const bool arrayNull = expected % 11 == 0 || expected % 7 == 0;
+            EXPECT_EQ(array->IsNull(row), arrayNull);
+            EXPECT_EQ(array->GetSize(row), arrayNull ? 0 : expected % 3);
+            if (expected % 11 != 0) {
+                EXPECT_EQ(static_cast<VarcharVector *>(payload->ChildAt(0).get())->GetValue(row),
+                    std::to_string(expected));
+            }
+            for (int i = 0; i < array->GetSize(row); ++i) {
+                EXPECT_EQ(static_cast<Vector<int32_t> *>(array->GetElementVector().get())->GetValue(
+                    array->GetOffset(row) + i), expected + i);
+            }
+        }
+        VectorHelper::FreeVecBatch(output);
+    }
+    EXPECT_GT(op->GetSpilledBytes(), 0);
+    omniruntime::op::Operator::DeleteOperator(op);
+    DeleteSortOperatorFactory(factory);
 }
 
 // Sort with ConstVector as non-sort data column

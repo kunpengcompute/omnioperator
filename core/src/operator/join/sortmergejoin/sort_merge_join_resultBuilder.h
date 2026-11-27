@@ -80,6 +80,38 @@ public:
         return isSameBufferedKeyMatched;
     }
 
+    // Called by the operator after the scanner produced the current address window
+    // and before materialization: the scanner's pending pre-row key comparison still
+    // reads this streamed batch, so the builder's streamed watermark must never free
+    // it. INT32_MAX means nothing is pinned.
+    ALWAYS_INLINE void SetStreamedPinBatchId(int32_t batchId)
+    {
+        streamedPinBatchId = batchId;
+    }
+
+    // Live-reference floor for the streamed watermark. During a duplicated-key
+    // matched group the scanner re-reads the group's FIRST streamed batch for key
+    // comparisons on every FindNextJoinRows call, while addresses of the whole group
+    // are consumed by the builder over several output windows. The per-window
+    // streamed pin only snapshots the latest pre-row, so the group head batch would
+    // lose protection after the first window. Tracking the minimum decoded batch id
+    // over every address CONSUMED so far (published by GetMatchedValueAddresses and
+    // already walked by AddJoinValueAddresses) pins the whole group head: a group
+    // spans batches [head..tail] only if its addresses do, so min consumed batch is
+    // always <= any batch the scanner may still compare against. Reset together with
+    // the address arrays in Clear().
+    ALWAYS_INLINE void TrackConsumedStreamedBatch(int32_t batchId)
+    {
+        if (batchId >= 0 && batchId < minConsumedStreamedBatchId) {
+            minConsumedStreamedBatchId = batchId;
+        }
+    }
+
+    ALWAYS_INLINE int32_t GetMinConsumedStreamedBatchId() const
+    {
+        return minConsumedStreamedBatchId;
+    }
+
     ALWAYS_INLINE bool HasNext()
     {
         return buildVectorBatchRowCount != 0;
@@ -102,6 +134,7 @@ public:
         leftOutputRowIds.clear();
         rightOutputBatchIds.clear();
         rightOutputRowIds.clear();
+        minConsumedStreamedBatchId = INT32_MAX;
     }
 
     ~JoinResultBuilder();
@@ -152,11 +185,29 @@ private:
 
     void FreeVectorBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId);
 
+    // Buffered-side half of FreeVectorBatches with the identical fresh-key gate;
+    // used by the left-join path whose streamed side frees via the pin watermark.
+    void FreeRightVectorBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId);
+
     bool CanFreeRightBatches(bool isPreMatched, int32_t leftBatchId, int32_t rightBatchId);
 
     VectorBatch *NewEmptyVectorBatch(int32_t rowCount) const;
 
     void EnsureBuildVectorBatchCapacity(int32_t rowCount);
+
+    void CopyOutputSegment(BaseVector *inputVector, const DataTypePtr &inputType, const int32_t *rows,
+        int32_t rowCount, BaseVector *outputVector, int32_t outputRowId);
+
+    void CopyOutputSelection(const std::vector<int32_t> &batchIds, const std::vector<int32_t> &rowIds,
+        DynamicPagesIndex *pagesIndex, const std::vector<DataTypePtr> &outputTypes, const int32_t *outputCols,
+        int32_t outputColsCount, int32_t columnOffset, int32_t rowBase);
+
+    // Build a LEFT JOIN output batch without copying the streamed payload when the
+    // whole output window is one consecutive, right-null-padded run from a single
+    // flat source batch. All other shapes retain the materializing path.
+    bool TryBuildLeftUnmatchedSliceOutput(int32_t rowBase, bool batchFull);
+
+    static bool CanSliceLeftOutputVector(BaseVector *vector, const DataTypePtr &dataType);
 
     void UpdateLeftAntiJoinHandler(int32_t addressPosition, std::vector<int8_t> &isSameBufferedKeyMatched,
         int32_t inputSize);
@@ -202,6 +253,11 @@ private:
 
     int32_t lastUnMatchedStreamedBatchId = -1;
     int32_t lastUnMatchedBufferedBatchId = -1;
+    // Streamed batch the scanner still reads via its pending pre-row state; set
+    // by the operator each cycle before materialization (see SetStreamedPinBatchId).
+    int32_t streamedPinBatchId = INT32_MAX;
+    // Minimum streamed batch id over all consumed addresses (see TrackConsumedStreamedBatch).
+    int32_t minConsumedStreamedBatchId = INT32_MAX;
 
     bool isFinished = false;
     int32_t maxRowCount;
@@ -224,6 +280,10 @@ private:
     bool *nulls = nullptr;
     int32_t *lengths = nullptr;
     JoinType joinType;
+    // Scratch reused across segments and columns of one builder. Every slot is
+    // rewritten before SetValues reads it, so stale nulls cannot leak between columns.
+    std::vector<std::string_view> batchVarcharValues;
+    std::vector<uint8_t> batchVarcharNulls;
 
     bool isPreRowMatched = false;
     int32_t addressOffset = 0;
@@ -243,7 +303,13 @@ private:
     std::vector<int32_t> rightOutputBatchIds;
     std::vector<int32_t> rightOutputRowIds;
 
-    void SetRightNullRangeForColumn(BaseVector *vector, const DataTypePtr &dataType, int32_t startRow, int32_t endRow);
+    void SetRightNullRangeForColumn(BaseVector *vector, const DataTypePtr &dataType, int32_t startRow,
+        int32_t endRow);
+
+    // Gathers one flat VARCHAR segment into the scratch views and writes it with a
+    // single SetValues. Returns false (output untouched) for non-flat source encodings.
+    bool TryBatchVarcharSegment(BaseVector *inputVector, BaseVector *outputVector, const int32_t *rows,
+        int32_t rowCount, int32_t outputRowId);
 };
 }
 }

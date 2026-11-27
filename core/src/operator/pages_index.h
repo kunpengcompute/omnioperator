@@ -6,6 +6,7 @@
 #define __PAGES_INDEX_H__
 
 #include <cstdint>
+#include <utility>
 #include <vector>
 #include "type/data_type.h"
 #include "type/data_types.h"
@@ -77,6 +78,17 @@ public:
         bool canInplaceSort, bool canRadixSort);
 
     void Clear();
+
+    // Incremental release (StructCopy materialization path only): called once after sort and
+    // valueAddresses are finalized to record each source batch's last position in the sorted result.
+    // Requires GetOutputWithStructCopy deep-copy semantics, ensuring the delivery batch holds no
+    // references to source batches.
+    void PrepareIncrementalRelease();
+
+    // Release source batches fully copied to the delivery batch (last occurrence < consumedRowCount);
+    // no-op if not activated. Released batches are nulled out in inputVecBatches/columns, preventing
+    // double-free in Clear().
+    void ReleaseConsumedBatches(int64_t consumedRowCount);
 
     ALWAYS_INLINE const DataTypes &GetTypes() const
     {
@@ -209,6 +221,12 @@ private:
     std::vector<bool> hasNulls;
     std::vector<uint8_t> radixComboRow;
     std::vector<omniruntime::vec::VectorBatch *> inputVecBatches;
+
+    // Incremental release state: (lastSortedPos, batch index) pairs sorted ascendingly by lastSortedPos;
+    // releaseCursor points to the batch with the smallest unreleased position.
+    std::vector<std::pair<int64_t, int32_t>> batchReleaseOrder;
+    size_t releaseCursor = 0;
+    bool incrementalReleaseActive = false;
 
     const DataTypes dataTypes;
     omniruntime::vec::BaseVector ***columns = nullptr; // Vector* [columnIndex][tableIndex]

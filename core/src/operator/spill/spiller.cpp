@@ -226,6 +226,16 @@ ErrorCode Spiller::Spill(PagesIndex *pagesIndex, bool canInplaceSort, bool canRa
             maxRowCount = rowCount;
         } else {
             spillVecBatch->Resize(rowCount);
+            for (int32_t col = 0; col < dataTypes.GetSize(); ++col) {
+                auto dataType = dataTypes.GetType(col);
+                if (dataType->GetId() == OMNI_ROW) {
+                    std::unique_ptr<BaseVector> replacement(
+                        VectorHelper::CreateComplexVector(dataType.get(), rowCount));
+                    auto *previous = spillVecBatch->Get(col);
+                    spillVecBatch->SetVector(col, replacement.release());
+                    delete previous;
+                }
+            }
         }
 
         auto spillVecBatchPtr = spillVecBatch.get();

@@ -28,8 +28,8 @@ TEST(TopNSortWithExprOperatorTest, TestTopNSortOutputRespectsConfiguredBatchBoun
     std::vector<int32_t> sortAscendings = { 1 };
     std::vector<int32_t> sortNullFirsts = { 0 };
     auto overflowConfig = new OverflowConfig();
-    const config::QueryConfig queryConfig(std::unordered_map<std::string, std::string>{
-        {config::QueryConfig::KMaxBatchRowCount, "4"}});
+    std::unordered_map<std::string, std::string> conf{{config::QueryConfig::KMaxBatchRowCount, "4"}};
+    const config::QueryConfig queryConfig(conf);
     auto factory = new TopNSortWithExprOperatorFactory(sourceTypes, 2, false, partitionKeys, sortKeys,
         sortAscendings, sortNullFirsts, overflowConfig, queryConfig);
     auto op = static_cast<TopNSortWithExprOperator *>(CreateTestOperator(factory));

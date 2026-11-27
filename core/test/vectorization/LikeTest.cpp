@@ -178,6 +178,48 @@ TEST(LikeTest, PercentBoth) {
     delete resultVec;
 }
 
+TEST(LikeTest, ConstCallerContextContainsLiteralUnderscores) {
+    std::vector<std::string> strValues = {
+        "prefix/mr_attempt_1700000000000_42_m_7_8/suffix",
+        "prefix/mrXattempt_1700000000000_42_m_7_8/suffix",
+        "prefix/application_99_1_JId_2_SId_3_4/suffix"
+    };
+    const std::string pattern = "%mr\\_attempt\\_%";
+    std::vector<bool> expected = {true, false, false};
+
+    BaseVector* strVec = LikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    LikeFunctionTestHelper::ExecuteLike(strVec, patternVec, resultVec);
+    LikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+TEST(LikeTest, ConstCallerContextPreservesUnderscoreWildcard) {
+    std::vector<std::string> strValues = {
+        "prefix/mr_attempt_1700000000000_42_m_7_8/suffix",
+        "prefix/mrXattempt_1700000000000_42_m_7_8/suffix",
+        "prefix/mrattempt_1700000000000_42_m_7_8/suffix"
+    };
+    // The first underscore is deliberately unescaped and therefore matches
+    // exactly one code point, as in the SQL from the reported workload.
+    const std::string pattern = "%mr_attempt\\_%";
+    std::vector<bool> expected = {true, true, false};
+
+    BaseVector* strVec = LikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    LikeFunctionTestHelper::ExecuteLike(strVec, patternVec, resultVec);
+    LikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
 TEST(LikeTest, UnderscoreWildcard) {
     std::vector<std::string> strValues = {"a", "ab", "abc", "x"};
     std::vector<std::string> patterns = {"_", "__", "___", "_"};
@@ -410,4 +452,124 @@ TEST(LikeTest, EscapeThreeArg_InvalidEscapeLength) {
     delete strVec;
     delete patternVec;
     delete escapeVec;
+}
+
+// SQL LIKE wildcards must match newline. "a%b" has an internal '%', so it is classified as generic
+// and compiled to a regex: only the "(?s)" flag added in LikePatternToRegex makes `.*` consume '\n'.
+// The relaxed fast paths below walk code points and match newline without any flag.
+TEST(LikeTest, NewlineMatchesPercentThroughRegexPath) {
+    std::vector<std::string> strValues = {"a\nb", "a\n\nb", "ab", "aXc"};
+    const std::string pattern = "a%b";
+    std::vector<bool> expected = {true, true, true, false};
+
+    BaseVector* strVec = LikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    LikeFunctionTestHelper::ExecuteLike(strVec, patternVec, resultVec);
+    LikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// Same check for '#'/'_' (regex `.`): "x_%z" is generic as well, so the single-character wildcard
+// must also consume '\n'.
+TEST(LikeTest, NewlineMatchesUnderscoreThroughRegexPath) {
+    std::vector<std::string> strValues = {"x\nyQz", "xz", "x\nz"};
+    const std::string pattern = "x_%z";
+    std::vector<bool> expected = {true, false, true};
+
+    BaseVector* strVec = LikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    LikeFunctionTestHelper::ExecuteLike(strVec, patternVec, resultVec);
+    LikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// `_` consumes exactly one UTF-8 code point, so 3- and 4-byte characters are one wildcard match.
+// This exercises the byte span (1..4 bytes per `_`) used to bound the relaxed suffix matcher.
+TEST(LikeTest, RelaxedSuffixWithMultibyteUnderscore) {
+    std::vector<std::string> strValues = {"x\xe4\xb8\xad\xf0\x9f\x98\x80",  // x + 中 + 😀
+                                          "\xf0\x9f\x98\x80\xf0\x9f\x98\x80",  // 😀😀
+                                          "\xf0\x9f\x98\x80",                  // 😀 only
+                                          "\xe4\xb8\xad"};                     // 中 only
+    const std::string pattern = "%_\xf0\x9f\x98\x80";  // "%_😀"
+    std::vector<bool> expected = {true, true, false, false};
+
+    BaseVector* strVec = LikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    LikeFunctionTestHelper::ExecuteLike(strVec, patternVec, resultVec);
+    LikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+TEST(LikeTest, RelaxedSuffixWithMultibyteUnderscoreCjk) {
+    std::vector<std::string> strValues = {"ab\xe4\xb8\xad", "\xe4\xb8\xad", "x\xe4\xb8\xad"};  // ab中, 中, x中
+    const std::string pattern = "%_\xe4\xb8\xad";  // "%_中"
+    std::vector<bool> expected = {true, false, true};
+
+    BaseVector* strVec = LikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    LikeFunctionTestHelper::ExecuteLike(strVec, patternVec, resultVec);
+    LikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// Substring shape ("%<body>%"): the body starts with a multi-byte literal followed by `_`, so the
+// anchor lookup and the code-point walk must agree on the byte offsets.
+TEST(LikeTest, RelaxedSubstringWithMultibyteBody) {
+    std::vector<std::string> strValues = {
+        "xx\xf0\x9f\x98\x80\xe4\xb8\xadyy",  // xx😀中yy
+        "xx\xf0\x9f\x98\x80yy",              // xx😀yy
+        "xx\xf0\x9f\x98\x80"                 // xx😀 (no trailing code point for `_`)
+    };
+    const std::string pattern = "%\xf0\x9f\x98\x80_%";  // "%😀_%"
+    std::vector<bool> expected = {true, true, false};
+
+    BaseVector* strVec = LikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    LikeFunctionTestHelper::ExecuteLike(strVec, patternVec, resultVec);
+    LikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
+}
+
+// Candidate budget: "%<30 underscores>abc" has a 91-wide start window (4 bytes per `_`), so both
+// rows exceed the 64-attempt budget and must fall back to RE2. The first row really matches at the
+// last window position (the 91st candidate), the second one never matches.
+TEST(LikeTest, RelaxedSuffixCandidateBudgetFallsBackToRegex) {
+    std::string tailMatch(196, 'x');
+    tailMatch += "abc";
+    std::string noMatch(300, 'x');
+    std::vector<std::string> strValues = {tailMatch, noMatch};
+    std::string pattern = "%";
+    pattern.append(30, '_');
+    pattern += "abc";
+    std::vector<bool> expected = {true, false};
+
+    BaseVector* strVec = LikeFunctionTestHelper::CreateStringVector(strValues);
+    BaseVector* patternVec = new ConstVector<std::string_view>(
+        std::string_view(pattern), OMNI_VARCHAR, static_cast<int32_t>(strValues.size()));
+    BaseVector* resultVec = nullptr;
+
+    LikeFunctionTestHelper::ExecuteLike(strVec, patternVec, resultVec);
+    LikeFunctionTestHelper::ValidateBooleanResult(resultVec, expected, strValues.size());
+
+    delete resultVec;
 }

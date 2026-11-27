@@ -186,6 +186,9 @@ int32_t SortMergeJoinOperator::GetJoinResult()
         smjScanner->GetMatchedValueAddresses(joinResultBuilder->GetPreKeyMatched(),
             joinResultBuilder->GetStreamedTableValueAddresses(), joinResultBuilder->GetBufferedTableValueAddresses(),
             joinResultBuilder->GetSameBufferedKeyMatched());
+        // Publish the scanner's pending pre-row batch before materialization so the
+        // builder's streamed free watermark never frees a batch the scanner still reads.
+        joinResultBuilder->SetStreamedPinBatchId(smjScanner->GetStreamedPinBatchId());
         auto joinResultBuilderRet = joinResultBuilder->AddJoinValueAddresses();
         if (joinResultBuilderRet == 1) {
             joinResultBuilder->GetOutput(&returnVectorBatch);

@@ -23,6 +23,18 @@ public:
 
     void SetValue(int index, const std::string_view &value);
 
+    // Append and deep-copy a sequential output range after reserving its payload once.
+    // Already materialized rows cannot be overwritten. Source views must not refer to
+    // this container; nulls may be nullptr for an all-non-null range.
+    void SetValues(int32_t index, const std::string_view *values, const uint8_t *nulls, int32_t count);
+
+    // Same append semantics as SetValues, for callers that pre-validate during their own
+    // gather pass. totalBytes must be the exact sum of the non-null value lengths, and the
+    // sources must have been proven not to alias this container's buffer. The per-value
+    // validation scan is replaced by one int32 offsets capacity check.
+    void SetValues(int32_t index, const std::string_view *values, const uint8_t *nulls, int32_t count,
+        uint64_t totalBytes);
+
     /* *
      * set the element at the index position to null
      * @param index

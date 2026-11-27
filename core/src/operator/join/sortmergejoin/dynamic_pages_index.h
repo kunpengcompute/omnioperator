@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <vector>
+#include "operator/pages_index.h"
 #include "type/data_type.h"
 #include "type/data_types.h"
 #include "vector/vector_batch.h"
@@ -15,6 +16,12 @@ namespace omniruntime {
 namespace op {
 class DynamicPagesIndex {
 public:
+    struct AddressCursor {
+        int32_t batchId = -1;
+        int32_t batchStart = 0;
+        int32_t batchEnd = 0;
+    };
+
     explicit DynamicPagesIndex(const omniruntime::type::DataTypes &types, int32_t *computeCols,
         int32_t computeColsCount);
 
@@ -47,9 +54,25 @@ public:
         return this->finishAddData && this->positionCount == 0;
     }
 
-    ALWAYS_INLINE int64_t GetValueAddresses(int32_t rowIndex) const
+    int64_t GetValueAddresses(int32_t rowIndex) const;
+
+    ALWAYS_INLINE int64_t GetValueAddresses(int32_t rowIndex, AddressCursor &cursor) const
     {
-        return this->valueAddressesDeque[rowIndex];
+        if (UNLIKELY(rowIndex < cursor.batchStart || rowIndex >= cursor.batchEnd)) {
+            UpdateAddressCursor(rowIndex, cursor);
+        }
+        return static_cast<int64_t>(EncodeSyntheticAddress(static_cast<uint32_t>(cursor.batchId),
+            static_cast<uint32_t>(rowIndex - cursor.batchStart)));
+    }
+
+    ALWAYS_INLINE int64_t GetLastValueAddress() const
+    {
+        if (positionCount == 0) {
+            return -1;
+        }
+        const int32_t batchId = static_cast<int32_t>(batchRowOffsets.size()) - 2;
+        return static_cast<int64_t>(EncodeSyntheticAddress(static_cast<uint32_t>(batchId),
+            static_cast<uint32_t>(positionCount - batchRowOffsets[batchId] - 1)));
     }
 
     ALWAYS_INLINE bool HaveNull(int32_t rowIndex) const
@@ -89,6 +112,8 @@ public:
     std::vector<bool> CalculateNullsFromRawVectorBatch(vec::VectorBatch *vectorBatch);
 
 private:
+    void UpdateAddressCursor(int32_t rowIndex, AddressCursor &cursor) const;
+
     int32_t typesCount;
     int32_t *computeCols;
     int32_t computeColsCount;
@@ -98,7 +123,10 @@ private:
     omniruntime::vec::BaseVector **cacheBatch;
     // vector  first Level：vectorBatch second Level: columnar vector
     std::vector<omniruntime::vec::BaseVector **> columnsDeque;
-    std::vector<int64_t> valueAddressesDeque; // row
+    // N+1 cumulative row boundaries for non-empty batches. Batch i owns
+    // [batchRowOffsets[i], batchRowOffsets[i + 1]). Keep old boundaries after
+    // releasing a batch so global row indexes and encoded batch ids stay stable.
+    std::vector<int32_t> batchRowOffsets { 0 };
     std::vector<bool> nullsDeque;             // whether has a column whose value is null for gaven row
     int32_t positionCount;
     std::vector<bool> vecBatchFreeFlagDeque;                       // vectorBatch free flag
