@@ -174,9 +174,9 @@ public class TestVarcharVec {
         assertTrue(varcharVec.hasNull());
         assertEquals(varcharVec.getValuesNulls(0, size), isNulls);
         int offset = 3;
-        boolean[] acutal = varcharVec.getValuesNulls(offset, size / 2);
+        boolean[] actualNulls = varcharVec.getValuesNulls(offset, size / 2);
         for (int i = 0; i < size / 2; i++) {
-            assertEquals(acutal[i], isNulls[i + offset]);
+            assertEquals(actualNulls[i], isNulls[i + offset]);
         }
         varcharVec.close();
     }

@@ -129,7 +129,7 @@ public class TestShortVec {
     }
 
     /**
-     * test copy postion
+     * test copy position
      */
     @Test
     public void testCopyPositions() {

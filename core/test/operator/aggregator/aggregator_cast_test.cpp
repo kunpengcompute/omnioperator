@@ -141,7 +141,7 @@ static void SetDecimalOutputWithScale(AggregatorCastTestClass &agg, const int32_
     switch (agg.GetOutputTypes().GetType(0)->GetId()) {
         case OMNI_DECIMAL64: dataTypeVector[0] = Decimal64Type(DECIMAL64_DEFAULT_PRECISION, scale); break;
         case OMNI_DECIMAL128: dataTypeVector[0] = Decimal128Type(DECIMAL128_DEFAULT_PRECISION, scale); break;
-        default: throw OmniException("Invalid arguement", "Expecting decimal output type");
+        default: throw OmniException("Invalid argument", "Expecting decimal output type");
     }
 
     agg.SetOutputType(*DataTypes(dataTypeVector).Instance());
@@ -153,7 +153,7 @@ static void SetDecimalInputWithScale(AggregatorCastTestClass &agg, const int32_t
     switch (agg.GetInputTypes().GetType(0)->GetId()) {
         case OMNI_DECIMAL64: dataTypeVector[0] = Decimal64Type(DECIMAL64_DEFAULT_PRECISION, scale); break;
         case OMNI_DECIMAL128: dataTypeVector[0] = Decimal128Type(DECIMAL128_DEFAULT_PRECISION, scale); break;
-        default: throw OmniException("Invalid arguement", "Expecting decimal input type");
+        default: throw OmniException("Invalid argument", "Expecting decimal input type");
     }
 
     agg.SetInputType(*DataTypes(dataTypeVector).Instance());

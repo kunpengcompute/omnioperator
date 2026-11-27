@@ -447,7 +447,7 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_and1)
     int64_t data2[dataSize] = {0, 1, 2, 3, 4};
 
     DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
-    std::vector<DataTypePtr> typess = {IntType(), LongType()};
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     vecBatch->Get(0)->SetNull(1);
     vecBatch->Get(0)->SetNull(3);
@@ -473,7 +473,7 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_and2)
     }
 
     DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
-    std::vector<DataTypePtr> typess = {IntType(), LongType()};
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     for (size_t i = 0; i < dataSize; i++) {
         if (i % 2 == 0) {
@@ -512,7 +512,7 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_and3)
     }
 
     DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType(), DoubleType(), LongType()}));
-    std::vector<DataTypePtr> typess = {IntType(), LongType(), LongType(), DoubleType(), LongType()};
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType(), LongType(), DoubleType(), LongType()};
     VectorBatch *vecBatch =
         omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5);
     for (size_t i = 0; i < dataSize; i++) {
@@ -553,7 +553,7 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_or1)
     int64_t data2[dataSize] = {0, 1, 2, 3, 4};
 
     DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
-    std::vector<DataTypePtr> typess = {IntType(), LongType()};
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     vecBatch->Get(0)->SetNull(1);
     vecBatch->Get(0)->SetNull(3);
@@ -575,7 +575,7 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_or2)
     int64_t data2[dataSize] = {0, 1, 2, 3, 4};
 
     DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
-    std::vector<DataTypePtr> typess = {IntType(), LongType()};
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     vecBatch->Get(0)->SetNull(1);
     vecBatch->Get(1)->SetNull(1);
@@ -604,7 +604,7 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_or3)
     }
 
     DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
-    std::vector<DataTypePtr> typess = {IntType(), LongType()};
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     for (size_t i = 0; i < dataSize; i++) {
         if (i % 2 == 0) {
@@ -643,7 +643,7 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_or4)
     }
 
     DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType(), DoubleType(), LongType()}));
-    std::vector<DataTypePtr> typess = {IntType(), LongType(), LongType(), DoubleType(), LongType()};
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType(), LongType(), DoubleType(), LongType()};
     VectorBatch *vecBatch =
         omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5);
     for (size_t i = 0; i < dataSize; i++) {
@@ -694,7 +694,7 @@ TEST(SelectivityVector, test_gather_result_1)
     }
 
     DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType(), DoubleType(), LongType()}));
-    std::vector<DataTypePtr> typess = {IntType(), LongType(), LongType(), DoubleType(), LongType()};
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType(), LongType(), DoubleType(), LongType()};
     VectorBatch *vecBatch =
         omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5);
     std::vector<BaseVector *> src(5, nullptr);

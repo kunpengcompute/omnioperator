@@ -176,19 +176,15 @@ TEST(HashUtilTest, TestHashValueDecimal128)
 
 TEST(HashUtilTest, TestHashValueVarchar)
 {
-    // lenth has 3, 4, 5, 8, 11, 20, 32, 36, 72, 180
+    // length has 3, 4, 5, 8, 11, 20, 32, 36, 72, 180
     std::string values[] = {
-        "abc",
-        "abcd",
-        "abcde",
-        "abcde222",
-        "abcdefgh222",
-        "abcdefghijklmnopqrst",
-        "abcdefghijklmnopqrstuvwxyz123456",
-        "abcdefghijklmnopqrstuvwxyz1234567890",
-        "abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz1234567890",
+        "abc", "abcd", "abcde", "abcde222", "abcdefgh222", "abcdefghijklmnopqrst",
+        "abcdefghijklmnopqrstuvwxyz123456",                                         // pragma: allowlist secret
+        "abcdefghijklmnopqrstuvwxyz1234567890",                                     // pragma: allowlist secret
+        "abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz1234567890", // pragma: allowlist secret
+        // pragma: allowlist nextline secret
         "abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz1234567890ab"
-        "cdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz1234567890"};
+        "cdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz1234567890"}; // pragma: allowlist secret
     int64_t expectedHashes[] = {4952883123889572249,  -2449070131962342708, 568411279426701291, -6957354030615793260,
                                 -2030035951930513236, -230643138868552546,  9832087890187035,   -8161331784937432616,
                                 4864693492930352182,  -1077384717859208249};
@@ -239,7 +235,7 @@ TEST(HashUtilTest, TestCRCHashVarchar)
     const std::string str2 = "123456789";
     const std::string str3 = "123456789123456789";
     const std::string str4 = "abcdefghijklmnopqrstuvwxyz";
-    const std::string str5 = "01234567890123456789abcdefghijklmnopqrstuvwxyz";
+    const std::string str5 = "01234567890123456789abcdefghijklmnopqrstuvwxyz"; // pragma: allowlist secret
     StringRef stringValue[] = {StringRef(str1), StringRef(str2), StringRef(str3), StringRef(str4), StringRef(str5)};
     size_t expectedStringHashes[] = {306354154, 3808858755, 2825671668, 2665934629, 1551261344};
     for (int i = 0; i < 5; ++i) {

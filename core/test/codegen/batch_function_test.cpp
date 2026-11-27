@@ -1288,7 +1288,7 @@ TEST(BatchFunctionTest, SpiltIndex)
     EXPECT_TRUE(output[4] == nullptr);
     EXPECT_TRUE(output[5] == nullptr);
     EXPECT_EQ("Mary", std::string(reinterpret_cast<char *>(output[6]), outLen[6]));
-    // Test that string above the given length isnt considered
+    // Test that string above the given length is not considered
     EXPECT_EQ(4, outLen[0]);
     EXPECT_EQ(6, outLen[1]);
     EXPECT_EQ(0, outLen[2]);

@@ -256,9 +256,9 @@ public class OmniHashAggregationOperatorTest {
         OmniHashAggregationOperatorFactory factory = new OmniHashAggregationOperatorFactory(groupByChanel, groupByTypes,
                 aggChannels, aggTypes, aggFunctionTypes, aggOutputTypes, true, false);
 
-        Object[][] datas = {{"", null, "", null}, {1L, 2L, 3L, 4L}};
+        Object[][] inputData = {{"", null, "", null}, {1L, 2L, 3L, 4L}};
         DataType[] sourceTypes = {new VarcharDataType(varcharWidth), LongDataType.LONG};
-        VecBatch vecBatch = createVecBatch(sourceTypes, datas);
+        VecBatch vecBatch = createVecBatch(sourceTypes, inputData);
 
         OmniOperator omniOperator = factory.createOperator();
         omniOperator.addInput(vecBatch);

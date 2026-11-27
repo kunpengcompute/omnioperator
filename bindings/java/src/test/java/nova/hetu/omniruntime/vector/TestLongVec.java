@@ -129,7 +129,7 @@ public class TestLongVec {
     }
 
     /**
-     * test copy postion
+     * test copy position
      */
     @Test
     public void testCopyPositions() {

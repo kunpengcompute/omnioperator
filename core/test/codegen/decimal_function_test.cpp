@@ -41,14 +41,14 @@ TEST(FunctionTest, GetDecimalFromDictionaryVector)
     int32_t ids[] = {0, 2, 4, 6, 8};
     auto dictionary = VectorHelper::CreateDictionary(ids, size, decimalVec);
     int64_t outHigh = 0;
-    uint64_t outLow = 0;
+    uint64_t outputLow = 0;
     int64_t dictptr =
         reinterpret_cast<int64_t>(reinterpret_cast<Vector<DictionaryContainer<Decimal128>> *>(dictionary));
     for (int i = 0; i < size; i++) {
-        GetDecimalFromDictionaryVector(dictptr, i, 38, 0, &outHigh, &outLow);
+        GetDecimalFromDictionaryVector(dictptr, i, 38, 0, &outHigh, &outputLow);
         Decimal128 expected = decimalVec->GetValue(ids[i]);
         EXPECT_EQ(expected.HighBits(), outHigh);
-        EXPECT_EQ(expected.LowBits(), outLow);
+        EXPECT_EQ(expected.LowBits(), outputLow);
     }
     delete decimalVec;
     delete dictionary;
@@ -288,33 +288,33 @@ TEST(FunctionTest, DivDec128)
 TEST(FunctionTest, AbsDecimal128)
 {
     int64_t outHigh = 0;
-    uint64_t outLow = 0;
+    uint64_t outputLow = 0;
 
     Decimal128 test;
     Decimal128 expected;
 
     test = Decimal128(3);
-    AbsDecimal128(test.HighBits(), test.LowBits(), 38, 9, false, 38, 9, &outHigh, &outLow);
+    AbsDecimal128(test.HighBits(), test.LowBits(), 38, 9, false, 38, 9, &outHigh, &outputLow);
     EXPECT_EQ(outHigh, test.HighBits());
-    EXPECT_EQ(outLow, test.LowBits());
+    EXPECT_EQ(outputLow, test.LowBits());
 
     test = Decimal128(-1);
     expected = Decimal128(1);
-    AbsDecimal128(test.HighBits(), test.LowBits(), 38, 0, false, 38, 0, &outHigh, &outLow);
+    AbsDecimal128(test.HighBits(), test.LowBits(), 38, 0, false, 38, 0, &outHigh, &outputLow);
     EXPECT_EQ(outHigh, expected.HighBits());
-    EXPECT_EQ(outLow, expected.LowBits());
+    EXPECT_EQ(outputLow, expected.LowBits());
 
     test = Decimal128(0);
     expected = Decimal128(0);
-    AbsDecimal128(test.HighBits(), test.LowBits(), 38, 0, false, 38, 0, &outHigh, &outLow);
+    AbsDecimal128(test.HighBits(), test.LowBits(), 38, 0, false, 38, 0, &outHigh, &outputLow);
     EXPECT_EQ(outHigh, expected.HighBits());
-    EXPECT_EQ(outLow, expected.LowBits());
+    EXPECT_EQ(outputLow, expected.LowBits());
 }
 
 TEST(FunctionTest, RoundDecimal)
 {
     int64_t outHigh = 0;
-    uint64_t outLow = 0;
+    uint64_t outputLow = 0;
 
     auto context = new ExecutionContext();
     auto contextPtr = reinterpret_cast<int64_t>(context);
@@ -322,27 +322,28 @@ TEST(FunctionTest, RoundDecimal)
     Decimal128 expected;
     test = Decimal128("22167875302138684366688952930001319804");
     expected = Decimal128("22167875302138684367");
-    RoundDecimal128(contextPtr, test.HighBits(), test.LowBits(), 38, 18, 0, false, 21, 0, &outHigh, &outLow);
+    RoundDecimal128(contextPtr, test.HighBits(), test.LowBits(), 38, 18, 0, false, 21, 0, &outHigh, &outputLow);
     EXPECT_EQ(outHigh, expected.HighBits());
-    EXPECT_EQ(outLow, expected.LowBits());
+    EXPECT_EQ(outputLow, expected.LowBits());
 
     test = Decimal128("151949737170315874258868924986217725952");
     expected = Decimal128(0);
-    RoundDecimal128(contextPtr, test.HighBits(), test.LowBits(), 38, 18, 0, true, 21, 0, &outHigh, &outLow);
+    RoundDecimal128(contextPtr, test.HighBits(), test.LowBits(), 38, 18, 0, true, 21, 0, &outHigh, &outputLow);
     EXPECT_EQ(outHigh, expected.HighBits());
-    EXPECT_EQ(outLow, expected.LowBits());
+    EXPECT_EQ(outputLow, expected.LowBits());
 
     test = Decimal128("76051882560490807662482874031011839644");
     expected = Decimal128("76051882560490807662");
-    RoundDecimal128WithoutRound(contextPtr, test.HighBits(), test.LowBits(), 38, 18, false, 21, 0, &outHigh, &outLow);
+    RoundDecimal128WithoutRound(contextPtr, test.HighBits(), test.LowBits(), 38, 18, false, 21, 0, &outHigh,
+                                &outputLow);
     EXPECT_EQ(outHigh, expected.HighBits());
-    EXPECT_EQ(outLow, expected.LowBits());
+    EXPECT_EQ(outputLow, expected.LowBits());
 
     test = Decimal128("151949737170315874258868924986217725952");
     expected = Decimal128(0);
-    RoundDecimal128WithoutRound(contextPtr, test.HighBits(), test.LowBits(), 38, 18, true, 21, 0, &outHigh, &outLow);
+    RoundDecimal128WithoutRound(contextPtr, test.HighBits(), test.LowBits(), 38, 18, true, 21, 0, &outHigh, &outputLow);
     EXPECT_EQ(outHigh, expected.HighBits());
-    EXPECT_EQ(outLow, expected.LowBits());
+    EXPECT_EQ(outputLow, expected.LowBits());
 
     int64_t result = RoundDecimal64(contextPtr, 463127424592162661L, 18, 8, 0, false, 11, 0);
     EXPECT_EQ(result, 4631274246L);
@@ -642,18 +643,18 @@ TEST(FunctionTest, CastIntToDecimal128)
 TEST(FunctionTest, CastLongToDecimal128)
 {
     int64_t outHigh = 0;
-    uint64_t outLow = 0;
+    uint64_t outputLow = 0;
     Decimal128 expected;
 
     auto context = new ExecutionContext();
     auto contextPtr = reinterpret_cast<int64_t>(context);
 
     int64_t x = 999;
-    CastLongToDecimal128(contextPtr, x, false, 2, 0, &outHigh, &outLow);
+    CastLongToDecimal128(contextPtr, x, false, 2, 0, &outHigh, &outputLow);
     EXPECT_TRUE(context->HasError());
     x = 10;
-    CastLongToDecimal128(contextPtr, x, false, 2, 0, &outHigh, &outLow);
-    EXPECT_EQ(outLow, 10);
+    CastLongToDecimal128(contextPtr, x, false, 2, 0, &outHigh, &outputLow);
+    EXPECT_EQ(outputLow, 10);
 
     delete context;
 }

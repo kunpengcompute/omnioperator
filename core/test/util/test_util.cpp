@@ -717,15 +717,15 @@ bool CompareArrayUnorderedRows(BaseVector *resVec, BaseVector *dstVec, const dou
             continue;
         }
 
-        int32_t resSize = resultVec->GetSize(row);
+        int32_t resultSize = resultVec->GetSize(row);
         int32_t expSize = expectedVec->GetSize(row);
-        if (resSize != expSize) {
+        if (resultSize != expSize) {
             return false;
         }
 
         int32_t resOffset = resultVec->GetOffset(row);
         int32_t expOffset = expectedVec->GetOffset(row);
-        auto resSubArray = resultVec->GetElementVector()->Slice(resOffset, resSize, false);
+        auto resSubArray = resultVec->GetElementVector()->Slice(resOffset, resultSize, false);
         auto expSubArray = expectedVec->GetElementVector()->Slice(expOffset, expSize, false);
         bool match = ColumnMatchIgnoreOrder(resSubArray, expSubArray, error);
 

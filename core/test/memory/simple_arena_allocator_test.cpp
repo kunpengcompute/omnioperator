@@ -90,7 +90,7 @@ TEST(SimpleArenaAllocator, testResetSmallToBig)
     EXPECT_EQ(arena.TotalBytes(), chunkSize);
     EXPECT_EQ(arena.AvailBytes(), chunkSize);
 
-    // should re-use buffer after Reset.
+    // should reuse buffer after Reset.
     p = arena.Allocate(smallSize);
     EXPECT_NE(p, nullptr);
     EXPECT_EQ(arena.TotalBytes(), chunkSize);
@@ -117,7 +117,7 @@ TEST(SimpleArenaAllocator, testResetFromBigToSmall)
     EXPECT_EQ(arena.TotalBytes(), largeSize);
     EXPECT_EQ(arena.AvailBytes(), largeSize);
 
-    // should re-use buffer after Reset.
+    // should reuse buffer after Reset.
     p = arena.Allocate(smallSize);
     EXPECT_NE(p, nullptr);
     EXPECT_EQ(arena.TotalBytes(), largeSize);

@@ -2935,14 +2935,14 @@ TEST(HashAggregationOperatorTest, supported_type_test)
     // prepare data
     int32_t data0[dataSize] = {0, 1, 2, 0, 1, 2};
     int64_t data1[dataSize] = {0, 1, 2, 3, 4, 5};
-    void *datas[2] = {data0, data1};
+    void *columnBuffers[2] = {data0, data1};
     std::vector<DataTypePtr> sourceFieldTypes{IntType(), LongType()};
     DataTypes sourceTypes(sourceFieldTypes);
     int32_t ids[] = {0, 1, 2, 3, 4, 5};
     VectorBatch *vectorBatch = new VectorBatch(dataSize);
     for (int32_t i = 0; i < 2; i++) {
         DataTypePtr dataType = sourceTypes.GetType(i);
-        vectorBatch->Append(CreateDictionaryVector(*dataType, dataSize, ids, dataSize, datas[i]));
+        vectorBatch->Append(CreateDictionaryVector(*dataType, dataSize, ids, dataSize, columnBuffers[i]));
     }
 
     aggFactory = CreateHashAggregationOperatorFactory(
@@ -5133,7 +5133,7 @@ TEST(AggregatorTest, typed_aggregator_test)
 
     const int dataSize = 6;
     double data0[dataSize] = {0.0f, 1.0f, 2.0f, 0.0f, 1.0f, 2.0f};
-    void *datas[1] = {data0};
+    void *columnBuffers[1] = {data0};
     std::vector<DataTypePtr> sourceFieldTypes{IntType()};
     DataTypes sourceTypes(sourceFieldTypes);
     int32_t ids[] = {0, 1, 2, 3, 4, 5};
@@ -5146,7 +5146,7 @@ TEST(AggregatorTest, typed_aggregator_test)
     BaseVector *vector = VectorHelper::CreateDictionaryVector(ids, dataSize, doubleVector, inputType->GetId());
     vectorBatch->Append(vector);
     delete doubleVector;
-    auto rawVectorBatch = CreateVectorBatch(inputTypes, dataSize, datas[0]);
+    auto rawVectorBatch = CreateVectorBatch(inputTypes, dataSize, columnBuffers[0]);
     std::vector<DataTypePtr> typesPtr = {
         nullptr,         IntType(),        LongType(), DoubleType(),    BooleanType(),   ShortType(),
         Decimal64Type(), Decimal128Type(), IntType(),  LongType(),      IntType(),       LongType(),

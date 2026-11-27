@@ -25,7 +25,7 @@ using namespace omniruntime::op;
 using namespace omniruntime::vec;
 using namespace omniruntime::type;
 
-// in this benchmark we examin performance of aggregations inside hash aggregation
+// in this benchmark we examine performance of aggregations inside hash aggregation
 // to focus on aggregation performance not hashing performance, here the hash aggregator will have a single
 // simple groupby column of type int
 

@@ -23,7 +23,7 @@ import org.apache.hadoop.hive.ql.exec.UDF;
  */
 public class AddIntUDF extends UDF {
     /**
-     * Calculates the sum of two int datas for test.
+     * Calculates the sum of two int values for test.
      *
      * @param paramA the first param
      * @param paramB the second param

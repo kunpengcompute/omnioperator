@@ -295,14 +295,12 @@ TEST(NativeOmniDistinctLimitOperator, TestDistinctLimitVarchar)
 
     // table1
     int32_t data1[dataSize] = {0, 0, 0, 0, 0, 0};
-    std::string data2[dataSize] = {"abc",
-                                   "abc",
-                                   "Abc",
-                                   "ab",
-                                   "abcd",
+    std::string data2[dataSize] = {"abc", "abc", "Abc", "ab", "abcd",
+                                   // pragma: allowlist nextline secret
                                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrs"
+                                   // pragma: allowlist nextline secret
                                    "tuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKL"
-                                   "MNOPQRSTUVWXYZ1234567890"};
+                                   "MNOPQRSTUVWXYZ1234567890"}; // pragma: allowlist secret
 
     std::vector<DataTypePtr> types = {IntType(), VarcharType(256)};
     DataTypes sourceTypes(types);
@@ -321,8 +319,11 @@ TEST(NativeOmniDistinctLimitOperator, TestDistinctLimitVarchar)
     int32_t expData1[resultDataSize] = {0, 0, 0, 0, 0};
     std::string expData2[resultDataSize] = {
         "abc", "Abc", "ab", "abcd",
+        // pragma: allowlist nextline secret
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrs"
+        // pragma: allowlist nextline secret
         "tuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKL"
+        // pragma: allowlist nextline secret
         "MNOPQRSTUVWXYZ1234567890"};
     VectorBatch *expVecBatch1 = CreateVectorBatch(sourceTypes, resultDataSize, expData1, expData2);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expVecBatch1));
@@ -348,7 +349,7 @@ TEST(NativeOmniDistinctLimitOperator, TestDistinctLimitHashCol)
     /*
      * data3 will be used directly as hash value of the corresponding row
      * for data3[3]: hash value conflict and data1[3] and data2[3] both has same record, treat as repeat record
-     * for data4[4]: hash value conflict but data2[4] is not same as before record, tread as a new record
+     * for data4[4]: hash value conflict but data2[4] is not same as before record, treat as a new record
      */
     int64_t data3[dataSize] = {100000, 110000, 120000, 100000, 110000};
     int16_t data4[dataSize] = {6, 5, 4, 6, 2};

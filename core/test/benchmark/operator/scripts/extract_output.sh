@@ -15,7 +15,7 @@ then
     echo "Too few arguments"
     echo "Usage: extract_output.sh BENCHMARK_NAME BENCHMARK_OUTPUT"
     echo "  BENCHMARK_NAME: name of benchmark test, i.e. 'AggBenchmark'"
-    echo "  BENCHMARK_OUTPUT: path to ouput of benchmark"
+    echo "  BENCHMARK_OUTPUT: path to output of benchmark"
     exit -1
 fi
 if [ "$1" == "-h" ] || [ "$1" == "--help" ]
@@ -23,7 +23,7 @@ then
     echo "Extract result of benchmark from benchmark output file for specified benchmark"
     echo "Usage: extract_output.sh BENCHMARK_NAME BENCHMARK_OUTPUT"
     echo "  BENCHMARK_NAME: name of benchmark test, i.e. 'AggBenchmark'"
-    echo "  BENCHMARK_OUTPUT: path to ouput of benchmark"
+    echo "  BENCHMARK_OUTPUT: path to output of benchmark"
     exit 0
 fi
 

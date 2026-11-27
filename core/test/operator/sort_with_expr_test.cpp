@@ -145,12 +145,12 @@ TEST(SortWithExprTest, TestSortTwoExprDictionaryColumns)
     int32_t data0[dataSize] = {0, 1, 2, 0, 1, 2};
     int64_t data1[dataSize] = {0, 1, 2, 3, 4, 5};
     int64_t data2[dataSize] = {66, 55, 44, 33, 22, 11};
-    void *datas[3] = {data0, data1, data2};
+    void *columnBuffers[3] = {data0, data1, data2};
     DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType()}));
     int32_t ids[] = {0, 1, 2, 3, 4, 5};
     auto *vecBatch = new VectorBatch(dataSize);
     for (int32_t i = 0; i < 3; i++) {
-        vecBatch->Append(CreateDictionaryVector(*sourceTypes.GetType(i), dataSize, ids, dataSize, datas[i]));
+        vecBatch->Append(CreateDictionaryVector(*sourceTypes.GetType(i), dataSize, ids, dataSize, columnBuffers[i]));
     }
 
     int32_t outputCols[2] = {1, 2};

@@ -33,20 +33,20 @@ if sys.argv[1].find("=") >= 0:
     exit(-1)
 
 outputDir = sys.argv[1]
-datas = {}
+datasets = {}
 header = []
 for i in range(2, len(sys.argv)):
     input = sys.argv[i]
     idx = input.find("=")
     if idx <= 0:
-        print("Invalid NAME=PATH tuple at arument {}: {}".format(i, input))
+        print("Invalid NAME=PATH tuple at argument {}: {}".format(i, input))
         exit(-2)
     name = input[0:idx]
     (h, data) = plot_util.loadData(input[idx + 1:], "%(Iterations)|(Time\(ms\))|(CPU\(ms\))$")
     print("[{}]: #rows: {}".format(name, len(data)))
     if len(header) == 0:
         header = h
-    datas[name] = data
+    datasets[name] = data
 
 sqls = ["sql2", "sql4", "sql6", "sql7", "sql9"]
 prefixs = ["0", "50", "150"]
@@ -58,5 +58,5 @@ for sql in sqls:
         nameMap = [["IsDictionary", {"false" : "flat", "true" : "dict"}], \
            ["OverflowAsNull", {"false" : "over-excp", "true" : "over-null"}], \
            ["RowsPerGroup", {}]]
-        plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", plotName + " (TIME)")
-        plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", plotName + " (CPU)")
+        plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", plotName + " (TIME)")
+        plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", plotName + " (CPU)")

@@ -33,20 +33,20 @@ if sys.argv[1].find("=") >= 0:
     exit(-1)
 
 outputDir = sys.argv[1]
-datas = {}
+datasets = {}
 header = []
 for i in range(2, len(sys.argv)):
     input = sys.argv[i]
     idx = input.find("=")
     if idx <= 0:
-        print("Invalid NAME=PATH tuple at arument {}: {}".format(i, input))
+        print("Invalid NAME=PATH tuple at argument {}: {}".format(i, input))
         exit(-2)
     name = input[0:idx]
     (h, data) = plot_util.loadData(input[idx + 1:], "%(Iterations)|(Time\(ms\))|(CPU\(ms\))$")
     print("[{}]: #rows: {}".format(name, len(data)))
     if len(header) == 0:
         header = h
-    datas[name] = data
+    datasets[name] = data
 
 print("Generating plot for Sum Aggregator Primitive...")
 filter = {"AggType" : "^sum$", "VectorType" : "^(int)|(long)|(double)$",\
@@ -54,8 +54,8 @@ filter = {"AggType" : "^sum$", "VectorType" : "^(int)|(long)|(double)$",\
 nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["IsDictionary", {"false" : "flat", "true" : "dict"}],\
            ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Sum Aggregator Primitive (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Sum Aggregator Primitive (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Sum Aggregator Primitive (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Sum Aggregator Primitive (CPU)")
 
 print("Generating plot for Sum Aggregator Decimal...")
 filter = {"AggType" : "^sum$", "VectorType" : "^(decimal64)|(decimal128)$", "UseMask" : "false"}
@@ -64,8 +64,8 @@ nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["InputRaw", {"false" : "raw", "true" : "not-raw"}],\
            ["OutputPartial", {"false" : "partial", "true" : "not-partial"}],\
            ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Sum Aggregator Decimal (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Sum Aggregator Decimal (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Sum Aggregator Decimal (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Sum Aggregator Decimal (CPU)")
 
 print("Generating plot for Average Aggregator Primitive...")
 filter = {"AggType" : "^avg$", "VectorType" : "^(int)|(long)|(double)$",\
@@ -73,8 +73,8 @@ filter = {"AggType" : "^avg$", "VectorType" : "^(int)|(long)|(double)$",\
 nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["IsDictionary", {"false" : "flat", "true" : "dict"}],\
            ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Average Aggregator Primitive (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Average Aggregator Primitive (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Average Aggregator Primitive (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Average Aggregator Primitive (CPU)")
 
 print("Generating plot for Average Aggregator Decimal...")
 filter = {"AggType" : "^avg$", "VectorType" : "^(decimal64)|(decimal128)$", "UseMask" : "false"}
@@ -83,31 +83,31 @@ nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["InputRaw", {"false" : "raw", "true" : "not-raw"}],\
            ["OutputPartial", {"false" : "partial", "true" : "not-partial"}],\
            ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Average Aggregator Decimal (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Average Aggregator Decimal (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Average Aggregator Decimal (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Average Aggregator Decimal (CPU)")
 
 print("Generating plot for Min Aggregator...")
 filter = {"AggType" : "^min$", "VectorType" : "^(int)|(long)|(double)|(decimal64)|(decimal128)|(char)$",\
         "UseMask" : "false", "InputRaw" : "true", "OutputPartial" : "false"}
 nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["IsDictionary", {"false" : "flat", "true" : "dict"}], ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Min Aggregator (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Min Aggregator (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Min Aggregator (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Min Aggregator (CPU)")
 
 print("Generating plot for Max Aggregator...")
 filter["AggType"] = "^max$"
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Max Aggregator (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Max Aggregator (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Max Aggregator (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Max Aggregator (CPU)")
 
 print("Generating plot for Count Column Aggregator...")
 filter["AggType"] = "^count$"
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Count Column Aggregator (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Count Column Aggregator (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Count Column Aggregator (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Count Column Aggregator (CPU)")
 
 print("Generating plot for Count All Aggregator...")
 filter["AggType"] = "^count_all$"
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Count All Aggregator (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Count All Aggregator (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Count All Aggregator (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Count All Aggregator (CPU)")
 
 
 # masked
@@ -117,8 +117,8 @@ filter = {"AggType" : "^sum$", "VectorType" : "^(int)|(long)|(double)$",\
 nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["IsDictionary", {"false" : "flat", "true" : "dict"}],\
            ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Masked Sum Aggregator Primitive (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Masked Sum Aggregator Primitive (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Masked Sum Aggregator Primitive (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Masked Sum Aggregator Primitive (CPU)")
 
 print("Generating plot for Masked Sum Aggregator Decimal...")
 filter = {"AggType" : "^sum$", "VectorType" : "^(decimal64)|(decimal128)$", "UseMask" : "true"}
@@ -127,8 +127,8 @@ nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["InputRaw", {"false" : "raw", "true" : "not-raw"}],\
            ["OutputPartial", {"false" : "partial", "true" : "not-partial"}],\
            ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Masked Sum Aggregator Decimal (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Masked Sum Aggregator Decimal (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Masked Sum Aggregator Decimal (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Masked Sum Aggregator Decimal (CPU)")
 
 print("Generating plot for Masked Average Aggregator Primitive...")
 filter = {"AggType" : "^avg$", "VectorType" : "^(int)|(long)|(double)$",\
@@ -136,8 +136,8 @@ filter = {"AggType" : "^avg$", "VectorType" : "^(int)|(long)|(double)$",\
 nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["IsDictionary", {"false" : "flat", "true" : "dict"}],\
            ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Masked Average Aggregator Primitive (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Masked Average Aggregator Primitive (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Masked Average Aggregator Primitive (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Masked Average Aggregator Primitive (CPU)")
 
 print("Generating plot for Masked Average Aggregator Decimal...")
 filter = {"AggType" : "^avg$", "VectorType" : "^(decimal64)|(decimal128)$", "UseMask" : "true"}
@@ -146,28 +146,28 @@ nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["InputRaw", {"false" : "raw", "true" : "not-raw"}],\
            ["OutputPartial", {"false" : "partial", "true" : "not-partial"}],\
            ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Masked Average Aggregator Decimal (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Masked Average Aggregator Decimal (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Masked Average Aggregator Decimal (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Masked Average Aggregator Decimal (CPU)")
 
 print("Generating plot for Masked Min Aggregator...")
 filter = {"AggType" : "^min$", "VectorType" : "^(int)|(long)|(double)|(decimal64)|(decimal128)|(char)$",\
         "UseMask" : "true", "InputRaw" : "true", "OutputPartial" : "false"}
 nameMap = [["HasNull", {"false" : "not-nullable", "true" : "nullable"}], \
            ["IsDictionary", {"false" : "flat", "true" : "dict"}], ["VectorType", {}]]
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Masked Min Aggregator (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Masked Min Aggregator (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Masked Min Aggregator (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Masked Min Aggregator (CPU)")
 
 print("Generating plot for Masked Max Aggregator...")
 filter["AggType"] = "^max$"
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Masked Max Aggregator (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Masked Max Aggregator (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Masked Max Aggregator (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Masked Max Aggregator (CPU)")
 
 print("Generating plot for Masked Count Column Aggregator...")
 filter["AggType"] = "^count$"
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Masked Count Column Aggregator (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Masked Count Column Aggregator (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Masked Count Column Aggregator (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Masked Count Column Aggregator (CPU)")
 
 print("Generating plot for Masked Count All Aggregator...")
 filter["AggType"] = "^count_all$"
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "Time(ms)", "Masked Count All Aggregator (TIME)")
-plot_util.generatePlot(outputDir, datas, header, filter, nameMap, "CPU(ms)", "Masked Count All Aggregator (CPU)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "Time(ms)", "Masked Count All Aggregator (TIME)")
+plot_util.generatePlot(outputDir, datasets, header, filter, nameMap, "CPU(ms)", "Masked Count All Aggregator (CPU)")

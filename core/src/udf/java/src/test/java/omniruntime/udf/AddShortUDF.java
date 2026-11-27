@@ -23,7 +23,7 @@ import org.apache.hadoop.hive.ql.exec.UDF;
  */
 public class AddShortUDF extends UDF {
     /**
-     * Calculates the sum of two short datas for test.
+     * Calculates the sum of two short values for test.
      *
      * @param paramA the first param
      * @param paramB the second param

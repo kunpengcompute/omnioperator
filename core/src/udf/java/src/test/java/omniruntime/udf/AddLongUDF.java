@@ -23,7 +23,7 @@ import org.apache.hadoop.hive.ql.exec.UDF;
  */
 public class AddLongUDF extends UDF {
     /**
-     * Calculates the sum of two long datas for test.
+     * Calculates the sum of two long values for test.
      *
      * @param paramA the first param
      * @param paramB the second param

@@ -231,15 +231,17 @@ TEST(FunctionTest, Mm3String)
 
 TEST(FunctionTest, Md5String)
 {
-    Md5StringTest("hellow world!", "df6a571d99e454e99be79a258ca3a57d");
-    Md5StringTest("123412345892376487612983", "1eac0a767ccdf782870bac35db9af264");
+    // pragma: allowlist nextline secret
+    Md5StringTest("hellow world!", "df6a571d99e454e99be79a258ca3a57d");            // codespell:ignore hellow
+    Md5StringTest("123412345892376487612983", "1eac0a767ccdf782870bac35db9af264"); // pragma: allowlist secret
+    // pragma: allowlist nextline secret
     Md5StringTest("1eac0a767ccdf782870bac35db9af2642345", "582aa488923f89ea825358ffe387f5ae");
-    Md5StringTest("", "d41d8cd98f00b204e9800998ecf8427e");
-    Md5StringTest("  1", "37705de0752d1027f8fc3b3f390c448d");
-    Md5StringTest("1  ", "42609f6cf2cbebfe205241bf26e2e0ef");
-    Md5StringTest("1", "c4ca4238a0b923820dcc509a6f75849b");
+    Md5StringTest("", "d41d8cd98f00b204e9800998ecf8427e");    // pragma: allowlist secret
+    Md5StringTest("  1", "37705de0752d1027f8fc3b3f390c448d"); // pragma: allowlist secret
+    Md5StringTest("1  ", "42609f6cf2cbebfe205241bf26e2e0ef"); // pragma: allowlist secret
+    Md5StringTest("1", "c4ca4238a0b923820dcc509a6f75849b");   // pragma: allowlist secret
     Md5StringTest("uwefbuiwef7821ho;o;lhf8923golecg288823pfhl;hsf2893fgOIHDWQIUHFGEWF7823GHQDFddj2",
-                  "03f2ace2c433c4b743787d96b41ed1b6");
+                  "03f2ace2c433c4b743787d96b41ed1b6"); // pragma: allowlist secret
 }
 
 static void EmptyToNullTest(const std::string &input)
@@ -261,7 +263,7 @@ static void EmptyToNullNotNullTest(const std::string &input, const std::string &
 
 TEST(FunctionTest, EmptyToNull)
 {
-    EmptyToNullNotNullTest("hellow world!", "hellow world!");
+    EmptyToNullNotNullTest("hellow world!", "hellow world!"); // codespell:ignore hellow
     EmptyToNullNotNullTest("123412345892376487612983", "123412345892376487612983");
     EmptyToNullNotNullTest("   ", "   ");
     EmptyToNullTest("");
@@ -1235,158 +1237,158 @@ TEST(FunctionTest, Mod)
 
 TEST(FunctionTest, LT)
 {
-    bool ans = LessThanInt8(3, 7);
-    EXPECT_TRUE(ans);
-    ans = LessThanInt8(11, 1);
-    EXPECT_FALSE(ans);
+    bool comparisonResult = LessThanInt8(3, 7);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanInt8(11, 1);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = LessThanInt16(13, 10210);
-    EXPECT_TRUE(ans);
-    ans = LessThanInt16(12311, 1123);
-    EXPECT_FALSE(ans);
+    comparisonResult = LessThanInt16(13, 10210);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanInt16(12311, 1123);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = LessThanInt32(123456, 1234567);
-    EXPECT_TRUE(ans);
-    ans = LessThanInt32(10, 2);
-    EXPECT_FALSE(ans);
+    comparisonResult = LessThanInt32(123456, 1234567);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanInt32(10, 2);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = LessThanInt64(10, 10000000);
-    EXPECT_TRUE(ans);
-    ans = LessThanInt64(10000000, 1);
-    EXPECT_FALSE(ans);
+    comparisonResult = LessThanInt64(10, 10000000);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanInt64(10000000, 1);
+    EXPECT_FALSE(comparisonResult);
 }
 
 TEST(FunctionTest, GT)
 {
-    bool ans = GreaterThanInt8(3, 7);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanInt8(11, 1);
-    EXPECT_TRUE(ans);
+    bool comparisonResult = GreaterThanInt8(3, 7);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanInt8(11, 1);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanInt16(13, 10210);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanInt16(12311, 1123);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanInt16(13, 10210);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanInt16(12311, 1123);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanInt32(123456, 1234567);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanInt32(10, 2);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanInt32(123456, 1234567);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanInt32(10, 2);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanInt64(10, 10000000);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanInt64(10000000, 1);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanInt64(10, 10000000);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanInt64(10000000, 1);
+    EXPECT_TRUE(comparisonResult);
 }
 
 TEST(FunctionTest, LTE)
 {
-    bool ans = LessThanEqualInt8(3, 7);
-    EXPECT_TRUE(ans);
-    ans = LessThanEqualInt8(11, 1);
-    EXPECT_FALSE(ans);
-    ans = LessThanEqualInt8(100, 100);
-    EXPECT_TRUE(ans);
+    bool comparisonResult = LessThanEqualInt8(3, 7);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanEqualInt8(11, 1);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = LessThanEqualInt8(100, 100);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = LessThanEqualInt16(13, 10210);
-    EXPECT_TRUE(ans);
-    ans = LessThanEqualInt16(12311, 1123);
-    EXPECT_FALSE(ans);
-    ans = LessThanEqualInt16(8192, 8192);
-    EXPECT_TRUE(ans);
+    comparisonResult = LessThanEqualInt16(13, 10210);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanEqualInt16(12311, 1123);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = LessThanEqualInt16(8192, 8192);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = LessThanEqualInt32(123456, 1234567);
-    EXPECT_TRUE(ans);
-    ans = LessThanEqualInt32(10, 2);
-    EXPECT_FALSE(ans);
-    ans = LessThanEqualInt32(65536, 65536);
-    EXPECT_TRUE(ans);
+    comparisonResult = LessThanEqualInt32(123456, 1234567);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanEqualInt32(10, 2);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = LessThanEqualInt32(65536, 65536);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = LessThanEqualInt64(10, 10000000);
-    EXPECT_TRUE(ans);
-    ans = LessThanEqualInt64(10000000, 1);
-    EXPECT_FALSE(ans);
-    ans = LessThanEqualInt64(123456789, 123456789);
-    EXPECT_TRUE(ans);
+    comparisonResult = LessThanEqualInt64(10, 10000000);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanEqualInt64(10000000, 1);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = LessThanEqualInt64(123456789, 123456789);
+    EXPECT_TRUE(comparisonResult);
 }
 
 TEST(FunctionTest, GTE)
 {
-    bool ans = GreaterThanEqualInt8(3, 7);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanEqualInt8(11, 1);
-    EXPECT_TRUE(ans);
-    ans = GreaterThanEqualInt8(100, 100);
-    EXPECT_TRUE(ans);
+    bool comparisonResult = GreaterThanEqualInt8(3, 7);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt8(11, 1);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt8(100, 100);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanEqualInt16(13, 10210);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanEqualInt16(12311, 1123);
-    EXPECT_TRUE(ans);
-    ans = GreaterThanEqualInt16(8192, 8192);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanEqualInt16(13, 10210);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt16(12311, 1123);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt16(8192, 8192);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanEqualInt32(123456, 1234567);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanEqualInt32(10, 2);
-    EXPECT_TRUE(ans);
-    ans = GreaterThanEqualInt32(65536, 65536);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanEqualInt32(123456, 1234567);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt32(10, 2);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt32(65536, 65536);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanEqualInt64(10, 10000000);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanEqualInt64(10000000, 1);
-    EXPECT_TRUE(ans);
-    ans = GreaterThanEqualInt64(123456789, 123456789);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanEqualInt64(10, 10000000);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt64(10000000, 1);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt64(123456789, 123456789);
+    EXPECT_TRUE(comparisonResult);
 }
 
 TEST(FunctionTest, EQ)
 {
-    bool ans;
-    ans = EqualInt8(17, 17);
-    EXPECT_TRUE(ans);
-    ans = EqualInt8(11, 123);
-    EXPECT_FALSE(ans);
+    bool comparisonResult;
+    comparisonResult = EqualInt8(17, 17);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = EqualInt8(11, 123);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = EqualInt16(171, 171);
-    EXPECT_TRUE(ans);
-    ans = EqualInt16(11, 12345);
-    EXPECT_FALSE(ans);
+    comparisonResult = EqualInt16(171, 171);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = EqualInt16(11, 12345);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = EqualInt32(123456, 123456);
-    EXPECT_TRUE(ans);
-    ans = EqualInt32(0, 123456);
-    EXPECT_FALSE(ans);
+    comparisonResult = EqualInt32(123456, 123456);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = EqualInt32(0, 123456);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = EqualInt64(123456000, 123456000);
-    EXPECT_TRUE(ans);
-    ans = EqualInt64(11, 12348765);
-    EXPECT_FALSE(ans);
+    comparisonResult = EqualInt64(123456000, 123456000);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = EqualInt64(11, 12348765);
+    EXPECT_FALSE(comparisonResult);
 }
 
 TEST(FunctionTest, NEQ)
 {
-    bool ans;
-    ans = NotEqualInt8(17, 17);
-    EXPECT_FALSE(ans);
-    ans = NotEqualInt8(11, 123);
-    EXPECT_TRUE(ans);
+    bool comparisonResult;
+    comparisonResult = NotEqualInt8(17, 17);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = NotEqualInt8(11, 123);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = NotEqualInt16(171, 171);
-    EXPECT_FALSE(ans);
-    ans = NotEqualInt16(11, 12345);
-    EXPECT_TRUE(ans);
+    comparisonResult = NotEqualInt16(171, 171);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = NotEqualInt16(11, 12345);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = NotEqualInt32(123456, 123456);
-    EXPECT_FALSE(ans);
-    ans = NotEqualInt32(0, 123456);
-    EXPECT_TRUE(ans);
+    comparisonResult = NotEqualInt32(123456, 123456);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = NotEqualInt32(0, 123456);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = NotEqualInt64(123456000, 123456000);
-    EXPECT_FALSE(ans);
-    ans = NotEqualInt64(11, 12348765);
-    EXPECT_TRUE(ans);
+    comparisonResult = NotEqualInt64(123456000, 123456000);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = NotEqualInt64(11, 12348765);
+    EXPECT_TRUE(comparisonResult);
 }
 
 TEST(FunctionTest, LessThanEqualDouble)
@@ -1522,7 +1524,7 @@ TEST(FunctionTest, SplitIndexRetNull)
     EXPECT_EQ(outIsNull, true);
     EXPECT_EQ(result, nullptr);
 
-    // When strings are concatinated, make sure data from next row isnt included when picking last element
+    // When strings are concatenated, make sure data from next row is not included when picking last element
     result = SplitIndexRetNull("Jack,John,MaryPaul,Nathan", 14, false, ",", 1, 1, false, 2, false, &outIsNull, &outlen);
     EXPECT_EQ(outlen, 4);
     actual = std::string(result, outlen);
@@ -3732,12 +3734,12 @@ TEST(FunctionTest, ContainsStr)
     EXPECT_EQ(result, false);
 
     src = std::string("abc");
-    match = std::string("abd");
+    match = std::string("abd"); // codespell:ignore abd
     result = ContainsStr(src.c_str(), src.length(), match.c_str(), match.length(), false);
     EXPECT_EQ(result, false);
 
     src = std::string("abcd");
-    match = std::string("abd");
+    match = std::string("abd"); // codespell:ignore abd
     result = ContainsStr(src.c_str(), src.length(), match.c_str(), match.length(), false);
     EXPECT_EQ(result, false);
 

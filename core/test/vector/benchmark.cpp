@@ -74,7 +74,7 @@ template <typename T> void bm_vector_has_no_null(benchmark::State &state)
         hasNull = vector->HasNull();
     }
     if (hasNull) {
-        // nothing, only avoid the compiler optimiztion for unused variable
+        // nothing, only avoid the compiler optimization for unused variable
     }
 }
 
@@ -88,7 +88,7 @@ template <typename T> void bm_vector_has_null(benchmark::State &state)
         hasNull = vector->HasNull();
     }
     if (hasNull) {
-        // nothing, only avoid the compiler optimiztion for unused variable
+        // nothing, only avoid the compiler optimization for unused variable
     }
 }
 

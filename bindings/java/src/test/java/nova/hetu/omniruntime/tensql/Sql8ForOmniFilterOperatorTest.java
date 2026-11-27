@@ -89,7 +89,7 @@ public class Sql8ForOmniFilterOperatorTest {
                                             "Jewelry                                           ",
                                             "Men                                               ")),
                             omniJsonInExpr(15, 1,
-                                    Arrays.asList("womens                                            ",
+                                    Arrays.asList("womens                                            ", // codespell:ignore womens
                                             "birdal                                            ",
                                             "pants                                             ")))),
             omniJsonIsNotNullExpr(getOmniJsonFieldReference(2, 2)));
@@ -129,7 +129,7 @@ public class Sql8ForOmniFilterOperatorTest {
             {"wallpaper                                         ", "parenting                                         ",
                     "musical                                           ",
                     "self-help                                         ",
-                    "womens                                            ",
+                    "womens                                            ", // codespell:ignore womens
                     "birdal                                            ",
                     "pants                                             ",
                     "other                                             "}, // i_class #1 char(50)
@@ -151,7 +151,7 @@ public class Sql8ForOmniFilterOperatorTest {
             {"wallpaper                                         ", null,
                     "musical                                           ",
                     "self-help                                         ",
-                    "womens                                            ",
+                    "womens                                            ", // codespell:ignore womens
                     "birdal                                            ",
                     "pants                                             ",
                     "pants                                             "}, // i_class #1 char(50)

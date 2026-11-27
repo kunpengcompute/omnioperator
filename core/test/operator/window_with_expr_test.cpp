@@ -1188,10 +1188,10 @@ TEST(NativeOmniWindowWithExprOperatorTest, testDictionaryVector)
 
     auto *vecBatch = new vec::VectorBatch(DATA_SIZE);
 
-    void *datas[9] = {data0, data1, data2, data3, data4, data5, data6, data7, data8};
+    void *columnBuffers[9] = {data0, data1, data2, data3, data4, data5, data6, data7, data8};
     for (int32_t i = 0; i < sourceTypes.GetSize(); i++) {
         const DataTypePtr &dataType = sourceTypes.GetType(i);
-        vecBatch->Append(CreateDictionaryVector(*dataType, DATA_SIZE, ids, DATA_SIZE, datas[i]));
+        vecBatch->Append(CreateDictionaryVector(*dataType, DATA_SIZE, ids, DATA_SIZE, columnBuffers[i]));
     }
 
     int32_t outputCols[9] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
@@ -1354,7 +1354,7 @@ TEST(NativeOmniWindowWithExprOperatorTest, testFrameBoundedN)
                                        "2021-01-01", "2021-01-01", "2021-01-01", "2021-02-01"};
     int64_t data2[MY_DATA_SIZE] = {7400, 8000, 7800, 7000, 7500, 6500, 4500, 8500, 9000, 8000, 8500, 9500};
     int32_t data3[MY_DATA_SIZE] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}; // frame start col
-    int32_t data4[MY_DATA_SIZE] = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}; // frane end col
+    int32_t data4[MY_DATA_SIZE] = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}; // frame end col
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, MY_DATA_SIZE, data0, data1, data2, data3, data4);
 
     int32_t partitionCols[1] = {0};
@@ -1398,7 +1398,7 @@ TEST(NativeOmniWindowWithExprOperatorTest, testFrameBoundedN)
                                              "2020-12-04", "2020-12-07", "2021-01-01", "2021-01-01"};
     int64_t expectData3[MY_DATA_SIZE] = {7000, 8000, 9000, 9500, 7800, 7400, 7500, 6500, 8500, 4500, 8500, 8000};
     int32_t expectData4[MY_DATA_SIZE] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}; // frame start col
-    int32_t expectData5[MY_DATA_SIZE] = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}; // frane end col
+    int32_t expectData5[MY_DATA_SIZE] = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}; // frame end col
     int64_t expectData6[MY_DATA_SIZE] = {3, 4, 3, 2, 3, 4, 4, 4, 4, 3, 2, 1};
     VectorBatch *expectVecBatch = CreateVectorBatch(expectTypes, MY_DATA_SIZE, expectData1, expectData2, expectData3,
                                                     expectData4, expectData5, expectData6);

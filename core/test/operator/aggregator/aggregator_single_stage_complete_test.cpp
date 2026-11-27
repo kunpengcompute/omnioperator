@@ -104,9 +104,9 @@ public:
             AggregatorTesterTemplate<IN_ID, OUT_ID>::GenerateVarcharResult(vvb, *expectedResult, true);
             return false;
         } else if constexpr (OUT_ID == OMNI_VARCHAR || OUT_ID == OMNI_CHAR) {
-            throw OmniException("Invalid Arguement", "Invalid aggregation type " +
-                                                         std::to_string(as_integer(this->aggFunc)) +
-                                                         " for Varchar input");
+            throw OmniException("Invalid Argument", "Invalid aggregation type " +
+                                                        std::to_string(as_integer(this->aggFunc)) +
+                                                        " for Varchar input");
         } else {
             using T_IN = typename NativeAndVectorType<IN_ID>::type;
             using T_OUT = typename NativeAndVectorType<OUT_ID>::type;
@@ -150,7 +150,7 @@ public:
                 overflow = GenerateExpectedResultNumeric<AllMatchFilter, IN_ID, T_OUT, T_IN>(
                     vvb, valueIndex, maskIndex, MaxFunc<T_IN, T_IN>, count, result);
             } else {
-                throw OmniException("Invalid Arguement",
+                throw OmniException("Invalid Argument",
                                     "Invalid aggregation type " + std::to_string(as_integer(this->aggFunc)));
             }
 
@@ -214,9 +214,9 @@ public:
             HashAggregatorTesterTemplate<IN_ID, OUT_ID>::GenerateVarcharResult(vvb, *expectedResult, true);
             return false;
         } else if constexpr (OUT_ID == OMNI_VARCHAR || OUT_ID == OMNI_CHAR) {
-            throw OmniException("Invalid Arguement", "Invalid aggregation type " +
-                                                         std::to_string(as_integer(this->aggFunc)) +
-                                                         " for Varchar input");
+            throw OmniException("Invalid Argument", "Invalid aggregation type " +
+                                                        std::to_string(as_integer(this->aggFunc)) +
+                                                        " for Varchar input");
         } else {
             using T_IN = typename NativeAndVectorType<IN_ID>::type;
             using T_OUT = typename NativeAndVectorType<OUT_ID>::type;
@@ -272,7 +272,7 @@ public:
                     overflow = GenerateExpectedResultNumeric<GroupByFilter, IN_ID, T_OUT, T_IN>(
                         vvb, valueIndex, maskIndex, MaxFunc<T_IN, T_IN>, count, result, filterValuePtr, 0);
                 } else {
-                    throw OmniException("Invalid Arguement",
+                    throw OmniException("Invalid Argument",
                                         "Invalid aggregation type " + std::to_string(as_integer(this->aggFunc)));
                 }
 
@@ -500,7 +500,7 @@ TEST_P(SingleStageCompleteTest, verify_correctness)
     // but calculation of expected result does not use SIMD vectorization.
     // Therefore, actual result can be slightly different from expected result.
     // we set error = 0.0001 to handle this situation
-    // When outout is not double (it is numeric) expected result could be off by +1/-1
+    // When output is not double (it is numeric) expected result could be off by +1/-1
     // for example, actual result could be 23.500123 (which when converted to numeric value will be 24)
     //  expected result, however, could be 23.499923 (which when converted to numeric value will be 23))
     double error = inId == OMNI_DOUBLE ? (outId == OMNI_DOUBLE ? 0.001 : 1) : 0;

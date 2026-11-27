@@ -728,7 +728,7 @@ TEST(ParseTest, ParseExpressions)
     DataTypes inputTypes(vecOfTypes);
     Parser parser;
     std::vector<Expr *> result = parser.ParseExpressions(exprs, 2, inputTypes);
-    // check substract expression
+    // check subtract expression
     EXPECT_EQ(result.at(0)->GetType(), omniruntime::expressions::ExprType::BINARY_E);
     BinaryExpr *subtractExpr = static_cast<BinaryExpr *>(result.at(0));
     EXPECT_EQ(subtractExpr->op, omniruntime::expressions::Operator::SUB);

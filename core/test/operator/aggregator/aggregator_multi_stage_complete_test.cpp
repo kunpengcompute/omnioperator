@@ -292,7 +292,7 @@ TEST_P(MultiStageCompleteTest, verify_correctness)
     // but calculation of expected result does not use SIMD vectorization.
     // Therefore, actual result can be slightly different from expected result.
     // we set error = 0.0001 to handle this situation
-    // When outout is not double (it is numeric) expected result could be off by +1/-1
+    // When output is not double (it is numeric) expected result could be off by +1/-1
     // for example, actual result could be 23.500123 (which when converted to numeric value will be 24)
     //  expected result, however, could be 23.499923 (which when converted to numeric value will be 23))
     double error = inId == OMNI_DOUBLE ? (outId == OMNI_DOUBLE ? 0.001 : 1) : 0;
@@ -492,7 +492,7 @@ TEST_P(MultiStageCompleteTestWithAdaptivePartialAgg, verify_correctness)
     // but calculation of expected result does not use SIMD vectorization.
     // Therefore, actual result can be slightly different from expected result.
     // we set error = 0.0001 to handle this situation
-    // When outout is not double (it is numeric) expected result could be off by +1/-1
+    // When output is not double (it is numeric) expected result could be off by +1/-1
     // for example, actual result could be 23.500123 (which when converted to numeric value will be 24)
     //  expected result, however, could be 23.499923 (which when converted to numeric value will be 23))
     double error = inId == OMNI_DOUBLE ? (outId == OMNI_DOUBLE ? 0.001 : 1) : 0;

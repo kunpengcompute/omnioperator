@@ -21,7 +21,7 @@ import org.apache.hadoop.hive.ql.exec.UDF;
  */
 public class AndBooleanUDF extends UDF {
     /**
-     * Calculates the result of and two boolean datas for test.
+     * Calculates the result of and two boolean values for test.
      *
      * @param paramA the first param
      * @param paramB the second param

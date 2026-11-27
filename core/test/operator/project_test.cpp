@@ -1006,7 +1006,7 @@ TEST(ProjectionTest, ProjectString1)
     auto *vcVec = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(outputVecBatch->Get(0));
     for (int32_t i = 0; i < numRows; i++) {
         if (i % 40 == 0) {
-            EXPECT_TRUE(vcVec->GetValue(i) == "hel");
+            EXPECT_TRUE(vcVec->GetValue(i) == "hel"); // codespell:ignore hel
         } else {
             EXPECT_TRUE(vcVec->GetValue(i) == "abc");
         }

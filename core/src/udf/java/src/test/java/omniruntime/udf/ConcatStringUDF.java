@@ -21,7 +21,7 @@ import org.apache.hadoop.hive.ql.exec.UDF;
  */
 public class ConcatStringUDF extends UDF {
     /**
-     * Concat the two string datas for test.
+     * Concat the two string values for test.
      *
      * @param paramA the first param
      * @param paramB the second param
