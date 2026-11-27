@@ -323,8 +323,6 @@ We welcome your contributions to the community. If you have questions or suggest
 
 ## Acknowledgments<a name="EN-US_TOPIC_0000002515658382"></a>
 
-OminiOperator is jointly developed by the following Huawei departments:
-
-Kunpeng Computing BoostKit Development Dept
+OmniOperator is jointly developed by the openEuler community.
 
 Thank you to everyone in the community for your PRs. We warmly welcome contributions to OminiOperator!
