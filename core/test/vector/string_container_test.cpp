@@ -1,6 +1,13 @@
 /*
- * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
- * @Description: string container test implementations
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -62,7 +69,7 @@ template <typename CONTAINER> void string_vector_size_invalid()
 
 template <typename CONTAINER>
 void CompareResult(Vector<CONTAINER> *appended, std::vector<std::string> expected, std::vector<bool> expectedNull,
-    int32_t appendedVecSize)
+                   int32_t appendedVecSize)
 {
     for (int32_t i = 0; i < appendedVecSize; i++) {
         // append empty vector or beyond the bound
@@ -126,7 +133,7 @@ template <typename CONTAINER> void string_vector_append_value()
     }
     EXPECT_ANY_THROW(appended->Append(v4OverBounds, 10, vectorSize + 1));
 
-    std::vector<bool> expectedNull{ false, false, false, false, false, true, false, true, false, true };
+    std::vector<bool> expectedNull{false, false, false, false, false, true, false, true, false, true};
     CompareResult(appended, expected, expectedNull, appendedVecSize);
 
     delete appended;
@@ -185,7 +192,6 @@ template <typename CONTAINER> void string_vector_copy_positions()
     delete vectorEmpty;
     delete vector;
 }
-
 
 template <typename CONTAINER> void string_vector_slice()
 {
@@ -281,49 +287,31 @@ TEST(vector2, vector_get_set_value_large_string)
     string_vector_get_set_value<LargeStringContainer<std::string_view>>();
 }
 
-
 TEST(vector2, vector_get_set_value_large_empty_string)
 {
     string_vector_get_set_empty_value<LargeStringContainer<std::string_view>>();
 }
-
 
 TEST(vector2, large_string_vector_size_invalid)
 {
     string_vector_size_invalid<LargeStringContainer<std::string_view>>();
 }
 
-
-TEST(vector2, vector_append_large_string)
-{
-    string_vector_append_value<LargeStringContainer<std::string_view>>();
-}
-
+TEST(vector2, vector_append_large_string) { string_vector_append_value<LargeStringContainer<std::string_view>>(); }
 
 TEST(vector2, vector_copy_positions_large_string)
 {
     string_vector_copy_positions<LargeStringContainer<std::string_view>>();
 }
 
+TEST(vector2, slice_container_large_string) { string_vector_slice<LargeStringContainer<std::string_view>>(); }
 
-TEST(vector2, slice_container_large_string)
-{
-    string_vector_slice<LargeStringContainer<std::string_view>>();
-}
+TEST(vector2, string_vector_get_datatype) { string_vector_get_datatype<LargeStringContainer<std::string_view>>(); }
 
-
-TEST(vector2, string_vector_get_datatype)
-{
-    string_vector_get_datatype<LargeStringContainer<std::string_view>>();
-}
-
-TEST(vector2, string_vector_get_large_size)
-{
-    string_vector_get_used_bytes<LargeStringContainer<std::string_view>>();
-}
+TEST(vector2, string_vector_get_large_size) { string_vector_get_used_bytes<LargeStringContainer<std::string_view>>(); }
 
 TEST(vector2, string_vector_zero_capacity_init)
 {
     string_vector_zero_capacity_init<LargeStringContainer<std::string_view>>();
 }
-}
+} // namespace omniruntime::vec::test

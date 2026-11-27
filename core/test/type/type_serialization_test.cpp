@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <nlohmann/json.hpp>
@@ -13,10 +21,21 @@ using DataType = omniruntime::type::DataType;
 namespace TypeSerializationTest {
 TEST(DataTypeSerializer, serialization)
 {
-    std::vector<DataTypePtr> fieldTypes { IntType(), Decimal128Type(20, 10), VarcharType(256) };
-    std::vector<DataTypePtr> types = { IntType(), DoubleType(), BooleanType(), LongType(), Date32Type(MILLI),
-        Date64Type(DAY), Time32Type(SEC), Time64Type(MICROSEC), VarcharType(1024), CharType(512),
-        Decimal128Type(30, 20), Decimal64Type(20, 10), ContainerType(fieldTypes), TimestampType() };
+    std::vector<DataTypePtr> fieldTypes{IntType(), Decimal128Type(20, 10), VarcharType(256)};
+    std::vector<DataTypePtr> types = {IntType(),
+                                      DoubleType(),
+                                      BooleanType(),
+                                      LongType(),
+                                      Date32Type(MILLI),
+                                      Date64Type(DAY),
+                                      Time32Type(SEC),
+                                      Time64Type(MICROSEC),
+                                      VarcharType(1024),
+                                      CharType(512),
+                                      Decimal128Type(30, 20),
+                                      Decimal64Type(20, 10),
+                                      ContainerType(fieldTypes),
+                                      TimestampType()};
     std::string typesJson = omniruntime::type::Serialize(types);
     DataTypes deserializedDataTypes = omniruntime::type::Deserialize(typesJson);
     auto &dataTypes = deserializedDataTypes.Get();
@@ -53,7 +72,6 @@ TEST(DataTypeSerializer, serialization)
     EXPECT_EQ(containerDataType.GetFieldType(2)->GetId(), OMNI_VARCHAR);
     EXPECT_EQ(static_cast<VarcharDataType &>(*containerDataType.GetFieldType(2)).GetWidth(), 256);
 }
-
 
 TEST(DataTypeSerializer, DataTypeBaseOperatorTest)
 {
@@ -96,9 +114,9 @@ TEST(DataTypeSerializer, DataTypeBaseOperatorTest)
     EXPECT_EQ(varcharDataType3.GetWidth(), varcharDataType.GetWidth());
     EXPECT_EQ(varcharDataType3.GetWidth(), 1024);
 
-    std::vector<DataTypePtr> fieldTypes { IntType(), VarcharType(1024) };
-    std::vector<DataTypePtr> fieldTypes2 { IntType(), Date32Type(MILLI) };
-    std::vector<DataTypePtr> fieldTypes3 { IntType(), Date32Type(MILLI) };
+    std::vector<DataTypePtr> fieldTypes{IntType(), VarcharType(1024)};
+    std::vector<DataTypePtr> fieldTypes2{IntType(), Date32Type(MILLI)};
+    std::vector<DataTypePtr> fieldTypes3{IntType(), Date32Type(MILLI)};
     ContainerDataType containerDataType = ContainerDataType(fieldTypes);
     ContainerDataType containerDataType2 = ContainerDataType(fieldTypes2);
     ContainerDataType containerDataType3 = ContainerDataType(fieldTypes3);
@@ -109,4 +127,4 @@ TEST(DataTypeSerializer, DataTypeBaseOperatorTest)
     EXPECT_EQ(containerDataType2.GetFieldType(1)->GetId(), OMNI_VARCHAR);
     EXPECT_EQ(static_cast<VarcharDataType &>(*containerDataType2.GetFieldType(1)).GetWidth(), 1024);
 }
-}
+} // namespace TypeSerializationTest

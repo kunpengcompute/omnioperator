@@ -1,6 +1,13 @@
 /*
-* Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Description: JNI Operator Factory Source File
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "compute/driver.h"
@@ -17,7 +24,7 @@ using namespace TestUtil;
 namespace orderbyTest {
 class TestBatchIterator final : public ColumnarBatchIterator {
 public:
-    explicit TestBatchIterator(const std::vector<VectorBatch *> &date): date(date) {}
+    explicit TestBatchIterator(const std::vector<VectorBatch *> &date) : date(date) {}
 
     ~TestBatchIterator() override = default;
 
@@ -97,61 +104,31 @@ TEST(DriverTest, TestGroupingOperator)
 
     auto sourceBatchIterator = std::make_unique<TestBatchIterator>(inputVector);
     auto resIterator = std::make_shared<ResultIterator>(std::move(sourceBatchIterator));
-    auto outTypes = std::make_shared<DataTypes>(std::vector<DataTypePtr>({
-        IntType(),
-        IntType(),
-        IntType(),
-        IntType(),
-        LongType()
-    }));
+    auto outTypes =
+        std::make_shared<DataTypes>(std::vector<DataTypePtr>({IntType(), IntType(), IntType(), IntType(), LongType()}));
     auto valueStreamNode = std::make_shared<const ValueStreamNode>("value_stream", outTypes, resIterator);
-    std::vector<ExprPtr> projectSet1 = {
-        new FieldExpr(0, IntType()),
-        new FieldExpr(1, IntType()),
-        new FieldExpr(2, IntType()),
-        new FieldExpr(3, IntType()),
-        new LiteralExpr(0, LongType())
-    };
-    std::vector<ExprPtr> projectSet2 = {
-        new FieldExpr(0, IntType()),
-        new FieldExpr(1, IntType()),
-        new FieldExpr(2, IntType()),
-        new LiteralExpr(0, IntType(), true),
-        new LiteralExpr(0, LongType())
-    };
-    std::vector<ExprPtr> projectSet3 = {
-        new FieldExpr(0, IntType()),
-        new FieldExpr(1, IntType()),
-        new LiteralExpr(0, IntType(), true),
-        new LiteralExpr(0, IntType(), true),
-        new LiteralExpr(0, LongType())
-    };
-    std::vector<ExprPtr> projectSet4 = {
-        new FieldExpr(0, IntType()),
-        new LiteralExpr(0, IntType(), true),
-        new LiteralExpr(0, IntType(), true),
-        new LiteralExpr(0, IntType(), true),
-        new LiteralExpr(0, LongType())
-    };
+    std::vector<ExprPtr> projectSet1 = {new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
+                                        new FieldExpr(2, IntType()), new FieldExpr(3, IntType()),
+                                        new LiteralExpr(0, LongType())};
+    std::vector<ExprPtr> projectSet2 = {new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
+                                        new FieldExpr(2, IntType()), new LiteralExpr(0, IntType(), true),
+                                        new LiteralExpr(0, LongType())};
+    std::vector<ExprPtr> projectSet3 = {new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
+                                        new LiteralExpr(0, IntType(), true), new LiteralExpr(0, IntType(), true),
+                                        new LiteralExpr(0, LongType())};
+    std::vector<ExprPtr> projectSet4 = {new FieldExpr(0, IntType()), new LiteralExpr(0, IntType(), true),
+                                        new LiteralExpr(0, IntType(), true), new LiteralExpr(0, IntType(), true),
+                                        new LiteralExpr(0, LongType())};
 
     std::vector<std::vector<ExprPtr>> projectSetExprs = {projectSet1, projectSet2, projectSet3, projectSet4};
     auto expandNode = std::make_shared<ExpandNode>("ExpandNode", std::move(projectSetExprs), valueStreamNode);
 
     std::vector<int32_t> c = {0};
     uint32_t groupByNum = 4;
-    auto sourceDataTypes = std::make_shared<DataTypes>(std::vector<DataTypePtr>({
-        IntType(),
-        IntType(),
-        IntType(),
-        IntType(),
-        LongType()
-    }));
-    std::vector<ExprPtr> groupingExprs = {
-        new FieldExpr(1, IntType()),
-        new FieldExpr(2, IntType()),
-        new FieldExpr(3, IntType()),
-        new FieldExpr(4, LongType())
-    };
+    auto sourceDataTypes =
+        std::make_shared<DataTypes>(std::vector<DataTypePtr>({IntType(), IntType(), IntType(), IntType(), LongType()}));
+    std::vector<ExprPtr> groupingExprs = {new FieldExpr(1, IntType()), new FieldExpr(2, IntType()),
+                                          new FieldExpr(3, IntType()), new FieldExpr(4, LongType())};
     std::vector<std::vector<ExprPtr>> aggsKeys = {{new FieldExpr(0, IntType())}};
     std::vector<ExprPtr> aggFilters = {};
     std::vector<DataTypes> outPutDataTypes = {DataTypes(std::vector<DataTypePtr>({LongType()}))};
@@ -160,9 +137,9 @@ TEST(DriverTest, TestGroupingOperator)
     std::vector<bool> inputRaws = {true};
     std::vector<bool> outputPartial = {true};
     bool isStatisticalAggregate = false;
-    auto aggregationNode = std::make_shared<AggregationNode>("AggregationNode", groupingExprs, groupByNum, aggsKeys,
-        sourceDataTypes, outPutDataTypes, aggFuncTypes, aggFilters, maskColumns, inputRaws, outputPartial,
-        isStatisticalAggregate, sourceDataTypes, valueStreamNode);
+    auto aggregationNode = std::make_shared<AggregationNode>(
+        "AggregationNode", groupingExprs, groupByNum, aggsKeys, sourceDataTypes, outPutDataTypes, aggFuncTypes,
+        aggFilters, maskColumns, inputRaws, outputPartial, isStatisticalAggregate, sourceDataTypes, valueStreamNode);
 
     auto groupingNode = std::make_shared<GroupingNode>("GroupingNode", expandNode, aggregationNode);
 
@@ -185,4 +162,4 @@ TEST(DriverTest, TestGroupingOperator)
     }
     delete aggsKeys[0][0];
 }
-}
+} // namespace orderbyTest

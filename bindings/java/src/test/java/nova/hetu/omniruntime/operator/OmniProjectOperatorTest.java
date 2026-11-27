@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2022. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 package nova.hetu.omniruntime.operator;
@@ -194,8 +202,8 @@ public class OmniProjectOperatorTest {
     @Test
     public void xxHash64StringTest() {
         DataType[] inputTypes = {new VarcharDataType(50)};
-        Object[][] datas = {{"hello world", "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ", "china"}};
-        VecBatch vecBatch = createVecBatch(inputTypes, datas);
+        Object[][] inputData = {{"hello world", "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ", "china"}};
+        VecBatch vecBatch = createVecBatch(inputTypes, inputData);
         String[] expressions = {"{\"exprType\":\"FUNCTION\",\"returnType\":2,\"function_name\":\"xxhash64\","
                 + "\"arguments\":[{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":15,\"colVal\":0,\"width\":50},"
                 + "{\"exprType\":\"LITERAL\",\"dataType\":2,\"isNull\":false,\"value\":42}]}"};
@@ -220,9 +228,9 @@ public class OmniProjectOperatorTest {
     @Test
     public void xxHash64Decimal128Test() {
         DataType[] inputTypes = {new Decimal128DataType(38, 16)};
-        Object[][] datas = {{4000L, 0L}, {2000L, 0L}, {1000L, 0L}};
+        Object[][] inputData = {{4000L, 0L}, {2000L, 0L}, {1000L, 0L}};
         Vec[] buildVecs = new Vec[inputTypes.length];
-        buildVecs[0] = createVec(inputTypes[0], datas);
+        buildVecs[0] = createVec(inputTypes[0], inputData);
         VecBatch vecBatch = new VecBatch(buildVecs);
         String[] expressions = {"{\"exprType\":\"FUNCTION\",\"returnType\":2,\"function_name\":\"xxhash64\","
                 + "\"arguments\":[{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":7,\"precision\":38,\"scale\":16,"
@@ -284,9 +292,9 @@ public class OmniProjectOperatorTest {
     @Test
     public void testReplaceWithRep() {
         DataType[] types = {new VarcharDataType(20), new VarcharDataType(10), new VarcharDataType(10)};
-        Object[][] datas = {{"varchar100", "varchar200", "varchar300"}, {"char1", "char", "char3"},
+        Object[][] inputData = {{"varchar100", "varchar200", "varchar300"}, {"char1", "char", "char3"},
                 {"opera", "*#", "VARCHAR"}};
-        VecBatch vecBatch = createVecBatch(types, datas);
+        VecBatch vecBatch = createVecBatch(types, inputData);
         String[] expressions = {"{\"exprType\":\"FUNCTION\",\"returnType\":15,\"function_name\":\"replace\","
                 + "\"arguments\":[{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":15,\"colVal\":0,\"width\":20},"
                 + "{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":15,\"colVal\":1,\"width\":10},{\"exprType\":"
@@ -313,8 +321,8 @@ public class OmniProjectOperatorTest {
     @Test
     public void testReplaceWithoutRep() {
         DataType[] types = {new VarcharDataType(20), new VarcharDataType(10)};
-        Object[][] datas = {{"varchar100", "varchar200", "varchar300"}, {"char1", "char2", "char3"}};
-        VecBatch vecBatch = createVecBatch(types, datas);
+        Object[][] inputData = {{"varchar100", "varchar200", "varchar300"}, {"char1", "char2", "char3"}};
+        VecBatch vecBatch = createVecBatch(types, inputData);
         String[] expressions = {"{\"exprType\":\"FUNCTION\",\"returnType\":15,\"function_name\":\"replace\","
                 + "\"arguments\":[{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":15,\"colVal\":0,\"width\":20},"
                 + "{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":15,\"colVal\":1,\"width\":10}],\"width\":100}"};

@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2020-2020. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <vector>
@@ -33,7 +41,6 @@ void DeleteTopNOperatorFactory(TopNOperatorFactory *topNOperatorFactory)
     }
 }
 
-
 TEST(NativeOmniTopNOperatorTest, TestTopNAscOneColumnPerformance)
 {
     // construct input data
@@ -52,10 +59,9 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscOneColumnPerformance)
     for (int32_t i = 0; i < dataSize; i++) {
         column0->SetValue(i, data0[i]);
     }
-    std::vector<DataTypePtr> types = { IntType() };
+    std::vector<DataTypePtr> types = {IntType()};
     inputVecBatch1->Append(column0);
     VectorBatch *inputVecBatch2 = DuplicateVectorBatch(inputVecBatch1);
-
 
     DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
@@ -159,7 +165,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNInstruct)
     }
     inputVecBatch2->Append(column2);
 
-    std::vector<DataTypePtr> types = { IntType() };
+    std::vector<DataTypePtr> types = {IntType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
     int32_t ascendings[1] = {true};
@@ -239,7 +245,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscOneColumnPerformanceVarChar)
     }
     inputVecBatch->Append(column0);
 
-    std::vector<DataTypePtr> types = { VarcharType(3) };
+    std::vector<DataTypePtr> types = {VarcharType(3)};
     DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
     int32_t ascendings[1] = {true};
@@ -292,7 +298,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscOneColumn)
     }
 
     inputVecBatch->Append(column0);
-    std::vector<DataTypePtr> types = { IntType() };
+    std::vector<DataTypePtr> types = {IntType()};
     omniruntime::type::DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
     int32_t ascendings[1] = {true};
@@ -340,14 +346,14 @@ TEST(NativeOmniTopNOperatorTest, TestTopNOneColumnWithOffset)
     }
 
     inputVecBatch->Append(column0);
-    std::vector<DataTypePtr> types = { IntType() };
+    std::vector<DataTypePtr> types = {IntType()};
     omniruntime::type::DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
     int32_t ascendings[1] = {true};
     int32_t nullFirsts[1] = {false};
 
     TopNOperatorFactory *topNOperatorFactory =
-            new TopNOperatorFactory(sourceTypes, expectedDataSize, offsetSize, sortCols, ascendings, nullFirsts, 1);
+        new TopNOperatorFactory(sourceTypes, expectedDataSize, offsetSize, sortCols, ascendings, nullFirsts, 1);
 
     TopNOperator *topNOperator = static_cast<TopNOperator *>(CreateTestOperator(topNOperatorFactory));
 
@@ -389,7 +395,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscOneColumnVarChar)
     }
     inputVecBatch->Append(column0Base);
 
-    std::vector<DataTypePtr> types = { VarcharType(3) };
+    std::vector<DataTypePtr> types = {VarcharType(3)};
     DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
     int32_t ascendings[1] = {true};
@@ -415,7 +421,6 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscOneColumnVarChar)
     expectVectorBatch->Append(expectCol1Base);
 
     EXPECT_TRUE(VecBatchMatch(outputVectorBatch, expectVectorBatch));
-
 
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
@@ -441,7 +446,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscOneColumnChar)
     }
     inputVecBatch->Append(column0Base);
 
-    std::vector<DataTypePtr> types = { CharType(3) };
+    std::vector<DataTypePtr> types = {CharType(3)};
     DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
     int32_t ascendings[1] = {true};
@@ -468,7 +473,6 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscOneColumnChar)
 
     EXPECT_TRUE(VecBatchMatch(outputVectorBatch, expectVectorBatch));
 
-
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
@@ -491,7 +495,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescOneColumn)
     }
 
     inputVecBatch->Append(column0);
-    std::vector<DataTypePtr> types = { IntType() };
+    std::vector<DataTypePtr> types = {IntType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
     int32_t ascendings[1] = {false};
@@ -519,7 +523,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescOneColumn)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNDescOneColumnVarChar)
@@ -540,7 +545,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescOneColumnVarChar)
     }
     inputVecBatch->Append(column0Base);
 
-    std::vector<DataTypePtr> types = { VarcharType(3) };
+    std::vector<DataTypePtr> types = {VarcharType(3)};
     DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
     int32_t ascendings[1] = {false};
@@ -570,7 +575,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescOneColumnVarChar)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNDescOneColumnChar)
@@ -590,7 +596,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescOneColumnChar)
     }
     inputVecBatch->Append(column0Base);
 
-    std::vector<DataTypePtr> types = { CharType(3) };
+    std::vector<DataTypePtr> types = {CharType(3)};
     DataTypes sourceTypes(types);
     int32_t sortCols[1] = {0};
     int32_t ascendings[1] = {false};
@@ -619,7 +625,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescOneColumnChar)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumn)
@@ -650,7 +657,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumn)
     inputVecBatch->Append(column2);
     inputVecBatch->Append(column3);
 
-    std::vector<DataTypePtr> types = { IntType(), LongType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), LongType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, true};
@@ -691,7 +698,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumn)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNMultiColumnWithOffset)
@@ -723,7 +731,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNMultiColumnWithOffset)
     inputVecBatch->Append(column2);
     inputVecBatch->Append(column3);
 
-    std::vector<DataTypePtr> types = { IntType(), LongType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), LongType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, true};
@@ -733,7 +741,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNMultiColumnWithOffset)
     const int32_t realDataSize = expectedDataSize - offsetSize;
 
     TopNOperatorFactory *topNOperatorFactory =
-            new TopNOperatorFactory(sourceTypes, expectedDataSize, offsetSize, sortCols, ascendings, nullFirsts, 2);
+        new TopNOperatorFactory(sourceTypes, expectedDataSize, offsetSize, sortCols, ascendings, nullFirsts, 2);
 
     TopNOperator *topNOperator = static_cast<TopNOperator *>(CreateTestOperator(topNOperatorFactory));
 
@@ -742,7 +750,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNMultiColumnWithOffset)
     topNOperator->GetOutput(&outputVectorBatch);
     int32_t expectData1[realDataSize] = {1, 1, 2};
     IntVector *expectCol1 = new IntVector(realDataSize);
-    int64_t expectData2[realDataSize] = { 1, 4, 2};
+    int64_t expectData2[realDataSize] = {1, 4, 2};
     LongVector *expectCol2 = new LongVector(realDataSize);
     double expectData3[realDataSize] = {5.5, 2.2, 4.4};
     DoubleVector *expectCol3 = new DoubleVector(realDataSize);
@@ -766,7 +774,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNMultiColumnWithOffset)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnVarChar)
@@ -796,7 +805,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnVarChar)
     inputVecBatch->Append(column1Base);
     inputVecBatch->Append(column2);
 
-    std::vector<DataTypePtr> types = { IntType(), VarcharType(3), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), VarcharType(3), DoubleType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, true};
@@ -838,7 +847,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnVarChar)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnChar)
@@ -850,7 +860,6 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnChar)
     int32_t data0[dataSize] = {0, 1, 2, 0, 1, 2};
     std::string data1[dataSize] = {"0", "1", "2", "3", "4", "5"};
     double data2[dataSize] = {6.6, 5.5, 4.4, 3.3, 2.2, 1.1};
-
 
     VectorBatch *inputVecBatch = new VectorBatch(dataSize);
     IntVector *column0 = new IntVector(dataSize);
@@ -869,7 +878,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnChar)
     inputVecBatch->Append(column1Base);
     inputVecBatch->Append(column2);
 
-    std::vector<DataTypePtr> types = { IntType(), CharType(3), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), CharType(3), DoubleType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, true};
@@ -911,7 +920,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnChar)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumn)
@@ -942,7 +952,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumn)
     inputVecBatch->Append(column2);
     inputVecBatch->Append(column3);
 
-    std::vector<DataTypePtr> types = { IntType(), LongType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), LongType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, false};
@@ -984,7 +994,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumn)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumnVarChar)
@@ -1014,7 +1025,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumnVarChar)
     inputVecBatch->Append(column1Base);
     inputVecBatch->Append(column2);
 
-    std::vector<DataTypePtr> types = { IntType(), VarcharType(3), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), VarcharType(3), DoubleType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, false};
@@ -1054,7 +1065,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumnVarChar)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumnChar)
@@ -1084,7 +1096,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumnChar)
     inputVecBatch->Append(column1Base);
     inputVecBatch->Append(column2);
 
-    std::vector<DataTypePtr> types = { IntType(), CharType(3), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), CharType(3), DoubleType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, false};
@@ -1126,7 +1138,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumnChar)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullFirstAndDictionaryVecVarChar)
@@ -1153,7 +1166,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullFirstAndDictionaryVec
     inputVecBatch->Append(column0);
     inputVecBatch->Append(column1Base);
 
-    std::vector<DataTypePtr> types = { IntType(), VarcharType(3), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), VarcharType(3), DoubleType()};
     DataTypes sourceTypes(types);
 
     int32_t sortCols[2] = {0, 1};
@@ -1183,7 +1196,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullFirstAndDictionaryVec
     DoubleVector *expectCol3 = new DoubleVector(expectedDataSize);
 
     int32_t expectData1[expectedDataSize] = {2, 0, 0, 1, 1};
-    std::vector<std::string> expectData2 = { "", "0", "3", "1", "4" };
+    std::vector<std::string> expectData2 = {"", "0", "3", "1", "4"};
     double expectData3[expectedDataSize] = {1.1, 6.6, 3.3, 5.5, 2.2};
 
     expectCol1->SetNull(0);
@@ -1234,7 +1247,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullFirstAndDictionaryCha
     inputVecBatch->Append(column0);
     inputVecBatch->Append(column1Base);
 
-    std::vector<DataTypePtr> types = { IntType(), VarcharType(3), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), VarcharType(3), DoubleType()};
     DataTypes sourceTypes(types);
 
     int32_t sortCols[2] = {0, 1};
@@ -1264,7 +1277,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullFirstAndDictionaryCha
     DoubleVector *expectCol3 = new DoubleVector(expectedDataSize);
 
     int32_t expectData1[expectedDataSize] = {2, 0, 0, 1, 1};
-    std::vector<std::string> expectData2 = { "5", "0", "3", "1", "4" };
+    std::vector<std::string> expectData2 = {"5", "0", "3", "1", "4"};
     double expectData3[expectedDataSize] = {1.1, 6.6, 3.3, 5.5, 2.2};
 
     expectCol1->SetNull(0);
@@ -1316,7 +1329,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumnSortOnlyOneColumn)
     inputVecBatch->Append(column1);
     inputVecBatch->Append(column2);
 
-    std::vector<DataTypePtr> types = { IntType(), LongDataType::Instance(), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), LongDataType::Instance(), DoubleType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[1] = {1};
     int32_t ascendings[1] = {false};
@@ -1355,7 +1368,8 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDescMultiColumnSortOnlyOneColumn)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
     VectorHelper::FreeVecBatch(expectVectorBatch);
-    VectorHelper::FreeVecBatch(outputVectorBatch);;
+    VectorHelper::FreeVecBatch(outputVectorBatch);
+    ;
 }
 
 TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullFirstAndDictionaryVec)
@@ -1385,7 +1399,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullFirstAndDictionaryVec
     inputVecBatch->Append(column0);
     inputVecBatch->Append(column1);
 
-    std::vector<DataTypePtr> types = { IntType(), LongType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), LongType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, true};
@@ -1470,7 +1484,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullFirst)
     inputVecBatch->Append(column2);
     inputVecBatch->Append(column3);
 
-    std::vector<DataTypePtr> types = { IntType(), LongType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), LongType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, true};
@@ -1519,7 +1533,6 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullFirst)
     VectorHelper::FreeVecBatch(outputVectorBatch);
 }
 
-
 TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullLast)
 {
     using namespace omniruntime::op;
@@ -1552,7 +1565,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNAscMultiColumnNullLast)
     inputVecBatch->Append(column2);
     inputVecBatch->Append(column3);
 
-    std::vector<DataTypePtr> types = { IntType(), LongType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), LongType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
     int32_t sortCols[2] = {0, 1};
     int32_t ascendings[2] = {true, true};
@@ -1615,7 +1628,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDate32AndDecimal64Column)
     int64_t data1[dataSize] = {0, 1, 2, 3, 4, 5};
     int64_t data2[dataSize] = {66, 55, 44, 33, 22, 11};
 
-    std::vector<DataTypePtr> types = { Date32Type(DAY), LongType(), Decimal64Type(2, 0) };
+    std::vector<DataTypePtr> types = {Date32Type(DAY), LongType(), Decimal64Type(2, 0)};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, dataSize, data0, data1, data2);
     int32_t sortCols[2] = {0, 2};
@@ -1634,7 +1647,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDate32AndDecimal64Column)
     int32_t expectData0[expectedDataSize] = {2, 2, 1, 1, 0};
     int64_t expectData1[expectedDataSize] = {5, 2, 4, 1, 3};
     int64_t expectData2[expectedDataSize] = {11, 44, 22, 55, 33};
-    DataTypes expectedTypes(std::vector<DataTypePtr>({ Date32Type(DAY), LongType(), Decimal64Type(2, 1) }));
+    DataTypes expectedTypes(std::vector<DataTypePtr>({Date32Type(DAY), LongType(), Decimal64Type(2, 1)}));
     VectorBatch *expectVecBatch =
         CreateVectorBatch(sourceTypes, expectedDataSize, expectData0, expectData1, expectData2);
 
@@ -1658,7 +1671,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDecimal128Column)
     Decimal128 data0[dataSize] = {0, 1, 2, 0, 1, 2};
     int64_t data1[dataSize] = {0, 1, 2, 3, 4, 5};
     Decimal128 data2[dataSize] = {66, 55, 44, 33, 22, 11};
-    std::vector<DataTypePtr> types = { Decimal128Type(2, 1), LongType(), Decimal128Type(2, 1) };
+    std::vector<DataTypePtr> types = {Decimal128Type(2, 1), LongType(), Decimal128Type(2, 1)};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, dataSize, data0, data1, data2);
     int32_t sortCols[2] = {0, 2};
@@ -1678,7 +1691,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNDecimal128Column)
     int64_t expectData1[expectedDataSize] = {5, 2, 4, 1, 3};
     Decimal128 expectData2[expectedDataSize] = {11, 44, 22, 55, 33};
 
-    DataTypes expectedTypes(std::vector<DataTypePtr>({ Decimal64Type(2, 1), LongType(), Decimal64Type(2, 1) }));
+    DataTypes expectedTypes(std::vector<DataTypePtr>({Decimal64Type(2, 1), LongType(), Decimal64Type(2, 1)}));
     VectorBatch *expectVecBatch =
         CreateVectorBatch(sourceTypes, expectedDataSize, expectData0, expectData1, expectData2);
 
@@ -1703,7 +1716,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNShortColumn)
     int64_t data1[dataSize] = {0, 1, 2, 3, 4, 5};
     int16_t data2[dataSize] = {66, 55, 44, 33, 22, 11};
 
-    std::vector<DataTypePtr> types = { ShortType(), LongType(), ShortType() };
+    std::vector<DataTypePtr> types = {ShortType(), LongType(), ShortType()};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, dataSize, data0, data1, data2);
     int32_t sortCols[2] = {0, 2};
@@ -1722,7 +1735,7 @@ TEST(NativeOmniTopNOperatorTest, TestTopNShortColumn)
     int16_t expectData0[expectedDataSize] = {2, 2, 1, 1, 0};
     int64_t expectData1[expectedDataSize] = {5, 2, 4, 1, 3};
     int16_t expectData2[expectedDataSize] = {11, 44, 22, 55, 33};
-    DataTypes expectedTypes(std::vector<DataTypePtr>({ ShortType(), LongType(), ShortType() }));
+    DataTypes expectedTypes(std::vector<DataTypePtr>({ShortType(), LongType(), ShortType()}));
     VectorBatch *expectVecBatch =
         CreateVectorBatch(sourceTypes, expectedDataSize, expectData0, expectData1, expectData2);
 
@@ -1746,7 +1759,7 @@ TEST(NativeOmniTopNTest, TestTopNDoubleCharColumn)
     int64_t data1[dataSize] = {0, 1, 2, 3, 4, 5};
     std::string data2[dataSize] = {"6.6", "5.5", "4.4", "3.3", "2.2", "1.1"};
 
-    std::vector<DataTypePtr> types = { VarcharType(1), LongType(), VarcharType(3) };
+    std::vector<DataTypePtr> types = {VarcharType(1), LongType(), VarcharType(3)};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, dataSize, data0, data1, data2);
 
@@ -1763,10 +1776,10 @@ TEST(NativeOmniTopNTest, TestTopNDoubleCharColumn)
     VectorBatch *outputVecBatch;
     topNOperator->GetOutput(&outputVecBatch);
 
-    std::string expectData0[expectedDataSize]={"2", "2", "1", "1", "0"};
+    std::string expectData0[expectedDataSize] = {"2", "2", "1", "1", "0"};
     int64_t expectData1[expectedDataSize] = {5, 2, 4, 1, 3};
     std::string expectData2[expectedDataSize] = {"1.1", "4.4", "2.2", "5.5", "3.3"};
-    DataTypes expectedTypes(std::vector<DataTypePtr>({ VarcharType(1), LongType(), VarcharType(3) }));
+    DataTypes expectedTypes(std::vector<DataTypePtr>({VarcharType(1), LongType(), VarcharType(3)}));
     VectorBatch *expectVecBatch =
         CreateVectorBatch(expectedTypes, expectedDataSize, expectData0, expectData1, expectData2);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
@@ -1789,7 +1802,7 @@ TEST(NativeOmniTopNTest, TestTopNDoubleCharAndBooleanColumn)
     int64_t data1[dataSize] = {0, 1, 2, 3, 4, 5};
     bool data2[dataSize] = {false, false, false, true, true, true};
 
-    std::vector<DataTypePtr> types = { VarcharType(1), LongType(), BooleanType() };
+    std::vector<DataTypePtr> types = {VarcharType(1), LongType(), BooleanType()};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, dataSize, data0, data1, data2);
 
@@ -1807,10 +1820,10 @@ TEST(NativeOmniTopNTest, TestTopNDoubleCharAndBooleanColumn)
     VectorBatch *outputVecBatch;
     topNOperator->GetOutput(&outputVecBatch);
 
-    std::string expectData0[expectedDataSize]={"2", "2", "1", "1", "0"};
+    std::string expectData0[expectedDataSize] = {"2", "2", "1", "1", "0"};
     int64_t expectData1[expectedDataSize] = {5, 2, 4, 1, 3};
     bool expectData2[expectedDataSize] = {true, false, true, false, true};
-    DataTypes expectedTypes(std::vector<DataTypePtr>({ VarcharType(1), LongType(), BooleanType() }));
+    DataTypes expectedTypes(std::vector<DataTypePtr>({VarcharType(1), LongType(), BooleanType()}));
     VectorBatch *expectVecBatch =
         CreateVectorBatch(expectedTypes, expectedDataSize, expectData0, expectData1, expectData2);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
@@ -1820,4 +1833,4 @@ TEST(NativeOmniTopNTest, TestTopNDoubleCharAndBooleanColumn)
     omniruntime::op::Operator::DeleteOperator(topNOperator);
     DeleteTopNOperatorFactory(topNOperatorFactory);
 }
-}
+} // namespace TopnTest

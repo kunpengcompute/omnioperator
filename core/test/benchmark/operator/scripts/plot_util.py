@@ -1,4 +1,13 @@
 #!python3
+# Copyright (c) 2026 Huawei Technologies Co., Ltd
+# OmniOperator is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#          http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+# EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+# See the Mulan PSL v2 for more details.
 
 import sys
 import numpy as np
@@ -64,14 +73,14 @@ def extractData(data, header, nameCols, extractCols):
         res.append(outRow)
     return res
 
-def plotData(outputDir, datas, colIdx, yLabel, title):
+def plotData(outputDir, datasets, colIdx, yLabel, title):
     colors = ["orange", "green", "red"]
     width = 0.35
 
     labels = []
     bars = []
     legend = []
-    for (name, data) in datas.items():
+    for (name, data) in datasets.items():
         legend.append(name)
         if len(labels) == 0:
             bar = []
@@ -88,7 +97,7 @@ def plotData(outputDir, datas, colIdx, yLabel, title):
     # print("Bars: ", bars)
 
     x = np.arange(len(labels))
-    start = -(width * ((len(datas) - 1.0) / 2.0))
+    start = -(width * ((len(datasets) - 1.0) / 2.0))
     plt.rcParams["figure.figsize"] = (20, 15)
     for i in range(0, len(bars)):
         b = plt.bar(x + start, bars[i], width=width, color=colors[i])
@@ -99,25 +108,25 @@ def plotData(outputDir, datas, colIdx, yLabel, title):
     plt.title(title)
     plt.ylabel(yLabel)
     plt.legend(labels=legend)
-    
+
     # for b in bh:
     #     plt.bar_label(b)
 
     plt.savefig(outputDir + "/" + title.replace(" ", "_") + ".png", bbox_inches="tight")
     plt.close()
 
-def generatePlot(outputDir, datas, header, filter, nameMap, colLabel, plotLable):
+def generatePlot(outputDir, datasets, header, filter, nameMap, colLabel, plotLable):
     pathlib.Path(outputDir).mkdir(parents=True, exist_ok=True)
 
     res = {}
     dataLength = -1
-    for (name, data) in datas.items():
+    for (name, data) in datasets.items():
         subList = filterData(data, header, filter)
         # print("[{}] SubListLen: {}".format(name, len(subList)))
         if dataLength < 0:
             dataLength = len(subList)
             if dataLength == 0:
-                print("WARN: Plot {} not generaged. Data length is zero for {}".format(plotLable, name))
+                print("WARN: Plot {} not generated. Data length is zero for {}".format(plotLable, name))
                 return
         else:
             if dataLength != len(subList):
@@ -125,5 +134,5 @@ def generatePlot(outputDir, datas, header, filter, nameMap, colLabel, plotLable)
                     .format(plotLable, len(subList), name, dataLength))
                 return
         res[name] = extractData(subList, header, nameMap, [colLabel])
-    
+
     plotData(outputDir, res, 1, colLabel, plotLable)

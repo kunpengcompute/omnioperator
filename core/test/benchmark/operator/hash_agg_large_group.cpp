@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2020-2020. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "common/common.h"
@@ -19,35 +27,30 @@ using namespace omniruntime::vec;
 using namespace omniruntime::type;
 class HashAggLargeGroupBenchmark : public BaseOperatorFixture {
 protected:
-    BaseFixtureGetOutputStrategy GetOutputStrategy() override
-    {
-        return AFTER_ALL_INPUT_FINISHED;
-    }
+    BaseFixtureGetOutputStrategy GetOutputStrategy() override { return AFTER_ALL_INPUT_FINISHED; }
 
     OperatorFactory *createOperatorFactory(const State &state) override
     {
         std::vector<uint32_t> groupByCols{0};
-        DataTypes groupByTypes(std::vector<DataTypePtr>({ LongType() }));
-        auto aggCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t> {1, 2, 3, 4, 5, 6, 7});
+        DataTypes groupByTypes(std::vector<DataTypePtr>({LongType()}));
+        auto aggCols = AggregatorUtil::WrapWithVector(std::vector<uint32_t>{1, 2, 3, 4, 5, 6, 7});
         auto aggInputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>{
-                DoubleType(), IntType(), DoubleType(), LongType(), DoubleType(), LongType(), LongType()}));
+            DoubleType(), IntType(), DoubleType(), LongType(), DoubleType(), LongType(), LongType()}));
         auto aggOutputTypes = AggregatorUtil::WrapWithVector(DataTypes(std::vector<DataTypePtr>{
-                DoubleType(), DoubleType(), DoubleType(), LongType(), DoubleType(), LongType(), LongType()}));
+            DoubleType(), DoubleType(), DoubleType(), LongType(), DoubleType(), LongType(), LongType()}));
         int32_t valueNum = 7;
         std::vector<uint32_t> maskCols(valueNum, uint32_t(-1));
         std::vector<bool> inputsRaw(valueNum, true);
         std::vector<bool> outputsPartial(valueNum, false);
-         
-        std::vector<uint32_t> aggFuncTypes {
-            OMNI_AGGREGATION_TYPE_AVG, OMNI_AGGREGATION_TYPE_AVG,
-            OMNI_AGGREGATION_TYPE_MIN, OMNI_AGGREGATION_TYPE_MAX,
-            OMNI_AGGREGATION_TYPE_SUM, OMNI_AGGREGATION_TYPE_SUM,
-            OMNI_AGGREGATION_TYPE_COUNT_COLUMN
-        };
 
-        auto *aggFactory = new omniruntime::op::HashAggregationOperatorFactory(groupByCols, groupByTypes,
-            aggCols, aggInputTypes, aggOutputTypes, aggFuncTypes,
-            maskCols, inputsRaw, outputsPartial);
+        std::vector<uint32_t> aggFuncTypes{OMNI_AGGREGATION_TYPE_AVG,         OMNI_AGGREGATION_TYPE_AVG,
+                                           OMNI_AGGREGATION_TYPE_MIN,         OMNI_AGGREGATION_TYPE_MAX,
+                                           OMNI_AGGREGATION_TYPE_SUM,         OMNI_AGGREGATION_TYPE_SUM,
+                                           OMNI_AGGREGATION_TYPE_COUNT_COLUMN};
+
+        auto *aggFactory = new omniruntime::op::HashAggregationOperatorFactory(
+            groupByCols, groupByTypes, aggCols, aggInputTypes, aggOutputTypes, aggFuncTypes, maskCols, inputsRaw,
+            outputsPartial);
         aggFactory->Init();
         return aggFactory;
     }
@@ -63,7 +66,7 @@ protected:
         for (int32_t p = 0; p < nPages; ++p) {
             auto *input = new VectorBatch(rowsPerPage);
             offset = p * aggSplit;
-            auto *aggCol = new  Vector<int64_t>(rowsPerPage);
+            auto *aggCol = new Vector<int64_t>(rowsPerPage);
             auto *col1 = new Vector<double>(rowsPerPage);
             auto *col2 = new Vector<int32_t>(rowsPerPage);
             auto *col3 = new Vector<double>(rowsPerPage);
@@ -104,4 +107,4 @@ private:
     const int32_t cardinality = 256;
 };
 OMNI_BENCHMARK_DECLARE_OPERATOR_DEFAULT(HashAggLargeGroupBenchmark);
-}
+} // namespace om_benchmark

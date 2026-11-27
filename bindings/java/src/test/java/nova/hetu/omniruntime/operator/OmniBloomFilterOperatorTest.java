@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 package nova.hetu.omniruntime.operator;
@@ -26,8 +34,8 @@ public class OmniBloomFilterOperatorTest {
     @Test
     public void testCreateBloomFilter() {
         DataType[] types = {IntDataType.INTEGER};
-        Object[][] datas = {{1, 6, 4, 0, 0, 0, 0, 0, 0, 0, 0}};
-        VecBatch inputVecBatch = createVecBatch(types, datas);
+        Object[][] inputData = {{1, 6, 4, 0, 0, 0, 0, 0, 0, 0, 0}};
+        VecBatch inputVecBatch = createVecBatch(types, inputData);
 
         OmniBloomFilterOperatorFactory factory = new OmniBloomFilterOperatorFactory(1);
         OmniOperator op = factory.createOperator();

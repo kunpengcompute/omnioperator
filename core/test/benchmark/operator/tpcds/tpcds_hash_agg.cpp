@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <nlohmann/json.hpp>
@@ -51,7 +59,8 @@ protected:
         auto source = DataTypes(sourceTypes);
 
         auto factory = new HashAggregationWithExprOperatorFactory(groupByKeys, groupByKeys.size(), aggsKeys, aggFilters,
-            source, aggOutputTypes, aggFuncTypes, maskChannels, isInputRaws, isOutputPartials, new OverflowConfig());
+                                                                  source, aggOutputTypes, aggFuncTypes, maskChannels,
+                                                                  isInputRaws, isOutputPartials, new OverflowConfig());
 
         Expr::DeleteExprs(groupByKeys);
         Expr::DeleteExprs(aggsKeys);
@@ -59,11 +68,8 @@ protected:
         return factory;
     }
 
-    std::string OperatorIdentifier() override
-    {
-        return "OmniHashAggregationWithExpr.id";
-    }
+    std::string OperatorIdentifier() override { return "OmniHashAggregationWithExpr.id"; }
 };
 
 OMNI_BENCHMARK_DECLARE_OPERATOR_DEFAULT(TpcDsHashAgg);
-}
+} // namespace om_benchmark

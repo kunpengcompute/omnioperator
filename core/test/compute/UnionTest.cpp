@@ -1,6 +1,13 @@
 /*
-* Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Description: JNI Operator Factory Source File
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "compute/driver.h"
@@ -18,7 +25,7 @@ using namespace TestUtil;
 namespace UnionTest {
 class TestBatchIterator : public ColumnarBatchIterator {
 public:
-    TestBatchIterator(const std::vector<VectorBatch*> &date): date(date) {}
+    TestBatchIterator(const std::vector<VectorBatch *> &date) : date(date) {}
 
     ~TestBatchIterator() override = default;
 
@@ -32,7 +39,7 @@ public:
     }
 
 private:
-    std::vector<VectorBatch*> date;
+    std::vector<VectorBatch *> date;
     size_t index = 0;
 };
 
@@ -43,7 +50,7 @@ VectorBatch *CreateTestUnionByThreeColumnVecBatch1()
     double data2[dataSize] = {6.6, 5.5, 4.4, 3.3, 2.2, 1.1};
     int16_t data3[dataSize] = {6, 5, 4, 3, 2, 1};
 
-    std::vector<DataTypePtr> types = { IntType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
 
     return CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
@@ -56,7 +63,7 @@ VectorBatch *CreateTestUnionByThreeColumnVecBatch2()
     double data2[dataSize] = {16.6, 15.5, 14.4, 13.3, 12.2, 11.1};
     int16_t data3[dataSize] = {16, 15, 14, 13, 12, 11};
 
-    std::vector<DataTypePtr> types = { IntType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
 
     return CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
@@ -69,7 +76,7 @@ VectorBatch *CreateTestUnionByThreeColumnOutputVecBatch1()
     double expData2[dataSize] = {6.6, 5.5, 4.4, 3.3, 2.2, 1.1};
     int16_t expData3[dataSize] = {6, 5, 4, 3, 2, 1};
 
-    std::vector<DataTypePtr> types = { IntType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
 
     return CreateVectorBatch(sourceTypes, dataSize, expData1, expData2, expData3);
@@ -82,7 +89,7 @@ VectorBatch *CreateTestUnionByThreeColumnOutputVecBatch2()
     double expData2[dataSize] = {16.6, 15.5, 14.4, 13.3, 12.2, 11.1};
     int16_t expData3[dataSize] = {16, 15, 14, 13, 12, 11};
 
-    std::vector<DataTypePtr> types = { IntType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
 
     return CreateVectorBatch(sourceTypes, dataSize, expData1, expData2, expData3);
@@ -90,11 +97,11 @@ VectorBatch *CreateTestUnionByThreeColumnOutputVecBatch2()
 
 TEST(PipelineTest, TestUnionByThreeColumn)
 {
-    std::vector<DataTypePtr> types = { IntType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), DoubleType(), ShortType()};
     VectorBatch *vecBatch1 = CreateTestUnionByThreeColumnVecBatch1();
     VectorBatch *vecBatch2 = CreateTestUnionByThreeColumnVecBatch1();
-    std::vector<VectorBatch*> inputVector1;
-    std::vector<VectorBatch*> inputVector2;
+    std::vector<VectorBatch *> inputVector1;
+    std::vector<VectorBatch *> inputVector2;
     inputVector1.push_back(vecBatch1);
     inputVector2.push_back(vecBatch2);
 
@@ -140,4 +147,4 @@ TEST(PipelineTest, TestUnionByThreeColumn)
     VectorHelper::FreeVecBatch(vectorBatch2);
 }
 
-}
+} // namespace UnionTest

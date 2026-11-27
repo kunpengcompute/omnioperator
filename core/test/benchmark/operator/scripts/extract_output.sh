@@ -1,3 +1,13 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd
+# OmniOperator is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#          http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+# EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+# See the Mulan PSL v2 for more details.
+
 #/bin/bash
 
 if [ -z "$1" ]  || [ -z "$2" ]
@@ -5,7 +15,7 @@ then
     echo "Too few arguments"
     echo "Usage: extract_output.sh BENCHMARK_NAME BENCHMARK_OUTPUT"
     echo "  BENCHMARK_NAME: name of benchmark test, i.e. 'AggBenchmark'"
-    echo "  BENCHMARK_OUTPUT: path to ouput of benchmark"
+    echo "  BENCHMARK_OUTPUT: path to output of benchmark"
     exit -1
 fi
 if [ "$1" == "-h" ] || [ "$1" == "--help" ]
@@ -13,7 +23,7 @@ then
     echo "Extract result of benchmark from benchmark output file for specified benchmark"
     echo "Usage: extract_output.sh BENCHMARK_NAME BENCHMARK_OUTPUT"
     echo "  BENCHMARK_NAME: name of benchmark test, i.e. 'AggBenchmark'"
-    echo "  BENCHMARK_OUTPUT: path to ouput of benchmark"
+    echo "  BENCHMARK_OUTPUT: path to output of benchmark"
     exit 0
 fi
 

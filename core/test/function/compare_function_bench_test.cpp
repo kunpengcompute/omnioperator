@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -29,7 +37,7 @@ string GetString(int32_t index, int32_t offset, int32_t width)
 }
 
 int32_t CompareVarchar(BaseVector *leftColumn, int32_t leftColumnPosition, BaseVector *rightColumn,
-    int32_t rightColumnPosition)
+                       int32_t rightColumnPosition)
 {
     auto leftVarCharColumn = static_cast<VarcharVector *>(leftColumn);
     auto rightVarCharColumn = static_cast<VarcharVector *>(rightColumn);
@@ -74,10 +82,7 @@ int64_t ReverseBytes(int64_t var0)
     return (result << 48) | ((result & 4294901760L) << 16) | ((result >> 16) & 4294901760L) | (result >> 48);
 }
 
-int64_t LongBytesToLong(int64_t bytes)
-{
-    return ReverseBytes(bytes) ^ LONG_MIN;
-}
+int64_t LongBytesToLong(int64_t bytes) { return ReverseBytes(bytes) ^ LONG_MIN; }
 
 int32_t CmpByLong(char *var1, char *var2, int32_t compareLength)
 {
@@ -109,14 +114,14 @@ int32_t CmpByLong(char *var1, char *var2, int32_t compareLength)
 }
 
 int32_t CompareVarcharByLong(BaseVector *leftColumn, int32_t leftColumnPosition, BaseVector *rightColumn,
-    int32_t rightColumnPosition)
+                             int32_t rightColumnPosition)
 {
     auto leftVarCharColumn = static_cast<VarcharVector *>(leftColumn);
     auto rightVarCharColumn = static_cast<VarcharVector *>(rightColumn);
     auto leftValue = leftVarCharColumn->GetValue(leftColumnPosition);
     auto rightValue = rightVarCharColumn->GetValue(rightColumnPosition);
-    int32_t result = CmpByLong((char*)leftValue.data(), (char*)rightValue.data(),
-                               std::min(leftValue.size(), rightValue.size()));
+    int32_t result =
+        CmpByLong((char *)leftValue.data(), (char *)rightValue.data(), std::min(leftValue.size(), rightValue.size()));
     if (result != 0) {
         return (result > 0) ? 1 : -1;
     } else if (leftValue.size() == rightValue.size()) {
@@ -222,4 +227,4 @@ TEST(varcharType, CompareVarcharByLongPerf)
     delete vector2;
     delete vector3;
 }
-}
+} // namespace omniruntime

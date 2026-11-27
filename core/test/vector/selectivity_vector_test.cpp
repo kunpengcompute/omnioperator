@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Description: selectivity_vector test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "vector/selectivity_vector.h"
@@ -314,10 +321,10 @@ TEST(SelectivityVector, test_or5)
     constexpr size_t length1 = 10;
     constexpr size_t length2 = 20;
     bool setFlag1[length1] = {false, true, false, false, true, false, false, true, true, false};
-    bool setFlag2[length2] = {true, true, false, false, false, false, false, false, false, false, true, true, false,
-        false, false, false, false, false, false, false};
-    bool resule[length2] = {true, true, false, false, true, false, false, true, true, false, true, true, false, false,
-        false, false, false, false, false, false};
+    bool setFlag2[length2] = {true, true, false, false, false, false, false, false, false, false,
+                              true, true, false, false, false, false, false, false, false, false};
+    bool resule[length2] = {true, true, false, false, true,  false, false, true,  true,  false,
+                            true, true, false, false, false, false, false, false, false, false};
     SelectivityVector selectivityVector1(length1);
     SelectivityVector selectivityVector2(length2);
     for (size_t i = 0; i < length1; i++) {
@@ -339,10 +346,10 @@ TEST(SelectivityVector, test_or6)
     constexpr size_t length1 = 10;
     constexpr size_t length2 = 20;
     bool setFlag1[length1] = {false, true, false, false, true, false, false, true, true, false};
-    bool setFlag2[length2] = {true, true, false, false, false, false, false, false, false, false, true, true, false,
-        false, false, false, false, true, false, false};
-    bool resule[length2] = {true, true, false, false, true, false, false, true, true, false, true, true, false, false,
-        false, false, false, true, false, false};
+    bool setFlag2[length2] = {true, true, false, false, false, false, false, false, false, false,
+                              true, true, false, false, false, false, false, true,  false, false};
+    bool resule[length2] = {true, true, false, false, true,  false, false, true, true,  false,
+                            true, true, false, false, false, false, false, true, false, false};
     SelectivityVector selectivityVector1(length1);
     SelectivityVector selectivityVector2(length2);
     for (size_t i = 0; i < length1; i++) {
@@ -439,8 +446,8 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_and1)
     int32_t data1[dataSize] = {4, 3, 2, 1, 0};
     int64_t data2[dataSize] = {0, 1, 2, 3, 4};
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
-    std::vector<DataTypePtr> typess = { IntType(), LongType() };
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     vecBatch->Get(0)->SetNull(1);
     vecBatch->Get(0)->SetNull(3);
@@ -465,8 +472,8 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_and2)
         data2[i] = i;
     }
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
-    std::vector<DataTypePtr> typess = { IntType(), LongType() };
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     for (size_t i = 0; i < dataSize; i++) {
         if (i % 2 == 0) {
@@ -504,8 +511,8 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_and3)
         data5[i] = i;
     }
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType(), DoubleType(), LongType() }));
-    std::vector<DataTypePtr> typess = { IntType(), LongType(), LongType(), DoubleType(), LongType() };
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType(), DoubleType(), LongType()}));
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType(), LongType(), DoubleType(), LongType()};
     VectorBatch *vecBatch =
         omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5);
     for (size_t i = 0; i < dataSize; i++) {
@@ -520,9 +527,9 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_and3)
         }
     }
     SelectivityVector result(dataSize, true);
-    std::vector<size_t> selectColums = { 0, 2, 4 };
+    std::vector<size_t> selectColums = {0, 2, 4};
     SelectivityVector::GetSelectivityVectorFromVectorBatch<GetSelectivityVectorMethod::AND>(vecBatch, selectColums,
-        result);
+                                                                                            result);
     EXPECT_EQ(false, result.IsAllSelected());
     for (size_t i = 0; i < dataSize; i++) {
         if (i % 2 == 0 || i % 3 == 0 || i % 7 == 0) {
@@ -545,8 +552,8 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_or1)
     int32_t data1[dataSize] = {4, 3, 2, 1, 0};
     int64_t data2[dataSize] = {0, 1, 2, 3, 4};
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
-    std::vector<DataTypePtr> typess = { IntType(), LongType() };
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     vecBatch->Get(0)->SetNull(1);
     vecBatch->Get(0)->SetNull(3);
@@ -567,8 +574,8 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_or2)
     int32_t data1[dataSize] = {4, 3, 2, 1, 0};
     int64_t data2[dataSize] = {0, 1, 2, 3, 4};
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
-    std::vector<DataTypePtr> typess = { IntType(), LongType() };
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     vecBatch->Get(0)->SetNull(1);
     vecBatch->Get(1)->SetNull(1);
@@ -596,8 +603,8 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_or3)
         data2[i] = i;
     }
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
-    std::vector<DataTypePtr> typess = { IntType(), LongType() };
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType()};
     VectorBatch *vecBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     for (size_t i = 0; i < dataSize; i++) {
         if (i % 2 == 0) {
@@ -635,8 +642,8 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_or4)
         data5[i] = i;
     }
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType(), DoubleType(), LongType() }));
-    std::vector<DataTypePtr> typess = { IntType(), LongType(), LongType(), DoubleType(), LongType() };
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType(), DoubleType(), LongType()}));
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType(), LongType(), DoubleType(), LongType()};
     VectorBatch *vecBatch =
         omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5);
     for (size_t i = 0; i < dataSize; i++) {
@@ -651,9 +658,9 @@ TEST(SelectivityVector, test_convert_from_vectorbatch_or4)
         }
     }
     SelectivityVector result(dataSize, false);
-    std::vector<size_t> selectColums = { 0, 2, 4 };
+    std::vector<size_t> selectColums = {0, 2, 4};
     SelectivityVector::GetSelectivityVectorFromVectorBatch<GetSelectivityVectorMethod::OR>(vecBatch, selectColums,
-        result);
+                                                                                           result);
     EXPECT_EQ(false, result.IsAllSelected());
     for (size_t i = 0; i < dataSize; i++) {
         if (i % 2 == 0 && i % 3 == 0 && i % 7 == 0) {
@@ -686,8 +693,8 @@ TEST(SelectivityVector, test_gather_result_1)
         data5[i] = i;
     }
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType(), DoubleType(), LongType() }));
-    std::vector<DataTypePtr> typess = { IntType(), LongType(), LongType(), DoubleType(), LongType() };
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType(), DoubleType(), LongType()}));
+    std::vector<DataTypePtr> inputColumnTypes = {IntType(), LongType(), LongType(), DoubleType(), LongType()};
     VectorBatch *vecBatch =
         omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5);
     std::vector<BaseVector *> src(5, nullptr);
@@ -756,7 +763,7 @@ TEST(SelectivityVector, test_gather_result_2)
         data5[i] = std::to_string(i) + "test_gather_result_2";
     }
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), ShortType(), DoubleType(), LongType(), CharType(20) }));
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), ShortType(), DoubleType(), LongType(), CharType(20)}));
     VectorBatch *vecBatch =
         omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5);
     std::vector<BaseVector *> src(5, nullptr);
@@ -791,7 +798,7 @@ TEST(SelectivityVector, test_gather_result_2)
         }
     }
     VectorBatch *expectedVectorBatch = omniruntime::TestUtil::CreateVectorBatch(sourceTypes, countSelected, result1,
-        result2, result3, result4, result5);
+                                                                                result2, result3, result4, result5);
     for (int i = 0; i < 5; i++) {
         EXPECT_TRUE(TestUtil::ColumnMatch(result[i], expectedVectorBatch->Get(i)));
     }
@@ -826,7 +833,7 @@ TEST(SelectivityVector, test_gather_result_3)
         data5[i] = std::to_string(i) + "test_gather_result_2";
     }
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), ShortType(), DoubleType(), LongType(), CharType(20) }));
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), ShortType(), DoubleType(), LongType(), CharType(20)}));
     VectorBatch *vecBatch =
         omniruntime::TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5);
     std::vector<BaseVector *> src(5, nullptr);
@@ -848,4 +855,4 @@ TEST(SelectivityVector, test_gather_result_3)
     delete[] data3;
     delete[] data4;
 }
-}
+} // namespace omniruntime::vec::test

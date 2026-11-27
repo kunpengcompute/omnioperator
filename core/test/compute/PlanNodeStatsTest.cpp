@@ -1,17 +1,25 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Description: This file declares for PlanNodeStatsTest.cpp
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include "compute/plannode_stats.h"
 #include <gtest/gtest.h>
 
 namespace PlanNodeStatsTest {
 /**
-* @tc.name  : PlanNodeStatsOperatorPlus_ShouldAddStats_WhenCalled
-* @tc.number: PlanNodeStatsOperatorPlus_Test_001
-* @tc.desc  : Test the PlanNodeStats::operator+= function to ensure it correctly adds stats.
-*/
-TEST(PlanNodeStatsTest, PlanNodeStatsOperatorPlus_ShouldAddStats_WhenCalled) {
+ * @tc.name  : PlanNodeStatsOperatorPlus_ShouldAddStats_WhenCalled
+ * @tc.number: PlanNodeStatsOperatorPlus_Test_001
+ * @tc.desc  : Test the PlanNodeStats::operator+= function to ensure it correctly adds stats.
+ */
+TEST(PlanNodeStatsTest, PlanNodeStatsOperatorPlus_ShouldAddStats_WhenCalled)
+{
     omniruntime::compute::PlanNodeStats stats1;
     omniruntime::compute::PlanNodeStats stats2;
 
@@ -34,11 +42,12 @@ TEST(PlanNodeStatsTest, PlanNodeStatsOperatorPlus_ShouldAddStats_WhenCalled) {
 }
 
 /**
-* @tc.name  : PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeExists
-* @tc.number: PlanNodeStatsAdd_Test_001
-* @tc.desc  : Test the PlanNodeStats::Add function to ensure it correctly adds stats when operatorType exists.
-*/
-TEST(PlanNodeStatsTest, PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeExists) {
+ * @tc.name  : PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeExists
+ * @tc.number: PlanNodeStatsAdd_Test_001
+ * @tc.desc  : Test the PlanNodeStats::Add function to ensure it correctly adds stats when operatorType exists.
+ */
+TEST(PlanNodeStatsTest, PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeExists)
+{
     omniruntime::compute::PlanNodeStats planNodeStats;
     omniruntime::compute::OperatorStats operatorStats;
     operatorStats.operatorType = "TestOperator";
@@ -56,11 +65,12 @@ TEST(PlanNodeStatsTest, PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeExists) 
 }
 
 /**
-* @tc.name  : PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeNotExists
-* @tc.number: PlanNodeStatsAdd_Test_002
-* @tc.desc  : Test the PlanNodeStats::Add function to ensure it correctly adds stats when operatorType does not exist.
-*/
-TEST(PlanNodeStatsTest, PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeNotExists) {
+ * @tc.name  : PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeNotExists
+ * @tc.number: PlanNodeStatsAdd_Test_002
+ * @tc.desc  : Test the PlanNodeStats::Add function to ensure it correctly adds stats when operatorType does not exist.
+ */
+TEST(PlanNodeStatsTest, PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeNotExists)
+{
     omniruntime::compute::PlanNodeStats planNodeStats;
     omniruntime::compute::OperatorStats operatorStats;
     operatorStats.operatorType = "TestOperator";
@@ -78,11 +88,13 @@ TEST(PlanNodeStatsTest, PlanNodeStatsAdd_ShouldAddStats_WhenOperatorTypeNotExist
 }
 
 /**
-* @tc.name  : PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncludeInputStatsIsTrue
-* @tc.number: PlanNodeStatsToString_Test_001
-* @tc.desc  : Test the PlanNodeStats::ToString function to ensure it returns the correct string when includeInputStats is true.
-*/
-TEST(PlanNodeStatsTest, PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncludeInputStatsIsTrue) {
+ * @tc.name  : PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncludeInputStatsIsTrue
+ * @tc.number: PlanNodeStatsToString_Test_001
+ * @tc.desc  : Test the PlanNodeStats::ToString function to ensure it returns the correct string when includeInputStats
+ * is true.
+ */
+TEST(PlanNodeStatsTest, PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncludeInputStatsIsTrue)
+{
     omniruntime::compute::PlanNodeStats planNodeStats;
     planNodeStats.inputRows = 10;
     planNodeStats.inputBytes = 100;
@@ -97,11 +109,13 @@ TEST(PlanNodeStatsTest, PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncl
 }
 
 /**
-* @tc.name  : PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncludeInputStatsIsFalse
-* @tc.number: PlanNodeStatsToString_Test_002
-* @tc.desc  : Test the PlanNodeStats::ToString function to ensure it returns the correct string when includeInputStats is false.
-*/
-TEST(PlanNodeStatsTest, PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncludeInputStatsIsFalse) {
+ * @tc.name  : PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncludeInputStatsIsFalse
+ * @tc.number: PlanNodeStatsToString_Test_002
+ * @tc.desc  : Test the PlanNodeStats::ToString function to ensure it returns the correct string when includeInputStats
+ * is false.
+ */
+TEST(PlanNodeStatsTest, PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncludeInputStatsIsFalse)
+{
     omniruntime::compute::PlanNodeStats planNodeStats;
     planNodeStats.inputRows = 10;
     planNodeStats.inputBytes = 100;
@@ -115,13 +129,15 @@ TEST(PlanNodeStatsTest, PlanNodeStatsToString_ShouldReturnCorrectString_WhenIncl
     EXPECT_NE(result.find("Output: 20 rows (200"), std::string::npos);
 }
 
-TEST(PlanNodeStatsTest, ToPlanStats_ShouldReturnEmptyMap_WhenInputVectorIsEmpty) {
+TEST(PlanNodeStatsTest, ToPlanStats_ShouldReturnEmptyMap_WhenInputVectorIsEmpty)
+{
     const omniruntime::TaskStats stats;
     auto result = ToPlanStats(stats);
     EXPECT_TRUE(result.empty());
 }
 
-TEST(PlanNodeStatsTest, ToPlanStats_ShouldReturnMapWithMultipleElements_WhenInputVectorHasMultipleElements) {
+TEST(PlanNodeStatsTest, ToPlanStats_ShouldReturnMapWithMultipleElements_WhenInputVectorHasMultipleElements)
+{
     omniruntime::TaskStats stats;
     stats.endTimeMs = 0;
     stats.numTotalSplits = 1;
@@ -139,4 +155,4 @@ TEST(PlanNodeStatsTest, ToPlanStats_ShouldReturnMapWithMultipleElements_WhenInpu
     auto result = ToPlanStats(stats);
     EXPECT_EQ(result.size(), 1);
 }
-}
+} // namespace PlanNodeStatsTest

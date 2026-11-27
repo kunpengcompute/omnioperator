@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <gtest/gtest.h>
@@ -26,7 +34,7 @@ TEST(DictionaryVector, appendVector)
 
     auto dicVecPtr = VectorHelper::CreateDictionary(values, valueSize, originVec.get());
     auto *dicVec = reinterpret_cast<Vector<DictionaryContainer<int64_t>> *>(dicVecPtr);
-    Vector<int64_t> appendedVec{ valueSize + dicSize };
+    Vector<int64_t> appendedVec{valueSize + dicSize};
     appendedVec.Append(dicVec, 0, valueSize);
     appendedVec.Append(originVec.get(), valueSize, dicSize);
 
@@ -88,10 +96,9 @@ TEST(DictionaryVector, copyPositions_string_view)
     }
 
     int32_t values[] = {2, 3, 4, 5, 6, 8, 9};
-    auto dicVecPtr = VectorHelper::CreateStringDictionary(values, valueSize,
-        reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(originVec.get()));
-    auto *dicVec =
-        reinterpret_cast<Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *>(dicVecPtr);
+    auto dicVecPtr = VectorHelper::CreateStringDictionary(
+        values, valueSize, reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(originVec.get()));
+    auto *dicVec = reinterpret_cast<Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *>(dicVecPtr);
 
     int32_t positions[] = {1, 3, 5, 6};
     int32_t offset = 1;
@@ -256,10 +263,9 @@ TEST(DictionaryVector, VarcharType)
         originVec->SetValue(j, val);
     }
 
-    auto dictVecPtr = VectorHelper::CreateStringDictionary(values, valueSize,
-        reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(originVec.get()));
-    auto *dictVec =
-        reinterpret_cast<Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *>(dictVecPtr);
+    auto dictVecPtr = VectorHelper::CreateStringDictionary(
+        values, valueSize, reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(originVec.get()));
+    auto *dictVec = reinterpret_cast<Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *>(dictVecPtr);
 
     for (int32_t index = 0; index < valueSize; ++index) {
         auto value = dictVec->GetValue(index);
@@ -432,7 +438,8 @@ TEST(DictionaryVector, appendDictionaryStringVector)
         std::string_view value(str.data(), str.length());
         otherOriginVec->SetValue(i, value);
     }
-    auto otherDicVecPtr = VectorHelper::CreateStringDictionary(otherValues, otherValueSize,
+    auto otherDicVecPtr = VectorHelper::CreateStringDictionary(
+        otherValues, otherValueSize,
         reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(otherOriginVec.get()));
     auto *otherDicVec =
         reinterpret_cast<Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *>(otherDicVecPtr);
@@ -443,4 +450,4 @@ TEST(DictionaryVector, appendDictionaryStringVector)
     }
     delete otherDicVec;
 }
-}
+} // namespace DictionaryVectorTest

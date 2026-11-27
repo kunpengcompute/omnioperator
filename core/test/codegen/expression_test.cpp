@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2023. All rights reserved.
- * Description: ...
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <string>
 #include <vector>
@@ -33,7 +40,7 @@ template <typename... Ts> struct Arguments {
     int64_t dictionaries[5] = {};
     omniruntime::op::ExecutionContext *ctx;
 
-    Arguments(int rowCount, int initSize, Ts *... initArgs) : rowCount(rowCount)
+    Arguments(int rowCount, int initSize, Ts *...initArgs) : rowCount(rowCount)
     {
         int columnCount = sizeof...(Ts);
         vals = new int64_t[columnCount]();
@@ -47,7 +54,7 @@ template <typename... Ts> struct Arguments {
 
         bitmap = new uint8_t *[colCount];
         for (int i = 0; i < colCount; i++) {
-            bitmap[i] = new uint8_t[NullsBuffer::CalculateNbytes(rowCount)] { 0 };
+            bitmap[i] = new uint8_t[NullsBuffer::CalculateNbytes(rowCount)]{0};
         }
 
         offsets = new int32_t *[colCount];
@@ -147,7 +154,7 @@ TEST(ExpressionTest, q1LongType)
         col3[i] = rand() % 8 + 5;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ LongType(), LongType(), LongType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({LongType(), LongType(), LongType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -164,7 +171,7 @@ TEST(ExpressionTest, q1LongType)
     FieldExpr *mulLeft = new FieldExpr(0, LongType());
     BinaryExpr *mulExpr1 = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, subExpr, LongType());
     BinaryExpr *mulExpr2 = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulExpr1, addExpr, LongType());
-    std::vector<Expr *> exprs = { mulExpr2 };
+    std::vector<Expr *> exprs = {mulExpr2};
 
     Timer timer;
     timer.SetStart();
@@ -205,8 +212,8 @@ TEST(ExpressionTest, q1LongType)
         for (int i = 0; i < numRows; i++) {
             int64_t result = (reinterpret_cast<Vector<int64_t> *>(outputVecBatch->Get(0)))->GetValue(i);
             int64_t actualLong = ((reinterpret_cast<Vector<int64_t> *>(t->Get(0)))->GetValue(i)) *
-                (100L - (reinterpret_cast<Vector<int64_t> *>(t->Get(1)))->GetValue(i)) *
-                (100L + (reinterpret_cast<Vector<int64_t> *>(t->Get(2)))->GetValue(i));
+                                 (100L - (reinterpret_cast<Vector<int64_t> *>(t->Get(1)))->GetValue(i)) *
+                                 (100L + (reinterpret_cast<Vector<int64_t> *>(t->Get(2)))->GetValue(i));
             EXPECT_EQ(result, actualLong);
         }
         VectorHelper::FreeVecBatch(outputVecBatch);
@@ -242,7 +249,7 @@ TEST(ExpressionTest, q1ByteType)
         col3[i] = rand() % 3;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ ByteType(), ByteType(), ByteType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({ByteType(), ByteType(), ByteType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -259,7 +266,7 @@ TEST(ExpressionTest, q1ByteType)
     FieldExpr *mulLeft = new FieldExpr(0, ByteType());
     BinaryExpr *mulExpr1 = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, subExpr, ByteType());
     BinaryExpr *mulExpr2 = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulExpr1, addExpr, ByteType());
-    std::vector<Expr *> exprs = { mulExpr2 };
+    std::vector<Expr *> exprs = {mulExpr2};
 
     Timer timer;
     timer.SetStart();
@@ -300,8 +307,8 @@ TEST(ExpressionTest, q1ByteType)
         for (int i = 0; i < numRows; i++) {
             int8_t result = (reinterpret_cast<Vector<int8_t> *>(outputVecBatch->Get(0)))->GetValue(i);
             int8_t actualByte = ((reinterpret_cast<Vector<int8_t> *>(t->Get(0)))->GetValue(i)) *
-                (10 - (reinterpret_cast<Vector<int8_t> *>(t->Get(1)))->GetValue(i)) *
-                (10 + (reinterpret_cast<Vector<int8_t> *>(t->Get(2)))->GetValue(i));
+                                (10 - (reinterpret_cast<Vector<int8_t> *>(t->Get(1)))->GetValue(i)) *
+                                (10 + (reinterpret_cast<Vector<int8_t> *>(t->Get(2)))->GetValue(i));
             EXPECT_EQ(result, actualByte);
         }
         VectorHelper::FreeVecBatch(outputVecBatch);
@@ -337,7 +344,7 @@ TEST(ExpressionTest, q1ShortType)
         col3[i] = rand() % 50 + 3;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ ShortType(), ShortType(), ShortType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({ShortType(), ShortType(), ShortType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -354,7 +361,7 @@ TEST(ExpressionTest, q1ShortType)
     FieldExpr *mulLeft = new FieldExpr(0, ShortType());
     BinaryExpr *mulExpr1 = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, subExpr, ShortType());
     BinaryExpr *mulExpr2 = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulExpr1, addExpr, ShortType());
-    std::vector<Expr *> exprs = { mulExpr2 };
+    std::vector<Expr *> exprs = {mulExpr2};
 
     Timer timer;
     timer.SetStart();
@@ -395,8 +402,8 @@ TEST(ExpressionTest, q1ShortType)
         for (int i = 0; i < numRows; i++) {
             int16_t result = (reinterpret_cast<Vector<int16_t> *>(outputVecBatch->Get(0)))->GetValue(i);
             int16_t actualShort = ((reinterpret_cast<Vector<int16_t> *>(t->Get(0)))->GetValue(i)) *
-                (100 - (reinterpret_cast<Vector<int16_t> *>(t->Get(1)))->GetValue(i)) *
-                (100 + (reinterpret_cast<Vector<int16_t> *>(t->Get(2)))->GetValue(i));
+                                  (100 - (reinterpret_cast<Vector<int16_t> *>(t->Get(1)))->GetValue(i)) *
+                                  (100 + (reinterpret_cast<Vector<int16_t> *>(t->Get(2)))->GetValue(i));
             EXPECT_EQ(result, actualShort);
         }
         VectorHelper::FreeVecBatch(outputVecBatch);
@@ -432,7 +439,7 @@ TEST(ExpressionTest, q1DoubleType)
         col3[i] = rand() % 8 + 5;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ DoubleType(), DoubleType(), DoubleType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({DoubleType(), DoubleType(), DoubleType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -449,7 +456,7 @@ TEST(ExpressionTest, q1DoubleType)
     FieldExpr *mulLeft = new FieldExpr(0, DoubleType());
     BinaryExpr *mulExpr1 = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, subExpr, DoubleType());
     BinaryExpr *mulExpr2 = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulExpr1, addExpr, DoubleType());
-    std::vector<Expr *> exprs = { mulExpr2 };
+    std::vector<Expr *> exprs = {mulExpr2};
 
     Timer timer;
     timer.SetStart();
@@ -490,8 +497,8 @@ TEST(ExpressionTest, q1DoubleType)
         for (int i = 0; i < numRows; i++) {
             double result = (reinterpret_cast<Vector<double> *>(outputVecBatch->Get(0)))->GetValue(i);
             double actualDouble = ((reinterpret_cast<Vector<double> *>(t->Get(0)))->GetValue(i)) *
-                (1.0 - (reinterpret_cast<Vector<double> *>(t->Get(1)))->GetValue(i)) *
-                (1.0 + (reinterpret_cast<Vector<double> *>(t->Get(2)))->GetValue(i));
+                                  (1.0 - (reinterpret_cast<Vector<double> *>(t->Get(1)))->GetValue(i)) *
+                                  (1.0 + (reinterpret_cast<Vector<double> *>(t->Get(2)))->GetValue(i));
             EXPECT_EQ(result, actualDouble);
         }
         VectorHelper::FreeVecBatch(outputVecBatch);
@@ -551,9 +558,9 @@ TEST(ExpressionTest, q1DoubleFilter)
     BinaryExpr *ltExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, mulExpr2, minValue, BooleanType());
 
     const string defaultTestFunctionName = "double-comparison-function";
-    Arguments<double, double, double> args { numRows, numRows, col1, col2, col3 };
+    Arguments<double, double, double> args{numRows, numRows, col1, col2, col3};
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType(), DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType(), DoubleType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     auto overflowConfig = new OverflowConfig();
@@ -564,7 +571,6 @@ TEST(ExpressionTest, q1DoubleFilter)
     std::cout << "compile expression: "
               << " wall " << timer.GetWallElapse() << " cpu " << timer.GetCpuElapse() << std::endl;
 
-
     int32_t result = 0;
     double wallTime[rounds];
     double cpuTime[rounds];
@@ -572,7 +578,7 @@ TEST(ExpressionTest, q1DoubleFilter)
         timer.Reset();
         timer.SetStart();
         result = func(args.vals, args.rowCount, args.selected, (int64_t *)args.bitmap, (int64_t *)args.offsets,
-            args.context, args.dictionaries);
+                      args.context, args.dictionaries);
         timer.CalculateElapse();
         wallTime[i] = timer.GetWallElapse();
         cpuTime[i] = timer.GetCpuElapse();
@@ -618,7 +624,7 @@ TEST(ExpressionTest, q1Decimal64Type)
         col3[i] = rand() % 8 + 5;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ LongType(), LongType(), LongType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({LongType(), LongType(), LongType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -639,7 +645,7 @@ TEST(ExpressionTest, q1Decimal64Type)
         new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, subExpr, Decimal64Type(12, 4));
     BinaryExpr *mulExpr2 =
         new BinaryExpr(omniruntime::expressions::Operator::MUL, mulExpr1, addExpr, Decimal64Type(12, 6));
-    std::vector<Expr *> exprs = { mulExpr2 };
+    std::vector<Expr *> exprs = {mulExpr2};
 
     Timer timer;
     timer.SetStart();
@@ -722,7 +728,7 @@ TEST(ExpressionTest, q1Decimal128Type)
         data3[2 * i + 1] = 0;
     }
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type(), Decimal128Type(), Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type(), Decimal128Type(), Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -743,7 +749,7 @@ TEST(ExpressionTest, q1Decimal128Type)
         new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, subExpr, Decimal128Type(32, 4));
     BinaryExpr *mulExpr2 =
         new BinaryExpr(omniruntime::expressions::Operator::MUL, mulExpr1, addExpr, Decimal128Type(32, 6));
-    std::vector<Expr *> exprs = { mulExpr2 };
+    std::vector<Expr *> exprs = {mulExpr2};
 
     Timer timer;
     timer.SetStart();
@@ -819,7 +825,7 @@ TEST(ExpressionTest, Decimal64BigIntToDecimal128)
         bigintCol[i] = rand() % 1000; // Random bigint values
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ LongType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({LongType()});
     DataTypes inputTypes(vecOfTypes);
 
     std::string unparsed = R"(
@@ -852,7 +858,7 @@ TEST(ExpressionTest, Decimal64BigIntToDecimal128)
     expr->Accept(printer);
     cout << endl;
 
-    std::vector<Expr *> exprs = { expr };
+    std::vector<Expr *> exprs = {expr};
 
     Timer timer;
     timer.SetStart();
@@ -873,11 +879,11 @@ TEST(ExpressionTest, Decimal64BigIntToDecimal128)
 
     timer.CalculateElapse();
     std::cout << "compile expression : "
-            << " wall " << timer.GetWallElapse() << " cpu " << timer.GetCpuElapse() << std::endl;
+              << " wall " << timer.GetWallElapse() << " cpu " << timer.GetCpuElapse() << std::endl;
 
     double wallTime[rounds];
     double cpuTime[rounds];
-    for(int i = 0; i < rounds; i++) {
+    for (int i = 0; i < rounds; i++) {
         auto copy = DuplicateVectorBatch(t);
         VectorBatch *vectorBatch = nullptr;
 
@@ -922,7 +928,7 @@ TEST(ExpressionTest, q1Decimal64Cast)
         col1[i] = rand() % 100000 + 20;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ LongType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({LongType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -933,7 +939,7 @@ TEST(ExpressionTest, q1Decimal64Cast)
     args.push_back(col0Expr);
     auto cast0 = GetFuncExpr(castStr, args, DoubleType());
 
-    std::vector<Expr *> exprs = { cast0 };
+    std::vector<Expr *> exprs = {cast0};
 
     Timer timer;
     timer.SetStart();
@@ -1001,7 +1007,7 @@ TEST(ExpressionTest, q1DateType)
         col1[i] = rand() % 1000 + 18262;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ IntType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({IntType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -1009,7 +1015,7 @@ TEST(ExpressionTest, q1DateType)
     // 2022-10-01 19266
     LiteralExpr *ltRight = new LiteralExpr(19266, Date32Type());
     BinaryExpr *ltExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, ltLeft, ltRight, BooleanType());
-    std::vector<Expr *> exprs = { ltExpr };
+    std::vector<Expr *> exprs = {ltExpr};
 
     Timer timer;
     timer.SetStart();
@@ -1082,17 +1088,17 @@ TEST(ExpressionTest, q1Case1)
         col2[i] = rand() % 10000000 + 200;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ IntType(), DoubleType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({IntType(), DoubleType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
     // 2022-01-01 18993 2023-01-01 19358
     ExprVerifier verifier;
     BinaryExpr *conditionLeft = new BinaryExpr(omniruntime::expressions::Operator::GTE, new FieldExpr(0, Date32Type()),
-        new LiteralExpr(18993, Date32Type()), BooleanType());
+                                               new LiteralExpr(18993, Date32Type()), BooleanType());
     EXPECT_TRUE(verifier.VisitExpr(*conditionLeft));
     BinaryExpr *conditionRight = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(0, Date32Type()),
-        new LiteralExpr(19358, Date32Type()), BooleanType());
+                                                new LiteralExpr(19358, Date32Type()), BooleanType());
     EXPECT_TRUE(verifier.VisitExpr(*conditionRight));
     BinaryExpr *condition =
         new BinaryExpr(omniruntime::expressions::Operator::AND, conditionLeft, conditionRight, BooleanType());
@@ -1103,7 +1109,7 @@ TEST(ExpressionTest, q1Case1)
     LiteralExpr *falseExpr = new LiteralExpr(0.0, DoubleType());
     IfExpr *ifExpr = new IfExpr(condition, divExpr, falseExpr);
     EXPECT_TRUE(verifier.VisitExpr(*ifExpr));
-    std::vector<Expr *> exprs = { ifExpr };
+    std::vector<Expr *> exprs = {ifExpr};
 
     Timer timer;
     timer.SetStart();
@@ -1146,9 +1152,9 @@ TEST(ExpressionTest, q1Case1)
         for (int i = 0; i < numRows; i++) {
             double result = (reinterpret_cast<Vector<double> *>(vectorBatch->Get(0)))->GetValue(i);
             double actualDouble = (((reinterpret_cast<Vector<int32_t> *>(t->Get(0)))->GetValue(i)) >= 18993 &&
-                ((reinterpret_cast<Vector<int32_t> *>(t->Get(0)))->GetValue(i)) < 19358) ?
-                ((reinterpret_cast<Vector<double> *>(t->Get(1)))->GetValue(i)) / 10000.0 :
-                0.0;
+                                   ((reinterpret_cast<Vector<int32_t> *>(t->Get(0)))->GetValue(i)) < 19358)
+                                      ? ((reinterpret_cast<Vector<double> *>(t->Get(1)))->GetValue(i)) / 10000.0
+                                      : 0.0;
             EXPECT_EQ(result, actualDouble);
         }
         VectorHelper::FreeVecBatch(vectorBatch);
@@ -1189,7 +1195,7 @@ TEST(ExpressionTest, q1SwitchCase)
         col1[i] = rand() % 60 + 40;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ IntType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({IntType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -1310,8 +1316,7 @@ TEST(ExpressionTest, q1SwitchCase)
     whenClause.push_back(when11);
 
     SwitchExpr *switchExpr = new SwitchExpr(whenClause, literalResult12);
-    std::vector<Expr *> exprs = { switchExpr };
-
+    std::vector<Expr *> exprs = {switchExpr};
 
     Timer timer;
     timer.SetStart();
@@ -1408,7 +1413,7 @@ TEST(ExpressionTest, q1If)
         col1[i] = rand() % 60 + 40;
     }
 
-    auto vecOfTypes = std::vector<DataTypePtr>({ IntType() });
+    auto vecOfTypes = std::vector<DataTypePtr>({IntType()});
     DataTypes inputTypes(vecOfTypes);
 
     // prepare expression
@@ -1489,7 +1494,7 @@ TEST(ExpressionTest, q1If)
     IfExpr *ifExpr2 = new IfExpr(gteExpr1, literalResult1, ifExpr3);
     IfExpr *ifExpr1 = new IfExpr(gteExpr0, literalResult0, ifExpr2);
 
-    std::vector<Expr *> exprs = { ifExpr1 };
+    std::vector<Expr *> exprs = {ifExpr1};
 
     Timer timer;
     timer.SetStart();
@@ -1601,8 +1606,8 @@ TEST(ExpressionTest, q1CastDoubleLong)
     // prepare expression
     auto cast0 = GenerateCastExpr(DoubleType(), LongType());
 
-    std::vector<Expr *> exprs = { cast0 };
-    auto vecOfTypes = std::vector<DataTypePtr>({ DoubleType() });
+    std::vector<Expr *> exprs = {cast0};
+    auto vecOfTypes = std::vector<DataTypePtr>({DoubleType()});
     DataTypes inputTypes(vecOfTypes);
 
     Timer timer;
@@ -1663,12 +1668,11 @@ TEST(ExpressionTest, q1CastDecimal64Double)
         col0[i] = rand() % 100000 + 20;
     }
 
-
     // prepare expression
     auto cast0 = GenerateCastExpr(Decimal64Type(12, 2), DoubleType());
 
-    std::vector<Expr *> exprs = { cast0 };
-    auto vecOfTypes = std::vector<DataTypePtr>({ LongType() });
+    std::vector<Expr *> exprs = {cast0};
+    auto vecOfTypes = std::vector<DataTypePtr>({LongType()});
     DataTypes inputTypes(vecOfTypes);
 
     Timer timer;
@@ -1732,8 +1736,8 @@ TEST(ExpressionTest, q1CastDecimal64Int64)
     // prepare expression
     auto cast0 = GenerateCastExpr(Decimal64Type(12, 2), LongType());
 
-    std::vector<Expr *> exprs = { cast0 };
-    auto vecOfTypes = std::vector<DataTypePtr>({ LongType() });
+    std::vector<Expr *> exprs = {cast0};
+    auto vecOfTypes = std::vector<DataTypePtr>({LongType()});
     DataTypes inputTypes(vecOfTypes);
 
     // make row vector
@@ -1797,8 +1801,8 @@ TEST(ExpressionTest, q1TestNull)
 
     // prepare expression
     Expr *expr = PrepareLongExpr();
-    std::vector<Expr *> exprs = { expr };
-    auto vecOfTypes = std::vector<DataTypePtr>({ LongType(), LongType(), LongType() });
+    std::vector<Expr *> exprs = {expr};
+    auto vecOfTypes = std::vector<DataTypePtr>({LongType(), LongType(), LongType()});
     DataTypes inputTypes(vecOfTypes);
 
     // make row vector
@@ -1812,7 +1816,6 @@ TEST(ExpressionTest, q1TestNull)
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
     omniruntime::op::Operator *op = factory->CreateOperator();
-
 
     // evaluate
     VectorBatch *outputVecBatch = nullptr;
@@ -1862,21 +1865,21 @@ template <typename T, int Size> static void bm_codegen_between()
         valueExpr = new FieldExpr(1, IntType());
         lowerExpr = new FieldExpr(0, IntType());
         upperExpr = new FieldExpr(2, IntType());
-        dataTypePtr = { IntType(), IntType(), IntType() };
+        dataTypePtr = {IntType(), IntType(), IntType()};
     } else if (std::is_same<T, double>::value) {
         valueExpr = new FieldExpr(1, DoubleType());
         lowerExpr = new FieldExpr(0, DoubleType());
         upperExpr = new FieldExpr(2, DoubleType());
-        dataTypePtr = { DoubleType(), DoubleType(), DoubleType() };
+        dataTypePtr = {DoubleType(), DoubleType(), DoubleType()};
     } else {
         valueExpr = new FieldExpr(1, LongType());
         lowerExpr = new FieldExpr(0, LongType());
         upperExpr = new FieldExpr(2, LongType());
-        dataTypePtr = { LongType(), LongType(), LongType() };
+        dataTypePtr = {LongType(), LongType(), LongType()};
     }
 
     BetweenExpr *expr = new BetweenExpr(valueExpr, lowerExpr, upperExpr);
-    Arguments<T, T, T> args { Size, 5, col0, col1, col2 };
+    Arguments<T, T, T> args{Size, 5, col0, col1, col2};
     DataTypes inputTypes(dataTypePtr);
     VectorBatch *t = CreateVectorBatch(inputTypes, 5, col0, col1, col2);
 
@@ -1888,7 +1891,7 @@ template <typename T, int Size> static void bm_codegen_between()
     Timer timer;
     timer.SetStart();
     int32_t result = func(args.vals, args.rowCount, args.selected, (int64_t *)args.bitmap, (int64_t *)args.offsets,
-        args.context, args.dictionaries);
+                          args.context, args.dictionaries);
     timer.CalculateElapse();
     std::cerr << result << std::endl;
     if (std::is_same<T, int32_t>::value) {
@@ -1936,8 +1939,8 @@ TEST(ExpressionTest, bm_codegen_between2)
     int col1[] = {1001, 1245, 1245, 3, 4};
     int col2[] = {1001, -1256, 12365, 4, 6};
 
-    Arguments<int, int, int> args { 1000, 5, col0, col1, col2 };
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType(), IntType() }));
+    Arguments<int, int, int> args{1000, 5, col0, col1, col2};
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, 5, col0, col1, col2);
 
     // a > l1 && a < l2
@@ -1952,7 +1955,7 @@ TEST(ExpressionTest, bm_codegen_between2)
     std::cout << "the cputime of function generate is " << timer.GetCpuElapse() << std::endl;
 
     int32_t result2 = func(args.vals, args.rowCount, args.selected, (int64_t *)args.bitmap, (int64_t *)args.offsets,
-        args.context, args.dictionaries);
+                           args.context, args.dictionaries);
     std::cout << " result2: " << result2 << std::endl;
 
     delete expr;
@@ -1984,7 +1987,7 @@ TEST(ExpressionTest, bm_codegen_filter)
     BinaryExpr *eq1Expr = new BinaryExpr(omniruntime::expressions::Operator::EQ, eq1Left, eq1Right, BooleanType());
 
     Expr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::AND, eq1Expr, innerAndExpr, BooleanType());
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType(), DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType(), DoubleType()}));
 
     // a > l1 && a < l2
     auto overflowConfig = new OverflowConfig();
@@ -2003,4 +2006,4 @@ TEST(ExpressionTest, bm_codegen_filter)
     delete col2Expr;
     delete overflowConfig;
 }
-}
+} // namespace ExpressionTest

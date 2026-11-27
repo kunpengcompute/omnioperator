@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 package nova.hetu.omniruntime.operator;
@@ -60,14 +68,14 @@ public class OmniFilterAndProjectOperatorTest {
     @Test
     public void betweenInt() {
         DataType[] types = {IntDataType.INTEGER, IntDataType.INTEGER, IntDataType.INTEGER};
-        Object[][] datas = {{0, 1, 2, 3, 4, 0, 1, 2, 3, 4}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+        Object[][] inputData = {{0, 1, 2, 3, 4, 0, 1, 2, 3, 4}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
                 {0, 1, 2, 3, 4, 5, 6, 6, 6, 6}};
 
         List<String> projections = ImmutableList.of("#0", "#1", "#2");
         OmniFilterAndProjectOperatorFactory factory = new OmniFilterAndProjectOperatorFactory(
                 "$operator$BETWEEN:4(#1, #0, #2)", types, projections);
 
-        VecBatch vecBatch = createVecBatch(types, datas);
+        VecBatch vecBatch = createVecBatch(types, inputData);
         OmniOperator op = factory.createOperator();
         op.addInput(vecBatch);
 
@@ -88,14 +96,14 @@ public class OmniFilterAndProjectOperatorTest {
     @Test
     public void betweenIntDictionary() {
         DataType[] types = {IntDataType.INTEGER, IntDataType.INTEGER, IntDataType.INTEGER};
-        Object[][] datas = {{0, 1, 2, 3, 4, 0, 1, 2, 3, 4}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+        Object[][] inputData = {{0, 1, 2, 3, 4, 0, 1, 2, 3, 4}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
                 {-3, -2, -1, 0, 1, 2, 3, 4, 5, 6}};
         Vec[] vecs = new Vec[3];
-        vecs[0] = TestUtils.createIntVec(datas[0]);
-        vecs[1] = TestUtils.createIntVec(datas[1]);
+        vecs[0] = TestUtils.createIntVec(inputData[0]);
+        vecs[1] = TestUtils.createIntVec(inputData[1]);
 
         int[] ids = {3, 4, 5, 6, 7, 8, 9, 9, 9, 9};
-        DictionaryVec dicVec = TestUtils.createDictionaryVec(types[2], datas[2], ids);
+        DictionaryVec dicVec = TestUtils.createDictionaryVec(types[2], inputData[2], ids);
         vecs[2] = dicVec;
 
         List<String> projections = ImmutableList.of("#0", "#1", "#2");
@@ -237,11 +245,11 @@ public class OmniFilterAndProjectOperatorTest {
     @Test
     public void lessThanDictionaryVarchar() {
         DataType[] types = {IntDataType.INTEGER, new VarcharDataType(50)};
-        Object[][] datas = {{0, 3, 9}, {"hello", "world", "friends"}};
+        Object[][] inputData = {{0, 3, 9}, {"hello", "world", "friends"}};
         Vec[] vecs = new Vec[2];
-        vecs[0] = createIntVec(datas[0]);
+        vecs[0] = createIntVec(inputData[0]);
         int[] ids = {0, 1, 2};
-        DictionaryVec dicVec = TestUtils.createDictionaryVec(types[1], datas[1], ids);
+        DictionaryVec dicVec = TestUtils.createDictionaryVec(types[1], inputData[1], ids);
         vecs[1] = dicVec;
         VecBatch vecBatch = new VecBatch(vecs);
 

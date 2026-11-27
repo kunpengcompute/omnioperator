@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -205,7 +213,7 @@ template <typename CONTAINER> void StringVectorGetStringBuffer()
     auto real = UnsafeStringContainer::GetStringBufferAddr(unsafe::UnsafeStringVector::GetContainer(vector).get());
 
     auto expect = UnsafeStringContainer::GetBufferWithSpace(unsafe::UnsafeStringVector::GetContainer(vector).get(),
-        vectorCapacityInBytes);
+                                                            vectorCapacityInBytes);
 
     EXPECT_EQ(expect, real);
 
@@ -224,7 +232,7 @@ template <typename CONTAINER> void StringVectorGetStringExpandBuffer()
         UnsafeStringContainer::GetCapacityInBytes(unsafe::UnsafeStringVector::GetContainer(vector).get());
 
     auto expect = UnsafeStringContainer::GetBufferWithSpace(unsafe::UnsafeStringVector::GetContainer(vector).get(),
-        vectorCapacityInBytes + requestSize);
+                                                            vectorCapacityInBytes + requestSize);
 
     auto real = UnsafeStringContainer::GetStringBufferAddr(unsafe::UnsafeStringVector::GetContainer(vector).get());
     EXPECT_EQ(expect, real);
@@ -275,30 +283,15 @@ void GetVarcharDictionaryWithEmptyStrings()
     delete vectorPtr;
 }
 
-TEST(unsafe_vector, int_get_values_and_nulls)
-{
-    VectorGetValuesAndNulls<int32_t>();
-}
+TEST(unsafe_vector, int_get_values_and_nulls) { VectorGetValuesAndNulls<int32_t>(); }
 
-TEST(unsafe_vector, int_slice_get_values_and_nulls)
-{
-    VectorSliceGetValuesAndNulls<int32_t>();
-}
+TEST(unsafe_vector, int_slice_get_values_and_nulls) { VectorSliceGetValuesAndNulls<int32_t>(); }
 
-TEST(unsafe_vector, int_dictionary_get_values_and_nulls)
-{
-    DictionaryVectorGetValuesAndNulls<int32_t>();
-}
+TEST(unsafe_vector, int_dictionary_get_values_and_nulls) { DictionaryVectorGetValuesAndNulls<int32_t>(); }
 
-TEST(unsafe_vector, string_dictionary_get_values_and_nulls)
-{
-    DictionaryStringVectorGetValuesAndNulls();
-}
+TEST(unsafe_vector, string_dictionary_get_values_and_nulls) { DictionaryStringVectorGetValuesAndNulls(); }
 
-TEST(unsafe_vector, int_dictionary_slice_get_values_and_nulls)
-{
-    DictionaryVectorSliceGetValuesAndNulls<int32_t>();
-}
+TEST(unsafe_vector, int_dictionary_slice_get_values_and_nulls) { DictionaryVectorSliceGetValuesAndNulls<int32_t>(); }
 
 TEST(unsafe_vector, large_string_get_values_and_nulls)
 {
@@ -325,8 +318,5 @@ TEST(unsafe_vector, string_vector_get_string_first_buffer)
     StringVectorGetStringFirstBuffer<LargeStringContainer<std::string_view>>();
 }
 
-TEST(unsafe_vector, get_varchar_dictionary_with_empty_strings)
-{
-    GetVarcharDictionaryWithEmptyStrings();
-}
-}
+TEST(unsafe_vector, get_varchar_dictionary_with_empty_strings) { GetVarcharDictionaryWithEmptyStrings(); }
+} // namespace omniruntime::vec::test

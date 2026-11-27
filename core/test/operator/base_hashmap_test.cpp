@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2023. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <vector>
@@ -24,26 +32,20 @@ public:
         static ResourceInfoCollector infoCollection;
         return infoCollection;
     }
-    ResourceInfoCollector &operator += (uint32_t s)
+    ResourceInfoCollector &operator+=(uint32_t s)
     {
         size += s;
         return *this;
     }
-    ResourceInfoCollector &operator -= (uint32_t s)
+    ResourceInfoCollector &operator-=(uint32_t s)
     {
         size -= s;
         return *this;
     }
 
-    MUST_CARE_RET uint32_t GetState() const
-    {
-        return size;
-    }
+    MUST_CARE_RET uint32_t GetState() const { return size; }
     // when this function return false, that means memory leak;
-    MUST_CARE_RET bool NoMemLeak() const
-    {
-        return size == 0;
-    }
+    MUST_CARE_RET bool NoMemLeak() const { return size == 0; }
 
 private:
     ResourceInfoCollector() = default;
@@ -52,13 +54,10 @@ private:
 
 class ValueWithResource {
 public:
-    ValueWithResource() : curSize(0)
-    {
-        resPtr = nullptr;
-    }
+    ValueWithResource() : curSize(0) { resPtr = nullptr; }
     ValueWithResource(const ValueWithResource &o) = delete;
 
-    ValueWithResource &operator = (const ValueWithResource &o) = delete;
+    ValueWithResource &operator=(const ValueWithResource &o) = delete;
 
     ValueWithResource(ValueWithResource &&o) noexcept
     {
@@ -68,7 +67,7 @@ public:
         o.resPtr = nullptr;
     }
 
-    ValueWithResource &operator = (ValueWithResource &&o) noexcept
+    ValueWithResource &operator=(ValueWithResource &&o) noexcept
     {
         this->curSize = o.curSize;
         o.curSize = 0;
@@ -122,7 +121,7 @@ public:
         ResourceInfoCollector::GetInstance() += ResourceUsedBytes;
     }
 
-    NotPodSharedClass &operator = (const NotPodSharedClass &data)
+    NotPodSharedClass &operator=(const NotPodSharedClass &data)
     {
         if (this != &data) {
             copyCounter = data.copyCounter;
@@ -141,7 +140,7 @@ public:
         }
     }
 
-    NotPodSharedClass &operator = (NotPodSharedClass &&data) noexcept
+    NotPodSharedClass &operator=(NotPodSharedClass &&data) noexcept
     {
         if (this != &data) {
             copyCounter = data.copyCounter;
@@ -162,19 +161,10 @@ public:
         }
     }
 
-    MUST_CARE_RET size_t Get0() const
-    {
-        return std::get<0>(d);
-    }
-    MUST_CARE_RET double Get1() const
-    {
-        return std::get<1>(d);
-    }
-    MUST_CARE_RET bool Get2() const
-    {
-        return std::get<2>(d);
-    }
-    bool operator == (const NotPodSharedClass &o) const
+    MUST_CARE_RET size_t Get0() const { return std::get<0>(d); }
+    MUST_CARE_RET double Get1() const { return std::get<1>(d); }
+    MUST_CARE_RET bool Get2() const { return std::get<2>(d); }
+    bool operator==(const NotPodSharedClass &o) const
     {
         return Get0() == o.Get0() && std::abs(Get1() - o.Get1()) < DBL_EPSILON && Get2() == o.Get2();
     }
@@ -194,7 +184,7 @@ public:
 
     MaxState(const MaxState &) = delete;
 
-    MaxState &operator = (const MaxState &) = delete;
+    MaxState &operator=(const MaxState &) = delete;
 
     MaxState(MaxState &&o) noexcept
     {
@@ -202,7 +192,7 @@ public:
         o.maxState = nullptr;
     }
 
-    MaxState &operator = (MaxState &&o) noexcept
+    MaxState &operator=(MaxState &&o) noexcept
     {
         maxState = o.maxState;
         o.maxState = nullptr;
@@ -225,10 +215,7 @@ public:
         }
     }
 
-    MUST_CARE_RET uint32_t GetResult() const
-    {
-        return *maxState;
-    }
+    MUST_CARE_RET uint32_t GetResult() const { return *maxState; }
 
     ~MaxState()
     {
@@ -242,12 +229,12 @@ private:
     static constexpr uint8_t StateResourceUsedBytes = sizeof(uint32_t);
     uint32_t *maxState = nullptr;
 };
-}
+} // namespace HashMapTest
 
 namespace omniruntime::op {
 // in unit test, use combine hash to generate NotPodClass's hash.
 template <> struct GroupbyHashCalculator<HashMapTest::NotPodSharedClass> {
-    size_t operator () (const HashMapTest::NotPodSharedClass &data) const
+    size_t operator()(const HashMapTest::NotPodSharedClass &data) const
     {
         auto value = std::hash<int>()(data.Get0());
         value = omniruntime::op::HashUtil::CombineHash(value, std::hash<double>()(data.Get1()));
@@ -258,13 +245,13 @@ template <> struct GroupbyHashCalculator<HashMapTest::NotPodSharedClass> {
 
 // in unit test, use combine hash to generate NotPodClass's hash.
 template <typename T> struct GroupbyHashCalculator<std::unique_ptr<T>> {
-    size_t operator () (const std::unique_ptr<T> &data) const
+    size_t operator()(const std::unique_ptr<T> &data) const
     {
         auto value = std::hash<T>()(*data);
         return value;
     }
 };
-}
+} // namespace omniruntime::op
 
 namespace HashMapTest {
 /**
@@ -644,7 +631,7 @@ TEST(BaseHashMapTest, TestMemoryUsageOfSerializing)
     EXPECT_EQ(arenaAllocator.TotalBytes(), 0);
     for (int rowIdx = 0; rowIdx < rowSize; ++rowIdx) {
         omniruntime::type::StringRef key;
-        for (int32_t groupColIdx = 0; groupColIdx < static_cast<int32_t >(groupVectors.size()); ++groupColIdx) {
+        for (int32_t groupColIdx = 0; groupColIdx < static_cast<int32_t>(groupVectors.size()); ++groupColIdx) {
             auto curVector = groupVectors[groupColIdx];
             auto &curFunc = serializers[groupColIdx];
             curFunc(curVector, rowIdx, arenaAllocator, key);
@@ -712,14 +699,14 @@ TEST(BaseHashMapTest, TestSerializedAndDeserialized)
     for (int rowIdx = 0; rowIdx < rowSize; ++rowIdx) {
         type::StringRef key;
         // serialize
-        for (int groupColIdx = 0; groupColIdx < static_cast<int32_t >(groupVectors.size()); ++groupColIdx) {
+        for (int groupColIdx = 0; groupColIdx < static_cast<int32_t>(groupVectors.size()); ++groupColIdx) {
             auto curVector = groupVectors[groupColIdx];
             auto &curFunc = serializers[groupColIdx];
             curFunc(curVector, rowIdx, arenaAllocator, key);
         }
         // deserialize
         auto *pos = key.data;
-        for (int groupColIdx = 0; groupColIdx < static_cast<int32_t >(groupVectors.size()); ++groupColIdx) {
+        for (int groupColIdx = 0; groupColIdx < static_cast<int32_t>(groupVectors.size()); ++groupColIdx) {
             auto curVectorPtr = groupOutputVectors[groupColIdx];
             auto deserializeFunc = deserializers[groupColIdx];
             pos = deserializeFunc(curVectorPtr, rowIdx, pos);
@@ -735,7 +722,8 @@ TEST(BaseHashMapTest, TestSerializedAndDeserialized)
             EXPECT_EQ((dynamic_cast<Vector<int> *>(outputVector1))->GetValue(i), 1);
             EXPECT_EQ((dynamic_cast<Vector<long> *>(outputVector2))->GetValue(i), 2);
             std::string_view s("hello");
-            EXPECT_EQ((dynamic_cast<Vector<LargeStringContainer<std::string_view*>> *>(outputVector3))->GetValue(i), s);
+            EXPECT_EQ((dynamic_cast<Vector<LargeStringContainer<std::string_view *>> *>(outputVector3))->GetValue(i),
+                      s);
         }
     }
 
@@ -746,4 +734,4 @@ TEST(BaseHashMapTest, TestSerializedAndDeserialized)
     delete outputVector2;
     delete outputVector3;
 }
-} // end test
+} // namespace HashMapTest

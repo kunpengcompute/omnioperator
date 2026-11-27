@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
- * Description: binaryExpr batch codegen test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include "gtest/gtest.h"
 
@@ -37,7 +44,7 @@ TEST(BatchCodeGenTest, IntCompare1)
         new BinaryExpr(omniruntime::expressions::Operator::AND, lessThanExpr, greatThanOrEqExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, IntType());
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int numRows = 100;
@@ -46,7 +53,7 @@ TEST(BatchCodeGenTest, IntCompare1)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
     std::vector<std::unique_ptr<Projection>> projections;
@@ -60,7 +67,7 @@ TEST(BatchCodeGenTest, IntCompare1)
         EXPECT_TRUE(val < 50 && val >= 25);
     }
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -82,7 +89,7 @@ TEST(BatchCodeGenTest, IntCompare2)
     BinaryExpr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::OR, gtExpr, lteEqExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, IntType());
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int numRows = 100;
@@ -91,7 +98,7 @@ TEST(BatchCodeGenTest, IntCompare2)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
     std::vector<std::unique_ptr<Projection>> projections;
@@ -106,7 +113,7 @@ TEST(BatchCodeGenTest, IntCompare2)
         EXPECT_TRUE(val > 50 || val <= 25);
     }
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -131,7 +138,7 @@ TEST(BatchCodeGenTest, LongCompare1)
         new BinaryExpr(omniruntime::expressions::Operator::OR, greatThanOrEqExpr, lessThanOrEqExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, LongType());
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int numRows = 100;
@@ -140,7 +147,7 @@ TEST(BatchCodeGenTest, LongCompare1)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({LongType()}));
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
     std::vector<std::unique_ptr<Projection>> projections;
@@ -155,7 +162,7 @@ TEST(BatchCodeGenTest, LongCompare1)
         EXPECT_TRUE(val >= 50 || val <= 25);
     }
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -177,7 +184,7 @@ TEST(BatchCodeGenTest, LongCompare2)
     BinaryExpr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::AND, ltExpr, eqExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, LongType());
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int numRows = 100;
@@ -186,7 +193,7 @@ TEST(BatchCodeGenTest, LongCompare2)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({LongType()}));
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
     std::vector<std::unique_ptr<Projection>> projections;
@@ -201,7 +208,7 @@ TEST(BatchCodeGenTest, LongCompare2)
         EXPECT_TRUE(val == 9);
     }
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -223,7 +230,7 @@ TEST(BatchCodeGenTest, DoubleCompare1)
     BinaryExpr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::OR, eqExpr, ltExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, DoubleType());
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int numRows = 100;
@@ -232,7 +239,7 @@ TEST(BatchCodeGenTest, DoubleCompare1)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({DoubleType()}));
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
     std::vector<std::unique_ptr<Projection>> projections;
@@ -247,7 +254,7 @@ TEST(BatchCodeGenTest, DoubleCompare1)
         EXPECT_TRUE(val == 50.0 || val < 25.0);
     }
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -269,7 +276,7 @@ TEST(BatchCodeGenTest, DoubleCompare2)
     BinaryExpr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::OR, gtExpr, lteExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, DoubleType());
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int numRows = 100;
@@ -278,7 +285,7 @@ TEST(BatchCodeGenTest, DoubleCompare2)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({DoubleType()}));
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
     std::vector<std::unique_ptr<Projection>> projections;
@@ -293,7 +300,7 @@ TEST(BatchCodeGenTest, DoubleCompare2)
         EXPECT_TRUE(val > 50.0 || val <= 25.0);
     }
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -305,15 +312,15 @@ TEST(BatchCodeGenTest, StringCompare)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(true);
     BinaryExpr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, VarcharType()),
-        new LiteralExpr(new std::string("hello"), VarcharType()), BooleanType());
+                                            new LiteralExpr(new std::string("hello"), VarcharType()), BooleanType());
 
     auto *projExpr = new FieldExpr(0, VarcharType());
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int32_t numRows = 1000;
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ VarcharType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({VarcharType()}));
 
     auto *col1 = new Vector<LargeStringContainer<std::string_view>>(numRows);
     std::string value;
@@ -337,7 +344,7 @@ TEST(BatchCodeGenTest, StringCompare)
     auto ret = FilterAndProject(filter, projections, numCols, t, numSelectedRows, inputTypes);
     EXPECT_EQ(25, numSelectedRows);
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(t);
     VectorHelper::FreeVecBatch(ret);
@@ -358,13 +365,13 @@ TEST(BatchCodeGenTest, Decimal64Compare1)
     BinaryExpr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::AND, gteExpr, lteExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, Decimal64Type(8, 0));
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int32_t numRows = 10;
     int64_t *data1 = MakeLongs(numRows);
 
-    std::vector<DataTypePtr> vecOfTypes = { LongType() };
+    std::vector<DataTypePtr> vecOfTypes = {LongType()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, data1);
 
@@ -375,7 +382,7 @@ TEST(BatchCodeGenTest, Decimal64Compare1)
     auto ret = FilterAndProject(filter, projections, numCols, vecBatch, numSelectedRows, inputTypes);
     EXPECT_EQ(1, numSelectedRows);
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -397,13 +404,13 @@ TEST(BatchCodeGenTest, Decimal64Compare2)
     BinaryExpr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::OR, eqExpr, ltExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, Decimal64Type(8, 0));
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int32_t numRows = 10;
     int64_t *data1 = MakeLongs(numRows, -5);
 
-    std::vector<DataTypePtr> vecOfTypes = { LongType() };
+    std::vector<DataTypePtr> vecOfTypes = {LongType()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, data1);
 
@@ -414,7 +421,7 @@ TEST(BatchCodeGenTest, Decimal64Compare2)
     auto ret = FilterAndProject(filter, projections, numCols, vecBatch, numSelectedRows, inputTypes);
     EXPECT_EQ(6, numSelectedRows);
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -436,7 +443,7 @@ TEST(BatchCodeGenTest, Decimal128Compare1)
     BinaryExpr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::AND, lteExpr, gteExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, Decimal128Type(38, 0));
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int32_t numRows = 1000;
@@ -446,7 +453,7 @@ TEST(BatchCodeGenTest, Decimal128Compare1)
         data1[2 * i + 1] = 0;
     }
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, data1);
 
@@ -457,7 +464,7 @@ TEST(BatchCodeGenTest, Decimal128Compare1)
     auto ret = FilterAndProject(filter, projections, numCols, vecBatch, numSelectedRows, inputTypes);
     EXPECT_EQ(1, numSelectedRows);
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -479,7 +486,7 @@ TEST(BatchCodeGenTest, Decimal128Compare2)
     BinaryExpr *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::OR, ltExpr, eqExpr, BooleanType());
 
     auto *projExpr = new FieldExpr(0, Decimal128Type(38, 0));
-    std::vector<Expr *> exprs = { projExpr };
+    std::vector<Expr *> exprs = {projExpr};
 
     const int32_t numCols = 1;
     const int32_t numRows = 10;
@@ -489,7 +496,7 @@ TEST(BatchCodeGenTest, Decimal128Compare2)
         data1[2 * i + 1] = 0;
     }
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, data1);
 
@@ -500,7 +507,7 @@ TEST(BatchCodeGenTest, Decimal128Compare2)
     auto ret = FilterAndProject(filter, projections, numCols, vecBatch, numSelectedRows, inputTypes);
     EXPECT_EQ(5, numSelectedRows);
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     Expr::DeleteExprs(exprs);
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(ret);
@@ -527,7 +534,7 @@ TEST(BatchCodeGenTest, IntArith)
     auto *divRight = new LiteralExpr(2, IntType());
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, divLeft, divRight, IntType());
 
-    std::vector<Expr *> exprs = { addExpr, subExpr, mulExpr, divExpr };
+    std::vector<Expr *> exprs = {addExpr, subExpr, mulExpr, divExpr};
 
     const int32_t numCols = 4;
     const int32_t numRows = 10;
@@ -548,7 +555,7 @@ TEST(BatchCodeGenTest, IntArith)
         col4[i] = i * 2;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType(), IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType(), IntType(), IntType()}));
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1, col2, col3, col4);
 
     std::vector<std::unique_ptr<Projection>> projections;
@@ -596,7 +603,7 @@ TEST(BatchCodeGenTest, LongArith)
     auto *divRight = new LiteralExpr(2L, LongType());
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, divLeft, divRight, LongType());
 
-    std::vector<Expr *> exprs = { addExpr, subExpr, mulExpr, divExpr };
+    std::vector<Expr *> exprs = {addExpr, subExpr, mulExpr, divExpr};
 
     const int32_t numCols = 4;
     const int32_t numRows = 10;
@@ -617,7 +624,7 @@ TEST(BatchCodeGenTest, LongArith)
         col4[i] = i * 2;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ LongType(), LongType(), LongType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({LongType(), LongType(), LongType(), LongType()}));
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1, col2, col3, col4);
 
     std::vector<std::unique_ptr<Projection>> projections;
@@ -665,7 +672,7 @@ TEST(BatchCodeGenTest, DoubleArith)
     auto *divRight = new LiteralExpr(2.0, DoubleType());
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, divLeft, divRight, DoubleType());
 
-    std::vector<Expr *> exprs = { addExpr, subExpr, mulExpr, divExpr };
+    std::vector<Expr *> exprs = {addExpr, subExpr, mulExpr, divExpr};
 
     const int32_t numCols = 4;
     const int32_t numRows = 10;
@@ -686,7 +693,7 @@ TEST(BatchCodeGenTest, DoubleArith)
         col4[i] = i * 2.0;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType(), DoubleType(), DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType(), DoubleType(), DoubleType()}));
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1, col2, col3, col4);
 
     std::vector<std::unique_ptr<Projection>> projections;
@@ -722,13 +729,13 @@ TEST(BatchCodeGenTest, Decimal64Arith1)
     auto subRight = new LiteralExpr(123468L, Decimal64Type(6, 4));
     BinaryExpr *subExpr =
         new BinaryExpr(omniruntime::expressions::Operator::SUB, subLeft, subRight, Decimal64Type(8, 4));
-    std::vector<Expr *> exprs = { subExpr };
+    std::vector<Expr *> exprs = {subExpr};
 
     const int32_t numRows = 1;
     const int32_t numCols = 1;
     auto col1 = new int64_t[numRows];
     col1[0] = 4321563;
-    std::vector<DataTypePtr> vecOfTypes = { Decimal64Type(7, 3) };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal64Type(7, 3)};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
@@ -756,13 +763,13 @@ TEST(BatchCodeGenTest, Decimal64Arith2)
     BinaryExpr *mulExpr =
         new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, mulRight, Decimal64Type(7, 4));
 
-    std::vector<Expr *> exprs = { mulExpr };
+    std::vector<Expr *> exprs = {mulExpr};
 
     const int32_t numRows = 1;
     const int32_t numCols = 1;
     auto col1 = new int64_t[numRows];
     col1[0] = 100;
-    std::vector<DataTypePtr> vecOfTypes = { Decimal64Type(7, 2) };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal64Type(7, 2)};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
@@ -790,13 +797,13 @@ TEST(BatchCodeGenTest, Decimal64Arith3)
 
     BinaryExpr *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, left, right, Decimal64Type(2, 1));
 
-    std::vector<Expr *> exprs = { divExpr };
+    std::vector<Expr *> exprs = {divExpr};
 
     const int32_t numRows = 1;
     const int32_t numCols = 1;
     auto col1 = new int64_t[numRows];
     col1[0] = 1225;
-    std::vector<DataTypePtr> vecOfTypes = { Decimal64Type(4, 2) };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal64Type(4, 2)};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
@@ -824,13 +831,13 @@ TEST(BatchCodeGenTest, Decimal64Arith4)
 
     BinaryExpr *modExpr = new BinaryExpr(omniruntime::expressions::Operator::MOD, left, right, Decimal64Type(4, 3));
 
-    std::vector<Expr *> exprs = { modExpr };
+    std::vector<Expr *> exprs = {modExpr};
 
     const int32_t numRows = 1;
     const int32_t numCols = 1;
     auto col1 = new int64_t[numRows];
     col1[0] = 12250;
-    std::vector<DataTypePtr> vecOfTypes = { Decimal64Type(5, 3) };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal64Type(5, 3)};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
@@ -858,12 +865,12 @@ TEST(BatchCodeGenTest, Decimal128Arith1)
     BinaryExpr *addExpr =
         new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft, addRight, Decimal128Type(38, 1));
 
-    std::vector<Expr *> exprs = { addExpr };
+    std::vector<Expr *> exprs = {addExpr};
 
     const int32_t numRows = 10;
     int64_t *col1 = MakeDecimals(numRows);
     const int32_t numCols = 1;
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
@@ -893,12 +900,12 @@ TEST(BatchCodeGenTest, Decimal128Arith2)
     BinaryExpr *subExpr =
         new BinaryExpr(omniruntime::expressions::Operator::SUB, subLeft, subRight, Decimal128Type(38, 1));
 
-    std::vector<Expr *> exprs = { subExpr };
+    std::vector<Expr *> exprs = {subExpr};
 
     const int32_t numRows = 10;
     int64_t *col0 = MakeDecimals(numRows, -5);
     const int32_t numCols = 1;
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col0);
 
@@ -929,12 +936,12 @@ TEST(BatchCodeGenTest, Decimal128Arith3)
     BinaryExpr *mulExpr =
         new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, mulRight, Decimal128Type(38, 1));
 
-    std::vector<Expr *> exprs = { mulExpr };
+    std::vector<Expr *> exprs = {mulExpr};
 
     const int32_t numRows = 10;
     int64_t *col1 = MakeDecimals(numRows);
     const int32_t numCols = 1;
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 
@@ -961,13 +968,13 @@ TEST(BatchCodeGenTest, Decimal128Arith4)
     ConfigUtil::SetEnableBatchExprEvaluate(true);
     LiteralExpr *divRight = new LiteralExpr(new std::string("20"), Decimal128Type(38, 0));
     BinaryExpr *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV,
-        new FieldExpr(0, Decimal128Type(38, 0)), divRight, Decimal128Type(38, 0));
-    std::vector<Expr *> exprs = { divExpr };
+                                         new FieldExpr(0, Decimal128Type(38, 0)), divRight, Decimal128Type(38, 0));
+    std::vector<Expr *> exprs = {divExpr};
 
     const int32_t numRows = 10;
     int64_t *col1 = MakeDecimals(numRows);
     const int32_t numCols = 1;
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *vecBatch = CreateVectorBatch(inputTypes, numRows, col1);
 

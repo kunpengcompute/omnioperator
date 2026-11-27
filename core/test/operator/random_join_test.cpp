@@ -1,6 +1,13 @@
 /*
- * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
- * @Description: random lookup join operator test implementations
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <vector>
 #include <random>
@@ -444,7 +451,7 @@ void StressTestTwoHashBuilderForArrayTable(DataTypes buildTypes, JoinType joinTy
 
 template <typename T>
 void StressTestTwoHashBuilderForArrayTableCornerCase(DataTypes buildTypes, JoinType joinType, int start,
-    int repeatTimes)
+                                                     int repeatTimes)
 {
     const int32_t dataSize = 1000;
     VectorBatch *plainVecBatch = CreateSingleColumnSequenceDataFromStartWithStride<T>(buildTypes, dataSize, start, 10);
@@ -478,109 +485,109 @@ void StressTestTwoHashBuilderForArrayTableCornerCase(DataTypes buildTypes, JoinT
 
 TEST(RandomJoinTest, TestSingleHashBuilderForNormalHashTable)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> repeatTimes { 1, 10 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> repeatTimes{1, 10};
     for (auto &joinType : joinTypes) {
         for (auto time : repeatTimes) {
-            StressTestSingleHashBuilderForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({ BooleanType() })),
-                joinType, time);
-            StressTestSingleHashBuilderForSingleKey<int16_t>(DataTypes(std::vector<DataTypePtr>({ ShortType() })),
-                joinType, time);
-            StressTestSingleHashBuilderForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })),
-                joinType, time);
-            StressTestSingleHashBuilderForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, time);
-            StressTestSingleHashBuilderForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({ DoubleType() })),
-                joinType, time);
-            StressTestSingleHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })),
-                joinType, time);
-            StressTestSingleHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Date64Type() })),
-                joinType, time);
-            StressTestSingleHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Decimal64Type() })),
-                joinType, time);
-            StressTestSingleHashBuilderForSingleKey<Decimal128>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal128Type() })), joinType, time);
+            StressTestSingleHashBuilderForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({BooleanType()})),
+                                                          joinType, time);
+            StressTestSingleHashBuilderForSingleKey<int16_t>(DataTypes(std::vector<DataTypePtr>({ShortType()})),
+                                                             joinType, time);
+            StressTestSingleHashBuilderForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                             time);
+            StressTestSingleHashBuilderForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})),
+                                                             joinType, time);
+            StressTestSingleHashBuilderForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({DoubleType()})),
+                                                            joinType, time);
+            StressTestSingleHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})),
+                                                             joinType, time);
+            StressTestSingleHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Date64Type()})),
+                                                             joinType, time);
+            StressTestSingleHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Decimal64Type()})),
+                                                             joinType, time);
+            StressTestSingleHashBuilderForSingleKey<Decimal128>(DataTypes(std::vector<DataTypePtr>({Decimal128Type()})),
+                                                                joinType, time);
 
             StressTestSingleHashBuilderForTwoFixedKey<bool>(
-                DataTypes(std::vector<DataTypePtr>({ BooleanType(), BooleanType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({BooleanType(), BooleanType()})), joinType, time);
             StressTestSingleHashBuilderForTwoFixedKey<int16_t>(
-                DataTypes(std::vector<DataTypePtr>({ ShortType(), ShortType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({ShortType(), ShortType()})), joinType, time);
             StressTestSingleHashBuilderForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ IntType(), IntType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({IntType(), IntType()})), joinType, time);
             StressTestSingleHashBuilderForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date32Type(), Date32Type() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({Date32Type(), Date32Type()})), joinType, time);
             StressTestSingleHashBuilderForTwoFixedKey<double>(
-                DataTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType()})), joinType, time);
             StressTestSingleHashBuilderForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ LongType(), LongType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({LongType(), LongType()})), joinType, time);
             StressTestSingleHashBuilderForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date64Type(), Date64Type() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({Date64Type(), Date64Type()})), joinType, time);
             StressTestSingleHashBuilderForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal64Type(), Decimal64Type() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal64Type(), Decimal64Type()})), joinType, time);
             StressTestSingleHashBuilderForTwoFixedKey<Decimal128>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal128Type(), Decimal128Type() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal128Type(), Decimal128Type()})), joinType, time);
 
             StressTestSingleHashBuilderForVariableKey(
-                DataTypes(std::vector<DataTypePtr>({ VarcharType(), VarcharType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({VarcharType(), VarcharType()})), joinType, time);
         }
     }
 }
 
 TEST(RandomJoinTest, TestTwoHashBuilderForNormalHashTable)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> repeatTimes { 1, 10 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> repeatTimes{1, 10};
     for (auto &joinType : joinTypes) {
         for (auto time : repeatTimes) {
-            StressTestTwoHashBuilderForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({ BooleanType() })), joinType,
-                time);
-            StressTestTwoHashBuilderForSingleKey<int16_t>(DataTypes(std::vector<DataTypePtr>({ ShortType() })),
-                joinType, time);
-            StressTestTwoHashBuilderForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })), joinType,
-                time);
-            StressTestTwoHashBuilderForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, time);
-            StressTestTwoHashBuilderForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({ DoubleType() })),
-                joinType, time);
-            StressTestTwoHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })), joinType,
-                time);
-            StressTestTwoHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Date64Type() })),
-                joinType, time);
-            StressTestTwoHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Decimal64Type() })),
-                joinType, time);
-            StressTestTwoHashBuilderForSingleKey<Decimal128>(DataTypes(std::vector<DataTypePtr>({ Decimal128Type() })),
-                joinType, time);
+            StressTestTwoHashBuilderForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({BooleanType()})), joinType,
+                                                       time);
+            StressTestTwoHashBuilderForSingleKey<int16_t>(DataTypes(std::vector<DataTypePtr>({ShortType()})), joinType,
+                                                          time);
+            StressTestTwoHashBuilderForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                          time);
+            StressTestTwoHashBuilderForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})), joinType,
+                                                          time);
+            StressTestTwoHashBuilderForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({DoubleType()})), joinType,
+                                                         time);
+            StressTestTwoHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})), joinType,
+                                                          time);
+            StressTestTwoHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Date64Type()})), joinType,
+                                                          time);
+            StressTestTwoHashBuilderForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Decimal64Type()})),
+                                                          joinType, time);
+            StressTestTwoHashBuilderForSingleKey<Decimal128>(DataTypes(std::vector<DataTypePtr>({Decimal128Type()})),
+                                                             joinType, time);
 
             StressTestTwoHashBuilderForTwoFixedKey<bool>(
-                DataTypes(std::vector<DataTypePtr>({ BooleanType(), BooleanType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({BooleanType(), BooleanType()})), joinType, time);
             StressTestTwoHashBuilderForTwoFixedKey<int16_t>(
-                DataTypes(std::vector<DataTypePtr>({ ShortType(), ShortType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({ShortType(), ShortType()})), joinType, time);
+            StressTestTwoHashBuilderForTwoFixedKey<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType(), IntType()})),
+                                                            joinType, time);
             StressTestTwoHashBuilderForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ IntType(), IntType() })), joinType, time);
-            StressTestTwoHashBuilderForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date32Type(), Date32Type() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({Date32Type(), Date32Type()})), joinType, time);
             StressTestTwoHashBuilderForTwoFixedKey<double>(
-                DataTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType()})), joinType, time);
             StressTestTwoHashBuilderForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ LongType(), LongType() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({LongType(), LongType()})), joinType, time);
             StressTestTwoHashBuilderForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date64Type(), Date64Type() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({Date64Type(), Date64Type()})), joinType, time);
             StressTestTwoHashBuilderForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal64Type(), Decimal64Type() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal64Type(), Decimal64Type()})), joinType, time);
             StressTestTwoHashBuilderForTwoFixedKey<Decimal128>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal128Type(), Decimal128Type() })), joinType, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal128Type(), Decimal128Type()})), joinType, time);
 
-            StressTestTwoHashBuilderForVariableKey(
-                DataTypes(std::vector<DataTypePtr>({ VarcharType(), VarcharType() })), joinType, time);
+            StressTestTwoHashBuilderForVariableKey(DataTypes(std::vector<DataTypePtr>({VarcharType(), VarcharType()})),
+                                                   joinType, time);
         }
     }
 }
 
 template <typename T>
 void StressTestSingleHashBuilderForArrayTableCornerCase(DataTypes buildTypes, JoinType joinType, int start,
-    int repeatTimes)
+                                                        int repeatTimes)
 {
     const int32_t dataSize = 1000;
     VectorBatch *plainVecBatch = CreateSingleColumnSequenceDataFromStartWithStride<T>(buildTypes, dataSize, start, 10);
@@ -605,30 +612,30 @@ void StressTestSingleHashBuilderForArrayTableCornerCase(DataTypes buildTypes, Jo
 
 TEST(RandomJoinTest, TestHashBuilderForArrayTable)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> starts { 0, -300, 300 };
-    std::vector<int> repeatTimes { 1, 10 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> starts{0, -300, 300};
+    std::vector<int> repeatTimes{1, 10};
     for (auto &joinType : joinTypes) {
         for (auto start : starts) {
             for (auto time : repeatTimes) {
-                StressTestSingleHashBuilderForArrayTable<int16_t>(DataTypes(std::vector<DataTypePtr>({ ShortType() })),
-                    joinType, start, time);
-                StressTestSingleHashBuilderForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })),
-                    joinType, start, time);
-                StressTestSingleHashBuilderForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                    joinType, start, time);
-                StressTestSingleHashBuilderForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })),
-                    joinType, start, time);
+                StressTestSingleHashBuilderForArrayTable<int16_t>(DataTypes(std::vector<DataTypePtr>({ShortType()})),
+                                                                  joinType, start, time);
+                StressTestSingleHashBuilderForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})),
+                                                                  joinType, start, time);
+                StressTestSingleHashBuilderForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})),
+                                                                  joinType, start, time);
+                StressTestSingleHashBuilderForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})),
+                                                                  joinType, start, time);
                 // ----------------------Two build-------------------------------
-                StressTestTwoHashBuilderForArrayTable<int16_t>(DataTypes(std::vector<DataTypePtr>({ ShortType() })),
-                    joinType, start, time);
-                StressTestTwoHashBuilderForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })),
-                    joinType, start, time);
-                StressTestTwoHashBuilderForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                    joinType, start, time);
-                StressTestTwoHashBuilderForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })),
-                    joinType, start, time);
+                StressTestTwoHashBuilderForArrayTable<int16_t>(DataTypes(std::vector<DataTypePtr>({ShortType()})),
+                                                               joinType, start, time);
+                StressTestTwoHashBuilderForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})),
+                                                               joinType, start, time);
+                StressTestTwoHashBuilderForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})),
+                                                               joinType, start, time);
+                StressTestTwoHashBuilderForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})),
+                                                               joinType, start, time);
             }
         }
     }
@@ -636,30 +643,30 @@ TEST(RandomJoinTest, TestHashBuilderForArrayTable)
 
 TEST(RandomJoinTest, TestHashBuilderForArrayTableCornerCase)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> starts { 0, -300, 300 };
-    std::vector<int> repeatTimes { 1, 10 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> starts{0, -300, 300};
+    std::vector<int> repeatTimes{1, 10};
     for (auto &joinType : joinTypes) {
         for (auto start : starts) {
             for (auto time : repeatTimes) {
                 StressTestSingleHashBuilderForArrayTableCornerCase<int16_t>(
-                    DataTypes(std::vector<DataTypePtr>({ ShortType() })), joinType, start, time);
+                    DataTypes(std::vector<DataTypePtr>({ShortType()})), joinType, start, time);
                 StressTestSingleHashBuilderForArrayTableCornerCase<int32_t>(
-                    DataTypes(std::vector<DataTypePtr>({ IntType() })), joinType, start, time);
+                    DataTypes(std::vector<DataTypePtr>({IntType()})), joinType, start, time);
                 StressTestSingleHashBuilderForArrayTableCornerCase<int32_t>(
-                    DataTypes(std::vector<DataTypePtr>({ Date32Type() })), joinType, start, time);
+                    DataTypes(std::vector<DataTypePtr>({Date32Type()})), joinType, start, time);
                 StressTestSingleHashBuilderForArrayTableCornerCase<int64_t>(
-                    DataTypes(std::vector<DataTypePtr>({ LongType() })), joinType, start, time);
+                    DataTypes(std::vector<DataTypePtr>({LongType()})), joinType, start, time);
                 // ----------------------Two build-------------------------------
                 StressTestTwoHashBuilderForArrayTableCornerCase<int16_t>(
-                    DataTypes(std::vector<DataTypePtr>({ ShortType() })), joinType, start, time);
+                    DataTypes(std::vector<DataTypePtr>({ShortType()})), joinType, start, time);
                 StressTestTwoHashBuilderForArrayTableCornerCase<int32_t>(
-                    DataTypes(std::vector<DataTypePtr>({ IntType() })), joinType, start, time);
+                    DataTypes(std::vector<DataTypePtr>({IntType()})), joinType, start, time);
                 StressTestTwoHashBuilderForArrayTableCornerCase<int32_t>(
-                    DataTypes(std::vector<DataTypePtr>({ Date32Type() })), joinType, start, time);
+                    DataTypes(std::vector<DataTypePtr>({Date32Type()})), joinType, start, time);
                 StressTestTwoHashBuilderForArrayTableCornerCase<int64_t>(
-                    DataTypes(std::vector<DataTypePtr>({ LongType() })), joinType, start, time);
+                    DataTypes(std::vector<DataTypePtr>({LongType()})), joinType, start, time);
             }
         }
     }
@@ -691,8 +698,7 @@ Expr *GetFilter(DataTypes &buildTypes)
             left = new FieldExpr(0, Decimal128Type());
             right = new LiteralExpr(new std::string("300"), Decimal128Type());
             break;
-        default:
-            break;
+        default: break;
     }
     return new BinaryExpr(omniruntime::expressions::Operator::NEQ, left, right, BooleanType());
 }
@@ -723,9 +729,9 @@ void StressTestSingleLookupJoinForArrayTable(DataTypes buildTypes, JoinType join
     }
     VectorBatch *probeVecBatch = CreateSingleColumnSequenceDataFromStart<T>(buildTypes, dataSize, start + 100);
     auto hashBuilderFactoryAddr = (int64_t)hashBuilderFactory;
-    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
-        joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
-        filter, false, nullptr);
+    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        buildTypes, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount,
+        buildTypes, hashBuilderFactoryAddr, filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
     lookupJoinOperator->AddInput(probeVecBatch);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -747,7 +753,7 @@ void StressTestSingleLookupJoinForArrayTable(DataTypes buildTypes, JoinType join
         delete lookupOuterJoinOperatorFactory;
     }
 
-    Expr::DeleteExprs({ filter });
+    Expr::DeleteExprs({filter});
     VectorHelper::FreeVecBatch(plainVecBatch);
     omniruntime::op::Operator::DeleteOperator(hashBuilderOperator);
     delete hashBuilderFactory;
@@ -789,9 +795,9 @@ void StressTestTwoLookupJoinForArrayTable(DataTypes buildTypes, JoinType joinTyp
     }
     VectorBatch *probeVecBatch = CreateSingleColumnSequenceDataFromStart<T>(buildTypes, dataSize, start + 100);
     auto hashBuilderFactoryAddr = (int64_t)hashBuilderFactory;
-    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
-        joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
-        filter, false, nullptr);
+    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        buildTypes, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount,
+        buildTypes, hashBuilderFactoryAddr, filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
     lookupJoinOperator->AddInput(probeVecBatch);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -813,7 +819,7 @@ void StressTestTwoLookupJoinForArrayTable(DataTypes buildTypes, JoinType joinTyp
         delete lookupOuterJoinOperatorFactory;
     }
 
-    Expr::DeleteExprs({ filter });
+    Expr::DeleteExprs({filter});
     VectorHelper::FreeVecBatch(plainVecBatch);
     omniruntime::op::Operator::DeleteOperator(hashBuilderOperator1);
     omniruntime::op::Operator::DeleteOperator(hashBuilderOperator2);
@@ -824,52 +830,52 @@ void StressTestTwoLookupJoinForArrayTable(DataTypes buildTypes, JoinType joinTyp
 
 TEST(RandomJoinTest, TestLookupJoinForArrayTable)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> starts { 0, -300, 300 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> starts{0, -300, 300};
     for (auto &joinType : joinTypes) {
         for (auto start : starts) {
-            StressTestSingleLookupJoinForArrayTable<int16_t>(DataTypes(std::vector<DataTypePtr>({ ShortType() })),
-                joinType, false, start);
-            StressTestSingleLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })),
-                joinType, false, start);
-            StressTestSingleLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, false, start);
-            StressTestSingleLookupJoinForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })),
-                joinType, false, start);
+            StressTestSingleLookupJoinForArrayTable<int16_t>(DataTypes(std::vector<DataTypePtr>({ShortType()})),
+                                                             joinType, false, start);
+            StressTestSingleLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                             false, start);
+            StressTestSingleLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})),
+                                                             joinType, false, start);
+            StressTestSingleLookupJoinForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})),
+                                                             joinType, false, start);
             // ----------------------Two build-------------------------------
-            StressTestTwoLookupJoinForArrayTable<int16_t>(DataTypes(std::vector<DataTypePtr>({ ShortType() })),
-                joinType, false, start);
-            StressTestTwoLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })), joinType,
-                false, start);
-            StressTestTwoLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, false, start);
-            StressTestTwoLookupJoinForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })), joinType,
-                false, start);
+            StressTestTwoLookupJoinForArrayTable<int16_t>(DataTypes(std::vector<DataTypePtr>({ShortType()})), joinType,
+                                                          false, start);
+            StressTestTwoLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                          false, start);
+            StressTestTwoLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})), joinType,
+                                                          false, start);
+            StressTestTwoLookupJoinForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})), joinType,
+                                                          false, start);
         }
     }
 }
 
 TEST(RandomJoinTest, TestLookupJoinForArrayTableWithFilter)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> starts { 0, -300, 300 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> starts{0, -300, 300};
     for (auto &joinType : joinTypes) {
         for (auto start : starts) {
-            StressTestSingleLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })),
-                joinType, true, start);
-            StressTestSingleLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, true, start);
-            StressTestSingleLookupJoinForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })),
-                joinType, true, start);
+            StressTestSingleLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                             true, start);
+            StressTestSingleLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})),
+                                                             joinType, true, start);
+            StressTestSingleLookupJoinForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})),
+                                                             joinType, true, start);
             // ----------------------Two build-------------------------------
-            StressTestTwoLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })), joinType,
-                true, start);
-            StressTestTwoLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, true, start);
-            StressTestTwoLookupJoinForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })), joinType,
-                true, start);
+            StressTestTwoLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                          true, start);
+            StressTestTwoLookupJoinForArrayTable<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})), joinType,
+                                                          true, start);
+            StressTestTwoLookupJoinForArrayTable<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})), joinType,
+                                                          true, start);
         }
     }
 }
@@ -941,9 +947,9 @@ void StressTestSingleLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinT
     VectorBatch *probeVecBatch1 = CreateSingleColumnSequenceDataFromStart<T>(buildTypes, dataSize, false, 100);
     VectorBatch *probeVecBatch2 = CreateSingleColumnSequenceDataFromStart<T>(buildTypes, dataSize, true, 100);
     auto hashBuilderFactoryAddr = (int64_t)hashBuilderFactory;
-    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
-        joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
-        filter, false, nullptr);
+    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        buildTypes, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount,
+        buildTypes, hashBuilderFactoryAddr, filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -971,7 +977,7 @@ void StressTestSingleLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinT
         delete lookupOuterJoinOperatorFactory;
     }
 
-    Expr::DeleteExprs({ filter });
+    Expr::DeleteExprs({filter});
     VectorHelper::FreeVecBatch(plainVecBatch);
     VectorHelper::FreeVecBatch(dicVecBatch);
     omniruntime::op::Operator::DeleteOperator(hashBuilderOperator);
@@ -1029,7 +1035,7 @@ Expr *GetStringFilter()
 }
 
 void StressTestSingleLookupJoinForVariableKey(DataTypes buildTypes, JoinType joinType, bool enableFilter,
-    int repeatTimes)
+                                              int repeatTimes)
 {
     const int32_t dataSize = 1000;
     VectorBatch *plainVecBatch = CreateVariableSizeSequenceData(buildTypes, dataSize, false, 0);
@@ -1057,9 +1063,9 @@ void StressTestSingleLookupJoinForVariableKey(DataTypes buildTypes, JoinType joi
     VectorBatch *probeVecBatch1 = CreateVariableSizeSequenceData(buildTypes, dataSize, false, 100);
     VectorBatch *probeVecBatch2 = CreateVariableSizeSequenceData(buildTypes, dataSize, true, 100);
     auto hashBuilderFactoryAddr = (int64_t)hashBuilderFactory;
-    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
-        joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
-        filter, false, nullptr);
+    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        buildTypes, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount,
+        buildTypes, hashBuilderFactoryAddr, filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -1087,7 +1093,7 @@ void StressTestSingleLookupJoinForVariableKey(DataTypes buildTypes, JoinType joi
         delete lookupOuterJoinOperatorFactory;
     }
 
-    Expr::DeleteExprs({ filter });
+    Expr::DeleteExprs({filter});
     VectorHelper::FreeVecBatch(plainVecBatch);
     VectorHelper::FreeVecBatch(dicVecBatch);
     omniruntime::op::Operator::DeleteOperator(hashBuilderOperator);
@@ -1134,9 +1140,9 @@ void StressTestTwoLookupJoinForVariableKey(DataTypes buildTypes, JoinType joinTy
     VectorBatch *probeVecBatch1 = CreateVariableSizeSequenceData(buildTypes, dataSize, false, 100);
     VectorBatch *probeVecBatch2 = CreateVariableSizeSequenceData(buildTypes, dataSize, true, 100);
     auto hashBuilderFactoryAddr = (int64_t)hashBuilderFactory;
-    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
-        joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
-        filter, false, nullptr);
+    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        buildTypes, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount,
+        buildTypes, hashBuilderFactoryAddr, filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -1164,7 +1170,7 @@ void StressTestTwoLookupJoinForVariableKey(DataTypes buildTypes, JoinType joinTy
         delete lookupOuterJoinOperatorFactory;
     }
 
-    Expr::DeleteExprs({ filter });
+    Expr::DeleteExprs({filter});
     VectorHelper::FreeVecBatch(plainVecBatch);
     VectorHelper::FreeVecBatch(dicVecBatch);
     omniruntime::op::Operator::DeleteOperator(hashBuilderOperator1);
@@ -1213,9 +1219,9 @@ void StressTestTwoLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinType
     VectorBatch *probeVecBatch1 = CreateSingleColumnSequenceDataFromStart<T>(buildTypes, dataSize, false, 100);
     VectorBatch *probeVecBatch2 = CreateSingleColumnSequenceDataFromStart<T>(buildTypes, dataSize, true, 100);
     auto hashBuilderFactoryAddr = (int64_t)hashBuilderFactory;
-    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
-        joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
-        filter, false, nullptr);
+    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        buildTypes, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount,
+        buildTypes, hashBuilderFactoryAddr, filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -1243,7 +1249,7 @@ void StressTestTwoLookupJoinForSingleKey(DataTypes buildTypes, JoinType joinType
         delete lookupOuterJoinOperatorFactory;
     }
 
-    Expr::DeleteExprs({ filter });
+    Expr::DeleteExprs({filter});
     VectorHelper::FreeVecBatch(plainVecBatch);
     VectorHelper::FreeVecBatch(dicVecBatch);
     omniruntime::op::Operator::DeleteOperator(hashBuilderOperator1);
@@ -1302,7 +1308,7 @@ VectorBatch *CreateTwoColumnSequenceDataFromStart(DataTypes &buildTypes, int row
 
 template <typename T>
 void StressTestSingleLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joinType, bool enableFilter,
-    int repeatTimes)
+                                              int repeatTimes)
 {
     const int32_t dataSize = 1000;
     VectorBatch *plainVecBatch = CreateTwoColumnSequenceDataFromStart<T>(buildTypes, dataSize, false, 0);
@@ -1330,9 +1336,9 @@ void StressTestSingleLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joi
     VectorBatch *probeVecBatch1 = CreateTwoColumnSequenceDataFromStart<T>(buildTypes, dataSize, false, 100);
     VectorBatch *probeVecBatch2 = CreateTwoColumnSequenceDataFromStart<T>(buildTypes, dataSize, true, 100);
     auto hashBuilderFactoryAddr = (int64_t)hashBuilderFactory;
-    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
-        joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
-        filter, false, nullptr);
+    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        buildTypes, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount,
+        buildTypes, hashBuilderFactoryAddr, filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -1360,7 +1366,7 @@ void StressTestSingleLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joi
         delete lookupOuterJoinOperatorFactory;
     }
 
-    Expr::DeleteExprs({ filter });
+    Expr::DeleteExprs({filter});
     VectorHelper::FreeVecBatch(plainVecBatch);
     VectorHelper::FreeVecBatch(dicVecBatch);
     omniruntime::op::Operator::DeleteOperator(hashBuilderOperator);
@@ -1408,9 +1414,9 @@ void StressTestTwoLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joinTy
     VectorBatch *probeVecBatch1 = CreateTwoColumnSequenceDataFromStart<T>(buildTypes, dataSize, false, 100);
     VectorBatch *probeVecBatch2 = CreateTwoColumnSequenceDataFromStart<T>(buildTypes, dataSize, true, 100);
     auto hashBuilderFactoryAddr = (int64_t)hashBuilderFactory;
-    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(buildTypes, buildJoinCols,
-        joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildTypes, hashBuilderFactoryAddr,
-        filter, false, nullptr);
+    auto lookupJoinFactory = LookupJoinOperatorFactory::CreateLookupJoinOperatorFactory(
+        buildTypes, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount, buildJoinCols, joinColsCount,
+        buildTypes, hashBuilderFactoryAddr, filter, false, nullptr);
     auto lookupJoinOperator = dynamic_cast<LookupJoinOperator *>(lookupJoinFactory->CreateOperator());
     lookupJoinOperator->AddInput(probeVecBatch1);
     while (lookupJoinOperator->GetStatus() != OMNI_STATUS_FINISHED) {
@@ -1438,7 +1444,7 @@ void StressTestTwoLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joinTy
         delete lookupOuterJoinOperatorFactory;
     }
 
-    Expr::DeleteExprs({ filter });
+    Expr::DeleteExprs({filter});
     VectorHelper::FreeVecBatch(plainVecBatch);
     VectorHelper::FreeVecBatch(dicVecBatch);
     omniruntime::op::Operator::DeleteOperator(hashBuilderOperator1);
@@ -1450,196 +1456,196 @@ void StressTestTwoLookupJoinForTwoFixedKey(DataTypes buildTypes, JoinType joinTy
 
 TEST(RandomJoinTest, TestLookupJoinWithSingleHashBuilderForNormalHashTable)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> repeatTimes { 1, 10 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> repeatTimes{1, 10};
     for (auto &joinType : joinTypes) {
         for (auto time : repeatTimes) {
-            StressTestSingleLookupJoinForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({ BooleanType() })),
-                joinType, false, time);
-            StressTestSingleLookupJoinForSingleKey<int16_t>(DataTypes(std::vector<DataTypePtr>({ ShortType() })),
-                joinType, false, time);
-            StressTestSingleLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })),
-                joinType, false, time);
-            StressTestSingleLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, false, time);
-            StressTestSingleLookupJoinForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({ DoubleType() })),
-                joinType, false, time);
-            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })),
-                joinType, false, time);
-            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Date64Type() })),
-                joinType, false, time);
-            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Decimal64Type() })),
-                joinType, false, time);
-            StressTestSingleLookupJoinForSingleKey<Decimal128>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal128Type() })), joinType, false, time);
+            StressTestSingleLookupJoinForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({BooleanType()})), joinType,
+                                                         false, time);
+            StressTestSingleLookupJoinForSingleKey<int16_t>(DataTypes(std::vector<DataTypePtr>({ShortType()})),
+                                                            joinType, false, time);
+            StressTestSingleLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                            false, time);
+            StressTestSingleLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})),
+                                                            joinType, false, time);
+            StressTestSingleLookupJoinForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({DoubleType()})),
+                                                           joinType, false, time);
+            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})), joinType,
+                                                            false, time);
+            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Date64Type()})),
+                                                            joinType, false, time);
+            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Decimal64Type()})),
+                                                            joinType, false, time);
+            StressTestSingleLookupJoinForSingleKey<Decimal128>(DataTypes(std::vector<DataTypePtr>({Decimal128Type()})),
+                                                               joinType, false, time);
 
             StressTestSingleLookupJoinForTwoFixedKey<bool>(
-                DataTypes(std::vector<DataTypePtr>({ BooleanType(), BooleanType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({BooleanType(), BooleanType()})), joinType, false, time);
             StressTestSingleLookupJoinForTwoFixedKey<int16_t>(
-                DataTypes(std::vector<DataTypePtr>({ ShortType(), ShortType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({ShortType(), ShortType()})), joinType, false, time);
             StressTestSingleLookupJoinForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ IntType(), IntType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({IntType(), IntType()})), joinType, false, time);
             StressTestSingleLookupJoinForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date32Type(), Date32Type() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({Date32Type(), Date32Type()})), joinType, false, time);
             StressTestSingleLookupJoinForTwoFixedKey<double>(
-                DataTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType()})), joinType, false, time);
             StressTestSingleLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ LongType(), LongType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({LongType(), LongType()})), joinType, false, time);
             StressTestSingleLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date64Type(), Date64Type() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({Date64Type(), Date64Type()})), joinType, false, time);
             StressTestSingleLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal64Type(), Decimal64Type() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal64Type(), Decimal64Type()})), joinType, false, time);
             StressTestSingleLookupJoinForTwoFixedKey<Decimal128>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal128Type(), Decimal128Type() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal128Type(), Decimal128Type()})), joinType, false, time);
             StressTestSingleLookupJoinForVariableKey(
-                DataTypes(std::vector<DataTypePtr>({ VarcharType(), VarcharType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({VarcharType(), VarcharType()})), joinType, false, time);
         }
     }
 }
 
 TEST(RandomJoinTest, TestLookupJoinWithTwoHashBuilderForNormalHashTable)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> repeatTimes { 1, 10 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> repeatTimes{1, 10};
     for (auto &joinType : joinTypes) {
         for (auto time : repeatTimes) {
-            StressTestTwoLookupJoinForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({ BooleanType() })), joinType,
-                false, time);
-            StressTestTwoLookupJoinForSingleKey<int16_t>(DataTypes(std::vector<DataTypePtr>({ ShortType() })), joinType,
-                false, time);
-            StressTestTwoLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })), joinType,
-                false, time);
-            StressTestTwoLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, false, time);
-            StressTestTwoLookupJoinForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({ DoubleType() })), joinType,
-                false, time);
-            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })), joinType,
-                false, time);
-            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Date64Type() })),
-                joinType, false, time);
-            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Decimal64Type() })),
-                joinType, false, time);
-            StressTestTwoLookupJoinForSingleKey<Decimal128>(DataTypes(std::vector<DataTypePtr>({ Decimal128Type() })),
-                joinType, false, time);
+            StressTestTwoLookupJoinForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({BooleanType()})), joinType,
+                                                      false, time);
+            StressTestTwoLookupJoinForSingleKey<int16_t>(DataTypes(std::vector<DataTypePtr>({ShortType()})), joinType,
+                                                         false, time);
+            StressTestTwoLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                         false, time);
+            StressTestTwoLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})), joinType,
+                                                         false, time);
+            StressTestTwoLookupJoinForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({DoubleType()})), joinType,
+                                                        false, time);
+            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})), joinType,
+                                                         false, time);
+            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Date64Type()})), joinType,
+                                                         false, time);
+            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Decimal64Type()})),
+                                                         joinType, false, time);
+            StressTestTwoLookupJoinForSingleKey<Decimal128>(DataTypes(std::vector<DataTypePtr>({Decimal128Type()})),
+                                                            joinType, false, time);
 
             StressTestTwoLookupJoinForTwoFixedKey<bool>(
-                DataTypes(std::vector<DataTypePtr>({ BooleanType(), BooleanType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({BooleanType(), BooleanType()})), joinType, false, time);
             StressTestTwoLookupJoinForTwoFixedKey<int16_t>(
-                DataTypes(std::vector<DataTypePtr>({ ShortType(), ShortType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({ShortType(), ShortType()})), joinType, false, time);
+            StressTestTwoLookupJoinForTwoFixedKey<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType(), IntType()})),
+                                                           joinType, false, time);
             StressTestTwoLookupJoinForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ IntType(), IntType() })), joinType, false, time);
-            StressTestTwoLookupJoinForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date32Type(), Date32Type() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({Date32Type(), Date32Type()})), joinType, false, time);
             StressTestTwoLookupJoinForTwoFixedKey<double>(
-                DataTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType()})), joinType, false, time);
             StressTestTwoLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ LongType(), LongType() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({LongType(), LongType()})), joinType, false, time);
             StressTestTwoLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date64Type(), Date64Type() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({Date64Type(), Date64Type()})), joinType, false, time);
             StressTestTwoLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal64Type(), Decimal64Type() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal64Type(), Decimal64Type()})), joinType, false, time);
             StressTestTwoLookupJoinForTwoFixedKey<Decimal128>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal128Type(), Decimal128Type() })), joinType, false, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal128Type(), Decimal128Type()})), joinType, false, time);
 
-            StressTestTwoLookupJoinForVariableKey(DataTypes(std::vector<DataTypePtr>({ VarcharType(), VarcharType() })),
-                joinType, false, time);
+            StressTestTwoLookupJoinForVariableKey(DataTypes(std::vector<DataTypePtr>({VarcharType(), VarcharType()})),
+                                                  joinType, false, time);
         }
     }
 }
 
 TEST(RandomJoinTest, TestLookupJoinWithSingleHashBuilderForNormalHashTableWithFilter)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> repeatTimes { 1, 10 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> repeatTimes{1, 10};
     for (auto &joinType : joinTypes) {
         for (auto time : repeatTimes) {
-            StressTestSingleLookupJoinForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({ BooleanType() })),
-                joinType, true, time);
-            StressTestSingleLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })),
-                joinType, true, time);
-            StressTestSingleLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, true, time);
-            StressTestSingleLookupJoinForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({ DoubleType() })),
-                joinType, true, time);
-            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })),
-                joinType, true, time);
-            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Date64Type() })),
-                joinType, true, time);
-            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Decimal64Type() })),
-                joinType, true, time);
-            StressTestSingleLookupJoinForSingleKey<Decimal128>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal128Type() })), joinType, true, time);
+            StressTestSingleLookupJoinForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({BooleanType()})), joinType,
+                                                         true, time);
+            StressTestSingleLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                            true, time);
+            StressTestSingleLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})),
+                                                            joinType, true, time);
+            StressTestSingleLookupJoinForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({DoubleType()})),
+                                                           joinType, true, time);
+            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})), joinType,
+                                                            true, time);
+            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Date64Type()})),
+                                                            joinType, true, time);
+            StressTestSingleLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Decimal64Type()})),
+                                                            joinType, true, time);
+            StressTestSingleLookupJoinForSingleKey<Decimal128>(DataTypes(std::vector<DataTypePtr>({Decimal128Type()})),
+                                                               joinType, true, time);
 
             StressTestSingleLookupJoinForTwoFixedKey<bool>(
-                DataTypes(std::vector<DataTypePtr>({ BooleanType(), BooleanType() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({BooleanType(), BooleanType()})), joinType, true, time);
             StressTestSingleLookupJoinForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ IntType(), IntType() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({IntType(), IntType()})), joinType, true, time);
             StressTestSingleLookupJoinForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date32Type(), Date32Type() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({Date32Type(), Date32Type()})), joinType, true, time);
             StressTestSingleLookupJoinForTwoFixedKey<double>(
-                DataTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType()})), joinType, true, time);
             StressTestSingleLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ LongType(), LongType() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({LongType(), LongType()})), joinType, true, time);
             StressTestSingleLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date64Type(), Date64Type() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({Date64Type(), Date64Type()})), joinType, true, time);
             StressTestSingleLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal64Type(), Decimal64Type() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal64Type(), Decimal64Type()})), joinType, true, time);
             StressTestSingleLookupJoinForTwoFixedKey<Decimal128>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal128Type(), Decimal128Type() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal128Type(), Decimal128Type()})), joinType, true, time);
 
             StressTestSingleLookupJoinForVariableKey(
-                DataTypes(std::vector<DataTypePtr>({ VarcharType(), VarcharType() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({VarcharType(), VarcharType()})), joinType, true, time);
         }
     }
 }
 
 TEST(RandomJoinTest, TestLookupJoinWithTwoHashBuilderForNormalHashTableWithFilter)
 {
-    std::vector<JoinType> joinTypes { OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
-        OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI };
-    std::vector<int> repeatTimes { 1, 10 };
+    std::vector<JoinType> joinTypes{OMNI_JOIN_TYPE_INNER, OMNI_JOIN_TYPE_LEFT,      OMNI_JOIN_TYPE_RIGHT,
+                                    OMNI_JOIN_TYPE_FULL,  OMNI_JOIN_TYPE_LEFT_SEMI, OMNI_JOIN_TYPE_LEFT_ANTI};
+    std::vector<int> repeatTimes{1, 10};
     for (auto &joinType : joinTypes) {
         for (auto time : repeatTimes) {
-            StressTestTwoLookupJoinForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({ BooleanType() })), joinType,
-                true, time);
-            StressTestTwoLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ IntType() })), joinType,
-                true, time);
-            StressTestTwoLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({ Date32Type() })),
-                joinType, true, time);
-            StressTestTwoLookupJoinForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({ DoubleType() })), joinType,
-                true, time);
-            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ LongType() })), joinType,
-                true, time);
-            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Date64Type() })),
-                joinType, true, time);
-            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({ Decimal64Type() })),
-                joinType, true, time);
-            StressTestTwoLookupJoinForSingleKey<Decimal128>(DataTypes(std::vector<DataTypePtr>({ Decimal128Type() })),
-                joinType, true, time);
+            StressTestTwoLookupJoinForSingleKey<bool>(DataTypes(std::vector<DataTypePtr>({BooleanType()})), joinType,
+                                                      true, time);
+            StressTestTwoLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType()})), joinType,
+                                                         true, time);
+            StressTestTwoLookupJoinForSingleKey<int32_t>(DataTypes(std::vector<DataTypePtr>({Date32Type()})), joinType,
+                                                         true, time);
+            StressTestTwoLookupJoinForSingleKey<double>(DataTypes(std::vector<DataTypePtr>({DoubleType()})), joinType,
+                                                        true, time);
+            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({LongType()})), joinType,
+                                                         true, time);
+            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Date64Type()})), joinType,
+                                                         true, time);
+            StressTestTwoLookupJoinForSingleKey<int64_t>(DataTypes(std::vector<DataTypePtr>({Decimal64Type()})),
+                                                         joinType, true, time);
+            StressTestTwoLookupJoinForSingleKey<Decimal128>(DataTypes(std::vector<DataTypePtr>({Decimal128Type()})),
+                                                            joinType, true, time);
 
             StressTestTwoLookupJoinForTwoFixedKey<bool>(
-                DataTypes(std::vector<DataTypePtr>({ BooleanType(), BooleanType() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({BooleanType(), BooleanType()})), joinType, true, time);
+            StressTestTwoLookupJoinForTwoFixedKey<int32_t>(DataTypes(std::vector<DataTypePtr>({IntType(), IntType()})),
+                                                           joinType, true, time);
             StressTestTwoLookupJoinForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ IntType(), IntType() })), joinType, true, time);
-            StressTestTwoLookupJoinForTwoFixedKey<int32_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date32Type(), Date32Type() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({Date32Type(), Date32Type()})), joinType, true, time);
             StressTestTwoLookupJoinForTwoFixedKey<double>(
-                DataTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType()})), joinType, true, time);
             StressTestTwoLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ LongType(), LongType() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({LongType(), LongType()})), joinType, true, time);
             StressTestTwoLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Date64Type(), Date64Type() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({Date64Type(), Date64Type()})), joinType, true, time);
             StressTestTwoLookupJoinForTwoFixedKey<int64_t>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal64Type(), Decimal64Type() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal64Type(), Decimal64Type()})), joinType, true, time);
             StressTestTwoLookupJoinForTwoFixedKey<Decimal128>(
-                DataTypes(std::vector<DataTypePtr>({ Decimal128Type(), Decimal128Type() })), joinType, true, time);
+                DataTypes(std::vector<DataTypePtr>({Decimal128Type(), Decimal128Type()})), joinType, true, time);
 
-            StressTestTwoLookupJoinForVariableKey(DataTypes(std::vector<DataTypePtr>({ VarcharType(), VarcharType() })),
-                joinType, true, time);
+            StressTestTwoLookupJoinForVariableKey(DataTypes(std::vector<DataTypePtr>({VarcharType(), VarcharType()})),
+                                                  joinType, true, time);
         }
     }
 }
-}
+} // namespace RandomJoinTest

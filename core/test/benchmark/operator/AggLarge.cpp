@@ -1,8 +1,16 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
-#include <algorithm>    // std::random_shuffle
+#include <algorithm> // std::random_shuffle
 #include <string_view>
 
 #include "common/common.h"
@@ -66,8 +74,8 @@ public:
             } else if (colTypeId == OMNI_CHAR) {
                 col = createColumn<OMNI_CHAR>(currentNullRatio, currentIsDict, rowValues, dictRowIds);
             } else {
-                throw omniruntime::exception::OmniException(
-                    "InvalidArgument", "Unsupported column type for AggLarge Bench Test");
+                throw omniruntime::exception::OmniException("InvalidArgument",
+                                                            "Unsupported column type for AggLarge Bench Test");
             }
             vecBatch->Append(col);
 
@@ -183,8 +191,9 @@ protected:
         auto aggColVectorWrap = AggregatorUtil::WrapWithVector(aggColVector);
         auto aggOutputTypesWrap = AggregatorUtil::WrapWithVector(DataTypes(aggOutputTypesVec));
 
-        AggregationOperatorFactory *factory = new AggregationOperatorFactory(sourceTypes, aggFuncTypeVector,
-            aggColVectorWrap, maskColsVector, aggOutputTypesWrap, inputRawWraps, outputPartialWraps, false);
+        AggregationOperatorFactory *factory =
+            new AggregationOperatorFactory(sourceTypes, aggFuncTypeVector, aggColVectorWrap, maskColsVector,
+                                           aggOutputTypesWrap, inputRawWraps, outputPartialWraps, false);
         factory->Init();
         return factory;
     }
@@ -220,7 +229,7 @@ private:
 
     template <DataTypeId typeId>
     BaseVector *createColumn(const int32_t nullRatio, const bool isDict, std::vector<int32_t> &rowValues,
-        std::vector<int32_t> dictRowIds)
+                             std::vector<int32_t> dictRowIds)
     {
         using T = typename omniruntime::type::NativeType<typeId>::type;
         if constexpr (std::is_same_v<T, std::string_view>) {
@@ -253,7 +262,7 @@ private:
             }
             if (isDict) {
                 std::random_shuffle(dictRowIds.begin(), dictRowIds.end());
-                auto *dictVec =  VectorHelper::CreateDictionary(dictRowIds.data(), ROWS_PER_PAGE, vector);
+                auto *dictVec = VectorHelper::CreateDictionary(dictRowIds.data(), ROWS_PER_PAGE, vector);
                 delete vector;
                 return dictVec;
             }
@@ -287,16 +296,11 @@ private:
     }
 
     std::vector<std::vector<DataTypePtr>> INPUT_TYPES = {
-        { IntType() },
-        { LongType() },
-        { DoubleType() },
-        { Decimal64Type() },
-        { Decimal128Type() }
-    };
+        {IntType()}, {LongType()}, {DoubleType()}, {Decimal64Type()}, {Decimal128Type()}};
     OMNI_BENCHMARK_PARAM(int32_t, InputTypes, 0, 1, 2, 3, 4);
     OMNI_BENCHMARK_PARAM(int32_t, NullRatio, 0, 10);
     OMNI_BENCHMARK_PARAM(bool, DictionaryBlocks, false, true);
     OMNI_BENCHMARK_PARAM(bool, WithMask, false, true);
 };
 OMNI_BENCHMARK_DECLARE_OPERATOR_LARGE(AggLarge);
-}
+} // namespace om_benchmark

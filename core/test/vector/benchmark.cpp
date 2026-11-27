@@ -1,6 +1,13 @@
 /*
- * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
- * @Description: benchmark implementations
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -67,7 +74,7 @@ template <typename T> void bm_vector_has_no_null(benchmark::State &state)
         hasNull = vector->HasNull();
     }
     if (hasNull) {
-        // nothing, only avoid the compiler optimiztion for unused variable
+        // nothing, only avoid the compiler optimization for unused variable
     }
 }
 
@@ -81,7 +88,7 @@ template <typename T> void bm_vector_has_null(benchmark::State &state)
         hasNull = vector->HasNull();
     }
     if (hasNull) {
-        // nothing, only avoid the compiler optimiztion for unused variable
+        // nothing, only avoid the compiler optimization for unused variable
     }
 }
 
@@ -118,7 +125,7 @@ template <> void bm_slice_vector_getvalue<std::string>(benchmark::State &state)
     { // scope to ensure deletion of parent
         auto parent = std::make_unique<Vector<std::string>>(parent_vec_size);
         for (int i = 0; i < parent_vec_size; i++) {
-            std::string value{ "hello hello hello hello hello: " + std::to_string(i % 100000) };
+            std::string value{"hello hello hello hello hello: " + std::to_string(i % 100000)};
             parent->SetValue(i, value);
         }
 
@@ -144,7 +151,7 @@ template <> void bm_vector_setvalue<std::string>(benchmark::State &state)
     for (auto _ : state) {
         auto vector = new Vector<std::string>(vecSize);
         for (int i = 0; i < 1'000'000; i++) {
-            std::string value{ prefix + std::to_string(i % 100000) };
+            std::string value{prefix + std::to_string(i % 100000)};
             vector->SetValue(i % vecSize, value);
         }
         delete vector;
@@ -160,7 +167,7 @@ template <> void bm_vector_getvalue<std::string>(benchmark::State &state)
     }
     auto vector = new Vector<std::string>(vecSize);
     for (int i = 0; i < vecSize; i++) {
-        std::string value{ prefix + std::to_string(i % 100000) };
+        std::string value{prefix + std::to_string(i % 100000)};
         vector->SetValue(i % vecSize, value);
     }
 
@@ -233,7 +240,7 @@ template <typename T> void bm_vector_copypositions(benchmark::State &state)
         positions[j] = 2 * j;
     }
 
-    Vector<T> vector{ originSize };
+    Vector<T> vector{originSize};
     for (int i = 0; i < originSize; i++) {
         T value(i * 2);
         vector.SetValue(i, value);
@@ -256,9 +263,9 @@ template <> void bm_vector_copypositions<std::string>(benchmark::State &state)
         positions[j] = 2 * j;
     }
 
-    Vector<std::string> vector{ originSize };
+    Vector<std::string> vector{originSize};
     for (int i = 0; i < originSize; i++) {
-        std::string value{ "hello" + std::to_string(i) };
+        std::string value{"hello" + std::to_string(i)};
         vector.SetValue(i, value);
     }
 
@@ -314,4 +321,4 @@ BENCHMARK_TEMPLATE(bm_vector_copypositions, std::string)->Arg(3000)->Arg(6000)->
 
 BENCHMARK_TEMPLATE(bm_vector_has_no_null, int32_t);
 BENCHMARK_TEMPLATE(bm_vector_has_null, int32_t);
-}
+} // namespace omniruntime::vec::test

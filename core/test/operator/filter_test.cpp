@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2023. All rights reserved.
- * Description: filter operator test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <iostream>
 #include <vector>
@@ -20,68 +27,67 @@ using namespace omniruntime::expressions;
 using namespace std;
 using namespace TestUtil;
 
-
 const std::string strCompareExpr = "{"
-    "  \"exprType\": \"BINARY\","
-    "  \"returnType\": 4,"
-    "  \"operator\": \"AND\","
-    "  \"left\": {"
-    "    \"exprType\": \"BINARY\","
-    "    \"returnType\": 4,"
-    "    \"operator\": \"AND\","
-    "    \"left\": {"
-    "      \"exprType\": \"UNARY\","
-    "      \"returnType\": 4,"
-    "      \"operator\": \"not\","
-    "      \"expr\": {"
-    "        \"exprType\": \"IS_NULL\","
-    "        \"returnType\": 4,"
-    "        \"arguments\": ["
-    "          {"
-    "            \"exprType\": \"FIELD_REFERENCE\","
-    "            \"dataType\": 15,"
-    "            \"colVal\": 0,"
-    "            \"width\": 10"
-    "          }"
-    "        ]"
-    "      }"
-    "    },"
-    "    \"right\": {"
-    "      \"exprType\": \"UNARY\","
-    "      \"returnType\": 4,"
-    "      \"operator\": \"not\","
-    "      \"expr\": {"
-    "        \"exprType\": \"IS_NULL\","
-    "        \"returnType\": 4,"
-    "        \"arguments\": ["
-    "          {"
-    "            \"exprType\": \"FIELD_REFERENCE\","
-    "            \"dataType\": 15,"
-    "            \"colVal\": 1,"
-    "            \"width\": 10"
-    "          }"
-    "        ]"
-    "      }"
-    "    }"
-    "  },"
-    "  \"right\": {"
-    "    \"exprType\": \"BINARY\","
-    "    \"returnType\": 4,"
-    "    \"operator\": \"EQUAL\","
-    "    \"left\": {"
-    "      \"exprType\": \"FIELD_REFERENCE\","
-    "      \"dataType\": 15,"
-    "      \"colVal\": 0,"
-    "      \"width\": 10"
-    "    },"
-    "    \"right\": {"
-    "      \"exprType\": \"FIELD_REFERENCE\","
-    "      \"dataType\": 15,"
-    "      \"colVal\": 1,"
-    "      \"width\": 10"
-    "    }"
-    "  }"
-    "}";
+                                   "  \"exprType\": \"BINARY\","
+                                   "  \"returnType\": 4,"
+                                   "  \"operator\": \"AND\","
+                                   "  \"left\": {"
+                                   "    \"exprType\": \"BINARY\","
+                                   "    \"returnType\": 4,"
+                                   "    \"operator\": \"AND\","
+                                   "    \"left\": {"
+                                   "      \"exprType\": \"UNARY\","
+                                   "      \"returnType\": 4,"
+                                   "      \"operator\": \"not\","
+                                   "      \"expr\": {"
+                                   "        \"exprType\": \"IS_NULL\","
+                                   "        \"returnType\": 4,"
+                                   "        \"arguments\": ["
+                                   "          {"
+                                   "            \"exprType\": \"FIELD_REFERENCE\","
+                                   "            \"dataType\": 15,"
+                                   "            \"colVal\": 0,"
+                                   "            \"width\": 10"
+                                   "          }"
+                                   "        ]"
+                                   "      }"
+                                   "    },"
+                                   "    \"right\": {"
+                                   "      \"exprType\": \"UNARY\","
+                                   "      \"returnType\": 4,"
+                                   "      \"operator\": \"not\","
+                                   "      \"expr\": {"
+                                   "        \"exprType\": \"IS_NULL\","
+                                   "        \"returnType\": 4,"
+                                   "        \"arguments\": ["
+                                   "          {"
+                                   "            \"exprType\": \"FIELD_REFERENCE\","
+                                   "            \"dataType\": 15,"
+                                   "            \"colVal\": 1,"
+                                   "            \"width\": 10"
+                                   "          }"
+                                   "        ]"
+                                   "      }"
+                                   "    }"
+                                   "  },"
+                                   "  \"right\": {"
+                                   "    \"exprType\": \"BINARY\","
+                                   "    \"returnType\": 4,"
+                                   "    \"operator\": \"EQUAL\","
+                                   "    \"left\": {"
+                                   "      \"exprType\": \"FIELD_REFERENCE\","
+                                   "      \"dataType\": 15,"
+                                   "      \"colVal\": 0,"
+                                   "      \"width\": 10"
+                                   "    },"
+                                   "    \"right\": {"
+                                   "      \"exprType\": \"FIELD_REFERENCE\","
+                                   "      \"dataType\": 15,"
+                                   "      \"colVal\": 1,"
+                                   "      \"width\": 10"
+                                   "    }"
+                                   "  }"
+                                   "}";
 void PrintValueLine(const double *valueArray, const int32_t arrLength)
 {
     std::cout << "[";
@@ -175,13 +181,13 @@ TEST(FilterTest, LessThanProcessRow)
     int32_t dataCol[numRows] = {0};
 
     int64_t valueAddrs[numCols] = {reinterpret_cast<int64_t>(dataCol)};
-    int32_t inputLens[numCols]= {0};
+    int32_t inputLens[numCols] = {0};
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     const int32_t projectCount = 1;
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType())};
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(0, IntType()),
-        new LiteralExpr(2000, IntType()), BooleanType());
+                                      new LiteralExpr(2000, IntType()), BooleanType());
     auto *overflowConfig = new OverflowConfig();
 
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
@@ -215,11 +221,11 @@ TEST(FilterTest, ExprCodegenStringCompare)
     const int32_t numRows = 10000000;
 
     // prepare expression isnotnull(a) and isnotnull(b) and (a = b)
-    DataTypes inputTypes(std::vector<DataTypePtr>({ VarcharType(), VarcharType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({VarcharType(), VarcharType()}));
     auto field0 = new FieldExpr(0, VarcharType());
     auto field1 = new FieldExpr(1, VarcharType());
     Expr *filterExpr = JSONParser::ParseJSON(nlohmann::json::parse(strCompareExpr));
-    std::vector<Expr *> projections = { field0, field1 };
+    std::vector<Expr *> projections = {field0, field1};
 
     // prepare test data
     auto vec1 = new Vector<LargeStringContainer<std::string_view>>(numRows);
@@ -256,8 +262,8 @@ TEST(FilterTest, ExprCodegenStringCompare)
     auto *factory = new FilterAndProjectOperatorFactory(std::move(exprEvaluator));
     omniruntime::op::Operator *op = factory->CreateOperator();
     auto createEnd = std::chrono::high_resolution_clock::now();
-    std::cout << "The time of creating operator and factory is " <<
-        std::chrono::duration_cast<std::chrono::microseconds>(createEnd - createStart).count() << std::endl;
+    std::cout << "The time of creating operator and factory is "
+              << std::chrono::duration_cast<std::chrono::microseconds>(createEnd - createStart).count() << std::endl;
 
     // evaluate expression
     auto evaluateStart = std::chrono::high_resolution_clock::now();
@@ -265,8 +271,9 @@ TEST(FilterTest, ExprCodegenStringCompare)
     VectorBatch *outputVecBatch = nullptr;
     int32_t numReturned = op->GetOutput(&outputVecBatch);
     auto evaluateEnd = std::chrono::high_resolution_clock::now();
-    std::cout << "The time of evaluate expression is " <<
-        std::chrono::duration_cast<std::chrono::microseconds>(evaluateEnd - evaluateStart).count() << std::endl;
+    std::cout << "The time of evaluate expression is "
+              << std::chrono::duration_cast<std::chrono::microseconds>(evaluateEnd - evaluateStart).count()
+              << std::endl;
 
     // verify correctness
     std::cout << "The numReturned is " << numReturned << std::endl;
@@ -293,12 +300,12 @@ TEST(FilterTest, LessThan)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType())};
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(0, IntType()),
-        new LiteralExpr(2000, IntType()), BooleanType());
+                                      new LiteralExpr(2000, IntType()), BooleanType());
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -329,12 +336,12 @@ TEST(FilterTest, Shorts_LessThan)
         col1[i] = static_cast<int16_t>(i);
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ ShortType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({ShortType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, ShortType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, ShortType())};
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(0, ShortType()),
-        new LiteralExpr(static_cast<int16_t>(2000), ShortType()), BooleanType());
+                                      new LiteralExpr(static_cast<int16_t>(2000), ShortType()), BooleanType());
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -365,12 +372,12 @@ TEST(FilterTest, Bytes_LessThan)
         col1[i] = static_cast<int8_t>(i);
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ ByteType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({ByteType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, ByteType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, ByteType())};
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(0, ByteType()),
-        new LiteralExpr(static_cast<int8_t>(20), ByteType()), BooleanType());
+                                      new LiteralExpr(static_cast<int8_t>(20), ByteType()), BooleanType());
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -401,14 +408,14 @@ TEST(FilterTest, LessThanWihtoutParsing)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
     auto *column = new FieldExpr(0, IntType());
     auto *left = new FieldExpr(0, IntType());
     auto *right = new LiteralExpr(2000, IntType());
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, left, right, BooleanType());
-    std::vector<Expr *> projections = { column };
+    std::vector<Expr *> projections = {column};
     auto *overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -440,12 +447,12 @@ TEST(FilterTest, GreaterThan)
         col1[i] = i % 25;
         col2[i] = 3e9;
     }
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     auto *col0Expr = new FieldExpr(0, IntType());
     auto *col1Expr = new FieldExpr(1, LongType());
-    std::vector<Expr *> projections = { col0Expr, col1Expr };
+    std::vector<Expr *> projections = {col0Expr, col1Expr};
 
     auto *gtLeft = new FieldExpr(0, IntType());
     auto *gtRight = new LiteralExpr(20, IntType());
@@ -484,12 +491,12 @@ TEST(FilterTest, Shorts_GreaterThan)
         col1[i] = static_cast<int16_t>(i % 25);
         col2[i] = 3e9;
     }
-    DataTypes inputTypes(std::vector<DataTypePtr>({ ShortType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({ShortType(), LongType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     auto *col0Expr = new FieldExpr(0, ShortType());
     auto *col1Expr = new FieldExpr(1, LongType());
-    std::vector<Expr *> projections = { col0Expr, col1Expr };
+    std::vector<Expr *> projections = {col0Expr, col1Expr};
 
     auto *gtLeft = new FieldExpr(0, ShortType());
     auto *gtRight = new LiteralExpr(static_cast<int16_t>(20), ShortType());
@@ -528,12 +535,12 @@ TEST(FilterTest, Bytes_GreaterThan)
         col1[i] = static_cast<int8_t>(i % 25);
         col2[i] = 3e9;
     }
-    DataTypes inputTypes(std::vector<DataTypePtr>({ ByteType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({ByteType(), LongType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     auto *col0Expr = new FieldExpr(0, ByteType());
     auto *col1Expr = new FieldExpr(1, LongType());
-    std::vector<Expr *> projections = { col0Expr, col1Expr };
+    std::vector<Expr *> projections = {col0Expr, col1Expr};
 
     auto *gtLeft = new FieldExpr(0, ByteType());
     auto *gtRight = new LiteralExpr(static_cast<int8_t>(20), ByteType());
@@ -573,12 +580,12 @@ TEST(FilterTest, EqualTo)
         col2[i] = i % 100;
         col3[i] = i % 100;
     }
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType(), DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType(), DoubleType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1, col3, col2);
 
     auto *col1Expr = new FieldExpr(1, LongType());
     auto *col2Expr = new FieldExpr(2, DoubleType());
-    std::vector<Expr *> projections = { col2Expr, col1Expr };
+    std::vector<Expr *> projections = {col2Expr, col1Expr};
 
     auto *eqLeft = new FieldExpr(2, DoubleType());
     auto *eqRight = new LiteralExpr(50.0, DoubleType());
@@ -623,11 +630,11 @@ TEST(FilterTest, GreaterThanOrEqualTo)
         }
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     auto *col1Expr = new FieldExpr(1, IntType());
-    std::vector<Expr *> projections = { col1Expr };
+    std::vector<Expr *> projections = {col1Expr};
 
     auto *gteLeft = new FieldExpr(1, IntType());
     auto *gteRight = new LiteralExpr(30, IntType());
@@ -662,11 +669,11 @@ TEST(FilterTest, NotEqualTo)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({DoubleType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
     auto *col0Expr = new FieldExpr(0, DoubleType());
-    std::vector<Expr *> projections = { col0Expr };
+    std::vector<Expr *> projections = {col0Expr};
     auto *neqLeft = new FieldExpr(0, DoubleType());
     auto *neqRight = new LiteralExpr(0, DoubleType());
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::NEQ, neqLeft, neqRight, BooleanType());
@@ -702,11 +709,11 @@ TEST(FilterTest, Shorts_NotEqualTo)
         col1[i] = static_cast<int16_t>(i);
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ ShortType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({ShortType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
     auto *col0Expr = new FieldExpr(0, ShortType());
-    std::vector<Expr *> projections = { col0Expr };
+    std::vector<Expr *> projections = {col0Expr};
     auto *neqLeft = new FieldExpr(0, ShortType());
     auto *neqRight = new LiteralExpr(0, ShortType());
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::NEQ, neqLeft, neqRight, BooleanType());
@@ -743,11 +750,11 @@ TEST(FilterTest, Bytes_NotEqualTo)
         col1[i] = static_cast<int8_t>(i);
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ ByteType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({ByteType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
     auto *col0Expr = new FieldExpr(0, ByteType());
-    std::vector<Expr *> projections = { col0Expr };
+    std::vector<Expr *> projections = {col0Expr};
     auto *neqLeft = new FieldExpr(0, ByteType());
     auto *neqRight = new LiteralExpr(0, ByteType());
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::NEQ, neqLeft, neqRight, BooleanType());
@@ -784,11 +791,11 @@ TEST(FilterTest, AllPass)
         col1[i] = 9348;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
     auto *col0Expr = new FieldExpr(0, IntType());
-    std::vector<Expr *> projections = { col0Expr };
+    std::vector<Expr *> projections = {col0Expr};
     auto *eqLeft = new FieldExpr(0, IntType());
     auto *eqRight = new LiteralExpr(9348, IntType());
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, eqLeft, eqRight, BooleanType());
@@ -820,11 +827,11 @@ TEST(FilterTest, MultipleInputs)
         data2[i] = i % 6 + 1;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, data1);
 
     auto *col0Expr = new FieldExpr(0, IntType());
-    std::vector<Expr *> projections = { col0Expr };
+    std::vector<Expr *> projections = {col0Expr};
 
     auto *lteLeft = new FieldExpr(0, IntType());
     auto *lteRight = new LiteralExpr(4, IntType());
@@ -873,12 +880,12 @@ TEST(FilterTest, NegativeValues)
         }
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, data1, data2);
 
     auto *col0Expr = new FieldExpr(0, IntType());
     auto *col1Expr = new FieldExpr(1, LongType());
-    std::vector<Expr *> projections = { col0Expr, col1Expr };
+    std::vector<Expr *> projections = {col0Expr, col1Expr};
 
     auto *lte1Left = new FieldExpr(0, IntType());
     auto *lte1Right = new LiteralExpr(-1, IntType());
@@ -922,13 +929,13 @@ TEST(FilterTest, AllTypes)
         data3[i] = i % 10 / 10.0;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType(), DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType(), DoubleType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, data1, data2, data3);
 
     auto *col0Expr = new FieldExpr(0, IntType());
     auto *col1Expr = new FieldExpr(1, LongType());
     auto *col2Expr = new FieldExpr(2, DoubleType());
-    std::vector<Expr *> projections = { col0Expr, col1Expr, col2Expr };
+    std::vector<Expr *> projections = {col0Expr, col1Expr, col2Expr};
 
     // create the filter expression object
     auto *eq2Left = new FieldExpr(1, LongType());
@@ -981,12 +988,12 @@ TEST(FilterTest, Compile)
         data2[i] = 6;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ DoubleType(), IntType(), DoubleType(), DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({DoubleType(), IntType(), DoubleType(), DoubleType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, dataSize, data1, data2, data3, data4);
 
     // TPCH 6
     auto *col0Expr = new FieldExpr(0, DoubleType());
-    std::vector<Expr *> projections = { col0Expr };
+    std::vector<Expr *> projections = {col0Expr};
 
     auto *gtRight = new LiteralExpr(8766.0, DoubleType());
     auto *gtExpr =
@@ -1049,7 +1056,7 @@ TEST(FilterTest, LogicalOperators1)
 
     // int int int long double long
     DataTypes inputTypes(
-        std::vector<DataTypePtr>({ IntType(), IntType(), IntType(), LongType(), DoubleType(), LongType() }));
+        std::vector<DataTypePtr>({IntType(), IntType(), IntType(), LongType(), DoubleType(), LongType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3, col4, col5, col6);
 
     // projection objects:
@@ -1057,19 +1064,19 @@ TEST(FilterTest, LogicalOperators1)
     auto *col2Expr = new FieldExpr(2, IntType());
     auto *col4Expr = new FieldExpr(4, DoubleType());
     auto *col5Expr = new FieldExpr(5, LongType());
-    std::vector<Expr *> projections = { col0Expr, col2Expr, col4Expr, col5Expr };
+    std::vector<Expr *> projections = {col0Expr, col2Expr, col4Expr, col5Expr};
 
     auto *eqRight = new LiteralExpr(3000000000L, LongType());
     auto *eqExpr =
         new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(3, LongType()), eqRight, BooleanType());
     auto *neqExpr = new BinaryExpr(omniruntime::expressions::Operator::NEQ, new FieldExpr(0, IntType()),
-        new LiteralExpr(1, IntType()), BooleanType());
+                                   new LiteralExpr(1, IntType()), BooleanType());
     auto *andExpr1 = new BinaryExpr(omniruntime::expressions::Operator::AND, neqExpr, eqExpr, BooleanType());
 
     auto *gtExpr = new BinaryExpr(omniruntime::expressions::Operator::GT, new FieldExpr(2, IntType()),
-        new LiteralExpr(4800, IntType()), BooleanType());
+                                  new LiteralExpr(4800, IntType()), BooleanType());
     auto *lteExpr = new BinaryExpr(omniruntime::expressions::Operator::LTE, new FieldExpr(1, IntType()),
-        new LiteralExpr(9990, IntType()), BooleanType());
+                                   new LiteralExpr(9990, IntType()), BooleanType());
     auto *andExpr2 = new BinaryExpr(omniruntime::expressions::Operator::AND, gtExpr, lteExpr, BooleanType());
 
     auto *andExpr3 = new BinaryExpr(omniruntime::expressions::Operator::AND, andExpr2, andExpr1, BooleanType());
@@ -1120,7 +1127,7 @@ TEST(FilterTest, LogicalOperators2)
         col4[i] = i % 9 - 4;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType(), LongType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType(), LongType(), LongType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3, col4);
 
     // projections
@@ -1129,7 +1136,7 @@ TEST(FilterTest, LogicalOperators2)
     auto *col2Expr = new FieldExpr(2, LongType());
     auto *col3Expr = new FieldExpr(3, LongType());
 
-    std::vector<Expr *> projections = { col3Expr, col2Expr, col1Expr, col0Expr };
+    std::vector<Expr *> projections = {col3Expr, col2Expr, col1Expr, col0Expr};
 
     auto *lteRight = new LiteralExpr(-3000000000L, LongType());
     auto *lteExpr =
@@ -1140,9 +1147,9 @@ TEST(FilterTest, LogicalOperators2)
     auto *orExpr1 = new BinaryExpr(omniruntime::expressions::Operator::OR, lteExpr, gteExpr, BooleanType());
 
     auto *ltExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(0, IntType()),
-        new LiteralExpr(50, IntType()), BooleanType());
+                                  new LiteralExpr(50, IntType()), BooleanType());
     auto *eqExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(1, IntType()),
-        new LiteralExpr(-12, IntType()), BooleanType());
+                                  new LiteralExpr(-12, IntType()), BooleanType());
     auto *orExpr2 = new BinaryExpr(omniruntime::expressions::Operator::OR, ltExpr, eqExpr, BooleanType());
 
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::AND, orExpr1, orExpr2, BooleanType());
@@ -1186,37 +1193,36 @@ TEST(FilterTest, LogicalOperators3)
     col1[7] = 13;
     col2[2] = 0;
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     // projections
     auto *col0Expr = new FieldExpr(0, IntType());
     auto *col1Expr = new FieldExpr(1, IntType());
-    std::vector<Expr *> projections = { col0Expr, col1Expr };
+    std::vector<Expr *> projections = {col0Expr, col1Expr};
 
     auto *eq1Expr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new LiteralExpr(55, IntType()),
-        new FieldExpr(0, IntType()), BooleanType());
+                                   new FieldExpr(0, IntType()), BooleanType());
     auto *eq2Expr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new LiteralExpr(5, IntType()),
-        new FieldExpr(0, IntType()), BooleanType());
+                                   new FieldExpr(0, IntType()), BooleanType());
     auto *or1Expr = new BinaryExpr(omniruntime::expressions::Operator::OR, eq1Expr, eq2Expr, BooleanType());
 
     auto *eq3Expr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, IntType()),
-        new LiteralExpr(8, IntType()), BooleanType());
+                                   new LiteralExpr(8, IntType()), BooleanType());
     auto *or2Expr = new BinaryExpr(omniruntime::expressions::Operator::OR, or1Expr, eq3Expr, BooleanType());
 
     auto *eq4Expr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, IntType()),
-        new LiteralExpr(13, IntType()), BooleanType());
+                                   new LiteralExpr(13, IntType()), BooleanType());
     auto *or3Expr = new BinaryExpr(omniruntime::expressions::Operator::OR, or2Expr, eq4Expr, BooleanType());
 
-
     auto *eq5Expr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, IntType()),
-        new LiteralExpr(1, IntType()), BooleanType());
+                                   new LiteralExpr(1, IntType()), BooleanType());
     auto *eq6Expr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, IntType()),
-        new LiteralExpr(2, IntType()), BooleanType());
+                                   new LiteralExpr(2, IntType()), BooleanType());
     auto *or4Expr = new BinaryExpr(omniruntime::expressions::Operator::OR, eq5Expr, eq6Expr, BooleanType());
 
     auto *eq7Expr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, IntType()),
-        new LiteralExpr(3, IntType()), BooleanType());
+                                   new LiteralExpr(3, IntType()), BooleanType());
     auto *or5Expr = new BinaryExpr(omniruntime::expressions::Operator::OR, or4Expr, eq7Expr, BooleanType());
 
     auto *or6Expr = new BinaryExpr(omniruntime::expressions::Operator::OR, or5Expr, or3Expr, BooleanType());
@@ -1259,14 +1265,14 @@ TEST(FilterTest, ArithmeticAdd)
         col1[i] = i % 5;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     auto t = CreateVectorBatch(inputTypes, numRows, col1);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType())};
 
     // filter
     auto *addExpr = new BinaryExpr(omniruntime::expressions::Operator::ADD, new FieldExpr(0, IntType()),
-        new LiteralExpr(1, IntType()), IntType());
+                                   new LiteralExpr(1, IntType()), IntType());
     auto *filterExpr =
         new BinaryExpr(omniruntime::expressions::Operator::GT, addExpr, new LiteralExpr(4, IntType()), BooleanType());
     auto overflowConfig = new OverflowConfig();
@@ -1300,13 +1306,13 @@ TEST(FilterTest, ArithmeticSubtract)
         col2[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, LongType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, LongType())};
 
     auto *subExpr = new BinaryExpr(omniruntime::expressions::Operator::SUB, new FieldExpr(0, IntType()),
-        new LiteralExpr(5, IntType()), IntType());
+                                   new LiteralExpr(5, IntType()), IntType());
     auto *filterExpr =
         new BinaryExpr(omniruntime::expressions::Operator::LT, new LiteralExpr(0, IntType()), subExpr, BooleanType());
     auto overflowConfig = new OverflowConfig();
@@ -1341,11 +1347,11 @@ TEST(FilterTest, ArithmeticMultiply)
         col2[i] = i % 10 + 1;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2);
 
     auto *mul1Expr = new BinaryExpr(omniruntime::expressions::Operator::MUL, new FieldExpr(0, IntType()),
-        new FieldExpr(0, IntType()), IntType());
+                                    new FieldExpr(0, IntType()), IntType());
     auto *eqExpr =
         new BinaryExpr(omniruntime::expressions::Operator::EQ, new LiteralExpr(0, IntType()), mul1Expr, BooleanType());
 
@@ -1356,7 +1362,7 @@ TEST(FilterTest, ArithmeticMultiply)
     auto *gtExpr = new BinaryExpr(omniruntime::expressions::Operator::GT, gtLeft, mul2Expr, BooleanType());
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::AND, eqExpr, gtExpr, BooleanType());
 
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, LongType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, LongType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1393,17 +1399,17 @@ TEST(FilterTest, Conditional)
         col3[i] = 100;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
-        new FieldExpr(2, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
+                                       new FieldExpr(2, IntType())};
 
     // filters
     auto *condition = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, IntType()),
-        new LiteralExpr(0, IntType()), BooleanType());
+                                     new LiteralExpr(0, IntType()), BooleanType());
     auto *texp = new BinaryExpr(omniruntime::expressions::Operator::ADD, new FieldExpr(1, IntType()),
-        new LiteralExpr(5, IntType()), IntType());
+                                new LiteralExpr(5, IntType()), IntType());
     auto *fexp = new FieldExpr(2, IntType());
 
     auto *eqLeft = new IfExpr(condition, texp, fexp);
@@ -1441,26 +1447,26 @@ TEST(FilterTest, Conditional2)
         col3[i] = i % 10;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     // filters
     auto *condition = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, IntType()),
-        new LiteralExpr(0, IntType()), BooleanType());
+                                     new LiteralExpr(0, IntType()), BooleanType());
     auto *texp = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(1, IntType()),
-        new LiteralExpr(3, IntType()), BooleanType());
+                                new LiteralExpr(3, IntType()), BooleanType());
     auto *fexp = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(1, IntType()),
-        new LiteralExpr(4, IntType()), BooleanType());
+                                new LiteralExpr(4, IntType()), BooleanType());
     auto *ifExpr = new IfExpr(condition, texp, fexp);
 
     auto *gtExpr = new BinaryExpr(omniruntime::expressions::Operator::GT, new FieldExpr(2, IntType()),
-        new LiteralExpr(3, IntType()), BooleanType());
+                                  new LiteralExpr(3, IntType()), BooleanType());
 
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::AND, ifExpr, gtExpr, BooleanType());
 
     // filters
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
-        new FieldExpr(2, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
+                                       new FieldExpr(2, IntType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1492,7 +1498,7 @@ TEST(FilterTest, In)
         col3[i] = i % 6 + 12;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
     // filter
     std::vector<Expr *> args;
@@ -1503,8 +1509,8 @@ TEST(FilterTest, In)
 
     auto *filterExpr = new InExpr(args);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
-        new FieldExpr(2, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
+                                       new FieldExpr(2, IntType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1540,7 +1546,7 @@ TEST(FilterTest, testLongIn)
         col3[i] = i % 6 + 12;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ LongType(), LongType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({LongType(), LongType(), LongType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     std::vector<Expr *> args;
@@ -1554,8 +1560,8 @@ TEST(FilterTest, testLongIn)
 
     auto *filterExpr = new InExpr(args);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, LongType()), new FieldExpr(1, LongType()),
-        new FieldExpr(2, LongType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, LongType()), new FieldExpr(1, LongType()),
+                                       new FieldExpr(2, LongType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1591,7 +1597,7 @@ TEST(FilterTest, testDoubleIn)
         col3[i] = i % 6 + 12;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType(), DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType(), DoubleType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
     // filter
     std::vector<Expr *> args;
@@ -1605,8 +1611,8 @@ TEST(FilterTest, testDoubleIn)
 
     auto *filterExpr = new InExpr(args);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, DoubleType()), new FieldExpr(1, DoubleType()),
-        new FieldExpr(2, DoubleType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, DoubleType()), new FieldExpr(1, DoubleType()),
+                                       new FieldExpr(2, DoubleType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1634,7 +1640,7 @@ TEST(FilterTest, testStringIn1)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 10;
-    DataTypes inputTypes(std::vector<DataTypePtr>({ VarcharType(10) }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({VarcharType(10)}));
 
     auto col1 = VectorHelper::CreateStringVector(numRows);
     auto *vector = (Vector<LargeStringContainer<std::string_view>> *)col1;
@@ -1660,7 +1666,7 @@ TEST(FilterTest, testStringIn1)
 
     auto *filterExpr = new InExpr(args);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, VarcharType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, VarcharType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1681,7 +1687,7 @@ TEST(FilterTest, testStringIn2)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 10;
-    DataTypes inputTypes(std::vector<DataTypePtr>({ CharType(10) }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({CharType(10)}));
     auto col1 = VectorHelper::CreateStringVector(numRows);
     auto *vector = (Vector<LargeStringContainer<std::string_view>> *)col1;
     std::string value;
@@ -1706,7 +1712,7 @@ TEST(FilterTest, testStringIn2)
 
     auto *filterExpr = new InExpr(args);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, CharType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, CharType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1733,7 +1739,7 @@ TEST(FilterTest, testDecimal128In)
         data1[2 * i + 1] = 0;
     }
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, data1);
 
@@ -1746,7 +1752,7 @@ TEST(FilterTest, testDecimal128In)
 
     auto *filterExpr = new InExpr(args);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, Decimal128Type(38, 0)) };
+    std::vector<Expr *> projections = {new FieldExpr(0, Decimal128Type(38, 0))};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1777,13 +1783,13 @@ TEST(FilterTest, Between)
         col3[i] = (i % 21) - 3;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     auto *filterExpr =
         new BetweenExpr(new FieldExpr(1, IntType()), new FieldExpr(0, IntType()), new FieldExpr(2, IntType()));
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
-        new FieldExpr(2, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
+                                       new FieldExpr(2, IntType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1818,7 +1824,7 @@ TEST(FilterTest, NotEqualToAbs)
         col1[i] = i - 32435;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1);
 
     // filter
@@ -1830,7 +1836,7 @@ TEST(FilterTest, NotEqualToAbs)
 
     auto filterExpr =
         new BinaryExpr(omniruntime::expressions::Operator::NEQ, absExpr, new LiteralExpr(4, IntType()), BooleanType());
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1863,7 +1869,7 @@ TEST(FilterTest, MathFunctionFilter1)
         col3[i] = -1;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     // filters
@@ -1889,8 +1895,8 @@ TEST(FilterTest, MathFunctionFilter1)
 
     auto filterExpr = new BinaryExpr(omniruntime::expressions::Operator::AND, eq1Expr, eq2Expr, BooleanType());
 
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
-        new FieldExpr(2, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
+                                       new FieldExpr(2, IntType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1917,7 +1923,6 @@ TEST(FilterTest, MathFunctionFilter1)
     delete overflowConfig;
 }
 
-
 // For testing different types
 TEST(FilterTest, MathFunctionFilter2)
 {
@@ -1933,7 +1938,7 @@ TEST(FilterTest, MathFunctionFilter2)
         col3[i] = -1;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     // filters
@@ -1949,8 +1954,8 @@ TEST(FilterTest, MathFunctionFilter2)
 
     auto filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, cast1, cast2, BooleanType());
 
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, LongType()),
-        new FieldExpr(2, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, LongType()),
+                                       new FieldExpr(2, IntType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -1974,7 +1979,7 @@ TEST(FilterTest, FilterString1)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1000;
-    DataTypes inputTypes(std::vector<DataTypePtr>({ VarcharType(30) }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({VarcharType(30)}));
     auto col1 = VectorHelper::CreateStringVector(numRows);
     auto *vector = (Vector<LargeStringContainer<std::string_view>> *)col1;
     std::string value;
@@ -1991,8 +1996,8 @@ TEST(FilterTest, FilterString1)
     t->Append(col1);
 
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, VarcharType()),
-        new LiteralExpr(new std::string("hello"), VarcharType()), BooleanType());
-    std::vector<Expr *> projections = { new FieldExpr(0, VarcharType()) };
+                                      new LiteralExpr(new std::string("hello"), VarcharType()), BooleanType());
+    std::vector<Expr *> projections = {new FieldExpr(0, VarcharType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2023,7 +2028,7 @@ TEST(FilterTest, Coalesce1)
         col3[i] = -1;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     for (int32_t i = 0; i < numRows; i++) {
@@ -2034,9 +2039,9 @@ TEST(FilterTest, Coalesce1)
 
     auto *coalesceExpr = new CoalesceExpr(new FieldExpr(1, IntType()), new FieldExpr(0, IntType()));
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new LiteralExpr(21, IntType()),
-        coalesceExpr, BooleanType());
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
-        new FieldExpr(2, IntType()) };
+                                      coalesceExpr, BooleanType());
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, IntType()),
+                                       new FieldExpr(2, IntType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2061,7 +2066,7 @@ TEST(FilterTest, Coalesce2)
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1000;
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ VarcharType(30) }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({VarcharType(30)}));
     auto col1 = VectorHelper::CreateStringVector(numRows);
     auto *vector = (Vector<LargeStringContainer<std::string_view>> *)col1;
     std::string value;
@@ -2079,8 +2084,8 @@ TEST(FilterTest, Coalesce2)
     auto *coalesceExpr =
         new CoalesceExpr(new FieldExpr(0, VarcharType()), new LiteralExpr(new std::string("bye"), VarcharType()));
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, coalesceExpr,
-        new LiteralExpr(new std::string("hello"), VarcharType()), BooleanType());
-    std::vector<Expr *> projections = { new FieldExpr(0, VarcharType()) };
+                                      new LiteralExpr(new std::string("hello"), VarcharType()), BooleanType());
+    std::vector<Expr *> projections = {new FieldExpr(0, VarcharType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2110,16 +2115,16 @@ TEST(FilterTest, Coalesce3)
         data2[2 * i + 1] = 0;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ Decimal128Type() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({Decimal128Type()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, data1);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, Decimal128Type(38, 0)) };
+    std::vector<Expr *> projections = {new FieldExpr(0, Decimal128Type(38, 0))};
     auto v1 = new LiteralExpr(new std::string("500000"), Decimal128Type(38, 0));
     v1->isNull = false;
     auto v2 = new LiteralExpr(new std::string("1234"), Decimal128Type(38, 0));
     auto coalesce = new CoalesceExpr(v1, v2);
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LTE, new FieldExpr(0, Decimal128Type(38, 0)),
-        coalesce, BooleanType());
+                                      coalesce, BooleanType());
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2153,7 +2158,7 @@ TEST(FilterTest, Coalesce4)
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1000;
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ CharType(5) }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({CharType(5)}));
     auto col1 = VectorHelper::CreateStringVector(numRows);
     auto *vector = (Vector<LargeStringContainer<std::string_view>> *)col1;
     std::string value;
@@ -2171,8 +2176,8 @@ TEST(FilterTest, Coalesce4)
     auto *coalesceExpr =
         new CoalesceExpr(new FieldExpr(0, CharType()), new LiteralExpr(new std::string("world"), CharType()));
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, coalesceExpr,
-        new LiteralExpr(new std::string("hello"), CharType()), BooleanType());
-    std::vector<Expr *> projections = { new FieldExpr(0, CharType()) };
+                                      new LiteralExpr(new std::string("hello"), CharType()), BooleanType());
+    std::vector<Expr *> projections = {new FieldExpr(0, CharType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2201,7 +2206,7 @@ TEST(FilterTest, Coalesce5)
         col3[i] = -1;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ LongType(), LongType(), LongType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({LongType(), LongType(), LongType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
     for (int32_t i = 0; i < numRows; i++) {
         if (i % 2 != 0) {
@@ -2212,9 +2217,9 @@ TEST(FilterTest, Coalesce5)
     int64_t targetValue = 21;
     auto *coalesceExpr = new CoalesceExpr(new FieldExpr(1, LongType()), new FieldExpr(0, LongType()));
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new LiteralExpr(targetValue, LongType()),
-        coalesceExpr, BooleanType());
-    std::vector<Expr *> projections = { new FieldExpr(0, LongType()), new FieldExpr(1, LongType()),
-        new FieldExpr(2, LongType()) };
+                                      coalesceExpr, BooleanType());
+    std::vector<Expr *> projections = {new FieldExpr(0, LongType()), new FieldExpr(1, LongType()),
+                                       new FieldExpr(2, LongType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2247,7 +2252,7 @@ TEST(FilterTest, Coalesce6)
         col3[i] = -1.0;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ DoubleType(), DoubleType(), DoubleType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({DoubleType(), DoubleType(), DoubleType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     for (int32_t i = 0; i < numRows; i++) {
@@ -2257,9 +2262,9 @@ TEST(FilterTest, Coalesce6)
     }
     auto *coalesceExpr = new CoalesceExpr(new FieldExpr(1, DoubleType()), new FieldExpr(0, DoubleType()));
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new LiteralExpr(21.0, DoubleType()),
-        coalesceExpr, BooleanType());
-    std::vector<Expr *> projections = { new FieldExpr(0, DoubleType()), new FieldExpr(1, DoubleType()),
-        new FieldExpr(2, DoubleType()) };
+                                      coalesceExpr, BooleanType());
+    std::vector<Expr *> projections = {new FieldExpr(0, DoubleType()), new FieldExpr(1, DoubleType()),
+                                       new FieldExpr(2, DoubleType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2293,7 +2298,7 @@ void process(omniruntime::op::FilterAndProjectOperatorFactory *factory, int32_t 
     }
     VectorBatch *outputVecBatch = nullptr;
     omniruntime::op::Operator *op = factory->CreateOperator();
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType(), IntType()}));
     VectorBatch *t = CreateVectorBatch(inputTypes, numRows, col1, col2, col3);
 
     op->AddInput(t);
@@ -2312,7 +2317,7 @@ TEST(FilterTest, Multithreading)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), LongType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), LongType(), IntType()}));
 
     int32_t *numReturned = new int32_t;
     int32_t *numReturned2 = new int32_t;
@@ -2340,8 +2345,8 @@ TEST(FilterTest, Multithreading)
 
     auto filterExpr1 = new BinaryExpr(omniruntime::expressions::Operator::EQ, eqLeft, eqRight, BooleanType());
 
-    std::vector<Expr *> projections1 = { new FieldExpr(0, IntType()), new FieldExpr(1, LongType()),
-        new FieldExpr(2, IntType()) };
+    std::vector<Expr *> projections1 = {new FieldExpr(0, IntType()), new FieldExpr(1, LongType()),
+                                        new FieldExpr(2, IntType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr1, projections1, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2351,8 +2356,8 @@ TEST(FilterTest, Multithreading)
     auto eqRight2 = new LiteralExpr(4L, LongType());
     auto filterExpr2 =
         new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(1, LongType()), eqRight2, BooleanType());
-    std::vector<Expr *> projections2 = { new FieldExpr(0, IntType()), new FieldExpr(1, LongType()),
-        new FieldExpr(2, IntType()) };
+    std::vector<Expr *> projections2 = {new FieldExpr(0, IntType()), new FieldExpr(1, LongType()),
+                                        new FieldExpr(2, IntType())};
 
     auto exprEvaluator2 = std::make_shared<ExpressionEvaluator>(filterExpr2, projections2, inputTypes, overflowConfig);
     auto *factory2 = new FilterAndProjectOperatorFactory(move(exprEvaluator2));
@@ -2384,7 +2389,7 @@ TEST(FilterTest, TestFilterDictionaryVec)
         col1[i] = i % 5;
         col2[i] = i % 11;
     }
-    DataTypes inputTypes1(std::vector<DataTypePtr>({ IntType(), IntType() }));
+    DataTypes inputTypes1(std::vector<DataTypePtr>({IntType(), IntType()}));
     auto *t = CreateVectorBatch(inputTypes1, numRows, col1, col2);
 
     int32_t ids[] = {3, 4, 5, 6, 7, 8, 9, 9, 9, 9};
@@ -2395,13 +2400,13 @@ TEST(FilterTest, TestFilterDictionaryVec)
     auto dicVec = VectorHelper::CreateDictionary(ids, numRows, dictionary.get());
     t->Append(dicVec);
 
-    std::vector<DataTypePtr> vecOfTypes({ IntType(), IntType(), IntType() });
+    std::vector<DataTypePtr> vecOfTypes({IntType(), IntType(), IntType()});
     DataTypes inputTypes2(vecOfTypes);
 
     auto *filterExpr =
         new BetweenExpr(new FieldExpr(1, IntType()), new FieldExpr(0, IntType()), new FieldExpr(2, IntType()));
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, LongType()),
-        new FieldExpr(2, IntType()) };
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, LongType()),
+                                       new FieldExpr(2, IntType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes2, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2437,9 +2442,9 @@ TEST(FilterTest, TestFilterDictionaryVarchar)
     for (int32_t i = 0; i < numRows; i++) {
         col1[i] = i * 3;
     }
-    DataTypes inputTypes1(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes1(std::vector<DataTypePtr>({IntType()}));
     auto *t = CreateVectorBatch(inputTypes1, numRows, col1);
-    std::vector<DataTypePtr> vecOfTypes({ IntType(), IntType(), IntType() });
+    std::vector<DataTypePtr> vecOfTypes({IntType(), IntType(), IntType()});
     DataTypes inputTypes(vecOfTypes);
 
     int32_t ids[] = {0, 1, 2};
@@ -2452,8 +2457,8 @@ TEST(FilterTest, TestFilterDictionaryVarchar)
     t->Append(dicVec);
 
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(0, IntType()),
-        new LiteralExpr(6, IntType()), BooleanType());
-    std::vector<Expr *> projections = { new FieldExpr(0, IntType()), new FieldExpr(1, VarcharType()) };
+                                      new LiteralExpr(6, IntType()), BooleanType());
+    std::vector<Expr *> projections = {new FieldExpr(0, IntType()), new FieldExpr(1, VarcharType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2469,7 +2474,7 @@ TEST(FilterTest, TestFilterDictionaryVarchar)
         std::string_view val1 =
             (reinterpret_cast<Vector<DictionaryContainer<std::string_view>> *>(outputVecBatch->Get(1)))->GetValue(i);
         EXPECT_TRUE(val1 ==
-            (reinterpret_cast<Vector<DictionaryContainer<std::string_view>> *>(t->Get(1)))->GetValue(i));
+                    (reinterpret_cast<Vector<DictionaryContainer<std::string_view>> *>(t->Get(1)))->GetValue(i));
     }
 
     VectorHelper::FreeVecBatch(t);
@@ -2494,14 +2499,14 @@ TEST(FilterTest, DecimalFilterBinaryTest)
         data2[2 * i + 1] = 0;
     }
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, data1);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, Decimal128Type(38, 0)) };
+    std::vector<Expr *> projections = {new FieldExpr(0, Decimal128Type(38, 0))};
     auto *lteRight = new LiteralExpr(new std::string("500000"), Decimal128Type(38, 0));
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LTE, new FieldExpr(0, Decimal128Type(38, 0)),
-        lteRight, BooleanType());
+                                      lteRight, BooleanType());
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2546,12 +2551,12 @@ TEST(FilterTest, DecimalFilterAbsTest)
         data3[2 * i + 1] = -1000;
     }
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type(), Decimal128Type(), Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type(), Decimal128Type(), Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, data1, data2, data3);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, Decimal128Type(38, 0)),
-        new FieldExpr(1, Decimal128Type(38, 0)), new FieldExpr(2, Decimal128Type(38, 0)) };
+    std::vector<Expr *> projections = {new FieldExpr(0, Decimal128Type(38, 0)), new FieldExpr(1, Decimal128Type(38, 0)),
+                                       new FieldExpr(2, Decimal128Type(38, 0))};
 
     // filters
     std::string absStr = "abs";
@@ -2608,13 +2613,13 @@ TEST(FilterTest, FilterStringWithNull)
     auto strings = new std::string[numRows];
     strings[0] = "hello";
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ VarcharType(1000) }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({VarcharType(1000)}));
     auto *batch = CreateVectorBatch(inputTypes, numRows, strings);
     batch->Get(0)->SetNull(1);
 
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, VarcharType()),
-        new LiteralExpr(new std::string("hello"), VarcharType()), BooleanType());
-    std::vector<Expr *> projections = { new FieldExpr(0, VarcharType()) };
+                                      new LiteralExpr(new std::string("hello"), VarcharType()), BooleanType());
+    std::vector<Expr *> projections = {new FieldExpr(0, VarcharType())};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(filterExpr, projections, inputTypes, overflowConfig);
     auto *factory = new FilterAndProjectOperatorFactory(move(exprEvaluator));
@@ -2636,7 +2641,6 @@ TEST(FilterTest, FilterStringWithNull)
             EXPECT_TRUE(vcVec->GetValue(i) == "hello");
         }
     }
-
 
     VectorHelper::FreeVecBatch(outputVecBatch);
     delete factory;
@@ -2687,8 +2691,8 @@ TEST(FilterTest, StartsWith)
     args.push_back(new FieldExpr(1, VarcharType(5)));
     auto funcExpr = GetFuncExpr(funcStr, args, retType);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, VarcharType(5)), new FieldExpr(1, VarcharType(5)) };
-    DataTypes inputTypes(std::vector<DataTypePtr>({ VarcharType(5), VarcharType(5) }));
+    std::vector<Expr *> projections = {new FieldExpr(0, VarcharType(5)), new FieldExpr(1, VarcharType(5))};
+    DataTypes inputTypes(std::vector<DataTypePtr>({VarcharType(5), VarcharType(5)}));
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(funcExpr, projections, inputTypes, overflowConfig);
 
@@ -2753,8 +2757,8 @@ TEST(FilterTest, EndsWith)
     args.push_back(new FieldExpr(1, VarcharType(5)));
     auto funcExpr = GetFuncExpr(funcStr, args, retType);
 
-    std::vector<Expr *> projections = { new FieldExpr(0, VarcharType(5)), new FieldExpr(1, VarcharType(5)) };
-    DataTypes inputTypes(std::vector<DataTypePtr>({ VarcharType(5), VarcharType(5) }));
+    std::vector<Expr *> projections = {new FieldExpr(0, VarcharType(5)), new FieldExpr(1, VarcharType(5))};
+    DataTypes inputTypes(std::vector<DataTypePtr>({VarcharType(5), VarcharType(5)}));
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(funcExpr, projections, inputTypes, overflowConfig);
 
@@ -2786,11 +2790,11 @@ TEST(FilterTest, SimpleFilter)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(0, IntType()),
-        new LiteralExpr(2000, IntType()), BooleanType());
+                                      new LiteralExpr(2000, IntType()), BooleanType());
     auto overflowConfig = new OverflowConfig();
     auto filter = new SimpleFilter(*filterExpr);
     bool initialized = filter->Initialize(overflowConfig);
@@ -2810,7 +2814,7 @@ TEST(FilterTest, SimpleFilter)
             EXPECT_FALSE(result);
         }
     }
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     VectorHelper::FreeVecBatch(in1);
     delete filter;
     delete[] col1;
@@ -2826,11 +2830,11 @@ TEST(FilterTest, SimpleFilterWithNulls)
         col1[i] = i;
     }
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType()}));
     VectorBatch *in1 = CreateVectorBatch(inputTypes, numRows, col1);
 
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::LT, new FieldExpr(0, IntType()),
-        new LiteralExpr(2000, IntType()), BooleanType());
+                                      new LiteralExpr(2000, IntType()), BooleanType());
     auto overflowConfig = new OverflowConfig();
     auto filter = new SimpleFilter(*filterExpr);
     bool initialized = filter->Initialize(overflowConfig);
@@ -2855,7 +2859,7 @@ TEST(FilterTest, SimpleFilterWithNulls)
             EXPECT_FALSE(result);
         }
     }
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     VectorHelper::FreeVecBatch(in1);
     ;
     delete filter;
@@ -2870,11 +2874,11 @@ TEST(FilterTest, SimpleFilterIntWithNulls)
     int32_t data0[numRows] = {19, 14, 7, 19, 1, 20, 10, 13, 20, 16};
     int32_t data1[numRows] = {20, 16, 13, 4, 20, 4, 22, 19, 8, 7};
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ IntType(), IntType() }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({IntType(), IntType()}));
     auto vecBatch = CreateVectorBatch(inputTypes, numRows, data0, data1);
 
     auto *filterExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, new FieldExpr(0, IntType()),
-        new FieldExpr(1, IntType()), BooleanType());
+                                      new FieldExpr(1, IntType()), BooleanType());
     auto overflowConfig = new OverflowConfig();
     auto filter = new SimpleFilter(*filterExpr);
     bool initialized = filter->Initialize(overflowConfig);
@@ -2900,7 +2904,7 @@ TEST(FilterTest, SimpleFilterIntWithNulls)
         bool result = filter->Evaluate(values, isNulls, nullptr, (int64_t)(&context));
         EXPECT_FALSE(result);
     }
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     VectorHelper::FreeVecBatch(vecBatch);
     delete filter;
     delete overflowConfig;
@@ -2913,7 +2917,7 @@ TEST(FilterTest, SimpleFilterCharWithNulls)
     std::string_view data0[numRows] = {"35709", "35709", "35709", "31904", "", "", "35709", "35709", ""};
     std::string_view data1[numRows] = {"31904", "35709", "31904", "31904", "31904", "35709", "35709", "31904", "35709"};
 
-    DataTypes inputTypes(std::vector<DataTypePtr>({ VarcharType(5), VarcharType(5) }));
+    DataTypes inputTypes(std::vector<DataTypePtr>({VarcharType(5), VarcharType(5)}));
     auto vec0 = VectorHelper::CreateStringVector(numRows);
     auto vec1 = VectorHelper::CreateStringVector(numRows);
     auto *vector0 = (Vector<LargeStringContainer<std::string_view>> *)vec0;
@@ -2974,7 +2978,7 @@ TEST(FilterTest, SimpleFilterCharWithNulls)
         }
     }
 
-    Expr::DeleteExprs({ filterExpr });
+    Expr::DeleteExprs({filterExpr});
     delete filter;
     VectorHelper::FreeVecBatch(t);
     delete overflowConfig;
@@ -2988,20 +2992,12 @@ VectorBatch *CreateSequenceVectorBatch(const std::vector<DataTypePtr> &types, in
         for (int index = 0; index < length; ++index) {
             switch (types[i]->GetId()) {
                 case OMNI_INT:
-                case OMNI_DATE32:
-                    static_cast<Vector<int32_t> *>(vector)->SetValue(index, index);
-                    break;
+                case OMNI_DATE32: static_cast<Vector<int32_t> *>(vector)->SetValue(index, index); break;
                 case OMNI_LONG:
                 case OMNI_TIMESTAMP:
-                case OMNI_DECIMAL64:
-                    static_cast<Vector<int64_t> *>(vector)->SetValue(index, index);
-                    break;
-                case OMNI_DOUBLE:
-                    static_cast<Vector<double> *>(vector)->SetValue(index, index);
-                    break;
-                case OMNI_BOOLEAN:
-                    static_cast<Vector<bool> *>(vector)->SetValue(index, index);
-                    break;
+                case OMNI_DECIMAL64: static_cast<Vector<int64_t> *>(vector)->SetValue(index, index); break;
+                case OMNI_DOUBLE: static_cast<Vector<double> *>(vector)->SetValue(index, index); break;
+                case OMNI_BOOLEAN: static_cast<Vector<bool> *>(vector)->SetValue(index, index); break;
                 case OMNI_VARCHAR:
                 case OMNI_CHAR: {
                     std::string_view input(std::to_string(index));
@@ -3011,9 +3007,7 @@ VectorBatch *CreateSequenceVectorBatch(const std::vector<DataTypePtr> &types, in
                 case OMNI_DECIMAL128:
                     static_cast<Vector<Decimal128> *>(vector)->SetValue(index, Decimal128(0, index));
                     break;
-                default:
-                    LogError("No such data type %d", types[i]->GetId());
-                    break;
+                default: LogError("No such data type %d", types[i]->GetId()); break;
             }
         }
         vectorBatch->Append(vector);
@@ -3030,20 +3024,12 @@ VectorBatch *CreateSequenceVectorBatchWithDictionaryVector(const std::vector<Dat
         for (int index = 0; index < length / ratio; ++index) {
             switch (types[i]->GetId()) {
                 case OMNI_INT:
-                case OMNI_DATE32:
-                    static_cast<Vector<int32_t> *>(inner)->SetValue(index, index);
-                    break;
+                case OMNI_DATE32: static_cast<Vector<int32_t> *>(inner)->SetValue(index, index); break;
                 case OMNI_LONG:
                 case OMNI_TIMESTAMP:
-                case OMNI_DECIMAL64:
-                    static_cast<Vector<int64_t> *>(inner)->SetValue(index, index);
-                    break;
-                case OMNI_DOUBLE:
-                    static_cast<Vector<double> *>(inner)->SetValue(index, index);
-                    break;
-                case OMNI_BOOLEAN:
-                    static_cast<Vector<bool> *>(inner)->SetValue(index, index);
-                    break;
+                case OMNI_DECIMAL64: static_cast<Vector<int64_t> *>(inner)->SetValue(index, index); break;
+                case OMNI_DOUBLE: static_cast<Vector<double> *>(inner)->SetValue(index, index); break;
+                case OMNI_BOOLEAN: static_cast<Vector<bool> *>(inner)->SetValue(index, index); break;
                 case OMNI_VARCHAR:
                 case OMNI_CHAR:
                     static_cast<Vector<string_view> *>(inner)->SetValue(index, std::to_string(index).c_str());
@@ -3051,9 +3037,7 @@ VectorBatch *CreateSequenceVectorBatchWithDictionaryVector(const std::vector<Dat
                 case OMNI_DECIMAL128:
                     static_cast<Vector<Decimal128> *>(inner)->SetValue(index, Decimal128(0, index));
                     break;
-                default:
-                    LogError("No such data type %d", types[i]->GetId());
-                    break;
+                default: LogError("No such data type %d", types[i]->GetId()); break;
             }
         }
         std::vector<int32_t> ids(length);
@@ -3079,7 +3063,7 @@ struct MultiThreadArgs {
 };
 
 void SetMultiThreadArgs(struct MultiThreadArgs *multiThreadArgs, FilterAndProjectOperatorFactory *operatorFactory,
-    int vecCount, std::vector<DataTypePtr> *types)
+                        int vecCount, std::vector<DataTypePtr> *types)
 {
     multiThreadArgs->operatorFactory = operatorFactory;
     multiThreadArgs->vecCount = vecCount;
@@ -3095,7 +3079,7 @@ void OperatorAddInput(struct MultiThreadArgs *multiThreadArgs)
     int vectorBatchNum;
     if (multiThreadArgs->index == 0) {
         vectorBatchNum = (multiThreadArgs->vecCount / multiThreadArgs->threadNum) +
-            (multiThreadArgs->vecCount % multiThreadArgs->threadNum);
+                         (multiThreadArgs->vecCount % multiThreadArgs->threadNum);
     } else {
         vectorBatchNum = multiThreadArgs->vecCount / multiThreadArgs->threadNum;
     }
@@ -3137,7 +3121,7 @@ void OperatorAddInput(struct MultiThreadArgs *multiThreadArgs)
 }
 
 void TestAddInputMultiThreads(struct MultiThreadArgs *multiThreadArgs, int32_t threadNum, double &wallElapsed,
-    double &cpuElapsed)
+                              double &cpuElapsed)
 {
     std::vector<std::thread> vecOfThreads;
     multiThreadArgs->wallTime.resize(threadNum);
@@ -3167,92 +3151,92 @@ void TestAddInputMultiThreads(struct MultiThreadArgs *multiThreadArgs, int32_t t
 TEST(FilterTest, Test10SQLMutilThread)
 {
     std::map<std::string, std::vector<DataTypePtr>> INPUT_TYPES = {
-        { "q1", { IntType(), IntType(), IntType(), Date32Type() } },
-        { "q2", { LongType(), LongType(), IntType(), IntType() } },
-        { "q3", { VarcharType(200), VarcharType(200), IntType() } },
-        { "q4", { VarcharType(200), IntType(), IntType() } },
-        { "q5", { CharType(200), IntType(), IntType() } },
-        { "q6", { VarcharType(200), LongType(), IntType() } },
-        { "q7", { VarcharType(200), IntType() } },
-        { "q8", { VarcharType(200), VarcharType(200), LongType(), IntType() } },
-        { "q9", { LongType(), IntType(), IntType(), VarcharType(200) } },
-        { "q10", { LongType(), IntType(), IntType(), VarcharType(200) } },
+        {"q1", {IntType(), IntType(), IntType(), Date32Type()}},
+        {"q2", {LongType(), LongType(), IntType(), IntType()}},
+        {"q3", {VarcharType(200), VarcharType(200), IntType()}},
+        {"q4", {VarcharType(200), IntType(), IntType()}},
+        {"q5", {CharType(200), IntType(), IntType()}},
+        {"q6", {VarcharType(200), LongType(), IntType()}},
+        {"q7", {VarcharType(200), IntType()}},
+        {"q8", {VarcharType(200), VarcharType(200), LongType(), IntType()}},
+        {"q9", {LongType(), IntType(), IntType(), VarcharType(200)}},
+        {"q10", {LongType(), IntType(), IntType(), VarcharType(200)}},
     };
 
     std::map<std::string, std::vector<std::string>> PROJECTIONS = {
-        { "q1",
-                { R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":0})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":8,"colVal":3})" } },
-        { "q2",
-                { R"({"exprType":"BINARY","returnType":2,"operator":"SUBTRACT",
+        {"q1",
+         {R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":0})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":8,"colVal":3})"}},
+        {"q2",
+         {R"({"exprType":"BINARY","returnType":2,"operator":"SUBTRACT",
         "left":{"exprType":"FIELD_REFERENCE","dataType":2,"colVal":0},
         "right":{"exprType":"LITERAL","dataType":2,"isNull":false,"value":1}})",
-                        R"({"exprType":"BINARY","returnType":2,"operator":"ADD",
+          R"({"exprType":"BINARY","returnType":2,"operator":"ADD",
         "left":{"exprType":"FIELD_REFERENCE","dataType":2,"colVal":1},
         "right":{"exprType":"LITERAL","dataType":2,"isNull":false,"value":1}})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})",
-                        R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
-        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":3}]})" } },
-        { "q3",
-                { R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":1,"width":200})",
-                        R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
-        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2}]})" } },
-        { "q4",
-                { R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})" } },
-        { "q5",
-                { R"({"exprType":"FUNCTION","returnType":16,"function_name":"concat",
+          R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})",
+          R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
+        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":3}]})"}},
+        {"q3",
+         {R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":1,"width":200})",
+          R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
+        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2}]})"}},
+        {"q4",
+         {R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})"}},
+        {"q5",
+         {R"({"exprType":"FUNCTION","returnType":16,"function_name":"concat",
         "arguments":[{"exprType":"FUNCTION","returnType":16,"function_name":"concat",
         "arguments":[{"exprType":"LITERAL","dataType":16,"isNull":false,"value":"foo","width":3},
         {"exprType": "FIELD_REFERENCE","dataType":16,"colVal":0,"width":200}],"width":203},
         {"exprType":"LITERAL","dataType":16,"isNull":false,"value":"lish","width":4}],"width":207})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})" } },
-        { "q6",
-                { R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":2,"colVal":1})",
-                        R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
-        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2}]})" } },
-        { "q7",
-                { R"({"exprType":"FUNCTION","returnType":15,"function_name":"substr",
+          R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})"}},
+        {"q6",
+         {R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":2,"colVal":1})",
+          R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
+        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2}]})"}},
+        {"q7",
+         {R"({"exprType":"FUNCTION","returnType":15,"function_name":"substr",
         "arguments":[{"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200},
         {"exprType": "LITERAL" ,"dataType":2,"isNull":false,"value":0},
         {"exprType":"LITERAL","dataType":2,"isNull":false,"value":1}],"width":200})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1})" } },
-        { "q8",
-                { R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":1,"width":200})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":2,"colVal":2})",
-                        R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
-        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":3}]})" } },
-        { "q9",
-                { R"({"exprType":"FIELD_REFERENCE","dataType":2,"colVal":0})",
-                        R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
+          R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1})"}},
+        {"q8",
+         {R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":15,"colVal":1,"width":200})",
+          R"({"exprType":"FIELD_REFERENCE","dataType":2,"colVal":2})",
+          R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
+        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":3}]})"}},
+        {"q9",
+         {R"({"exprType":"FIELD_REFERENCE","dataType":2,"colVal":0})",
+          R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1}]})",
-                        R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
+          R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
        "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2}]})",
-                        R"({"exprType":"FUNCTION","returnType":15,"function_name":"substr",
+          R"({"exprType":"FUNCTION","returnType":15,"function_name":"substr",
         "arguments":[{"exprType":"FIELD_REFERENCE","dataType":15,"colVal":3,"width":200},
         {"exprType": "LITERAL" ,"dataType":2,"isNull":false,"value":0},
-        {"exprType":"LITERAL","dataType":2,"isNull":false,"value":1}],"width":200})" } },
-        { "q10",
-                { R"({"exprType":"FIELD_REFERENCE","dataType":2,"colVal":0})",
-                        R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
+        {"exprType":"LITERAL","dataType":2,"isNull":false,"value":1}],"width":200})"}},
+        {"q10",
+         {R"({"exprType":"FIELD_REFERENCE","dataType":2,"colVal":0})",
+          R"({"exprType":"FUNCTION","returnType":2,"function_name":"CAST",
         "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1}]})",
-                        R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})",
-                        R"({"exprType":"FUNCTION","returnType":15,"function_name":"substr",
+          R"({"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2})",
+          R"({"exprType":"FUNCTION","returnType":15,"function_name":"substr",
         "arguments":[{"exprType":"FIELD_REFERENCE","dataType":15,"colVal":3,"width":200},
         {"exprType": "LITERAL" ,"dataType":2,"isNull":false,"value":0},
-        {"exprType":"LITERAL","dataType":2,"isNull":false,"value":1}],"width":200})" } },
+        {"exprType":"LITERAL","dataType":2,"isNull":false,"value":1}],"width":200})"}},
     };
 
     std::map<std::string, std::string> FILTERS = {
-        { "q1",
-                R"({"exprType":"BINARY","returnType":4,"operator":"OR",
+        {"q1",
+         R"({"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"IN","returnType":4,
           "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":0},
@@ -3267,9 +3251,9 @@ TEST(FilterTest, Test10SQLMutilThread)
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":0},
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":1},
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":2},
-          {"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}]}})" },
-        { "q2",
-                R"({"exprType":"BINARY","returnType":4,"operator":"OR",
+          {"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}]}})"},
+        {"q2",
+         R"({"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"GREATER_THAN",
           "left":{"exprType":"FIELD_REFERENCE","dataType":2,"colVal":0},
@@ -3284,9 +3268,9 @@ TEST(FilterTest, Test10SQLMutilThread)
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":2}]},
           "right":{"exprType":"BINARY","returnType":4,"operator":"EQUAL",
           "left":{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":3},
-          "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}}})" },
-        { "q3",
-                R"({"exprType":"BINARY","returnType":4,"operator":"OR",
+          "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}}})"},
+        {"q3",
+         R"({"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"IN","returnType":4,
           "arguments":[{"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200},
@@ -3310,9 +3294,9 @@ TEST(FilterTest, Test10SQLMutilThread)
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":2},
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":3},
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":4},
-          {"exprType":"LITERAL","dataType":1,"isNull":false,"value":5}]}})" },
-        { "q4",
-                R"({"exprType":"BINARY","returnType":4,"operator":"OR",
+          {"exprType":"LITERAL","dataType":1,"isNull":false,"value":5}]}})"},
+        {"q4",
+         R"({"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"IN","returnType":4,
           "arguments":[{"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200},
@@ -3324,9 +3308,9 @@ TEST(FilterTest, Test10SQLMutilThread)
           "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}},
           "right":{"exprType":"BINARY","returnType":4,"operator":"EQUAL",
           "left":{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2},
-          "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}})" },
-        { "q5",
-                R"({"exprType":"BINARY","returnType":4,"operator":"OR",
+          "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}})"},
+        {"q5",
+         R"({"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"EQUAL",
           "left":{"exprType":"FIELD_REFERENCE","dataType":16,"colVal":0,"width":200},
@@ -3336,9 +3320,9 @@ TEST(FilterTest, Test10SQLMutilThread)
           "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":10}}},
           "right":{"exprType":"BINARY","returnType":4,"operator":"LESS_THAN_OR_EQUAL",
           "left":{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2},
-          "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":20}}})" },
-        { "q6",
-                R"({"exprType":"BINARY","returnType":4,"operator":"OR",
+          "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":20}}})"},
+        {"q6",
+         R"({"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"IN","returnType":4,
           "arguments":[{"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200},
@@ -3362,14 +3346,14 @@ TEST(FilterTest, Test10SQLMutilThread)
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":2},
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":3},
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":4},
-          {"exprType":"LITERAL","dataType":1,"isNull":false,"value":5}]}})" },
-        { "q7",
-                R"({"exprType":"BETWEEN","returnType":4,
+          {"exprType":"LITERAL","dataType":1,"isNull":false,"value":5}]}})"},
+        {"q7",
+         R"({"exprType":"BETWEEN","returnType":4,
           "value":{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":1},
           "lower_bound":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3},
-          "upper_bound":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":5}})" },
-        { "q8",
-                R"({"exprType":"BINARY","returnType":4,"operator":"OR",
+          "upper_bound":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":5}})"},
+        {"q8",
+         R"({"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"IN","returnType":4,
           "arguments":[{"exprType":"FIELD_REFERENCE","dataType":15,"colVal":0,"width":200},
@@ -3389,9 +3373,9 @@ TEST(FilterTest, Test10SQLMutilThread)
           "upper_bound":{"exprType":"LITERAL","dataType":2,"isNull":false,"value":5}}},
           "right":{"exprType":"BINARY","returnType":4,"operator":"EQUAL",
           "left":{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":3},
-          "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}})" },
-        { "q9",
-                R"({"exprType":"BINARY","returnType":4,"operator":"OR",
+          "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}})"},
+        {"q9",
+         R"({"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BINARY","returnType":4,"operator":"OR",
           "left":{"exprType":"BETWEEN","returnType":4,
           "value":{"exprType":"FIELD_REFERENCE","dataType":2,"colVal":0},
@@ -3403,9 +3387,9 @@ TEST(FilterTest, Test10SQLMutilThread)
           "right":{"exprType":"IN","returnType":4,
           "arguments":[{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2},
           {"exprType":"LITERAL","dataType":1,"isNull":false,"value":1},
-          {"exprType":"LITERAL","dataType":1,"isNull":false,"value":2}]}})" },
-        { "q10",
-                R"({"exprType":"BINARY","returnType":4,"operator":"OR",
+          {"exprType":"LITERAL","dataType":1,"isNull":false,"value":2}]}})"},
+        {"q10",
+         R"({"exprType":"BINARY","returnType":4,"operator":"OR",
         "left":{"exprType":"BINARY","returnType":4,"operator":"OR",
         "left":{"exprType":"BETWEEN","returnType":4,
         "value":{"exprType":"FIELD_REFERENCE","dataType":2,"colVal":0},
@@ -3416,12 +3400,11 @@ TEST(FilterTest, Test10SQLMutilThread)
         "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}},
         "right":{"exprType":"BINARY","returnType":4,"operator":"EQUAL",
         "left":{"exprType":"FIELD_REFERENCE","dataType":1,"colVal":2},
-        "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}})" },
+        "right":{"exprType":"LITERAL","dataType":1,"isNull":false,"value":3}}})"},
     };
 
-    const static std::map<int64_t, std::string> SQL_NAME = { { 0, "q1" }, { 1, "q2" }, { 2, "q3" }, { 3, "q4" },
-                                                             { 4, "q5" }, { 5, "q6" }, { 6, "q7" }, { 7, "q8" },
-                                                             { 8, "q9" }, { 9, "q10" } };
+    const static std::map<int64_t, std::string> SQL_NAME = {{0, "q1"}, {1, "q2"}, {2, "q3"}, {3, "q4"}, {4, "q5"},
+                                                            {5, "q6"}, {6, "q7"}, {7, "q8"}, {8, "q9"}, {9, "q10"}};
     int64_t totalPositions = 1000000;
     int64_t positionsPerPage = 1024;
     static constexpr int FILTER_UNIT_TEST_TIME = 1;
@@ -3515,4 +3498,4 @@ TEST(FilterTest, Test10SQLMutilThread)
     std::cout << "sixteenThreadsCpuTime";
     PrintValueLine(sixteenThreadsCpuTime, FILTER_UNIT_TEST_TIME);
 }
-}
+} // namespace FilterTest

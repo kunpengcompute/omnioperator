@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2023. All rights reserved.
- * Description: Type Util Class
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "test_util.h"
@@ -37,7 +44,7 @@ bool VecBatchMatch(VectorBatch *outputPages, VectorBatch *expectPage)
     int32_t columnNumber = outputPages->GetVectorCount();
     if (columnNumber != expectPage->GetVectorCount()) {
         printf("Invalid vector count. Expected=%d, actual=%d\n", expectPage->GetVectorCount(),
-            outputPages->GetVectorCount());
+               outputPages->GetVectorCount());
         PrintNotMatchBatches(outputPages, expectPage);
         return false;
     }
@@ -56,7 +63,7 @@ bool VecBatchesIgnoreOrderMatch(std::vector<VectorBatch *> &resultBatches, std::
 {
     if (resultBatches.size() != expectedBatches.size()) {
         printf("List of VectorBatches not match. Expecting %ld, got %ld\n", expectedBatches.size(),
-            resultBatches.size());
+               resultBatches.size());
         printf("================ Expected Vector Batch (%ld) ==================\n", expectedBatches.size());
         for (size_t i = 0; i < expectedBatches.size(); ++i) {
             printf("    ---------- Expected Vector Batch %ld / %ld ----------\n", i, expectedBatches.size());
@@ -99,7 +106,7 @@ static ALWAYS_INLINE std::string_view GetVarcharValue(BaseVector *vector, uint32
 }
 
 static ALWAYS_INLINE bool DoubleValueEqualsValueIgnoreNulls(BaseVector *leftVector, BaseVector *rightVector,
-    int32_t rowIndex)
+                                                            int32_t rowIndex)
 {
     auto leftValue = GetValue<double>(leftVector, rowIndex);
     auto rightValue = GetValue<double>(rightVector, rowIndex);
@@ -111,14 +118,14 @@ static ALWAYS_INLINE bool DoubleValueEqualsValueIgnoreNulls(BaseVector *leftVect
 }
 
 static ALWAYS_INLINE bool VarcharValueEqualsValueIgnoreNulls(BaseVector *leftVector, BaseVector *rightVector,
-    int32_t rowIndex)
+                                                             int32_t rowIndex)
 {
     return GetVarcharValue(leftVector, rowIndex) == GetVarcharValue(rightVector, rowIndex);
 }
 
 template <typename T>
 ALWAYS_INLINE bool PrimitiveValueEqualsValueIgnoreNulls(BaseVector *leftVector, BaseVector *rightVector,
-    int32_t rowIndex)
+                                                        int32_t rowIndex)
 {
     return GetValue<T>(leftVector, rowIndex) == GetValue<T>(rightVector, rowIndex);
 }
@@ -168,8 +175,8 @@ bool ColumnMatch(BaseVector *actualColumn, BaseVector *expectColumn)
         } else if (typeId == OMNI_ARRAY) {
             auto actualElementVector = static_cast<ArrayVector *>(actualColumn)->GetElementVector();
             auto expectElementVector = static_cast<ArrayVector *>(expectColumn)->GetElementVector();
-            result =
-                    ColumnMatch(reinterpret_cast<BaseVector *>(actualElementVector.get()), reinterpret_cast<BaseVector *>(expectElementVector.get()));
+            result = ColumnMatch(reinterpret_cast<BaseVector *>(actualElementVector.get()),
+                                 reinterpret_cast<BaseVector *>(expectElementVector.get()));
             if (!result) {
                 return false;
             }
@@ -198,8 +205,9 @@ VectorBatch *CreateVectorBatch(const DataTypes &types, int32_t rowCount, ...)
     return vectorBatch;
 }
 
-VectorBatch *CreateArrayVectorBatch(const DataTypes &types, std::vector<int32_t> &offsets,
-                                    int32_t dataSize, int32_t elementSize, ...){
+VectorBatch *CreateArrayVectorBatch(const DataTypes &types, std::vector<int32_t> &offsets, int32_t dataSize,
+                                    int32_t elementSize, ...)
+{
     int32_t typesCount = types.GetSize();
     auto *vectorBatch = new VectorBatch(dataSize);
     va_list args;
@@ -226,7 +234,7 @@ VectorBatch *CreateArrayVectorBatch(const DataTypes &types, std::vector<int32_t>
 }
 
 void AssertStringEquals(std::vector<std::string> &expected, std::vector<uint8_t *> &result,
-    std::vector<int32_t> &outLen)
+                        std::vector<int32_t> &outLen)
 {
     for (size_t i = 0; i < expected.size(); i++) {
         std::string actual(reinterpret_cast<char *>(result[i]), outLen[i]);
@@ -235,7 +243,7 @@ void AssertStringEquals(std::vector<std::string> &expected, std::vector<uint8_t 
 }
 
 void AssertStringEquals(std::vector<std::string> &expected, int32_t offset, int32_t rowCnt,
-    std::vector<uint8_t *> &result, std::vector<int32_t> &outLen)
+                        std::vector<uint8_t *> &result, std::vector<int32_t> &outLen)
 {
     for (int32_t i = 0; i < rowCnt; i++) {
         std::string actual(reinterpret_cast<char *>(result[i]), outLen[i]);
@@ -295,33 +303,25 @@ void SetValue(BaseVector *vector, int32_t index, void *value)
         case OMNI_DATE32:
             static_cast<Vector<int32_t> *>(vector)->SetValue(index, *static_cast<int32_t *>(value));
             break;
-        case OMNI_SHORT:
-            static_cast<Vector<int16_t> *>(vector)->SetValue(index, *static_cast<int16_t *>(value));
-            break;
+        case OMNI_SHORT: static_cast<Vector<int16_t> *>(vector)->SetValue(index, *static_cast<int16_t *>(value)); break;
         case OMNI_LONG:
         case OMNI_TIMESTAMP:
         case OMNI_DECIMAL64:
             static_cast<Vector<int64_t> *>(vector)->SetValue(index, *static_cast<int64_t *>(value));
             break;
-        case OMNI_DOUBLE:
-            static_cast<Vector<double> *>(vector)->SetValue(index, *static_cast<double *>(value));
-            break;
-        case OMNI_BOOLEAN:
-            static_cast<Vector<bool> *>(vector)->SetValue(index, *static_cast<bool *>(value));
-            break;
+        case OMNI_DOUBLE: static_cast<Vector<double> *>(vector)->SetValue(index, *static_cast<double *>(value)); break;
+        case OMNI_BOOLEAN: static_cast<Vector<bool> *>(vector)->SetValue(index, *static_cast<bool *>(value)); break;
         case OMNI_VARCHAR:
         case OMNI_CHAR: {
             std::string_view data = std::string_view(static_cast<std::string *>(value)->data(),
-                static_cast<std::string *>(value)->length());
+                                                     static_cast<std::string *>(value)->length());
             static_cast<Vector<LargeStringContainer<std::string_view>> *>(vector)->SetValue(index, data);
             break;
         }
         case OMNI_DECIMAL128:
             static_cast<Vector<Decimal128> *>(vector)->SetValue(index, *static_cast<Decimal128 *>(value));
             break;
-        default:
-            LogError("No such data type %d", typeId);
-            break;
+        default: LogError("No such data type %d", typeId); break;
     }
 }
 
@@ -341,7 +341,7 @@ bool VecBatchMatchIgnoreOrder(vec::VectorBatch *resultBatch, vec::VectorBatch *e
     auto columnNumber = resultBatch->GetVectorCount();
     if (columnNumber != expectedBatch->GetVectorCount()) {
         printf("Invalid vector count. Expected=%d, actual=%d\n", expectedBatch->GetVectorCount(),
-            resultBatch->GetVectorCount());
+               resultBatch->GetVectorCount());
         PrintNotMatchBatches(resultBatch, expectedBatch);
         return false;
     }
@@ -423,7 +423,7 @@ void AssertDictionaryVectorDoubleEquals(BaseVector *vector, double *values)
             continue;
         }
         EXPECT_TRUE(std::fabs(static_cast<Vector<DictionaryContainer<bool>> *>(vector)->GetValue(i) - values[i]) <=
-            DBL_EPSILON);
+                    DBL_EPSILON);
     }
 }
 
@@ -475,24 +475,16 @@ void AssertVarcharVectorEquals(BaseVector *vector, std::string *expectedValues)
 void AssertDictionaryVectorEquals(BaseVector *vector, va_list &args)
 {
     switch (vector->GetTypeId()) {
-        case omniruntime::type::OMNI_SHORT:
-            AssertDictionaryVectorShortEquals(vector, va_arg(args, int16_t *));
-            break;
+        case omniruntime::type::OMNI_SHORT: AssertDictionaryVectorShortEquals(vector, va_arg(args, int16_t *)); break;
         case omniruntime::type::OMNI_INT:
-        case omniruntime::type::OMNI_DATE32:
-            AssertDictionaryVectorIntEquals(vector, va_arg(args, int32_t *));
-            break;
+        case omniruntime::type::OMNI_DATE32: AssertDictionaryVectorIntEquals(vector, va_arg(args, int32_t *)); break;
         case omniruntime::type::OMNI_LONG:
         case omniruntime::type::OMNI_TIMESTAMP:
         case omniruntime::type::OMNI_DECIMAL64:
             AssertDictionaryVectorLongEquals(vector, va_arg(args, int64_t *));
             break;
-        case omniruntime::type::OMNI_BOOLEAN:
-            AssertDictionaryVectorBooleanEquals(vector, va_arg(args, bool *));
-            break;
-        case omniruntime::type::OMNI_DOUBLE:
-            AssertDictionaryVectorDoubleEquals(vector, va_arg(args, double *));
-            break;
+        case omniruntime::type::OMNI_BOOLEAN: AssertDictionaryVectorBooleanEquals(vector, va_arg(args, bool *)); break;
+        case omniruntime::type::OMNI_DOUBLE: AssertDictionaryVectorDoubleEquals(vector, va_arg(args, double *)); break;
         case omniruntime::type::OMNI_VARCHAR:
         case omniruntime::type::OMNI_CHAR:
             AssertDictionaryVectorVarcharEquals(vector, va_arg(args, std::string *));
@@ -500,9 +492,7 @@ void AssertDictionaryVectorEquals(BaseVector *vector, va_list &args)
         case omniruntime::type::OMNI_DECIMAL128:
             AssertDictionaryVectorDecimal128Equals(vector, va_arg(args, Decimal128 *));
             break;
-        default:
-            std::cerr << "unsupported type:" << vector->GetTypeId() << std::endl;
-            break;
+        default: std::cerr << "unsupported type:" << vector->GetTypeId() << std::endl; break;
     }
 }
 
@@ -539,33 +529,19 @@ void AssertVecBatchEquals(VectorBatch *vectorBatch, int32_t expectedVecCount, in
         DataTypeId dataTypeId = vectorBatch->Get(i)->GetTypeId();
         switch (dataTypeId) {
             case omniruntime::type::OMNI_INT:
-            case omniruntime::type::OMNI_DATE32:
-                AssertVectorEquals<int32_t>(vector, va_arg(args, int32_t *));
-                break;
-            case omniruntime::type::OMNI_SHORT:
-                AssertVectorEquals<int16_t>(vector, va_arg(args, int16_t *));
-                break;
+            case omniruntime::type::OMNI_DATE32: AssertVectorEquals<int32_t>(vector, va_arg(args, int32_t *)); break;
+            case omniruntime::type::OMNI_SHORT: AssertVectorEquals<int16_t>(vector, va_arg(args, int16_t *)); break;
             case omniruntime::type::OMNI_LONG:
             case omniruntime::type::OMNI_TIMESTAMP:
-            case omniruntime::type::OMNI_DECIMAL64:
-                AssertVectorEquals<int64_t>(vector, va_arg(args, int64_t *));
-                break;
-            case omniruntime::type::OMNI_DOUBLE:
-                AssertDoubleVectorEquals(vector, va_arg(args, double *));
-                break;
-            case omniruntime::type::OMNI_BOOLEAN:
-                AssertVectorEquals<bool>(vector, va_arg(args, bool *));
-                break;
+            case omniruntime::type::OMNI_DECIMAL64: AssertVectorEquals<int64_t>(vector, va_arg(args, int64_t *)); break;
+            case omniruntime::type::OMNI_DOUBLE: AssertDoubleVectorEquals(vector, va_arg(args, double *)); break;
+            case omniruntime::type::OMNI_BOOLEAN: AssertVectorEquals<bool>(vector, va_arg(args, bool *)); break;
             case omniruntime::type::OMNI_DECIMAL128:
                 AssertVectorEquals<Decimal128>(vector, va_arg(args, Decimal128 *));
                 break;
             case omniruntime::type::OMNI_VARCHAR:
-            case omniruntime::type::OMNI_CHAR:
-                AssertVarcharVectorEquals(vector, va_arg(args, std::string *));
-                break;
-            default:
-                std::cerr << "Unsupported type : " << dataTypeId << std::endl;
-                break;
+            case omniruntime::type::OMNI_CHAR: AssertVarcharVectorEquals(vector, va_arg(args, std::string *)); break;
+            default: std::cerr << "Unsupported type : " << dataTypeId << std::endl; break;
         }
     }
     va_end(args);
@@ -596,7 +572,7 @@ FuncExpr *GetFuncExpr(const std::string &funcName, std::vector<Expr *> args, Dat
 {
     std::vector<DataTypeId> argTypes(args.size());
     std::transform(args.begin(), args.end(), argTypes.begin(),
-        [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
+                   [](Expr *expr) -> DataTypeId { return expr->GetReturnTypeId(); });
     auto signature = FunctionSignature(funcName, argTypes, returnType->GetId());
     auto function = FunctionRegistry::LookupFunction(&signature);
     if (function != nullptr) {
@@ -718,17 +694,12 @@ VectorBatch *CreateEmptyVectorBatch(const DataTypes &dataTypes)
     return vectorBatch;
 }
 
-int32_t DecodeAddFlag(int32_t resultCode)
-{
-    return resultCode >> 16;
-}
+int32_t DecodeAddFlag(int32_t resultCode) { return resultCode >> 16; }
 
-int32_t DecodeFetchFlag(int32_t resultCode)
-{
-    return resultCode & SHRT_MAX;
-}
+int32_t DecodeFetchFlag(int32_t resultCode) { return resultCode & SHRT_MAX; }
 
-bool CompareArrayUnorderedRows(BaseVector *resVec, BaseVector *dstVec, const double error) {
+bool CompareArrayUnorderedRows(BaseVector *resVec, BaseVector *dstVec, const double error)
+{
     auto resultVec = dynamic_cast<ArrayVector *>(resVec);
     auto expectedVec = dynamic_cast<ArrayVector *>(dstVec);
     if (!resultVec || !expectedVec) {
@@ -746,15 +717,15 @@ bool CompareArrayUnorderedRows(BaseVector *resVec, BaseVector *dstVec, const dou
             continue;
         }
 
-        int32_t resSize = resultVec->GetSize(row);
+        int32_t resultSize = resultVec->GetSize(row);
         int32_t expSize = expectedVec->GetSize(row);
-        if (resSize != expSize) {
+        if (resultSize != expSize) {
             return false;
         }
 
         int32_t resOffset = resultVec->GetOffset(row);
         int32_t expOffset = expectedVec->GetOffset(row);
-        auto resSubArray = resultVec->GetElementVector()->Slice(resOffset, resSize, false);
+        auto resSubArray = resultVec->GetElementVector()->Slice(resOffset, resultSize, false);
         auto expSubArray = expectedVec->GetElementVector()->Slice(expOffset, expSize, false);
         bool match = ColumnMatchIgnoreOrder(resSubArray, expSubArray, error);
 
@@ -940,7 +911,7 @@ bool ColumnMatchIgnoreOrder(BaseVector *resultVector, BaseVector *expectedVector
         }
         case OMNI_CONTAINER: {
             isMatched = CompareUnorderedRowsContainer(static_cast<ContainerVector *>(resultVector),
-                static_cast<ContainerVector *>(expectedVector), error);
+                                                      static_cast<ContainerVector *>(expectedVector), error);
             break;
         }
         case OMNI_ARRAY: {
@@ -955,7 +926,7 @@ bool ColumnMatchIgnoreOrder(BaseVector *resultVector, BaseVector *expectedVector
 }
 
 bool CompareUnorderedRowsContainer(ContainerVector *resultContainerVector, ContainerVector *expectedContainerVector,
-    const double error)
+                                   const double error)
 {
     int32_t vecCount = expectedContainerVector->GetVectorCount();
     for (int32_t vecIdx = 0; vecIdx < vecCount; vecIdx++) {
@@ -968,4 +939,4 @@ bool CompareUnorderedRowsContainer(ContainerVector *resultContainerVector, Conta
     }
     return true;
 }
-}
+} // namespace omniruntime::TestUtil

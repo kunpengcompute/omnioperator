@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "vector_util.h"
@@ -35,9 +43,7 @@ VectorBatch *CreateSequenceVectorBatch(const std::vector<DataTypePtr> &types, in
                     VectorHelper::SetValue(vector, index, &val);
                     break;
                 }
-                default:
-                    LogError("No such data type %d", type->GetId());
-                    break;
+                default: LogError("No such data type %d", type->GetId()); break;
             }
         }
         vectorBatch->Append(vector);
@@ -73,9 +79,7 @@ VectorBatch *CreateSequenceVectorBatchWithDictionaryVector(const std::vector<Dat
                     VectorHelper::SetValue(inner, index, &val);
                     break;
                 }
-                default:
-                    LogError("No such data type %d", type->GetId());
-                    break;
+                default: LogError("No such data type %d", type->GetId()); break;
             }
         }
         std::vector<int32_t> ids(length);
@@ -90,7 +94,7 @@ VectorBatch *CreateSequenceVectorBatchWithDictionaryVector(const std::vector<Dat
 }
 
 VectorBatch *CreateVectorBatch(uint32_t encoding, const std::vector<DataTypePtr> &types, std::string &prefix,
-    const std::vector<std::vector<int32_t>> &values, int rowCount)
+                               const std::vector<std::vector<int32_t>> &values, int rowCount)
 {
     auto *vectorBatch = new VectorBatch(rowCount);
     for (int i = 0; i < (int32_t)types.size(); ++i) {
@@ -118,9 +122,7 @@ VectorBatch *CreateVectorBatch(uint32_t encoding, const std::vector<DataTypePtr>
                     VectorHelper::SetValue(vector, index, &val);
                     break;
                 }
-                default:
-                    LogError("No such data type %d", types[i]->GetId());
-                    break;
+                default: LogError("No such data type %d", types[i]->GetId()); break;
             }
         }
         if (encoding == OMNI_DICTIONARY) {
@@ -193,10 +195,8 @@ void SetVectorBatchRow(VectorBatch *vb, std::vector<DataTypeId> dataTypes, int i
                 VectorHelper::SetValue(vb->Get(i), index, &item);
                 break;
             }
-            default:
-                LogError("No such data type %d", dataTypes[i]);
-                break;
+            default: LogError("No such data type %d", dataTypes[i]); break;
         }
     }
 }
-}
+} // namespace om_benchmark

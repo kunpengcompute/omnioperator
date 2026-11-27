@@ -1,7 +1,14 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2024. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
-
 
 #include <random>
 #include "common/common.h"
@@ -21,47 +28,43 @@ protected:
     std::string prefix;
     std::string filterExpression;
     std::map<std::string, std::vector<DataTypePtr>> BUILD_TYPES = {
-        { "group1", { LongType(), VarcharType(20) } },
-        { "group2",
-          { LongType(), IntType(), VarcharType(50), IntType(), IntType(), VarcharType(50), VarcharType(10) } },
-        { "group3", { LongType(), VarcharType(10) } },
-        { "group4", { LongType(), VarcharType(50), VarcharType(50) } },
-        { "group5",
-          { LongType(), IntType(), VarcharType(50), IntType(), IntType(), VarcharType(50), VarcharType(10) } },
-        { "group6", { LongType(), LongType(), LongType(), LongType(), IntType(), IntType() } },
-        { "group7", { LongType() } },
-        { "group8", { LongType(), IntType(), IntType() } },
-        { "group9", { LongType() } },
-        { "group10", { LongType() } },
-        { "group11", { LongType(), LongType(), LongType(), LongType(), LongType(), IntType(), IntType() } },
-        { "group12", { VarcharType(50), VarcharType(50), LongType(), VarcharType(50), VarcharType(50), LongType() } },
-        { "group13", { VarcharType(50), IntType(), LongType() } },
-        { "group14", { Decimal64Type(12, 2), LongType(), VarcharType(50), LongType() } }
-    };
+        {"group1", {LongType(), VarcharType(20)}},
+        {"group2", {LongType(), IntType(), VarcharType(50), IntType(), IntType(), VarcharType(50), VarcharType(10)}},
+        {"group3", {LongType(), VarcharType(10)}},
+        {"group4", {LongType(), VarcharType(50), VarcharType(50)}},
+        {"group5", {LongType(), IntType(), VarcharType(50), IntType(), IntType(), VarcharType(50), VarcharType(10)}},
+        {"group6", {LongType(), LongType(), LongType(), LongType(), IntType(), IntType()}},
+        {"group7", {LongType()}},
+        {"group8", {LongType(), IntType(), IntType()}},
+        {"group9", {LongType()}},
+        {"group10", {LongType()}},
+        {"group11", {LongType(), LongType(), LongType(), LongType(), LongType(), IntType(), IntType()}},
+        {"group12", {VarcharType(50), VarcharType(50), LongType(), VarcharType(50), VarcharType(50), LongType()}},
+        {"group13", {VarcharType(50), IntType(), LongType()}},
+        {"group14", {Decimal64Type(12, 2), LongType(), VarcharType(50), LongType()}}};
 
-    std::map<std::string, std::vector<int32_t>> BUILD_OUTPUT_COLS = { { "group1", { 1 } },
-                                                                      { "group2", { 1, 2, 3, 4, 5 } },
-                                                                      { "group3", { 1 } },
-                                                                      { "group4", { 1, 2 } },
-                                                                      { "group5", { 1, 2, 3, 4, 5, 6 } },
-                                                                      { "group6", { 0, 1, 3, 4, 5 } },
-                                                                      { "group7", {} },
-                                                                      { "group8", { 1, 2 } },
-                                                                      { "group9", {} },
-                                                                      { "group10", {} },
-                                                                      { "group11", { 0, 2, 3, 4, 5, 6 } },
-                                                                      { "group12", { 2 } },
-                                                                      { "group13", { 0, 1 } },
-                                                                      { "group14", { 0, 2, 3 } } };
+    std::map<std::string, std::vector<int32_t>> BUILD_OUTPUT_COLS = {{"group1", {1}},
+                                                                     {"group2", {1, 2, 3, 4, 5}},
+                                                                     {"group3", {1}},
+                                                                     {"group4", {1, 2}},
+                                                                     {"group5", {1, 2, 3, 4, 5, 6}},
+                                                                     {"group6", {0, 1, 3, 4, 5}},
+                                                                     {"group7", {}},
+                                                                     {"group8", {1, 2}},
+                                                                     {"group9", {}},
+                                                                     {"group10", {}},
+                                                                     {"group11", {0, 2, 3, 4, 5, 6}},
+                                                                     {"group12", {2}},
+                                                                     {"group13", {0, 1}},
+                                                                     {"group14", {0, 2, 3}}};
 
     std::map<std::string, std::vector<int32_t>> BUILD_HASH_COLS = {
-        { "group1", { 0 } },  { "group2", { 0 } },  { "group3", { 0 } },  { "group4", { 0 } },
-        { "group5", { 0 } },  { "group6", { 2 } },  { "group7", { 0 } },  { "group8", { 0 } },
-        { "group9", { 0 } },  { "group10", { 0 } }, { "group11", { 1 } }, { "group12", { 3, 0, 4, 1, 5 } },
-        { "group13", { 2 } }, { "group14", { 1 } }
-    };
+        {"group1", {0}},  {"group2", {0}},  {"group3", {0}},  {"group4", {0}},
+        {"group5", {0}},  {"group6", {2}},  {"group7", {0}},  {"group8", {0}},
+        {"group9", {0}},  {"group10", {0}}, {"group11", {1}}, {"group12", {3, 0, 4, 1, 5}},
+        {"group13", {2}}, {"group14", {1}}};
     OMNI_BENCHMARK_PARAM(std::string, TestGroup, "group1", "group2", "group3", "group4", "group5", "group6", "group7",
-        "group8", "group9", "group10", "group11", "group12", "group13", "group14");
+                         "group8", "group9", "group10", "group11", "group12", "group13", "group14");
     OMNI_BENCHMARK_PARAM(bool, IsDictionaryBlocks, false, true);
     OMNI_BENCHMARK_PARAM(int32_t, BuildRowsRepetition, 1, 5);
 
@@ -69,7 +72,8 @@ protected:
     OperatorFactory *createOperatorFactory(const State &state) override
     {
         return new HashBuilderOperatorFactory(JoinType::OMNI_JOIN_TYPE_INNER, DataTypes(BUILD_TYPES[TestGroup(state)]),
-            BUILD_HASH_COLS[TestGroup(state)].data(), (int32_t)BUILD_HASH_COLS[TestGroup(state)].size(),1);
+                                              BUILD_HASH_COLS[TestGroup(state)].data(),
+                                              (int32_t)BUILD_HASH_COLS[TestGroup(state)].size(), 1);
     }
 
     std::vector<VectorBatchSupplier> createVecBatch(const State &state) override
@@ -83,9 +87,9 @@ protected:
         int maxValue = buildRowsNumber / BuildRowsRepetition(state) + 40;
         int rows = 0;
         std::vector<VectorBatch *> vvb;
-        std::map<int32_t, int32_t> initialValueOffsets = { { OMNI_VARCHAR, 20 },   { OMNI_LONG, 30 },
-            { OMNI_INT, 40 },       { OMNI_DOUBLE, 50 },
-            { OMNI_DECIMAL64, 60 }, { OMNI_DECIMAL128, 60 } };
+        std::map<int32_t, int32_t> initialValueOffsets = {{OMNI_VARCHAR, 20},   {OMNI_LONG, 30},
+                                                          {OMNI_INT, 40},       {OMNI_DOUBLE, 50},
+                                                          {OMNI_DECIMAL64, 60}, {OMNI_DECIMAL128, 60}};
         while (rows < buildRowsNumber) {
             int newRows = std::min(buildRowsNumber - rows, rowsPerPage);
             for (unsigned int i = 0; i < buildTypes.size(); i++) {
@@ -135,11 +139,11 @@ protected:
         for (unsigned int i = 0; i < BUILD_OUTPUT_COLS[TestGroup(state)].size(); ++i) {
             buildOutputTypes[i] = BUILD_TYPES[TestGroup(state)][BUILD_OUTPUT_COLS[TestGroup(state)][i]];
         }
-        return new LookupJoinOperatorFactory(DataTypes(PROBE_TYPES[TestGroup(state)]),
-            PROBE_OUTPUT_COLS[TestGroup(state)].data(), (int32_t)PROBE_OUTPUT_COLS[TestGroup(state)].size(),
-            PROBE_HASH_COLS[TestGroup(state)].data(), (int32_t)PROBE_HASH_COLS[TestGroup(state)].size(),
-            BUILD_OUTPUT_COLS[TestGroup(state)].data(), (int32_t)BUILD_OUTPUT_COLS[TestGroup(state)].size(),
-            DataTypes(buildOutputTypes),
+        return new LookupJoinOperatorFactory(
+            DataTypes(PROBE_TYPES[TestGroup(state)]), PROBE_OUTPUT_COLS[TestGroup(state)].data(),
+            (int32_t)PROBE_OUTPUT_COLS[TestGroup(state)].size(), PROBE_HASH_COLS[TestGroup(state)].data(),
+            (int32_t)PROBE_HASH_COLS[TestGroup(state)].size(), BUILD_OUTPUT_COLS[TestGroup(state)].data(),
+            (int32_t)BUILD_OUTPUT_COLS[TestGroup(state)].size(), DataTypes(buildOutputTypes),
             hashBuilderOperatorFactory->GetHashTablesVariants(), nullptr, new OverflowConfig());
     }
 
@@ -160,13 +164,10 @@ protected:
         return VectorBatchToVectorBatchSupplier(vvb);
     }
 
-    BaseFixtureGetOutputStrategy GetOutputStrategy() override
-    {
-        return AFTER_EACH_INPUT_FINISHED;
-    }
+    BaseFixtureGetOutputStrategy GetOutputStrategy() override { return AFTER_EACH_INPUT_FINISHED; }
 
     void fillVectorBatches(const std::vector<DataTypePtr> &probeTypes, const State &state,
-        std::vector<VectorBatch *> &vvb)
+                           std::vector<VectorBatch *> &vvb)
     {
         std::vector<std::vector<int32_t>> columnValues(probeTypes.size());
         for (unsigned int i = 0; i < probeTypes.size(); i++) {
@@ -180,9 +181,9 @@ protected:
 
         int remainingRows = probeRowsNumber;
         int rowsInPage = 0;
-        std::map<int32_t, int32_t> initialValueOffsets = { { OMNI_VARCHAR, 20 },   { OMNI_LONG, 30 },
-            { OMNI_INT, 40 },       { OMNI_DOUBLE, 50 },
-            { OMNI_DECIMAL64, 60 }, { OMNI_DECIMAL128, 60 } };
+        std::map<int32_t, int32_t> initialValueOffsets = {{OMNI_VARCHAR, 20},   {OMNI_LONG, 30},
+                                                          {OMNI_INT, 40},       {OMNI_DOUBLE, 50},
+                                                          {OMNI_DECIMAL64, 60}, {OMNI_DECIMAL128, 60}};
         while (remainingRows > 0) {
             double roll = distribution(random);
 
@@ -211,9 +212,9 @@ protected:
 
             for (int i = 0; i < rowsCount; i++) {
                 if (rowsInPage >= rowsPerPage) {
-                    vvb.push_back(IsDictionaryBlocks(state) ?
-                        CreateVectorBatch(OMNI_DICTIONARY, probeTypes, prefix, columnValues, rowsInPage) :
-                        CreateVectorBatch(OMNI_FLAT, probeTypes, prefix, columnValues, rowsInPage));
+                    vvb.push_back(IsDictionaryBlocks(state)
+                                      ? CreateVectorBatch(OMNI_DICTIONARY, probeTypes, prefix, columnValues, rowsInPage)
+                                      : CreateVectorBatch(OMNI_FLAT, probeTypes, prefix, columnValues, rowsInPage));
                     rowsInPage = 0;
 
                     for (unsigned int j = 0; j < probeTypes.size(); j++) {
@@ -234,49 +235,46 @@ protected:
 private:
     int32_t probeRowsNumber = 1400000;
     std::map<std::string, std::vector<DataTypePtr>> PROBE_TYPES = {
-        { "group1",
-          { LongType(), LongType(), LongType(), VarcharType(30), VarcharType(50) } },
-        { "group2", { LongType(), VarcharType(10) } },
-        { "group3", { LongType(), LongType(), IntType(), VarcharType(50), IntType(), IntType(), VarcharType(50) } },
-        { "group4", { LongType(), LongType(), IntType(), IntType(), IntType() } },
-        { "group5", { LongType(), IntType() } },
-        { "group6", { VarcharType(60), LongType() } },
-        { "group7",
-          { LongType(), LongType(), LongType(), IntType(), VarcharType(50), IntType(), IntType(), VarcharType(50) } },
-        { "group8", { LongType(), LongType(), LongType(), IntType() } },
-        { "group9", { LongType(), LongType() } },
-        { "group10", { LongType(), LongType(), LongType(), LongType(), LongType(), LongType(), IntType(), IntType() } },
-        { "group11", { LongType() } },
-        { "group12",
-          { VarcharType(50), DoubleType(), VarcharType(50), LongType(), VarcharType(50), LongType(), VarcharType(50),
-            LongType(), VarcharType(50), IntType(), IntType(), LongType() } },
-        { "group13", { Decimal64Type(12, 2), LongType(), LongType() } },
-        { "group14", { IntType(), IntType(), LongType() } }
-    };
+        {"group1", {LongType(), LongType(), LongType(), VarcharType(30), VarcharType(50)}},
+        {"group2", {LongType(), VarcharType(10)}},
+        {"group3", {LongType(), LongType(), IntType(), VarcharType(50), IntType(), IntType(), VarcharType(50)}},
+        {"group4", {LongType(), LongType(), IntType(), IntType(), IntType()}},
+        {"group5", {LongType(), IntType()}},
+        {"group6", {VarcharType(60), LongType()}},
+        {"group7",
+         {LongType(), LongType(), LongType(), IntType(), VarcharType(50), IntType(), IntType(), VarcharType(50)}},
+        {"group8", {LongType(), LongType(), LongType(), IntType()}},
+        {"group9", {LongType(), LongType()}},
+        {"group10", {LongType(), LongType(), LongType(), LongType(), LongType(), LongType(), IntType(), IntType()}},
+        {"group11", {LongType()}},
+        {"group12",
+         {VarcharType(50), DoubleType(), VarcharType(50), LongType(), VarcharType(50), LongType(), VarcharType(50),
+          LongType(), VarcharType(50), IntType(), IntType(), LongType()}},
+        {"group13", {Decimal64Type(12, 2), LongType(), LongType()}},
+        {"group14", {IntType(), IntType(), LongType()}}};
 
-    std::map<std::string, std::vector<int32_t>> PROBE_OUTPUT_COLS = { { "group1", { 0, 2, 3, 4 } },
-                                                                      { "group2", {} },
-                                                                      { "group3", { 0, 2, 3, 4, 5, 6 } },
-                                                                      { "group4", { 0, 2, 3, 4 } },
-                                                                      { "group5", { 1 } },
-                                                                      { "group6", { 0 } },
-                                                                      { "group7", { 0, 1, 3, 4, 5, 6, 7 } },
-                                                                      { "group8", { 0, 2, 3 } },
-                                                                      { "group9", { 0 } },
-                                                                      { "group10", { 0, 1, 2, 3, 4, 6, 7 } },
-                                                                      { "group11", {} },
-                                                                      { "group12", { 8, 2, 1, 4, 3, 7 } },
-                                                                      { "group13", { 0, 2 } },
-                                                                      { "group14", { 0, 1 } } };
+    std::map<std::string, std::vector<int32_t>> PROBE_OUTPUT_COLS = {{"group1", {0, 2, 3, 4}},
+                                                                     {"group2", {}},
+                                                                     {"group3", {0, 2, 3, 4, 5, 6}},
+                                                                     {"group4", {0, 2, 3, 4}},
+                                                                     {"group5", {1}},
+                                                                     {"group6", {0}},
+                                                                     {"group7", {0, 1, 3, 4, 5, 6, 7}},
+                                                                     {"group8", {0, 2, 3}},
+                                                                     {"group9", {0}},
+                                                                     {"group10", {0, 1, 2, 3, 4, 6, 7}},
+                                                                     {"group11", {}},
+                                                                     {"group12", {8, 2, 1, 4, 3, 7}},
+                                                                     {"group13", {0, 2}},
+                                                                     {"group14", {0, 1}}};
     std::map<std::string, std::vector<int32_t>> PROBE_HASH_COLS = {
-        { "group1", { 1 } },  { "group2", { 0 } },  { "group3", { 1 } },  { "group4", { 1 } },
-        { "group5", { 0 } },  { "group6", { 1 } },  { "group7", { 2 } },  { "group8", { 1 } },
-        { "group9", { 1 } },  { "group10", { 5 } }, { "group11", { 0 } }, { "group12", { 2, 4, 6, 0, 5 } },
-        { "group13", { 1 } }, { "group14", { 2 } }
-    };
+        {"group1", {1}},  {"group2", {0}},  {"group3", {1}},  {"group4", {1}},
+        {"group5", {0}},  {"group6", {1}},  {"group7", {2}},  {"group8", {1}},
+        {"group9", {1}},  {"group10", {5}}, {"group11", {0}}, {"group12", {2, 4, 6, 0, 5}},
+        {"group13", {1}}, {"group14", {2}}};
     OMNI_BENCHMARK_PARAM(double, MatchRate, 0.1, 1, 2);
 };
 
 OMNI_BENCHMARK_DECLARE_OPERATOR_DEFAULT(HashBuilder);
 OMNI_BENCHMARK_DECLARE_OPERATOR_DEFAULT(HashJoin);
-}
+} // namespace om_benchmark

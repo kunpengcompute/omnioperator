@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2024. All rights reserved.
- * Description: function test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <string>
 #include <vector>
@@ -40,134 +47,127 @@ void Date32TruncTest(const std::string &input, const std::string &level, const s
     EXPECT_EQ(isNull, expectIsNull);
 }
 
-TEST(FunctionTest, ToTimestampLtz) {
-  bool retIsNull = false;
+TEST(FunctionTest, ToTimestampLtz)
+{
+    bool retIsNull = false;
 
-  // Normal cases: precision=3 (milliseconds)
-  EXPECT_EQ(1625097600000L,
-            ToTimestampLtz(1625097600000L, false, 3, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // Normal cases: precision=3 (milliseconds)
+    EXPECT_EQ(1625097600000L, ToTimestampLtz(1625097600000L, false, 3, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // Normal cases: precision=0 (seconds)
-  EXPECT_EQ(1625097600000L,
-            ToTimestampLtz(1625097600L, false, 0, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // Normal cases: precision=0 (seconds)
+    EXPECT_EQ(1625097600000L, ToTimestampLtz(1625097600L, false, 0, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // Null input cases
-  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, true, 3, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    // Null input cases
+    EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, true, 3, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 3, true, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 3, true, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  // Boundary values for precision=3 (milliseconds)
-  // MIN_EPOCH_MILLS = -62167219200000LL ('0000-01-01 00:00:00.000 UTC+0')
-  EXPECT_EQ(-62167219200000LL,
-            ToTimestampLtz(-62167219200000LL, false, 3, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // Boundary values for precision=3 (milliseconds)
+    // MIN_EPOCH_MILLS = -62167219200000LL ('0000-01-01 00:00:00.000 UTC+0')
+    EXPECT_EQ(-62167219200000LL, ToTimestampLtz(-62167219200000LL, false, 3, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // MAX_EPOCH_MILLS = 253402300799999LL ('9999-12-31 23:59:59.999 UTC+0')
-  EXPECT_EQ(253402300799999LL,
-            ToTimestampLtz(253402300799999LL, false, 3, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // MAX_EPOCH_MILLS = 253402300799999LL ('9999-12-31 23:59:59.999 UTC+0')
+    EXPECT_EQ(253402300799999LL, ToTimestampLtz(253402300799999LL, false, 3, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // Boundary values for precision=0 (seconds)
-  // MIN_EPOCH_SECONDS = -62167219200LL ('0000-01-01 00:00:00 UTC+0')
-  EXPECT_EQ(-62167219200000LL,
-            ToTimestampLtz(-62167219200LL, false, 0, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // Boundary values for precision=0 (seconds)
+    // MIN_EPOCH_SECONDS = -62167219200LL ('0000-01-01 00:00:00 UTC+0')
+    EXPECT_EQ(-62167219200000LL, ToTimestampLtz(-62167219200LL, false, 0, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // MAX_EPOCH_SECONDS = 253402300799LL ('9999-12-31 23:59:59 UTC+0')
-  EXPECT_EQ(253402300799000LL,
-            ToTimestampLtz(253402300799LL, false, 0, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // MAX_EPOCH_SECONDS = 253402300799LL ('9999-12-31 23:59:59 UTC+0')
+    EXPECT_EQ(253402300799000LL, ToTimestampLtz(253402300799LL, false, 0, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // Out of range values should return null
-  // Below MIN_EPOCH_MILLS for precision=3
-  EXPECT_EQ(0L, ToTimestampLtz(-62167219200001LL, false, 3, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    // Out of range values should return null
+    // Below MIN_EPOCH_MILLS for precision=3
+    EXPECT_EQ(0L, ToTimestampLtz(-62167219200001LL, false, 3, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  // Above MAX_EPOCH_MILLS for precision=3
-  EXPECT_EQ(0L, ToTimestampLtz(253402300800000LL, false, 3, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    // Above MAX_EPOCH_MILLS for precision=3
+    EXPECT_EQ(0L, ToTimestampLtz(253402300800000LL, false, 3, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  // Below MIN_EPOCH_SECONDS for precision=0
-  EXPECT_EQ(0L, ToTimestampLtz(-62167219201LL, false, 0, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    // Below MIN_EPOCH_SECONDS for precision=0
+    EXPECT_EQ(0L, ToTimestampLtz(-62167219201LL, false, 0, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  // Above MAX_EPOCH_SECONDS for precision=0
-  EXPECT_EQ(0L, ToTimestampLtz(253402300800LL, false, 0, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    // Above MAX_EPOCH_SECONDS for precision=0
+    EXPECT_EQ(0L, ToTimestampLtz(253402300800LL, false, 0, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  // Unsupported precision values should return null
-  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 1, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    // Unsupported precision values should return null
+    EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 1, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 6, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, 6, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, -1, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(0L, ToTimestampLtz(1625097600000L, false, -1, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  // Zero value test
-  EXPECT_EQ(0L, ToTimestampLtz(0L, false, 3, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // Zero value test
+    EXPECT_EQ(0L, ToTimestampLtz(0L, false, 3, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  EXPECT_EQ(0L, ToTimestampLtz(0L, false, 0, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(0L, ToTimestampLtz(0L, false, 0, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 }
 
-TEST(FunctionTest, ToTimestampLtzInt) {
-  bool retIsNull = false;
+TEST(FunctionTest, ToTimestampLtzInt)
+{
+    bool retIsNull = false;
 
-  // Normal cases: precision=0 (seconds) - INT can represent epoch seconds
-  EXPECT_EQ(1625097600000L,
-            ToTimestampLtzInt(1625097600, false, 0, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // Normal cases: precision=0 (seconds) - INT can represent epoch seconds
+    EXPECT_EQ(1625097600000L, ToTimestampLtzInt(1625097600, false, 0, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // Null input cases
-  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, true, 0, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    // Null input cases
+    EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, true, 0, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 0, true, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 0, true, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  // Boundary values for precision=0 (seconds) within INT range
-  // INT_MAX = 2147483647 seconds (approximately 2038-01-19)
-  // Note: INT_MAX seconds * 1000 = 2147483647000 milliseconds, which is within valid range
-  EXPECT_EQ(2147483647000LL,
-            ToTimestampLtzInt(2147483647, false, 0, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // Boundary values for precision=0 (seconds) within INT range
+    // INT_MAX = 2147483647 seconds (approximately 2038-01-19)
+    // Note: INT_MAX seconds * 1000 = 2147483647000 milliseconds, which is within valid range
+    EXPECT_EQ(2147483647000LL, ToTimestampLtzInt(2147483647, false, 0, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // INT_MIN = -2147483648 seconds (approximately 1930-03-19)
-  // Note: INT_MIN seconds * 1000 = -2147483648000 milliseconds, which is within valid range
-  EXPECT_EQ(-2147483648000LL,
-            ToTimestampLtzInt(-2147483648, false, 0, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // INT_MIN = -2147483648 seconds (approximately 1930-03-19)
+    // Note: INT_MIN seconds * 1000 = -2147483648000 milliseconds, which is within valid range
+    EXPECT_EQ(-2147483648000LL, ToTimestampLtzInt(-2147483648, false, 0, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // Zero value test for precision=0
-  EXPECT_EQ(0L, ToTimestampLtzInt(0, false, 0, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // Zero value test for precision=0
+    EXPECT_EQ(0L, ToTimestampLtzInt(0, false, 0, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // For precision=3 (milliseconds), INT range is very limited
-  // INT can only represent timestamps from approximately 1969-12-31 to 1970-01-26
-  // Valid INT milliseconds values within the broader timestamp range
-  // precision=3 means input is already milliseconds, so it returns directly
-  EXPECT_EQ(1LL, ToTimestampLtzInt(1, false, 3, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    // For precision=3 (milliseconds), INT range is very limited
+    // INT can only represent timestamps from approximately 1969-12-31 to 1970-01-26
+    // Valid INT milliseconds values within the broader timestamp range
+    // precision=3 means input is already milliseconds, so it returns directly
+    EXPECT_EQ(1LL, ToTimestampLtzInt(1, false, 3, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  EXPECT_EQ(0LL, ToTimestampLtzInt(0, false, 3, false, &retIsNull));
-  EXPECT_FALSE(retIsNull);
+    EXPECT_EQ(0LL, ToTimestampLtzInt(0, false, 3, false, &retIsNull));
+    EXPECT_FALSE(retIsNull);
 
-  // Unsupported precision values should return null
-  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 1, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    // Unsupported precision values should return null
+    EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 1, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 6, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, 6, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 
-  EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, -1, false, &retIsNull));
-  EXPECT_TRUE(retIsNull);
+    EXPECT_EQ(0L, ToTimestampLtzInt(1625097600, false, -1, false, &retIsNull));
+    EXPECT_TRUE(retIsNull);
 }
 /*
  * context helper tests
@@ -217,20 +217,11 @@ TEST(FunctionTest, ArenaAllocatorReset)
 /*
  * Murmur3 hash tests
  */
-TEST(FunctionTest, Mm3Int32)
-{
-    EXPECT_EQ(Mm3Int32(-2147483648, false, 42, false), 723455942);
-}
+TEST(FunctionTest, Mm3Int32) { EXPECT_EQ(Mm3Int32(-2147483648, false, 42, false), 723455942); }
 
-TEST(FunctionTest, Mm3Int64)
-{
-    EXPECT_EQ(Mm3Int64(static_cast<int64_t>(-2147483648), false, 42, false), -1889108749);
-}
+TEST(FunctionTest, Mm3Int64) { EXPECT_EQ(Mm3Int64(static_cast<int64_t>(-2147483648), false, 42, false), -1889108749); }
 
-TEST(FunctionTest, Mm3Double)
-{
-    EXPECT_EQ(Mm3Double(123.456, false, 42, false), -39269148);
-}
+TEST(FunctionTest, Mm3Double) { EXPECT_EQ(Mm3Double(123.456, false, 42, false), -39269148); }
 
 TEST(FunctionTest, Mm3String)
 {
@@ -240,15 +231,17 @@ TEST(FunctionTest, Mm3String)
 
 TEST(FunctionTest, Md5String)
 {
-    Md5StringTest("hellow world!", "df6a571d99e454e99be79a258ca3a57d");
-    Md5StringTest("123412345892376487612983", "1eac0a767ccdf782870bac35db9af264");
+    // pragma: allowlist nextline secret
+    Md5StringTest("hellow world!", "df6a571d99e454e99be79a258ca3a57d");            // codespell:ignore hellow
+    Md5StringTest("123412345892376487612983", "1eac0a767ccdf782870bac35db9af264"); // pragma: allowlist secret
+    // pragma: allowlist nextline secret
     Md5StringTest("1eac0a767ccdf782870bac35db9af2642345", "582aa488923f89ea825358ffe387f5ae");
-    Md5StringTest("", "d41d8cd98f00b204e9800998ecf8427e");
-    Md5StringTest("  1", "37705de0752d1027f8fc3b3f390c448d");
-    Md5StringTest("1  ", "42609f6cf2cbebfe205241bf26e2e0ef");
-    Md5StringTest("1", "c4ca4238a0b923820dcc509a6f75849b");
+    Md5StringTest("", "d41d8cd98f00b204e9800998ecf8427e");    // pragma: allowlist secret
+    Md5StringTest("  1", "37705de0752d1027f8fc3b3f390c448d"); // pragma: allowlist secret
+    Md5StringTest("1  ", "42609f6cf2cbebfe205241bf26e2e0ef"); // pragma: allowlist secret
+    Md5StringTest("1", "c4ca4238a0b923820dcc509a6f75849b");   // pragma: allowlist secret
     Md5StringTest("uwefbuiwef7821ho;o;lhf8923golecg288823pfhl;hsf2893fgOIHDWQIUHFGEWF7823GHQDFddj2",
-        "03f2ace2c433c4b743787d96b41ed1b6");
+                  "03f2ace2c433c4b743787d96b41ed1b6"); // pragma: allowlist secret
 }
 
 static void EmptyToNullTest(const std::string &input)
@@ -270,7 +263,7 @@ static void EmptyToNullNotNullTest(const std::string &input, const std::string &
 
 TEST(FunctionTest, EmptyToNull)
 {
-    EmptyToNullNotNullTest("hellow world!", "hellow world!");
+    EmptyToNullNotNullTest("hellow world!", "hellow world!"); // codespell:ignore hellow
     EmptyToNullNotNullTest("123412345892376487612983", "123412345892376487612983");
     EmptyToNullNotNullTest("   ", "   ");
     EmptyToNullTest("");
@@ -279,39 +272,18 @@ TEST(FunctionTest, EmptyToNull)
 /*
  * XxHash64 hash tests
  */
-TEST(FunctionTest, XxH64Short)
-{
-    EXPECT_EQ(XxH64Int16(1, false, 42, false), -6698625589789238999);
-}
+TEST(FunctionTest, XxH64Short) { EXPECT_EQ(XxH64Int16(1, false, 42, false), -6698625589789238999); }
 
-TEST(FunctionTest, XxH64Int)
-{
-    EXPECT_EQ(XxH64Int32(123, false, 42, false), 5513549449271372758);
-}
+TEST(FunctionTest, XxH64Int) { EXPECT_EQ(XxH64Int32(123, false, 42, false), 5513549449271372758); }
 
-TEST(FunctionTest, XxH64Long)
-{
-    EXPECT_EQ(XxH64Int64(123L, false, 42, false), -3178482946328430151);
-}
+TEST(FunctionTest, XxH64Long) { EXPECT_EQ(XxH64Int64(123L, false, 42, false), -3178482946328430151); }
 
-TEST(FunctionTest, XxH64Double)
-{
-    EXPECT_EQ(XxH64Double(123.456, false, 42, false), -6938331816624033461);
-}
-TEST(FunctionTest, XxH64Boolean)
-{
-    EXPECT_EQ(XxH64Boolean(true, false, 42, false), -6698625589789238999);
-}
+TEST(FunctionTest, XxH64Double) { EXPECT_EQ(XxH64Double(123.456, false, 42, false), -6938331816624033461); }
+TEST(FunctionTest, XxH64Boolean) { EXPECT_EQ(XxH64Boolean(true, false, 42, false), -6698625589789238999); }
 
-TEST(FunctionTest, XxH64String)
-{
-    EXPECT_EQ(XxH64String("hello world", 11, false, 42, false), 7620854247404556961);
-}
+TEST(FunctionTest, XxH64String) { EXPECT_EQ(XxH64String("hello world", 11, false, 42, false), 7620854247404556961); }
 
-TEST(FunctionTest, XxH64Decimal64)
-{
-    EXPECT_EQ(XxH64Decimal64(430, 7, 0, false, 42, false), -3069041474468904433);
-}
+TEST(FunctionTest, XxH64Decimal64) { EXPECT_EQ(XxH64Decimal64(430, 7, 0, false, 42, false), -3069041474468904433); }
 
 TEST(FunctionTest, XxH64Decimal128)
 {
@@ -473,7 +445,6 @@ TEST(FunctionTest, CastInt16ToInt32)
     EXPECT_TRUE(isSameType);
     EXPECT_EQ(std::numeric_limits<int16_t>::max(), result);
 }
-
 
 TEST(FunctionTest, CastInt16ToDouble)
 {
@@ -1266,158 +1237,158 @@ TEST(FunctionTest, Mod)
 
 TEST(FunctionTest, LT)
 {
-    bool ans = LessThanInt8(3, 7);
-    EXPECT_TRUE(ans);
-    ans = LessThanInt8(11, 1);
-    EXPECT_FALSE(ans);
+    bool comparisonResult = LessThanInt8(3, 7);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanInt8(11, 1);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = LessThanInt16(13, 10210);
-    EXPECT_TRUE(ans);
-    ans = LessThanInt16(12311, 1123);
-    EXPECT_FALSE(ans);
+    comparisonResult = LessThanInt16(13, 10210);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanInt16(12311, 1123);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = LessThanInt32(123456, 1234567);
-    EXPECT_TRUE(ans);
-    ans = LessThanInt32(10, 2);
-    EXPECT_FALSE(ans);
+    comparisonResult = LessThanInt32(123456, 1234567);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanInt32(10, 2);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = LessThanInt64(10, 10000000);
-    EXPECT_TRUE(ans);
-    ans = LessThanInt64(10000000, 1);
-    EXPECT_FALSE(ans);
+    comparisonResult = LessThanInt64(10, 10000000);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanInt64(10000000, 1);
+    EXPECT_FALSE(comparisonResult);
 }
 
 TEST(FunctionTest, GT)
 {
-    bool ans = GreaterThanInt8(3, 7);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanInt8(11, 1);
-    EXPECT_TRUE(ans);
+    bool comparisonResult = GreaterThanInt8(3, 7);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanInt8(11, 1);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanInt16(13, 10210);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanInt16(12311, 1123);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanInt16(13, 10210);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanInt16(12311, 1123);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanInt32(123456, 1234567);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanInt32(10, 2);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanInt32(123456, 1234567);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanInt32(10, 2);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanInt64(10, 10000000);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanInt64(10000000, 1);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanInt64(10, 10000000);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanInt64(10000000, 1);
+    EXPECT_TRUE(comparisonResult);
 }
 
 TEST(FunctionTest, LTE)
 {
-    bool ans = LessThanEqualInt8(3, 7);
-    EXPECT_TRUE(ans);
-    ans = LessThanEqualInt8(11, 1);
-    EXPECT_FALSE(ans);
-    ans = LessThanEqualInt8(100, 100);
-    EXPECT_TRUE(ans);
+    bool comparisonResult = LessThanEqualInt8(3, 7);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanEqualInt8(11, 1);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = LessThanEqualInt8(100, 100);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = LessThanEqualInt16(13, 10210);
-    EXPECT_TRUE(ans);
-    ans = LessThanEqualInt16(12311, 1123);
-    EXPECT_FALSE(ans);
-    ans = LessThanEqualInt16(8192, 8192);
-    EXPECT_TRUE(ans);
+    comparisonResult = LessThanEqualInt16(13, 10210);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanEqualInt16(12311, 1123);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = LessThanEqualInt16(8192, 8192);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = LessThanEqualInt32(123456, 1234567);
-    EXPECT_TRUE(ans);
-    ans = LessThanEqualInt32(10, 2);
-    EXPECT_FALSE(ans);
-    ans = LessThanEqualInt32(65536, 65536);
-    EXPECT_TRUE(ans);
+    comparisonResult = LessThanEqualInt32(123456, 1234567);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanEqualInt32(10, 2);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = LessThanEqualInt32(65536, 65536);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = LessThanEqualInt64(10, 10000000);
-    EXPECT_TRUE(ans);
-    ans = LessThanEqualInt64(10000000, 1);
-    EXPECT_FALSE(ans);
-    ans = LessThanEqualInt64(123456789, 123456789);
-    EXPECT_TRUE(ans);
+    comparisonResult = LessThanEqualInt64(10, 10000000);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = LessThanEqualInt64(10000000, 1);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = LessThanEqualInt64(123456789, 123456789);
+    EXPECT_TRUE(comparisonResult);
 }
 
 TEST(FunctionTest, GTE)
 {
-    bool ans = GreaterThanEqualInt8(3, 7);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanEqualInt8(11, 1);
-    EXPECT_TRUE(ans);
-    ans = GreaterThanEqualInt8(100, 100);
-    EXPECT_TRUE(ans);
+    bool comparisonResult = GreaterThanEqualInt8(3, 7);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt8(11, 1);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt8(100, 100);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanEqualInt16(13, 10210);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanEqualInt16(12311, 1123);
-    EXPECT_TRUE(ans);
-    ans = GreaterThanEqualInt16(8192, 8192);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanEqualInt16(13, 10210);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt16(12311, 1123);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt16(8192, 8192);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanEqualInt32(123456, 1234567);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanEqualInt32(10, 2);
-    EXPECT_TRUE(ans);
-    ans = GreaterThanEqualInt32(65536, 65536);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanEqualInt32(123456, 1234567);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt32(10, 2);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt32(65536, 65536);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = GreaterThanEqualInt64(10, 10000000);
-    EXPECT_FALSE(ans);
-    ans = GreaterThanEqualInt64(10000000, 1);
-    EXPECT_TRUE(ans);
-    ans = GreaterThanEqualInt64(123456789, 123456789);
-    EXPECT_TRUE(ans);
+    comparisonResult = GreaterThanEqualInt64(10, 10000000);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt64(10000000, 1);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = GreaterThanEqualInt64(123456789, 123456789);
+    EXPECT_TRUE(comparisonResult);
 }
 
 TEST(FunctionTest, EQ)
 {
-    bool ans;
-    ans = EqualInt8(17, 17);
-    EXPECT_TRUE(ans);
-    ans = EqualInt8(11, 123);
-    EXPECT_FALSE(ans);
+    bool comparisonResult;
+    comparisonResult = EqualInt8(17, 17);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = EqualInt8(11, 123);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = EqualInt16(171, 171);
-    EXPECT_TRUE(ans);
-    ans = EqualInt16(11, 12345);
-    EXPECT_FALSE(ans);
+    comparisonResult = EqualInt16(171, 171);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = EqualInt16(11, 12345);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = EqualInt32(123456, 123456);
-    EXPECT_TRUE(ans);
-    ans = EqualInt32(0, 123456);
-    EXPECT_FALSE(ans);
+    comparisonResult = EqualInt32(123456, 123456);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = EqualInt32(0, 123456);
+    EXPECT_FALSE(comparisonResult);
 
-    ans = EqualInt64(123456000, 123456000);
-    EXPECT_TRUE(ans);
-    ans = EqualInt64(11, 12348765);
-    EXPECT_FALSE(ans);
+    comparisonResult = EqualInt64(123456000, 123456000);
+    EXPECT_TRUE(comparisonResult);
+    comparisonResult = EqualInt64(11, 12348765);
+    EXPECT_FALSE(comparisonResult);
 }
 
 TEST(FunctionTest, NEQ)
 {
-    bool ans;
-    ans = NotEqualInt8(17, 17);
-    EXPECT_FALSE(ans);
-    ans = NotEqualInt8(11, 123);
-    EXPECT_TRUE(ans);
+    bool comparisonResult;
+    comparisonResult = NotEqualInt8(17, 17);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = NotEqualInt8(11, 123);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = NotEqualInt16(171, 171);
-    EXPECT_FALSE(ans);
-    ans = NotEqualInt16(11, 12345);
-    EXPECT_TRUE(ans);
+    comparisonResult = NotEqualInt16(171, 171);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = NotEqualInt16(11, 12345);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = NotEqualInt32(123456, 123456);
-    EXPECT_FALSE(ans);
-    ans = NotEqualInt32(0, 123456);
-    EXPECT_TRUE(ans);
+    comparisonResult = NotEqualInt32(123456, 123456);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = NotEqualInt32(0, 123456);
+    EXPECT_TRUE(comparisonResult);
 
-    ans = NotEqualInt64(123456000, 123456000);
-    EXPECT_FALSE(ans);
-    ans = NotEqualInt64(11, 12348765);
-    EXPECT_TRUE(ans);
+    comparisonResult = NotEqualInt64(123456000, 123456000);
+    EXPECT_FALSE(comparisonResult);
+    comparisonResult = NotEqualInt64(11, 12348765);
+    EXPECT_TRUE(comparisonResult);
 }
 
 TEST(FunctionTest, LessThanEqualDouble)
@@ -1489,10 +1460,7 @@ TEST(FunctionTest, Round)
     EXPECT_EQ(-10.13, Round<double>(-10.12945, 2));
 }
 
-TEST(FunctionTest, CombineHash)
-{
-    EXPECT_EQ(342, CombineHash(10, false, 32, false));
-}
+TEST(FunctionTest, CombineHash) { EXPECT_EQ(342, CombineHash(10, false, 32, false)); }
 
 /*
  * std::string functions:
@@ -1556,7 +1524,7 @@ TEST(FunctionTest, SplitIndexRetNull)
     EXPECT_EQ(outIsNull, true);
     EXPECT_EQ(result, nullptr);
 
-    // When strings are concatinated, make sure data from next row isnt included when picking last element
+    // When strings are concatenated, make sure data from next row is not included when picking last element
     result = SplitIndexRetNull("Jack,John,MaryPaul,Nathan", 14, false, ",", 1, 1, false, 2, false, &outIsNull, &outlen);
     EXPECT_EQ(outlen, 4);
     actual = std::string(result, outlen);
@@ -1855,7 +1823,8 @@ TEST(FunctionTest, ConcatWs3Str)
     EXPECT_EQ(actual, "-");
 
     // concat_ws("-", "", null, null) => ""
-    result = ConcatWs3Str(contextPtr, "-", 1, false, "", 0, false, nullptr, 0, true, nullptr, 0, true, &retIsNull, &outlen);
+    result =
+        ConcatWs3Str(contextPtr, "-", 1, false, "", 0, false, nullptr, 0, true, nullptr, 0, true, &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 0);
@@ -1863,7 +1832,8 @@ TEST(FunctionTest, ConcatWs3Str)
     EXPECT_EQ(actual, "");
 
     // concat_ws("-", null, null, null) => ""
-    result = ConcatWs3Str(contextPtr, "-", 1, false, nullptr, 0, true, nullptr, 0, true, nullptr, 0, true, &retIsNull, &outlen);
+    result = ConcatWs3Str(contextPtr, "-", 1, false, nullptr, 0, true, nullptr, 0, true, nullptr, 0, true, &retIsNull,
+                          &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 0);
@@ -1871,7 +1841,8 @@ TEST(FunctionTest, ConcatWs3Str)
     EXPECT_EQ(actual, "");
 
     // separator null => null
-    result = ConcatWs3Str(contextPtr, "-", 1, true, "aa", 2, false, "dd", 2, false, "bb", 2, false, &retIsNull, &outlen);
+    result =
+        ConcatWs3Str(contextPtr, "-", 1, true, "aa", 2, false, "dd", 2, false, "bb", 2, false, &retIsNull, &outlen);
     EXPECT_TRUE(retIsNull);
     EXPECT_EQ(result, nullptr);
     EXPECT_EQ(outlen, 0);
@@ -1904,7 +1875,7 @@ TEST(FunctionTest, ConcatWs4Str)
     bool retIsNull = false;
 
     result = ConcatWs4Str(contextPtr, ",", 1, false, "a", 1, false, "b", 1, false, "c", 1, false, "d", 1, false,
-        &retIsNull, &outlen);
+                          &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 7);
@@ -1912,7 +1883,7 @@ TEST(FunctionTest, ConcatWs4Str)
     EXPECT_EQ(actual, "a,b,c,d");
 
     result = ConcatWs4Str(contextPtr, ",", 1, false, "a", 1, false, "b", 1, false, "", 0, false, "d", 1, false,
-        &retIsNull, &outlen);
+                          &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 6);
@@ -1920,15 +1891,15 @@ TEST(FunctionTest, ConcatWs4Str)
     EXPECT_EQ(actual, "a,b,,d");
 
     result = ConcatWs4Str(contextPtr, ",", 1, false, "", 0, false, "b", 1, false, "c", 1, false, "", 0, false,
-        &retIsNull, &outlen);
+                          &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 5);
     actual = std::string(result, outlen);
     EXPECT_EQ(actual, ",b,c,");
 
-    result = ConcatWs4Str(contextPtr, ",", 1, false, "", 0, false, "", 0, false, "", 0, false, "", 0, false,
-        &retIsNull, &outlen);
+    result = ConcatWs4Str(contextPtr, ",", 1, false, "", 0, false, "", 0, false, "", 0, false, "", 0, false, &retIsNull,
+                          &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 3);
@@ -1936,13 +1907,13 @@ TEST(FunctionTest, ConcatWs4Str)
     EXPECT_EQ(actual, ",,,");
 
     result = ConcatWs4Str(contextPtr, ",", 1, true, "a", 1, false, "b", 1, false, "c", 1, false, "d", 1, false,
-        &retIsNull, &outlen);
+                          &retIsNull, &outlen);
     EXPECT_TRUE(retIsNull);
     EXPECT_EQ(result, nullptr);
     EXPECT_EQ(outlen, 0);
 
     result = ConcatWs4Str(contextPtr, "", 0, false, "a", 1, false, "b", 1, false, "c", 1, false, "d", 1, false,
-        &retIsNull, &outlen);
+                          &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 4);
@@ -1951,7 +1922,7 @@ TEST(FunctionTest, ConcatWs4Str)
 
     // skip nulls: concat_ws("-", "aa", null, "bb", null) => "aa-bb"
     result = ConcatWs4Str(contextPtr, "-", 1, false, "aa", 2, false, nullptr, 0, true, "bb", 2, false, nullptr, 0, true,
-        &retIsNull, &outlen);
+                          &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 5);
@@ -1970,24 +1941,24 @@ TEST(FunctionTest, ConcatWs5Str)
     std::string actual;
     bool retIsNull = false;
 
-    result = ConcatWs5Str(contextPtr, ",", 1, false, "a", 1, false, "b", 1, false, "c", 1, false, "d", 1, false,
-        "e", 1, false, &retIsNull, &outlen);
+    result = ConcatWs5Str(contextPtr, ",", 1, false, "a", 1, false, "b", 1, false, "c", 1, false, "d", 1, false, "e", 1,
+                          false, &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 9);
     actual = std::string(result, outlen);
     EXPECT_EQ(actual, "a,b,c,d,e");
 
-    result = ConcatWs5Str(contextPtr, ",", 1, false, "a", 1, false, "b", 1, false, "", 0, false, "d", 1, false,
-        "e", 1, false, &retIsNull, &outlen);
+    result = ConcatWs5Str(contextPtr, ",", 1, false, "a", 1, false, "b", 1, false, "", 0, false, "d", 1, false, "e", 1,
+                          false, &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 8);
     actual = std::string(result, outlen);
     EXPECT_EQ(actual, "a,b,,d,e");
 
-    result = ConcatWs5Str(contextPtr, ",", 1, false, "", 0, false, "b", 1, false, "c", 1, false, "d", 1, false,
-        "", 0, false, &retIsNull, &outlen);
+    result = ConcatWs5Str(contextPtr, ",", 1, false, "", 0, false, "b", 1, false, "c", 1, false, "d", 1, false, "", 0,
+                          false, &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 7);
@@ -1995,21 +1966,21 @@ TEST(FunctionTest, ConcatWs5Str)
     EXPECT_EQ(actual, ",b,c,d,");
 
     result = ConcatWs5Str(contextPtr, ",", 1, false, "", 0, false, "", 0, false, "", 0, false, "", 0, false, "", 0,
-        false, &retIsNull, &outlen);
+                          false, &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 4);
     actual = std::string(result, outlen);
     EXPECT_EQ(actual, ",,,,");
 
-    result = ConcatWs5Str(contextPtr, ",", 1, true, "a", 1, false, "b", 1, false, "c", 1, false, "d", 1, false,
-        "e", 1, false, &retIsNull, &outlen);
+    result = ConcatWs5Str(contextPtr, ",", 1, true, "a", 1, false, "b", 1, false, "c", 1, false, "d", 1, false, "e", 1,
+                          false, &retIsNull, &outlen);
     EXPECT_TRUE(retIsNull);
     EXPECT_EQ(result, nullptr);
     EXPECT_EQ(outlen, 0);
 
-    result = ConcatWs5Str(contextPtr, "", 0, false, "a", 1, false, "b", 1, false, "c", 1, false, "d", 1, false,
-        "e", 1, false, &retIsNull, &outlen);
+    result = ConcatWs5Str(contextPtr, "", 0, false, "a", 1, false, "b", 1, false, "c", 1, false, "d", 1, false, "e", 1,
+                          false, &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 5);
@@ -2017,7 +1988,7 @@ TEST(FunctionTest, ConcatWs5Str)
     EXPECT_EQ(actual, "abcde");
 
     result = ConcatWs5Str(contextPtr, "-", 1, false, nullptr, 0, true, nullptr, 0, true, nullptr, 0, true, nullptr, 0,
-        true, nullptr, 0, true, &retIsNull, &outlen);
+                          true, nullptr, 0, true, &retIsNull, &outlen);
     EXPECT_FALSE(retIsNull);
     EXPECT_NE(result, nullptr);
     EXPECT_EQ(outlen, 0);
@@ -2400,12 +2371,12 @@ TEST(FunctionTest, SubstrWithZhForSpark)
 
     std::string strEn = "apple";
     result = SubstrVarchar<int32_t, true, false>(contextPtr, strEn.c_str(), static_cast<int32_t>(strEn.length()), -7, 3,
-        false, &outLen);
+                                                 false, &outLen);
     actual = std::string(result, outLen);
     EXPECT_EQ(actual, "a");
 
     result = SubstrVarcharWithStart<int32_t, true, false>(contextPtr, strEn.c_str(),
-        static_cast<int32_t>(strEn.length()), -7, false, &outLen);
+                                                          static_cast<int32_t>(strEn.length()), -7, false, &outLen);
     actual = std::string(result, outLen);
     EXPECT_EQ(actual, "apple");
 
@@ -2643,12 +2614,12 @@ TEST(FunctionTest, Instr)
     std::string srcStr = "一丁丂七丄丅丆万丈三上下丌不与丏";
     std::string subStr = "万丈";
     result = InStr(srcStr.c_str(), static_cast<int32_t>(srcStr.length()), subStr.c_str(),
-        static_cast<int32_t>(subStr.length()), false);
+                   static_cast<int32_t>(subStr.length()), false);
     EXPECT_EQ(result, 8);
     srcStr = "壹貳叁肆伍";
     subStr = "叁肆";
     result = InStr(srcStr.c_str(), static_cast<int32_t>(srcStr.length()), subStr.c_str(),
-        static_cast<int32_t>(subStr.length()), false);
+                   static_cast<int32_t>(subStr.length()), false);
     EXPECT_EQ(result, 3);
 }
 
@@ -2806,8 +2777,9 @@ TEST(FunctionTest, ReplaceStrStrStrWithRep)
     std::string str = "operator1";
     std::string searchStr = "o";
     std::string replaceStr = "**";
-    auto result = ReplaceStrStrStrWithRepReplace(contextPtr, str.c_str(), str.length(), searchStr.c_str(),
-        searchStr.length(), replaceStr.c_str(), replaceStr.length(), false, &outLen);
+    auto result =
+        ReplaceStrStrStrWithRepReplace(contextPtr, str.c_str(), str.length(), searchStr.c_str(), searchStr.length(),
+                                       replaceStr.c_str(), replaceStr.length(), false, &outLen);
     std::string expected = "**perat**r1";
     EXPECT_EQ(outLen, 11);
     EXPECT_EQ(std::string(result, outLen), expected);
@@ -2815,8 +2787,9 @@ TEST(FunctionTest, ReplaceStrStrStrWithRep)
     str = "operator2";
     searchStr = "";
     replaceStr = "*";
-    result = ReplaceStrStrStrWithRepReplace(contextPtr, str.c_str(), str.length(), searchStr.c_str(),
-        searchStr.length(), replaceStr.c_str(), replaceStr.length(), false, &outLen);
+    result =
+        ReplaceStrStrStrWithRepReplace(contextPtr, str.c_str(), str.length(), searchStr.c_str(), searchStr.length(),
+                                       replaceStr.c_str(), replaceStr.length(), false, &outLen);
     expected = "*o*p*e*r*a*t*o*r*2*";
     EXPECT_EQ(outLen, 19);
     EXPECT_EQ(std::string(result, outLen), expected);
@@ -2824,8 +2797,9 @@ TEST(FunctionTest, ReplaceStrStrStrWithRep)
     str = "operator3";
     searchStr = "era";
     replaceStr = "ER";
-    result = ReplaceStrStrStrWithRepReplace(contextPtr, str.c_str(), str.length(), searchStr.c_str(),
-        searchStr.length(), replaceStr.c_str(), replaceStr.length(), false, &outLen);
+    result =
+        ReplaceStrStrStrWithRepReplace(contextPtr, str.c_str(), str.length(), searchStr.c_str(), searchStr.length(),
+                                       replaceStr.c_str(), replaceStr.length(), false, &outLen);
     expected = "opERtor3";
     EXPECT_EQ(outLen, 8);
     EXPECT_EQ(std::string(result, outLen), expected);
@@ -2841,7 +2815,7 @@ TEST(FunctionTest, ReplaceStrStrWithoutRep)
     std::string str = "operator1";
     std::string searchStr = "o";
     auto result = ReplaceStrStrWithoutRepReplace(contextPtr, str.c_str(), str.length(), searchStr.c_str(),
-        searchStr.length(), false, &outLen);
+                                                 searchStr.length(), false, &outLen);
     std::string expected = "peratr1";
     EXPECT_EQ(outLen, 7);
     EXPECT_EQ(std::string(result, outLen), expected);
@@ -2849,7 +2823,7 @@ TEST(FunctionTest, ReplaceStrStrWithoutRep)
     str = "operator2";
     searchStr = "";
     result = ReplaceStrStrWithoutRepReplace(contextPtr, str.c_str(), str.length(), searchStr.c_str(),
-        searchStr.length(), false, &outLen);
+                                            searchStr.length(), false, &outLen);
     expected = "operator2";
     EXPECT_EQ(outLen, 9);
     EXPECT_EQ(std::string(result, outLen), expected);
@@ -2857,7 +2831,7 @@ TEST(FunctionTest, ReplaceStrStrWithoutRep)
     str = "operator3";
     searchStr = "era";
     result = ReplaceStrStrWithoutRepReplace(contextPtr, str.c_str(), str.length(), searchStr.c_str(),
-        searchStr.length(), false, &outLen);
+                                            searchStr.length(), false, &outLen);
     expected = "optor3";
     EXPECT_EQ(outLen, 6);
     EXPECT_EQ(std::string(result, outLen), expected);
@@ -2870,16 +2844,17 @@ TEST(FunctionTest, ReplaceStrCharStr)
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
 
-    std::string str[] = { "", " varchar2", "", "varchar4", "varchar5", "varchar6", "varchar7" };
-    std::string searchStr[] =
-                { "          ", " char200  ", "char300   ", "char400   ", "char500   ", "char600   ", "char700   " };
-    std::string replaceStr[] = { "", " varchar2", "", "varchar4", "varchar5", "varchar6", "varchar7" };
-    int32_t resultLen[] = { 0, 9, 0, 8, 8, 8, 8 };
-    std::string expected[] = { "", " varchar2", "", "varchar4", "varchar5", "varchar6", "varchar7" };
+    std::string str[] = {"", " varchar2", "", "varchar4", "varchar5", "varchar6", "varchar7"};
+    std::string searchStr[] = {"          ", " char200  ", "char300   ", "char400   ",
+                               "char500   ", "char600   ", "char700   "};
+    std::string replaceStr[] = {"", " varchar2", "", "varchar4", "varchar5", "varchar6", "varchar7"};
+    int32_t resultLen[] = {0, 9, 0, 8, 8, 8, 8};
+    std::string expected[] = {"", " varchar2", "", "varchar4", "varchar5", "varchar6", "varchar7"};
 
     for (int32_t i = 0; i < 7; i++) {
         auto result = ReplaceStrStrStrWithRepReplace(contextPtr, str[i].c_str(), str[i].length(), searchStr[i].c_str(),
-            searchStr[i].length(), replaceStr[i].c_str(), replaceStr[i].length(), false, &outLen);
+                                                     searchStr[i].length(), replaceStr[i].c_str(),
+                                                     replaceStr[i].length(), false, &outLen);
         EXPECT_EQ(outLen, resultLen[i]);
         EXPECT_EQ(std::string(result, outLen), expected[i]);
     }
@@ -2892,19 +2867,20 @@ TEST(FunctionTest, ReplaceCharCharChar)
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
 
-    std::string str[] = { "          ", " char200  ", "          ", "char400   ", "char500   ", "char600   ",
-                              "char700   " };
-    std::string searchStr[] =
-                { "cha1     ", " char2     ", "char3     ", "char4     ", "char5     ", "char6     ", "char7     " };
-    std::string replaceStr[] =
-                { "varchar100", "varchar200", "varchar300", "varchar400", "varchar500", "varchar600", "varchar700" };
-    int32_t resultLen[] = { 10, 10, 10, 10, 10, 10, 10 };
-    std::string expected[] =
-                { "          ", " char200  ", "          ", "char400   ", "char500   ", "char600   ", "char700   " };
+    std::string str[] = {"          ", " char200  ", "          ", "char400   ",
+                         "char500   ", "char600   ", "char700   "};
+    std::string searchStr[] = {"cha1     ",  " char2     ", "char3     ", "char4     ",
+                               "char5     ", "char6     ",  "char7     "};
+    std::string replaceStr[] = {"varchar100", "varchar200", "varchar300", "varchar400",
+                                "varchar500", "varchar600", "varchar700"};
+    int32_t resultLen[] = {10, 10, 10, 10, 10, 10, 10};
+    std::string expected[] = {"          ", " char200  ", "          ", "char400   ",
+                              "char500   ", "char600   ", "char700   "};
 
     for (int32_t i = 0; i < 7; i++) {
         auto result = ReplaceStrStrStrWithRepReplace(contextPtr, str[i].c_str(), str[i].length(), searchStr[i].c_str(),
-            searchStr[i].length(), replaceStr[i].c_str(), replaceStr[i].length(), false, &outLen);
+                                                     searchStr[i].length(), replaceStr[i].c_str(),
+                                                     replaceStr[i].length(), false, &outLen);
         EXPECT_EQ(outLen, resultLen[i]);
         EXPECT_EQ(std::string(result, outLen), expected[i]);
     }
@@ -2917,48 +2893,55 @@ TEST(FunctionTest, ReplaceStrStrStrZh)
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     int32_t outLen = 0;
 
-    std::vector<std::string> str { "", "粉色的圣诞袜", "apple", "粉色de圣诞袜" };
-    std::vector<std::string> searchStr { "", "粉色", "pp", "de圣" };
-    std::vector<std::string> replaceStr { "", "黑色", "*w*", "*的*" };
+    std::vector<std::string> str{"", "粉色的圣诞袜", "apple", "粉色de圣诞袜"};
+    std::vector<std::string> searchStr{"", "粉色", "pp", "de圣"};
+    std::vector<std::string> replaceStr{"", "黑色", "*w*", "*的*"};
 
     auto result1 = ReplaceStrStrStrWithRepReplace(contextPtr, str[2].c_str(), str[2].length(), searchStr[0].c_str(),
-        searchStr[0].length(), replaceStr[2].c_str(), replaceStr[2].length(), false, &outLen);
+                                                  searchStr[0].length(), replaceStr[2].c_str(), replaceStr[2].length(),
+                                                  false, &outLen);
     std::string expected = "*w*a*w*p*w*p*w*l*w*e*w*";
     EXPECT_EQ(outLen, 23);
     EXPECT_EQ(std::string(result1, outLen), expected);
 
     auto result2 = ReplaceStrStrStrWithRepReplace(contextPtr, str[1].c_str(), str[1].length(), searchStr[0].c_str(),
-        searchStr[0].length(), replaceStr[2].c_str(), replaceStr[2].length(), false, &outLen);
+                                                  searchStr[0].length(), replaceStr[2].c_str(), replaceStr[2].length(),
+                                                  false, &outLen);
     expected = "*w*粉*w*色*w*的*w*圣*w*诞*w*袜*w*";
     EXPECT_EQ(outLen, 39);
     EXPECT_EQ(std::string(result2, outLen), expected);
 
     auto result3 = ReplaceStrStrStrWithRepReplace(contextPtr, str[3].c_str(), str[3].length(), searchStr[0].c_str(),
-        searchStr[0].length(), replaceStr[2].c_str(), replaceStr[2].length(), false, &outLen);
+                                                  searchStr[0].length(), replaceStr[2].c_str(), replaceStr[2].length(),
+                                                  false, &outLen);
     expected = "*w*粉*w*色*w*d*w*e*w*圣*w*诞*w*袜*w*";
     EXPECT_EQ(outLen, 41);
     EXPECT_EQ(std::string(result3, outLen), expected);
 
     auto result4 = ReplaceStrStrStrWithRepReplace(contextPtr, str[3].c_str(), str[3].length(), searchStr[0].c_str(),
-        searchStr[0].length(), replaceStr[3].c_str(), replaceStr[3].length(), false, &outLen);
+                                                  searchStr[0].length(), replaceStr[3].c_str(), replaceStr[3].length(),
+                                                  false, &outLen);
     expected = "*的*粉*的*色*的*d*的*e*的*圣*的*诞*的*袜*的*";
     EXPECT_EQ(outLen, 57);
     EXPECT_EQ(std::string(result4, outLen), expected);
 
     auto result5 = ReplaceStrStrStrWithRepReplace(contextPtr, str[3].c_str(), str[3].length(), searchStr[3].c_str(),
-        searchStr[3].length(), replaceStr[3].c_str(), replaceStr[3].length(), false, &outLen);
+                                                  searchStr[3].length(), replaceStr[3].c_str(), replaceStr[3].length(),
+                                                  false, &outLen);
     expected = "粉色*的*诞袜";
     EXPECT_EQ(outLen, 17);
     EXPECT_EQ(std::string(result5, outLen), expected);
 
     auto result6 = ReplaceStrStrStrWithRepReplace(contextPtr, str[0].c_str(), str[0].length(), searchStr[0].c_str(),
-        searchStr[0].length(), replaceStr[0].c_str(), replaceStr[0].length(), false, &outLen);
+                                                  searchStr[0].length(), replaceStr[0].c_str(), replaceStr[0].length(),
+                                                  false, &outLen);
     expected = "";
     EXPECT_EQ(outLen, 0);
     EXPECT_EQ(std::string(result6, outLen), expected);
 
     auto result7 = ReplaceStrStrStrWithRepReplace(contextPtr, str[3].c_str(), str[3].length(), searchStr[0].c_str(),
-        searchStr[0].length(), replaceStr[0].c_str(), replaceStr[0].length(), false, &outLen);
+                                                  searchStr[0].length(), replaceStr[0].c_str(), replaceStr[0].length(),
+                                                  false, &outLen);
     expected = "粉色de圣诞袜";
     EXPECT_EQ(outLen, 17);
     EXPECT_EQ(std::string(result7, outLen), expected);
@@ -3507,12 +3490,12 @@ TEST(FunctionTest, EvaluateHiveUdfSingle)
 {
     auto context = new ExecutionContext();
     auto contextPtr = reinterpret_cast<int64_t>(context);
-    int32_t inputTypes[] = { OMNI_INT, OMNI_INT };
+    int32_t inputTypes[] = {OMNI_INT, OMNI_INT};
     int32_t retType = OMNI_INT;
     int32_t vecCount = 2;
 
-    int32_t inputValue[2] = { 3, 5 };
-    uint8_t inputNull[2] = { 0, 0 };
+    int32_t inputValue[2] = {3, 5};
+    uint8_t inputNull[2] = {0, 0};
     int64_t inputLength = 0;
     int32_t outputValue;
     int8_t outputNull;
@@ -3541,15 +3524,15 @@ TEST(FunctionTest, EvaluateHiveUdfSingle)
     EXPECT_CALL(*env, GetStaticObjectField(_, _)).WillRepeatedly(Return(nullptr));
     EXPECT_CALL(*env, SetObjectArrayElement(_, _, _)).WillRepeatedly(Return());
 
-    InAndOutputInfos infos {};
+    InAndOutputInfos infos{};
     EXPECT_CALL(*env, CallStaticVoidMethodV(_, _, infos))
         .WillOnce(DoAll(Assign((int32_t *)(&outputValue), 8), Assign((int8_t *)(&outputNull), 0)))
         .WillRepeatedly(Return());
 
     EvaluateHiveUdfSingle(contextPtr, "omniruntime.udf.AddIntUDF", inputTypes, retType, vecCount,
-        reinterpret_cast<int64_t>(inputValue), reinterpret_cast<int64_t>(inputNull), inputLength,
-        reinterpret_cast<int64_t>(&outputValue), reinterpret_cast<int64_t>(&outputNull),
-        reinterpret_cast<int64_t>(&outputLength));
+                          reinterpret_cast<int64_t>(inputValue), reinterpret_cast<int64_t>(inputNull), inputLength,
+                          reinterpret_cast<int64_t>(&outputValue), reinterpret_cast<int64_t>(&outputNull),
+                          reinterpret_cast<int64_t>(&outputLength));
 
     ASSERT_EQ(outputValue, 8);
     ASSERT_EQ(outputNull, 0);
@@ -3562,20 +3545,20 @@ TEST(FunctionTest, EvaluateHiveUdfSingle)
 TEST(FunctionTest, UnixTimestampFromStr)
 {
     const int32_t rowCnt = 6;
-    std::string timeStrs[] = {"2024-10-12", "1948-01-12", "2023-12-09", "",
-                              "1989-07-10 11:10:09", "1985-06-29 00:04:49"};
+    std::string timeStrs[] = {"2024-10-12", "1948-01-12",          "2023-12-09",
+                              "",           "1989-07-10 11:10:09", "1985-06-29 00:04:49"};
     std::string fmtStrs[] = {"%Y-%m-%d", "%Y-%m-%d", "%Y-%m-%d", "", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"};
     bool isNullTimeStr[] = {false, false, false, true, false, false};
     bool isNullFmtStr[] = {false, false, false, true, false, false};
-    bool* retIsNull[rowCnt];
+    bool *retIsNull[rowCnt];
     for (int i = 0; i < rowCnt; ++i) {
         retIsNull[i] = new bool(false);
     }
     int64_t output[rowCnt];
     for (int32_t i = 0; i < rowCnt; i++) {
         output[i] = UnixTimestampFromStr(timeStrs[i].c_str(), timeStrs[i].length(), isNullTimeStr[i],
-                                         fmtStrs[i].c_str(), fmtStrs[i].length(), isNullFmtStr[i],
-                                         "Asia/Shanghai", 13, false, "CORRECTED", 9, false, retIsNull[i]);
+                                         fmtStrs[i].c_str(), fmtStrs[i].length(), isNullFmtStr[i], "Asia/Shanghai", 13,
+                                         false, "CORRECTED", 9, false, retIsNull[i]);
     }
     std::vector<bool> expectIsNull = {false, false, false, true, false, false};
     bool resultIsNull[rowCnt];
@@ -3584,10 +3567,10 @@ TEST(FunctionTest, UnixTimestampFromStr)
     }
     TestUtil::AssertBoolEquals(expectIsNull, resultIsNull);
     std::vector<int64_t> result(output, output + rowCnt);
-    std::vector<int64_t> expect = { 1728662400, -693388800, 1702051200, 0, 616039809, 488822689 };
+    std::vector<int64_t> expect = {1728662400, -693388800, 1702051200, 0, 616039809, 488822689};
     TestUtil::AssertLongEquals(expect, result);
     for (int i = 0; i < rowCnt; ++i) {
-    delete retIsNull[i];
+        delete retIsNull[i];
     }
 }
 
@@ -3599,11 +3582,11 @@ TEST(FunctionTest, UnixTimestampFromDate)
     bool isNull[] = {false, false, false};
     int64_t output[rowCnt];
     for (int32_t i = 0; i < rowCnt; i++) {
-        output[i] = UnixTimestampFromDate(dates[i], fmtStrs[i].c_str(), fmtStrs[i].length(),
-                                          "Asia/Shanghai", 13, "CORRECTED", 9, isNull[i]);
+        output[i] = UnixTimestampFromDate(dates[i], fmtStrs[i].c_str(), fmtStrs[i].length(), "Asia/Shanghai", 13,
+                                          "CORRECTED", 9, isNull[i]);
     }
     std::vector<int64_t> result(output, output + rowCnt);
-    std::vector<int64_t> expect = { 615999600, 488822400, -28800 };
+    std::vector<int64_t> expect = {615999600, 488822400, -28800};
     TestUtil::AssertLongEquals(expect, result);
 }
 
@@ -3618,26 +3601,26 @@ TEST(FunctionTest, FromUnixTimeRetNull)
     char *result = nullptr;
     std::string actual;
 
-    result = FromUnixTimeRetNull(contextPtr, &isNull, 615999600, fmtStr.c_str(), fmtStr.length(),
-                                 tzStr.c_str(), tzStr.length(), &outlen);
+    result = FromUnixTimeRetNull(contextPtr, &isNull, 615999600, fmtStr.c_str(), fmtStr.length(), tzStr.c_str(),
+                                 tzStr.length(), &outlen);
     actual = std::string(result, outlen);
     EXPECT_EQ(actual, "1989-07-10 00:00:00");
     EXPECT_EQ(outlen, 19);
 
-    result = FromUnixTimeRetNull(contextPtr, &isNull, 488822400, fmtStr.c_str(), fmtStr.length(),
-                                 tzStr.c_str(), tzStr.length(), &outlen);
+    result = FromUnixTimeRetNull(contextPtr, &isNull, 488822400, fmtStr.c_str(), fmtStr.length(), tzStr.c_str(),
+                                 tzStr.length(), &outlen);
     actual = std::string(result, outlen);
     EXPECT_EQ(actual, "1985-06-29 00:00:00");
     EXPECT_EQ(outlen, 19);
 
-    result = FromUnixTimeRetNull(contextPtr, &isNull, 0, fmtStr.c_str(), fmtStr.length(),
-                                 tzStr.c_str(), tzStr.length(), &outlen);
+    result = FromUnixTimeRetNull(contextPtr, &isNull, 0, fmtStr.c_str(), fmtStr.length(), tzStr.c_str(), tzStr.length(),
+                                 &outlen);
     actual = std::string(result, outlen);
     EXPECT_EQ(actual, "1970-01-01 08:00:00");
     EXPECT_EQ(outlen, 19);
 
-    result = FromUnixTimeRetNull(contextPtr, &isNull, -100, fmtStr.c_str(), fmtStr.length(),
-                                 tzStr.c_str(), tzStr.length(), &outlen);
+    result = FromUnixTimeRetNull(contextPtr, &isNull, -100, fmtStr.c_str(), fmtStr.length(), tzStr.c_str(),
+                                 tzStr.length(), &outlen);
     actual = std::string(result, outlen);
     EXPECT_EQ(actual, "1970-01-01 07:58:20");
     EXPECT_EQ(outlen, 19);
@@ -3751,12 +3734,12 @@ TEST(FunctionTest, ContainsStr)
     EXPECT_EQ(result, false);
 
     src = std::string("abc");
-    match = std::string("abd");
+    match = std::string("abd"); // codespell:ignore abd
     result = ContainsStr(src.c_str(), src.length(), match.c_str(), match.length(), false);
     EXPECT_EQ(result, false);
 
     src = std::string("abcd");
-    match = std::string("abd");
+    match = std::string("abd"); // codespell:ignore abd
     result = ContainsStr(src.c_str(), src.length(), match.c_str(), match.length(), false);
     EXPECT_EQ(result, false);
 
@@ -3798,11 +3781,11 @@ TEST(FunctionTest, ContainsStr)
 
 TEST(FunctionTest, GreatestStr)
 {
-    const char* lValue = "abc";
-    const char* rValue = "abcd";
+    const char *lValue = "abc";
+    const char *rValue = "abcd";
     bool retIsNull = false;
     int32_t outLen = 0;
-    const char* result = GreatestStr(lValue, strlen(lValue), false, rValue, strlen(rValue), false, &retIsNull, &outLen);
+    const char *result = GreatestStr(lValue, strlen(lValue), false, rValue, strlen(rValue), false, &retIsNull, &outLen);
     EXPECT_EQ(result, rValue);
     EXPECT_EQ(outLen, strlen(rValue));
     EXPECT_FALSE(retIsNull);
@@ -3945,30 +3928,30 @@ TEST(FunctionTest, StaticInvokeVarcharTypeWriteSideCheck)
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string src = "abc";
     int outLen;
-    const char* cs1 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 4, false, &outLen);
+    const char *cs1 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 4, false, &outLen);
     std::string ss1(cs1, outLen);
     EXPECT_EQ(ss1, src);
 
-    const char* cs2 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
+    const char *cs2 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
     EXPECT_TRUE(cs2 == nullptr);
 
     src = "abc   ";
-    const char* cs3 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 4, false, &outLen);
+    const char *cs3 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 4, false, &outLen);
     std::string ss3(cs3, outLen);
     EXPECT_EQ(ss3, "abc ");
 
-    const char* cs4 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
+    const char *cs4 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
     EXPECT_TRUE(cs4 == nullptr);
 
     src = "你好";
-    const char* cs5 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
+    const char *cs5 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
     std::string ss5(cs5, outLen);
     EXPECT_EQ(ss5, src);
 
-    const char* cs6 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 1, false, &outLen);
+    const char *cs6 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, src.c_str(), src.size(), 1, false, &outLen);
     EXPECT_TRUE(cs6 == nullptr);
 
-    const char* cs7 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, nullptr, 0, 1, true, &outLen);
+    const char *cs7 = StaticInvokeVarcharTypeWriteSideCheck(contextPtr, nullptr, 0, 1, true, &outLen);
     EXPECT_TRUE(cs7 == nullptr);
     delete context;
 }
@@ -3979,32 +3962,32 @@ TEST(FunctionTest, StaticInvokeCharReadPadding)
     int64_t contextPtr = reinterpret_cast<int64_t>(context);
     std::string src = "abc";
     int outLen;
-    const char* cs1 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
+    const char *cs1 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
     std::string ss1(cs1, outLen);
     EXPECT_EQ(ss1, src);
 
-    const char* cs2 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), src.size(), false, &outLen);
+    const char *cs2 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), src.size(), false, &outLen);
     std::string ss2(cs2, outLen);
     EXPECT_EQ(ss2, src);
 
-    const char* cs3 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 6, false, &outLen);
+    const char *cs3 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 6, false, &outLen);
     std::string ss3(cs3, outLen);
     EXPECT_EQ(ss3, "abc   ");
 
     src = "你好";
-    const char* cs4 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 1, false, &outLen);
+    const char *cs4 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 1, false, &outLen);
     std::string ss4(cs4, outLen);
     EXPECT_EQ(ss4, src);
 
-    const char* cs5 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
+    const char *cs5 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 2, false, &outLen);
     std::string ss5(cs5, outLen);
     EXPECT_EQ(ss5, src);
 
-    const char* cs6 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 4, false, &outLen);
+    const char *cs6 = StaticInvokeCharReadPadding(contextPtr, src.c_str(), src.size(), 4, false, &outLen);
     std::string ss6(cs6, outLen);
     EXPECT_EQ(ss6, "你好  ");
 
-    const char* cs7 = StaticInvokeCharReadPadding(contextPtr, nullptr, 0, 4, true, &outLen);
+    const char *cs7 = StaticInvokeCharReadPadding(contextPtr, nullptr, 0, 4, true, &outLen);
     std::string ss7(cs7, outLen);
     EXPECT_TRUE(cs7 == nullptr);
     delete context;
@@ -4019,8 +4002,8 @@ TEST(FunctionTest, GetJsonObject)
                           bool pathIsNull) {
         bool retIsNull = false;
         int32_t outLen = -1;
-        const char *ret = GetJsonObject(contextPtr, jsonStr, jsonLen, jsonIsNull, pathStr, pathLen, pathIsNull,
-            &retIsNull, &outLen);
+        const char *ret =
+            GetJsonObject(contextPtr, jsonStr, jsonLen, jsonIsNull, pathStr, pathLen, pathIsNull, &retIsNull, &outLen);
         EXPECT_TRUE(retIsNull);
         EXPECT_EQ(ret, nullptr);
         EXPECT_EQ(outLen, 0);
@@ -4030,7 +4013,8 @@ TEST(FunctionTest, GetJsonObject)
                            const std::string &expect) {
         bool retIsNull = true;
         int32_t outLen = 0;
-        const char *ret = GetJsonObject(contextPtr, jsonStr, jsonLen, false, pathStr, pathLen, false, &retIsNull, &outLen);
+        const char *ret =
+            GetJsonObject(contextPtr, jsonStr, jsonLen, false, pathStr, pathLen, false, &retIsNull, &outLen);
         EXPECT_FALSE(retIsNull);
         ASSERT_NE(ret, nullptr);
         EXPECT_EQ(outLen, static_cast<int32_t>(expect.size()));
@@ -4086,11 +4070,11 @@ TEST(FunctionTest, CurrentTimestamp)
 {
     int64_t timestamp1 = CurrentTimestamp();
     EXPECT_GT(timestamp1, 0);
-    
+
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     int64_t timestamp2 = CurrentTimestamp();
     EXPECT_GT(timestamp2, timestamp1);
-    
+
     auto now = std::chrono::system_clock::now();
     auto duration = now.time_since_epoch();
     int64_t expectedMillis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
@@ -4101,75 +4085,75 @@ TEST(FunctionTest, CurrentTimestamp)
 TEST(FunctionTest, DateAddDays)
 {
     bool retIsNull = false;
-    
+
     constexpr int64_t MILLIS_PER_DAY = 86400000LL;
     constexpr int64_t MIN_EPOCH_MILLS = -62167219200000LL;
     constexpr int64_t MAX_EPOCH_MILLS = 253402300799999LL;
-    
+
     int64_t timestamp = 1625097600000L;
-    
+
     int64_t result = DateAddDays(timestamp, false, 1, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, timestamp + MILLIS_PER_DAY);
-    
+
     result = DateAddDays(timestamp, false, 7, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, timestamp + 7 * MILLIS_PER_DAY);
-    
+
     result = DateAddDays(timestamp, false, -1, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, timestamp - MILLIS_PER_DAY);
-    
+
     result = DateAddDays(timestamp, false, -30, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, timestamp - 30 * MILLIS_PER_DAY);
-    
+
     result = DateAddDays(timestamp, false, 0, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, timestamp);
-    
+
     result = DateAddDays(timestamp, true, 1, false, &retIsNull);
     EXPECT_TRUE(retIsNull);
     EXPECT_EQ(result, 0);
-    
+
     result = DateAddDays(timestamp, false, 1, true, &retIsNull);
     EXPECT_TRUE(retIsNull);
     EXPECT_EQ(result, 0);
-    
+
     int64_t nearMax = MAX_EPOCH_MILLS - MILLIS_PER_DAY;
     result = DateAddDays(nearMax, false, 1, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, MAX_EPOCH_MILLS);
-    
+
     result = DateAddDays(MAX_EPOCH_MILLS, false, 1, false, &retIsNull);
     EXPECT_TRUE(retIsNull);
     EXPECT_EQ(result, 0);
-    
+
     int64_t nearMin = MIN_EPOCH_MILLS + MILLIS_PER_DAY;
     result = DateAddDays(nearMin, false, -1, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, MIN_EPOCH_MILLS);
-    
+
     result = DateAddDays(MIN_EPOCH_MILLS, false, -1, false, &retIsNull);
     EXPECT_TRUE(retIsNull);
     EXPECT_EQ(result, 0);
-    
+
     result = DateAddDays(0L, false, 365, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, 365 * MILLIS_PER_DAY);
-    
+
     result = DateAddDays(365 * MILLIS_PER_DAY, false, -365, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, 0L);
-    
+
     int64_t epochTimestamp = 0L;
     result = DateAddDays(epochTimestamp, false, 1000, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, 1000 * MILLIS_PER_DAY);
-    
+
     result = DateAddDays(epochTimestamp, false, -1000, false, &retIsNull);
     EXPECT_FALSE(retIsNull);
     EXPECT_EQ(result, -1000 * MILLIS_PER_DAY);
 }
 
-}
+} // namespace omniruntime

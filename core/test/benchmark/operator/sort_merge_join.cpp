@@ -1,7 +1,14 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
-
 
 #include <random>
 #include <iostream>
@@ -20,13 +27,13 @@ class SortMergeJoinBM : public Fixture {
 public:
     int32_t streamedTblSize = 100000;
     int32_t bufferTblSize = 100000;
-    std::map<std::string, std::vector<DataTypePtr>> STREAMED_TYPES = { { "group1", { LongType(), IntType() } } };
-    std::map<std::string, std::vector<DataTypePtr>> BUFFER_TYPES = { { "group1", { IntType(), LongType() } } };
-    std::map<std::string, std::vector<int32_t>> STREAMED_KEYCOLS = { { "group1", { 0 } } };
-    std::map<std::string, std::vector<int32_t>> STREAMED_OUTPUTCOLS = { { "group1", { 1 } } };
-    std::map<std::string, std::vector<int32_t>> BUFFER_KEYCOLS = { { "group1", { 1 } } };
-    std::map<std::string, std::vector<int32_t>> BUFFER_OUTPUTCOLS = { { "group1", { 0 } } };
-    std::map<std::string, JoinType> JOIN_TYPE = { { "group1", JoinType::OMNI_JOIN_TYPE_INNER } };
+    std::map<std::string, std::vector<DataTypePtr>> STREAMED_TYPES = {{"group1", {LongType(), IntType()}}};
+    std::map<std::string, std::vector<DataTypePtr>> BUFFER_TYPES = {{"group1", {IntType(), LongType()}}};
+    std::map<std::string, std::vector<int32_t>> STREAMED_KEYCOLS = {{"group1", {0}}};
+    std::map<std::string, std::vector<int32_t>> STREAMED_OUTPUTCOLS = {{"group1", {1}}};
+    std::map<std::string, std::vector<int32_t>> BUFFER_KEYCOLS = {{"group1", {1}}};
+    std::map<std::string, std::vector<int32_t>> BUFFER_OUTPUTCOLS = {{"group1", {0}}};
+    std::map<std::string, JoinType> JOIN_TYPE = {{"group1", JoinType::OMNI_JOIN_TYPE_INNER}};
 
     void SetUp(benchmark::State &state)
     {
@@ -63,11 +70,11 @@ public:
 
         DataTypes streamedTblTypes(STREAMED_TYPES[groupKey]);
         smjOp->ConfigStreamedTblInfo(streamedTblTypes, STREAMED_KEYCOLS[groupKey], STREAMED_OUTPUTCOLS[groupKey],
-            streamedTblTypes.GetSize());
+                                     streamedTblTypes.GetSize());
 
         DataTypes bufferedTblTypes(BUFFER_TYPES[groupKey]);
         smjOp->ConfigBufferedTblInfo(bufferedTblTypes, BUFFER_KEYCOLS[groupKey], BUFFER_OUTPUTCOLS[groupKey],
-            bufferedTblTypes.GetSize());
+                                     bufferedTblTypes.GetSize());
 
         smjOp->InitScannerAndResultBuilder(nullptr);
 
@@ -129,12 +136,11 @@ private:
     SortMergeJoinOperator *smjOp;
 };
 
-
 BENCHMARK_DEFINE_F(SortMergeJoinBM, SortMergeJoinTTest)(benchmark::State &st)
 {
     for (auto _ : st)
         SortMergeJoinBM::SortMergeJoinTest(st);
 }
 
-BENCHMARK_REGISTER_F(SortMergeJoinBM, SortMergeJoinTTest)->Args({ 1 })->Repetitions(20);
-}
+BENCHMARK_REGISTER_F(SortMergeJoinBM, SortMergeJoinTTest)->Args({1})->Repetitions(20);
+} // namespace om_benchmark

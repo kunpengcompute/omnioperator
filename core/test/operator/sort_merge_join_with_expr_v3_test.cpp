@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
- * Description: ...
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <vector>
 #include "gtest/gtest.h"
@@ -20,29 +27,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjInnerJoinExprGreaterThanCondition)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"GREATER_THAN\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":2}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"GREATER_THAN\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":2}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
+    std::vector<int32_t> streamedOutputCols = {1};
     OperatorConfig operatorConfig;
     auto streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filterJsonStr,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     auto bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -94,30 +103,32 @@ TEST(SortMergeJoinWithExprV3Test, testSmjInnerJoinExprEqualCondition)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"EQUAL\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"EQUAL\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
 
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     OperatorConfig operatorConfig;
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filterJsonStr,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -168,25 +179,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinstreamedGreaterThanBuffered)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -238,25 +251,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinstreamedLessThanBuffered)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -304,25 +319,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinMixGreaterLessThanBuffered)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -373,25 +390,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinStreamedWithNullJoinKeyFirst)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -447,25 +466,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinMultiColumBatch)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     int32_t streamedCol1Row1[1] = {1};
@@ -507,7 +528,6 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinMultiColumBatch)
     double bufferedCol1Row6[1] = {6.6};
     int32_t bufferedCol2Row6[1] = {6};
     VectorBatch *bufferedTblVecBatchRow6 = CreateVectorBatch(bufferedTblTypes, 1, bufferedCol1Row6, bufferedCol2Row6);
-
 
     // join start add streamed table data
     streamedTblWithExprOperator->AddInput(streamedTblVecBatchRow1);
@@ -579,25 +599,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinNullFirstWithRepeatRowsAndMulti
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     int32_t streamedCol1Row1[1] = {1};
@@ -719,25 +741,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinRepeatRowsAndMultiColumBatch)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     int32_t streamedCol1Row1[1] = {1};
@@ -848,10 +872,10 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinRepeatRowsAndMultiColumBatch)
     bufferedTblWithExprOperator->GetOutput(&result);
 
     // check the join result
-    long resultCol1[] = {1100, 2200, 4400, 5500, 5500, 5500, 5500, 5500, 5500, 5500, 5500, 5500,
-                             5500, 5500, 5500, 5500, 5500, 5500, 5500, 6600};
-    double resultCol2[] = {1.1, 2.2, 4.4, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5,
-                               5.5, 5.5, 5.5, 6.6};
+    long resultCol1[] = {1100, 2200, 4400, 5500, 5500, 5500, 5500, 5500, 5500, 5500,
+                         5500, 5500, 5500, 5500, 5500, 5500, 5500, 5500, 5500, 6600};
+    double resultCol2[] = {1.1, 2.2, 4.4, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5,
+                           5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 6.6};
     AssertVecBatchEquals(result, 2, sizeof(resultCol1) / sizeof(resultCol1[0]), resultCol1, resultCol2);
     VectorHelper::FreeVecBatch(result);
 
@@ -869,25 +893,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinStreamedWithEmptyBuffered)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -932,33 +958,34 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinStreamedWithEmptyBuffered)
 TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinWithNullFirst)
 {
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { LongType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {LongType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *streamCol0 = new FieldExpr(0, LongType());
     auto *streamCol1 = new FieldExpr(1, LongType());
-    std::vector<Expr *> streamedEqualKeyExprs = { streamCol0, streamCol1 };
+    std::vector<Expr *> streamedEqualKeyExprs = {streamCol0, streamCol1};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { LongType(), LongType() };
+    std::vector<DataTypePtr> bufferTypesVector = {LongType(), LongType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *bufferCol0 = new FieldExpr(0, LongType());
     auto *bufferCol1 = new FieldExpr(1, LongType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { bufferCol0, bufferCol1 };
-    std::vector<int32_t> bufferedOutputCols = { 0, 1 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {bufferCol0, bufferCol1};
+    std::vector<int32_t> bufferedOutputCols = {0, 1};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
     const int32_t streamedTblDataSize = 10;
-    int64_t streamedTblDataCol1[streamedTblDataSize] = {1, 3378, 5439, 9013, 9543, 12572, 15591, 17436, 25272,
-                                                            30436};
+    int64_t streamedTblDataCol1[streamedTblDataSize] = {1, 3378, 5439, 9013, 9543, 12572, 15591, 17436, 25272, 30436};
     int64_t streamedTblDataCol2[streamedTblDataSize] = {8042, 8221, 8261, 7067, 7883, 8354, 5861, 6539, 5870, 6907};
     VectorBatch *streamedTblVecBatch1 =
         CreateVectorBatch(streamedTblTypes, streamedTblDataSize, streamedTblDataCol1, streamedTblDataCol2);
@@ -987,18 +1014,15 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinWithNullFirst)
     bufferedTblWithExprOperator->GetOutput(&result);
 
     // check the join result
-    int64_t resultCol1[] = {-1, -1, -1, 3378, 5439, -1, 9013, 9543, 12572, -1, -1, 15591, 17436, 25272, 30436, -1,
-                                -1,
-                                -1, -1, -1};
-    int64_t resultCol2[] = {8042, -1, -1, 8221, 8261, -1, 7067, 7883, 8354, -1, -1, 5861, 6539, 5870, 6907, -1, -1,
-                                -1,
-                                -1, -1};
-    int64_t resultCol3[] = {-1, -1, 879, -1, -1, 7804, -1, -1, -1, 13206, 14690, -1, -1, -1, -1, 32279, 36620,
-                                41764,
-                                44840, 53836};
-    int64_t resultCol4[] = {-1, 7748, 5444, -1, -1, 5701, -1, -1, -1, 6737, 5381, -1, -1, -1, -1, 6434, 8000, 7231,
-                                7610, 7955};
-    std::vector<DataTypePtr> resultTypesVec = { LongType(), LongType(), LongType(), LongType() };
+    int64_t resultCol1[] = {-1, -1,    -1,    3378,  5439,  -1, 9013, 9543, 12572, -1,
+                            -1, 15591, 17436, 25272, 30436, -1, -1,   -1,   -1,    -1};
+    int64_t resultCol2[] = {8042, -1,   -1,   8221, 8261, -1, 7067, 7883, 8354, -1,
+                            -1,   5861, 6539, 5870, 6907, -1, -1,   -1,   -1,   -1};
+    int64_t resultCol3[] = {-1,    -1, 879, -1, -1, 7804,  -1,    -1,    -1,    13206,
+                            14690, -1, -1,  -1, -1, 32279, 36620, 41764, 44840, 53836};
+    int64_t resultCol4[] = {-1,   7748, 5444, -1, -1, 5701, -1,   -1,   -1,   6737,
+                            5381, -1,   -1,   -1, -1, 6434, 8000, 7231, 7610, 7955};
+    std::vector<DataTypePtr> resultTypesVec = {LongType(), LongType(), LongType(), LongType()};
     DataTypes resultTypes(resultTypesVec);
     VectorBatch *expectVecBatch = CreateVectorBatch(resultTypes, 20, resultCol1, resultCol2, resultCol3, resultCol4);
     for (int32_t colIdx = 0; colIdx < expectVecBatch->GetVectorCount(); colIdx++) {
@@ -1027,25 +1051,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinMissMatchBothSide)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -1098,25 +1124,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullJoinWithMultiColumBatch)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     int32_t streamedCol1Row1[1] = {1};
@@ -1229,25 +1257,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinMatchBothSide)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -1300,25 +1330,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinMissMatchWithNullJoinkKeyF
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -1375,25 +1407,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinMissMatchWith2NullJoinkKey
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -1451,25 +1485,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinkKeyLast)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -1488,7 +1524,6 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinkKeyLast)
 
     // need add buffered table data
     bufferedTblWithExprOperator->AddInput(bufferedTblVecBatch1);
-
 
     // add eof flag to streamed table
     VectorBatch *streamedTblVecBatchEof = CreateEmptyVectorBatch(streamedTblTypes);
@@ -1524,25 +1559,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullJoinNullValuesWithMultiColumBatch)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     int32_t streamedCol1Row1[1] = {1};
@@ -1662,25 +1699,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinStreamedWithEmptyBuffered)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -1727,25 +1766,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinEmptyStreamedWithBuffered)
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -1794,25 +1835,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinRepeatRowsAndMultiColumBat
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     std::string blank;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     int32_t streamedCol1Row1[1] = {1};
@@ -1924,10 +1967,10 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinRepeatRowsAndMultiColumBat
     bufferedTblWithExprOperator->GetOutput(&result);
 
     // check the join result
-    long resultCol1[] = {1100, 2200, 0, 4400, 5500, 5500, 5500, 5500, 5500, 5500, 5500, 5500, 5500,
-                             5500, 5500, 5500, 5500, 5500, 5500, 5500, 6600};
-    double resultCol2[] = {1.1, 2.2, 3.3, 4.4, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5,
-                               5.5, 5.5, 5.5, 6.6};
+    long resultCol1[] = {1100, 2200, 0,    4400, 5500, 5500, 5500, 5500, 5500, 5500, 5500,
+                         5500, 5500, 5500, 5500, 5500, 5500, 5500, 5500, 5500, 6600};
+    double resultCol2[] = {1.1, 2.2, 3.3, 4.4, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5,
+                           5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 6.6};
     AssertVecBatchEquals(result, 2, sizeof(resultCol1) / sizeof(resultCol1[0]), resultCol1, resultCol2);
     // todo:compare null
     VectorHelper::FreeVecBatch(result);
@@ -1946,29 +1989,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjFullOuterJoinMissMatchBothSideWithExpre
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"GREATER_THAN\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":2}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"GREATER_THAN\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":2}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_FULL, filterJsonStr,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2029,29 +2074,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinStreamedWithNullJoinKeyFirstWit
     // streamedTbl t1:  int a, long b;
     // bufferedTbl t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"GREATER_THAN\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":3}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"GREATER_THAN\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":3}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, filterJsonStr,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2087,7 +2134,7 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinStreamedWithNullJoinKeyFirstWit
     // check the join result
     long resultCol1[] = {1100, 2200, 3300, 4400, 5500, 6600, 7700};
     double resultCol2[] = {0, 0, 0, 4.4, 0, 6.6, 0};
-    std::vector<DataTypePtr> resultTypeVector = { LongType(), DoubleType() };
+    std::vector<DataTypePtr> resultTypeVector = {LongType(), DoubleType()};
     DataTypes resultDataTypes(resultTypeVector);
     VectorBatch *expectVecBatch = CreateVectorBatch(resultDataTypes, 7, resultCol1, resultCol2);
     expectVecBatch->Get(1)->SetNull(0);
@@ -2113,27 +2160,29 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinStreamedRowLastUnJoinedWithExpr
     // bufferedTbl t2: int id, int age;
     // streamedTbl t1:  int id, int quantity;
     string filterJsonStr = "{\"exprType\":\"BINARY\",\"returnType\":4,\"operator\":\"GREATER_THAN\",\"left\":{"
-        "\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":1},\"right\":{\"exprType\":"
-        "\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":3}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), IntType() };
+                           "\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":1},\"right\":{\"exprType\":"
+                           "\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":3}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), IntType()};
     DataTypes streamedTblTypes(streamTypeVector);
     FieldExpr *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 0 };
+    std::vector<int32_t> streamedOutputCols = {0};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, filterJsonStr,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { IntType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {IntType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     FieldExpr *col1 = new FieldExpr(0, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2171,7 +2220,7 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftJoinStreamedRowLastUnJoinedWithExpr
     // check the join result
     int32_t resultCol1[] = {100, 100, 100, 200, 300, 300, 400, 500};
     int32_t resultCol2[] = {100, 100, 100, 0, 300, 300, 0, 0};
-    std::vector<DataTypePtr> resultTypeVector = { IntType(), IntType() };
+    std::vector<DataTypePtr> resultTypeVector = {IntType(), IntType()};
     DataTypes resultDataTypes(resultTypeVector);
     VectorBatch *expectVecBatch = CreateVectorBatch(resultDataTypes, 8, resultCol1, resultCol2);
     expectVecBatch->Get(1)->SetNull(3);
@@ -2195,25 +2244,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftSemiJoinWithFilterEmpty)
     // streamedTbl(left table) t1:  int a, long b;
     // bufferedTbl(right table) t2: double c, int d;
     std::string blank = "";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI, blank, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI, blank,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleDataType::Instance(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleDataType::Instance(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2268,29 +2319,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftSemiJoinStreamedWithRepeatRows)
     // streamedTbl(left table) t1:  int a, long b;
     // bufferedTbl(right table) t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"GREATER_THAN\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":1}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"GREATER_THAN\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":1}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2345,29 +2398,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftSemiJoinBufferedWithRepeatRows)
     // streamedTbl(left table) t1:  int a, long b;
     // bufferedTbl(right table) t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"LESS_THAN_OR_EQUAL\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"LESS_THAN_OR_EQUAL\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2421,29 +2476,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftSemiJoinBothNullFirst)
     // streamedTbl(left table) t1:  int a, long b;
     // bufferedTbl(right table) t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"LESS_THAN\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":5}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"LESS_THAN\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":5}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2501,29 +2558,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftSemiJoinFilterDeduplicate)
     // streamedTbl(left table) t1:  int a, long b;
     // bufferedTbl(right table) t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"GREATER_THAN\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":3,\"colVal\":2},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":3, \"isNull\":false, \"value\":4}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"GREATER_THAN\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":3,\"colVal\":2},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":3, \"isNull\":false, \"value\":4}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2580,29 +2639,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftSemiJoinBufferedWithDuplicateFilter
     // streamedTbl(left table) t1:  int a, long b;
     // bufferedTbl(right table) t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"GREATER_THAN\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":3,\"colVal\":2},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":3, \"isNull\":false, \"value\":4}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"GREATER_THAN\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":3,\"colVal\":2},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":3, \"isNull\":false, \"value\":4}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
     OperatorConfig operatorConfig;
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_SEMI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { DoubleType(), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {DoubleType(), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2659,25 +2720,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiJoinStreamedWithEmptyFilterExpr
     // streamedTbl AntiTest_s: CountryID int, Units long;
     // bufferedTbl AntiTest_b: ID int, Country double;
     string filterJsonStr;
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *streamCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { streamCol0 };
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<Expr *> streamedEqualKeyExprs = {streamCol0};
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     OperatorConfig operatorConfig;
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> bufferTypesVector = {IntType(), DoubleType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *bufferCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { bufferCol0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {bufferCol0};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2727,29 +2790,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiJoinEqualCondition)
     // AntiTest_s.CountryID = 4; streamedTbl AntiTest_s: CountryID int, Units long; bufferedTbl AntiTest_b: ID int,
     // Country double;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"EQUAL\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"EQUAL\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *streamCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { streamCol0 };
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<Expr *> streamedEqualKeyExprs = {streamCol0};
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     OperatorConfig operatorConfig;
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> bufferTypesVector = {IntType(), DoubleType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *bufferCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { bufferCol0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {bufferCol0};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2799,29 +2864,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiJoinBufferDoubleJoinRowFilterOu
     // AntiTest_s.CountryID = 4; streamedTbl AntiTest_s: CountryID int, Units long; bufferedTbl AntiTest_b: ID int,
     // Country double;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"EQUAL\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"EQUAL\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *streamCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { streamCol0 };
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<Expr *> streamedEqualKeyExprs = {streamCol0};
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     OperatorConfig operatorConfig;
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> bufferTypesVector = {IntType(), DoubleType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *bufferCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { bufferCol0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {bufferCol0};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2871,29 +2938,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiJoinWithStreamedNullFist)
     // AntiTest_s.CountryID = 4; streamedTbl AntiTest_s: CountryID int, Units long; bufferedTbl AntiTest_b: ID int,
     // Country double;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"EQUAL\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"EQUAL\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *streamCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { streamCol0 };
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<Expr *> streamedEqualKeyExprs = {streamCol0};
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     OperatorConfig operatorConfig;
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> bufferTypesVector = {IntType(), DoubleType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *bufferCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { bufferCol0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {bufferCol0};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -2945,29 +3014,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiJoinWithBufferedNullFist)
     // AntiTest_s.CountryID = 4; streamedTbl AntiTest_s: CountryID int, Units long; bufferedTbl AntiTest_b: ID int,
     // Country double;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"EQUAL\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"EQUAL\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *streamCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { streamCol0 };
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<Expr *> streamedEqualKeyExprs = {streamCol0};
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     OperatorConfig operatorConfig;
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> bufferTypesVector = {IntType(), DoubleType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *bufferCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { bufferCol0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {bufferCol0};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -3019,29 +3090,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiJoinWithBothSideNullFist)
     // AntiTest_s.CountryID = 4; streamedTbl AntiTest_s: CountryID int, Units long; bufferedTbl AntiTest_b: ID int,
     // Country double;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"EQUAL\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"EQUAL\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":4}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *streamCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { streamCol0 };
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<Expr *> streamedEqualKeyExprs = {streamCol0};
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     OperatorConfig operatorConfig;
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> bufferTypesVector = {IntType(), DoubleType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *bufferCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { bufferCol0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {bufferCol0};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -3095,29 +3168,31 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiJoinWithMultiRowAndFilterOut)
     // AntiTest_b.Country = 3.3; streamedTbl AntiTest_s: CountryID int, Units long; bufferedTbl AntiTest_b: ID int,
     // Country double;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"GREATER_THAN\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":3,\"colVal\":3},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":3, \"isNull\":false, \"value\":3.3}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), LongType() };
+                           "\"returnType\":4,"
+                           "\"operator\":\"GREATER_THAN\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":3,\"colVal\":3},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":3, \"isNull\":false, \"value\":3.3}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), LongType()};
     DataTypes streamedTblTypes(streamTypeVector);
     auto *streamCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { streamCol0 };
-    std::vector<int32_t> streamedOutputCols = { 0, 1 };
+    std::vector<Expr *> streamedEqualKeyExprs = {streamCol0};
+    std::vector<int32_t> streamedOutputCols = {0, 1};
     OperatorConfig operatorConfig;
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI,
+            filterJsonStr, operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> bufferTypesVector = {IntType(), DoubleType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     auto *bufferCol0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { bufferCol0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {bufferCol0};
     std::vector<int32_t> bufferedOutputCols = {};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -3171,30 +3246,32 @@ TEST(SortMergeJoinWithExprV3Test, testSmjInnerJoinExprGreaterThanIterativeGetOut
     // streamedTbl t1:  int a, Long b;
     // bufferedTbl t2: double c, int d;
     string filterJsonStr = "{\"exprType\":\"BINARY\","
-        "\"returnType\":4,"
-        "\"operator\":\"GREATER_THAN\","
-        "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
-        "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":2}}";
-    std::vector<DataTypePtr> streamTypeVector = { IntType(), VarcharType(2000) };
+                           "\"returnType\":4,"
+                           "\"operator\":\"GREATER_THAN\","
+                           "\"left\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1,\"colVal\":0},"
+                           "\"right\":{\"exprType\":\"LITERAL\",\"dataType\":1, \"isNull\":false, \"value\":2}}";
+    std::vector<DataTypePtr> streamTypeVector = {IntType(), VarcharType(2000)};
     DataTypes streamedTblTypes(streamTypeVector);
     FieldExpr *col0 = new FieldExpr(0, IntType());
-    std::vector<Expr *> streamedEqualKeyExprs = { col0 };
+    std::vector<Expr *> streamedEqualKeyExprs = {col0};
 
-    std::vector<int32_t> streamedOutputCols = { 1 };
+    std::vector<int32_t> streamedOutputCols = {1};
     OperatorConfig operatorConfig;
     StreamedTableWithExprOperatorFactoryV3 *streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filterJsonStr, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filterJsonStr,
+            operatorConfig);
     omniruntime::op::Operator *streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    std::vector<DataTypePtr> bufferTypesVector = { VarcharType(2000), IntType() };
+    std::vector<DataTypePtr> bufferTypesVector = {VarcharType(2000), IntType()};
     DataTypes bufferedTblTypes(bufferTypesVector);
     FieldExpr *col1 = new FieldExpr(1, IntType());
-    std::vector<Expr *> bufferedEqualKeyExprs = { col1 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<Expr *> bufferedEqualKeyExprs = {col1};
+    std::vector<int32_t> bufferedOutputCols = {0};
     BufferedTableWithExprOperatorFactoryV3 *bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // construct data
@@ -3284,27 +3361,29 @@ TEST(SortMergeJoinWithExprV3Test, TestBothJoinKeyAndFilterWithExpr)
         "\"exprType\":\"FIELD_REFERENCE\",\"dataType\":6,\"colVal\":0,\"precision\":18, "
         "\"scale\":2},\"right\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":6,\"colVal\":1,\"precision\":18, "
         "\"scale\":2}}}";
-    DataTypes streamedTblTypes(std::vector<DataTypePtr>({ Decimal64Type(18, 2) }));
-    auto castExpr1 = new FuncExpr("CAST", { new FieldExpr(0, Decimal64Type(18, 2)) }, VarcharType(50));
-    auto substrExpr1 = new FuncExpr("substr",
-        { castExpr1, new LiteralExpr(1, IntType()), new LiteralExpr(2, IntType()) }, VarcharType(50));
-    std::vector<omniruntime::expressions::Expr *> streamedEqualKeyExprs{ substrExpr1 };
-    std::vector<int32_t> streamedOutputCols = { 0 };
+    DataTypes streamedTblTypes(std::vector<DataTypePtr>({Decimal64Type(18, 2)}));
+    auto castExpr1 = new FuncExpr("CAST", {new FieldExpr(0, Decimal64Type(18, 2))}, VarcharType(50));
+    auto substrExpr1 = new FuncExpr("substr", {castExpr1, new LiteralExpr(1, IntType()), new LiteralExpr(2, IntType())},
+                                    VarcharType(50));
+    std::vector<omniruntime::expressions::Expr *> streamedEqualKeyExprs{substrExpr1};
+    std::vector<int32_t> streamedOutputCols = {0};
     OperatorConfig operatorConfig;
     auto streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, filter, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT, filter,
+            operatorConfig);
     auto streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    DataTypes bufferedTblTypes(std::vector<DataTypePtr>{ Decimal64Type(18, 2) });
-    auto castExpr2 = new FuncExpr("CAST", { new FieldExpr(0, Decimal64Type(18, 2)) }, VarcharType(50));
-    auto substrExpr2 = new FuncExpr("substr",
-        { castExpr2, new LiteralExpr(1, IntType()), new LiteralExpr(2, IntType()) }, VarcharType(50));
-    std::vector<omniruntime::expressions::Expr *> bufferedEqualKeyExprs{ substrExpr2 };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    DataTypes bufferedTblTypes(std::vector<DataTypePtr>{Decimal64Type(18, 2)});
+    auto castExpr2 = new FuncExpr("CAST", {new FieldExpr(0, Decimal64Type(18, 2))}, VarcharType(50));
+    auto substrExpr2 = new FuncExpr("substr", {castExpr2, new LiteralExpr(1, IntType()), new LiteralExpr(2, IntType())},
+                                    VarcharType(50));
+    std::vector<omniruntime::expressions::Expr *> bufferedEqualKeyExprs{substrExpr2};
+    std::vector<int32_t> bufferedOutputCols = {0};
     auto bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     const int32_t dataSize = 2;
@@ -3331,8 +3410,7 @@ TEST(SortMergeJoinWithExprV3Test, TestBothJoinKeyAndFilterWithExpr)
     // check the join result
     int64_t expectedData0[] = {111, 111, 112};
     int64_t expectedData1[] = {111, 112, 112};
-    AssertVecBatchEquals(result, 2, sizeof(expectedData0) / sizeof(expectedData0[0]), expectedData0,
-        expectedData1);
+    AssertVecBatchEquals(result, 2, sizeof(expectedData0) / sizeof(expectedData0[0]), expectedData0, expectedData1);
     VectorHelper::FreeVecBatch(result);
 
     Expr::DeleteExprs(streamedEqualKeyExprs);
@@ -3359,27 +3437,29 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiJoinSubStrAndCaseWhen)
         "\"exprType\":\"FIELD_REFERENCE\",\"dataType\":6,\"colVal\":0,\"precision\":18, "
         "\"scale\":2},\"right\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":6,\"colVal\":1,\"precision\":18, "
         "\"scale\":2}}}";
-    DataTypes streamedTblTypes(std::vector<DataTypePtr>({ Decimal64Type(18, 2) }));
-    auto castExpr1 = new FuncExpr("CAST", { new FieldExpr(0, Decimal64Type(18, 2)) }, VarcharType(50));
-    auto substrExpr1 = new FuncExpr("substr",
-        { castExpr1, new LiteralExpr(1, IntType()), new LiteralExpr(2, IntType()) }, VarcharType(50));
-    std::vector<omniruntime::expressions::Expr *> streamedEqualKeyExprs{ substrExpr1 };
-    std::vector<int32_t> streamedOutputCols = { 0 };
+    DataTypes streamedTblTypes(std::vector<DataTypePtr>({Decimal64Type(18, 2)}));
+    auto castExpr1 = new FuncExpr("CAST", {new FieldExpr(0, Decimal64Type(18, 2))}, VarcharType(50));
+    auto substrExpr1 = new FuncExpr("substr", {castExpr1, new LiteralExpr(1, IntType()), new LiteralExpr(2, IntType())},
+                                    VarcharType(50));
+    std::vector<omniruntime::expressions::Expr *> streamedEqualKeyExprs{substrExpr1};
+    std::vector<int32_t> streamedOutputCols = {0};
     OperatorConfig operatorConfig;
     auto streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filter, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filter,
+            operatorConfig);
     auto streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    DataTypes bufferedTblTypes(std::vector<DataTypePtr>{ Decimal64Type(18, 2) });
-    auto castExpr2 = new FuncExpr("CAST", { new FieldExpr(0, Decimal64Type(18, 2)) }, VarcharType(50));
-    auto substrExpr2 = new FuncExpr("substr",
-        { castExpr2, new LiteralExpr(1, IntType()), new LiteralExpr(2, IntType()) }, VarcharType(50));
-    std::vector<omniruntime::expressions::Expr *> bufferedEqualKeyExprs{ substrExpr2 };
+    DataTypes bufferedTblTypes(std::vector<DataTypePtr>{Decimal64Type(18, 2)});
+    auto castExpr2 = new FuncExpr("CAST", {new FieldExpr(0, Decimal64Type(18, 2))}, VarcharType(50));
+    auto substrExpr2 = new FuncExpr("substr", {castExpr2, new LiteralExpr(1, IntType()), new LiteralExpr(2, IntType())},
+                                    VarcharType(50));
+    std::vector<omniruntime::expressions::Expr *> bufferedEqualKeyExprs{substrExpr2};
     std::vector<int32_t> bufferedOutputCols = {};
     auto bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     const int32_t dataSize = 2;
@@ -3417,31 +3497,33 @@ TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiJoinSubStrAndCaseWhen)
 TEST(SortMergeJoinWithExprV3Test, testSmjLeftAntiForEmptyVecBatch)
 {
     std::string filter = "";
-    DataTypes streamedTblTypes(std::vector<DataTypePtr>({ Date32Type(), VarcharType(200), VarcharType(200) }));
+    DataTypes streamedTblTypes(std::vector<DataTypePtr>({Date32Type(), VarcharType(200), VarcharType(200)}));
 
     auto v1 = new FieldExpr(1, VarcharType(200));
     auto str = new std::string("");
     auto v2 = new LiteralExpr(str, VarcharType(200));
     auto streamedKey = new CoalesceExpr(v1, v2);
-    std::vector<omniruntime::expressions::Expr *> streamedEqualKeyExprs{ streamedKey };
+    std::vector<omniruntime::expressions::Expr *> streamedEqualKeyExprs{streamedKey};
 
-    std::vector<int32_t> streamedOutputCols = { 0 };
+    std::vector<int32_t> streamedOutputCols = {0};
     OperatorConfig operatorConfig;
     auto streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filter, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_LEFT_ANTI, filter,
+            operatorConfig);
     auto streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    DataTypes bufferedTblTypes(std::vector<DataTypePtr>{ VarcharType(200), VarcharType(200), Date32Type() });
+    DataTypes bufferedTblTypes(std::vector<DataTypePtr>{VarcharType(200), VarcharType(200), Date32Type()});
     auto v3 = new FieldExpr(1, VarcharType(200));
     auto str1 = new std::string("");
     auto v4 = new LiteralExpr(str1, VarcharType(200));
     auto bufferedKey = new CoalesceExpr(v3, v4);
-    std::vector<omniruntime::expressions::Expr *> bufferedEqualKeyExprs{ bufferedKey };
+    std::vector<omniruntime::expressions::Expr *> bufferedEqualKeyExprs{bufferedKey};
     std::vector<int32_t> bufferedOutputCols = {};
     auto bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     // add eof flag to buffered table , need add streamed table data
@@ -3471,25 +3553,27 @@ TEST(SortMergeJoinWithExprV3Test, testSmjInner1)
     std::string filter =
         "{\"exprType\":\"BINARY\",\"returnType\":4,\"operator\":\"EQUAL\",\"left\":{\"exprType\":\"FIELD_REFERENCE\","
         "\"dataType\":1,\"colVal\":0},\"right\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1, \"colVal\":2}}";
-    DataTypes streamedTblTypes(std::vector<DataTypePtr>({ IntType(), IntType() }));
+    DataTypes streamedTblTypes(std::vector<DataTypePtr>({IntType(), IntType()}));
 
     auto streamedKey = new FieldExpr(1, IntType());
-    std::vector<omniruntime::expressions::Expr *> streamedEqualKeyExprs{ streamedKey };
+    std::vector<omniruntime::expressions::Expr *> streamedEqualKeyExprs{streamedKey};
 
-    std::vector<int32_t> streamedOutputCols = { 0 };
+    std::vector<int32_t> streamedOutputCols = {0};
     OperatorConfig operatorConfig;
     auto streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamedTblTypes,
-        streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filter, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamedTblTypes, streamedEqualKeyExprs, streamedOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filter,
+            operatorConfig);
     auto streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    DataTypes bufferedTblTypes(std::vector<DataTypePtr>{ IntType(), IntType() });
+    DataTypes bufferedTblTypes(std::vector<DataTypePtr>{IntType(), IntType()});
     auto bufferedKey = new FieldExpr(1, IntType());
-    std::vector<omniruntime::expressions::Expr *> bufferedEqualKeyExprs{ bufferedKey };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<omniruntime::expressions::Expr *> bufferedEqualKeyExprs{bufferedKey};
+    std::vector<int32_t> bufferedOutputCols = {0};
     auto bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferedTblTypes,
-        bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferedTblTypes, bufferedEqualKeyExprs, bufferedOutputCols, streamedWithExprOperatorFactory,
+            operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     int32_t buffer00[] = {1001, 1002, 1003};
@@ -3531,8 +3615,7 @@ TEST(SortMergeJoinWithExprV3Test, testSmjInner1)
     // check the join result
     int32_t expectedData0[] = {8001, 8001, 1003, 1003, 8001, 8001, 1003, 1003};
     int32_t expectedData1[] = {8001, 8001, 1003, 1003, 8001, 8001, 1003, 1003};
-    AssertVecBatchEquals(result, 2, sizeof(expectedData0) / sizeof(expectedData0[0]), expectedData0,
-        expectedData1);
+    AssertVecBatchEquals(result, 2, sizeof(expectedData0) / sizeof(expectedData0[0]), expectedData0, expectedData1);
     VectorHelper::FreeVecBatch(result);
 
     Expr::DeleteExprs(streamedEqualKeyExprs);
@@ -3554,23 +3637,23 @@ TEST(SortMergeJoinWithExprV3Test, testSmjInner1)
 TEST(SortMergeJoinWithExprV3Test, testSmjInner2)
 {
     std::string filter = "";
-    DataTypes streamTypes(std::vector<DataTypePtr>({ IntType(), IntType() }));
+    DataTypes streamTypes(std::vector<DataTypePtr>({IntType(), IntType()}));
     auto streamKey = new FieldExpr(1, IntType());
-    std::vector<omniruntime::expressions::Expr *> streamJoinKeys{ streamKey };
-    std::vector<int32_t> streamOutputCols = { 0 };
+    std::vector<omniruntime::expressions::Expr *> streamJoinKeys{streamKey};
+    std::vector<int32_t> streamOutputCols = {0};
     OperatorConfig operatorConfig;
     auto streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamTypes, streamJoinKeys,
-        streamOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filter, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamTypes, streamJoinKeys, streamOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filter, operatorConfig);
     auto streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    DataTypes bufferTypes(std::vector<DataTypePtr>{ IntType(), IntType() });
+    DataTypes bufferTypes(std::vector<DataTypePtr>{IntType(), IntType()});
     auto bufferKey = new FieldExpr(1, IntType());
-    std::vector<omniruntime::expressions::Expr *> bufferJoinKeys{ bufferKey };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<omniruntime::expressions::Expr *> bufferJoinKeys{bufferKey};
+    std::vector<int32_t> bufferedOutputCols = {0};
     auto bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferTypes, bufferJoinKeys,
-        bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferTypes, bufferJoinKeys, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     int32_t buffer00[] = {6001, 6002};
@@ -3618,23 +3701,23 @@ TEST(SortMergeJoinWithExprV3Test, testSmjInner2WithFilter)
     std::string filter =
         "{\"exprType\":\"BINARY\",\"returnType\":4,\"operator\":\"EQUAL\",\"left\":{\"exprType\":\"FIELD_REFERENCE\","
         "\"dataType\":1,\"colVal\":0},\"right\":{\"exprType\":\"FIELD_REFERENCE\",\"dataType\":1, \"colVal\":2}}";
-    DataTypes streamTypes(std::vector<DataTypePtr>({ IntType(), IntType() }));
+    DataTypes streamTypes(std::vector<DataTypePtr>({IntType(), IntType()}));
     auto streamKey = new FieldExpr(1, IntType());
-    std::vector<omniruntime::expressions::Expr *> streamJoinKeys{ streamKey };
-    std::vector<int32_t> streamOutputCols = { 0 };
+    std::vector<omniruntime::expressions::Expr *> streamJoinKeys{streamKey};
+    std::vector<int32_t> streamOutputCols = {0};
     OperatorConfig operatorConfig;
     auto streamedWithExprOperatorFactory =
-        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(streamTypes, streamJoinKeys,
-        streamOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filter, operatorConfig);
+        StreamedTableWithExprOperatorFactoryV3::CreateStreamedTableWithExprOperatorFactory(
+            streamTypes, streamJoinKeys, streamOutputCols, JoinType::OMNI_JOIN_TYPE_INNER, filter, operatorConfig);
     auto streamedTblWithExprOperator = CreateTestOperator(streamedWithExprOperatorFactory);
 
-    DataTypes bufferTypes(std::vector<DataTypePtr>{ IntType(), IntType() });
+    DataTypes bufferTypes(std::vector<DataTypePtr>{IntType(), IntType()});
     auto bufferKey = new FieldExpr(1, IntType());
-    std::vector<omniruntime::expressions::Expr *> bufferJoinKeys{ bufferKey };
-    std::vector<int32_t> bufferedOutputCols = { 0 };
+    std::vector<omniruntime::expressions::Expr *> bufferJoinKeys{bufferKey};
+    std::vector<int32_t> bufferedOutputCols = {0};
     auto bufferedWithExprOperatorFactory =
-        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(bufferTypes, bufferJoinKeys,
-        bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
+        BufferedTableWithExprOperatorFactoryV3::CreateBufferedTableWithExprOperatorFactory(
+            bufferTypes, bufferJoinKeys, bufferedOutputCols, streamedWithExprOperatorFactory, operatorConfig);
     omniruntime::op::Operator *bufferedTblWithExprOperator = CreateTestOperator(bufferedWithExprOperatorFactory);
 
     int32_t buffer00[] = {6001, 6002};
@@ -3676,4 +3759,4 @@ TEST(SortMergeJoinWithExprV3Test, testSmjInner2WithFilter)
     delete bufferedWithExprOperatorFactory;
     delete streamedWithExprOperatorFactory;
 }
-}
+} // namespace SortMergeJoinWithExprV3Test

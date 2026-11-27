@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
- * Description: basic_test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include "gtest/gtest.h"
 #include "vector/vector.h"
@@ -187,7 +194,7 @@ template <typename T> T GetTestValue(int32_t index)
 template <typename T> void vector_append_value()
 {
     int vecSize = 5;
-    Vector<T> v1{ vecSize };
+    Vector<T> v1{vecSize};
     std::vector<T> expected;
     for (int32_t i = 0; i < vecSize; i++) {
         T value = GetTestValue<T>(i);
@@ -196,10 +203,10 @@ template <typename T> void vector_append_value()
     }
 
     int32_t appendedVecSize = 15;
-    Vector<T> appended{ appendedVecSize };
+    Vector<T> appended{appendedVecSize};
     appended.Append(&v1, 0, vecSize);
 
-    Vector<T> v2WithNull{ vecSize };
+    Vector<T> v2WithNull{vecSize};
     for (int32_t i = 0; i < vecSize; i++) {
         if (i % 2 == 0) {
             v2WithNull.SetNull(i);
@@ -209,16 +216,16 @@ template <typename T> void vector_append_value()
     }
     appended.Append(&v2WithNull, 5, 5);
 
-    Vector<T> v3Emtpy{ 0 };
+    Vector<T> v3Emtpy{0};
     EXPECT_ANY_THROW(appended.Append(&v3Emtpy, 10, 0));
 
-    Vector<T> v4OverBounds{ vecSize };
+    Vector<T> v4OverBounds{vecSize};
     for (int32_t i = 0; i < vecSize; i++) {
         v4OverBounds.SetValue(i, expected[i]);
     }
     EXPECT_ANY_THROW(appended.Append(&v4OverBounds, 10, vecSize + 1));
 
-    std::vector<bool> expectedNull{ false, false, false, false, false, true, false, true, false, true };
+    std::vector<bool> expectedNull{false, false, false, false, false, true, false, true, false, true};
     for (int32_t i = 0; i < appendedVecSize; i++) {
         // append empty vector or beyond the bound
         if (i >= 10) {
@@ -241,7 +248,7 @@ template <typename T> void vector_append_value()
 template <typename T> void vector_copy_positions_value()
 {
     int vecSize = 10;
-    Vector<T> vector{ vecSize };
+    Vector<T> vector{vecSize};
     std::vector<T> expected;
     for (int32_t i = 0; i < vecSize; i++) {
         T value = GetTestValue<T>(i);
@@ -342,7 +349,8 @@ template <> void dict_copy_positions_value<std::string_view>()
     int32_t positions[] = {1, 3, 5, 6};
     int32_t offset = 1;
     int32_t newValueSize = 3;
-    auto copyPositions =(Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *)(vector->CopyPositions(positions, offset, newValueSize));
+    auto copyPositions = (Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *)(vector->CopyPositions(
+        positions, offset, newValueSize));
 
     for (int i = 0; i < newValueSize; i++) {
         if (values[positions[i + offset]] % 2 == 0) {
@@ -353,7 +361,8 @@ template <> void dict_copy_positions_value<std::string_view>()
         EXPECT_EQ(dictionary->GetValue(values[positions[i + offset]]), expectValue);
     }
 
-    auto v3Empty = (Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *)(vector->CopyPositions(positions, offset, 0));
+    auto v3Empty = (Vector<DictionaryContainer<std::string_view, LargeStringContainer>> *)(vector->CopyPositions(
+        positions, offset, 0));
     EXPECT_EQ(v3Empty->GetSize(), 0);
     EXPECT_ANY_THROW(vector->CopyPositions(positions, offset, -1));
     delete copyPositions;
@@ -435,70 +444,31 @@ template <typename T> void vec_set_nulls(int32_t nullSize = 100)
     }
 }
 
-TEST(vector, vector_get_set_value_int32)
-{
-    vector_get_set_value<int32_t>();
-}
+TEST(vector, vector_get_set_value_int32) { vector_get_set_value<int32_t>(); }
 
-TEST(vector, vector_get_set_value_int64)
-{
-    vector_get_set_value<int64_t>();
-}
+TEST(vector, vector_get_set_value_int64) { vector_get_set_value<int64_t>(); }
 
-TEST(vector, vector_get_set_value_int16)
-{
-    vector_get_set_value<int16_t>();
-}
+TEST(vector, vector_get_set_value_int16) { vector_get_set_value<int16_t>(); }
 
-TEST(vector, vector_get_set_value_double)
-{
-    vector_get_set_value<double>();
-}
+TEST(vector, vector_get_set_value_double) { vector_get_set_value<double>(); }
 
-TEST(vector, vector_get_set_value_bool)
-{
-    vector_get_set_value<bool>();
-}
+TEST(vector, vector_get_set_value_bool) { vector_get_set_value<bool>(); }
 
-TEST(vector, vector_get_set_value_dec128)
-{
-    vector_get_set_value<int128_t>();
-}
+TEST(vector, vector_get_set_value_dec128) { vector_get_set_value<int128_t>(); }
 
-TEST(vector, vector_has_null_int32)
-{
-    vector_has_null<int32_t>();
-}
+TEST(vector, vector_has_null_int32) { vector_has_null<int32_t>(); }
 
-TEST(vector, vector_has_null_int64)
-{
-    vector_has_null<int64_t>();
-}
+TEST(vector, vector_has_null_int64) { vector_has_null<int64_t>(); }
 
-TEST(vector, vector_has_null_int16)
-{
-    vector_has_null<int16_t>();
-}
+TEST(vector, vector_has_null_int16) { vector_has_null<int16_t>(); }
 
-TEST(vector, vector_has_null_double)
-{
-    vector_has_null<double>();
-}
+TEST(vector, vector_has_null_double) { vector_has_null<double>(); }
 
-TEST(vector, vector_has_null_bool)
-{
-    vector_has_null<bool>();
-}
+TEST(vector, vector_has_null_bool) { vector_has_null<bool>(); }
 
-TEST(vector, vector_has_nulldec128)
-{
-    vector_has_null<int128_t>();
-}
+TEST(vector, vector_has_nulldec128) { vector_has_null<int128_t>(); }
 
-TEST(vector, vector_has_null_string)
-{
-    vector_has_null<std::string_view>();
-}
+TEST(vector, vector_has_null_string) { vector_has_null<std::string_view>(); }
 
 TEST(vector, odd_vector_has_null)
 {
@@ -517,9 +487,9 @@ TEST(vector, SliceVector)
     for (int i = 0; i < vecSize; i++) {
         vector->SetValue(i, i);
     }
-    auto sliceVector = reinterpret_cast<Vector<int32_t>*>(VectorHelper::SliceVector(vector.get(), 3, 5));
+    auto sliceVector = reinterpret_cast<Vector<int32_t> *>(VectorHelper::SliceVector(vector.get(), 3, 5));
     for (int i = 0; i < 5; i++) {
-        EXPECT_EQ(sliceVector->GetValue(i), i+3);
+        EXPECT_EQ(sliceVector->GetValue(i), i + 3);
     }
     delete sliceVector;
 }
@@ -536,178 +506,73 @@ TEST(vector, string_vec_any_size)
     }
 }
 
-TEST(vector, string_vec_size_0)
-{
-    auto vec = std::make_shared<Vector<LargeStringContainer<std::string_view>>>(0);
-}
+TEST(vector, string_vec_size_0) { auto vec = std::make_shared<Vector<LargeStringContainer<std::string_view>>>(0); }
 
-TEST(vector, append_int32)
-{
-    vector_append_value<int32_t>();
-}
+TEST(vector, append_int32) { vector_append_value<int32_t>(); }
 
-TEST(vector, append_int64)
-{
-    vector_append_value<int64_t>();
-}
+TEST(vector, append_int64) { vector_append_value<int64_t>(); }
 
-TEST(vector, append_int16)
-{
-    vector_append_value<int16_t>();
-}
+TEST(vector, append_int16) { vector_append_value<int16_t>(); }
 
-TEST(vector, append_double)
-{
-    vector_append_value<double>();
-}
+TEST(vector, append_double) { vector_append_value<double>(); }
 
-TEST(vector, append_bool)
-{
-    vector_append_value<bool>();
-}
+TEST(vector, append_bool) { vector_append_value<bool>(); }
 
-TEST(vector, append_boost_dec128)
-{
-    vector_append_value<int128_t>();
-}
+TEST(vector, append_boost_dec128) { vector_append_value<int128_t>(); }
 
-TEST(vector, copy_positions_int32)
-{
-    vector_copy_positions_value<int32_t>();
-}
+TEST(vector, copy_positions_int32) { vector_copy_positions_value<int32_t>(); }
 
-TEST(vector, copy_positions_int64)
-{
-    vector_copy_positions_value<int64_t>();
-}
+TEST(vector, copy_positions_int64) { vector_copy_positions_value<int64_t>(); }
 
-TEST(vector, copy_positions_int16)
-{
-    vector_copy_positions_value<int16_t>();
-}
+TEST(vector, copy_positions_int16) { vector_copy_positions_value<int16_t>(); }
 
-TEST(vector, copy_positions_double)
-{
-    vector_copy_positions_value<double>();
-}
+TEST(vector, copy_positions_double) { vector_copy_positions_value<double>(); }
 
-TEST(vector, copy_positions_bool)
-{
-    vector_copy_positions_value<bool>();
-}
+TEST(vector, copy_positions_bool) { vector_copy_positions_value<bool>(); }
 
-TEST(vector, copy_positions_dec128)
-{
-    vector_copy_positions_value<int128_t>();
-}
+TEST(vector, copy_positions_dec128) { vector_copy_positions_value<int128_t>(); }
 
-TEST(vector, dict_get_value_with_null_int32)
-{
-    dict_vector_get_value_with_null<int32_t>();
-}
+TEST(vector, dict_get_value_with_null_int32) { dict_vector_get_value_with_null<int32_t>(); }
 
-TEST(vector, dict_get_value_with_null_int64)
-{
-    dict_vector_get_value_with_null<int64_t>();
-}
+TEST(vector, dict_get_value_with_null_int64) { dict_vector_get_value_with_null<int64_t>(); }
 
-TEST(vector, dict_get_value_with_null_int16)
-{
-    dict_vector_get_value_with_null<int16_t>();
-}
+TEST(vector, dict_get_value_with_null_int16) { dict_vector_get_value_with_null<int16_t>(); }
 
-TEST(vector, dict_get_value_with_null_double)
-{
-    dict_vector_get_value_with_null<double>();
-}
+TEST(vector, dict_get_value_with_null_double) { dict_vector_get_value_with_null<double>(); }
 
-TEST(vector, dict_get_value_with_null_bool)
-{
-    dict_vector_get_value_with_null<bool>();
-}
+TEST(vector, dict_get_value_with_null_bool) { dict_vector_get_value_with_null<bool>(); }
 
-TEST(vector, dict_get_value_with_null_dec128)
-{
-    dict_vector_get_value_with_null<int128_t>();
-}
+TEST(vector, dict_get_value_with_null_dec128) { dict_vector_get_value_with_null<int128_t>(); }
 
-TEST(vector, dict_get_value_with_null_string)
-{
-    dict_vector_get_value_with_null<std::string_view>();
-}
+TEST(vector, dict_get_value_with_null_string) { dict_vector_get_value_with_null<std::string_view>(); }
 
-TEST(vector, dict_copy_position_with_null_int32)
-{
-    dict_copy_positions_value<int32_t>();
-}
+TEST(vector, dict_copy_position_with_null_int32) { dict_copy_positions_value<int32_t>(); }
 
-TEST(vector, dict_copy_position_with_null_int64)
-{
-    dict_copy_positions_value<int64_t>();
-}
+TEST(vector, dict_copy_position_with_null_int64) { dict_copy_positions_value<int64_t>(); }
 
-TEST(vector, dict_copy_position_with_null_int16)
-{
-    dict_copy_positions_value<int16_t>();
-}
+TEST(vector, dict_copy_position_with_null_int16) { dict_copy_positions_value<int16_t>(); }
 
-TEST(vector, dict_copy_position_with_null_double)
-{
-    dict_copy_positions_value<double>();
-}
+TEST(vector, dict_copy_position_with_null_double) { dict_copy_positions_value<double>(); }
 
-TEST(vector, dict_copy_position_with_null_bool)
-{
-    dict_copy_positions_value<bool>();
-}
+TEST(vector, dict_copy_position_with_null_bool) { dict_copy_positions_value<bool>(); }
 
-TEST(vector, dict_copy_position_with_dec128)
-{
-    dict_copy_positions_value<int128_t>();
-}
+TEST(vector, dict_copy_position_with_dec128) { dict_copy_positions_value<int128_t>(); }
 
-TEST(vector, dict_copy_position_with_null_string)
-{
-    dict_copy_positions_value<std::string_view>();
-}
+TEST(vector, dict_copy_position_with_null_string) { dict_copy_positions_value<std::string_view>(); }
 
-TEST(vector, vec_set_values_int16)
-{
-    vec_set_values<int16_t>();
-}
+TEST(vector, vec_set_values_int16) { vec_set_values<int16_t>(); }
 
-TEST(vector, vec_set_values_int32)
-{
-    vec_set_values<int32_t>();
-}
+TEST(vector, vec_set_values_int32) { vec_set_values<int32_t>(); }
 
-TEST(vector, vec_set_values_int64)
-{
-    vec_set_values<int64_t>();
-}
+TEST(vector, vec_set_values_int64) { vec_set_values<int64_t>(); }
 
-TEST(vector, vec_set_values_double)
-{
-    vec_set_values<double>();
-}
+TEST(vector, vec_set_values_double) { vec_set_values<double>(); }
 
-TEST(vector, vec_set_values_dec128)
-{
-    vec_set_values<int128_t>();
-}
+TEST(vector, vec_set_values_dec128) { vec_set_values<int128_t>(); }
 
-TEST(vector, vec_set_values_int32_out_of_range)
-{
-    vec_set_values<int32_t>(101);
-}
+TEST(vector, vec_set_values_int32_out_of_range) { vec_set_values<int32_t>(101); }
 
-TEST(vector, vec_set_nulls_int32)
-{
-    vec_set_nulls<int32_t>();
-}
+TEST(vector, vec_set_nulls_int32) { vec_set_nulls<int32_t>(); }
 
-TEST(vector, vec_set_nulls_int32_out_of_range)
-{
-    vec_set_nulls<int32_t>(101);
-}
-}
+TEST(vector, vec_set_nulls_int32_out_of_range) { vec_set_nulls<int32_t>(101); }
+} // namespace omniruntime::vec::test
