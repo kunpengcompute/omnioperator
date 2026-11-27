@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <random>
@@ -28,12 +36,9 @@ public:
         this->d = data.d;
     }
 
-    void SetResource()
-    {
-        copyCounter = new int(1);
-    }
+    void SetResource() { copyCounter = new int(1); }
 
-    NotPodSharedClass &operator = (const NotPodSharedClass &data)
+    NotPodSharedClass &operator=(const NotPodSharedClass &data)
     {
         if (this != &data) {
             copyCounter = data.copyCounter;
@@ -52,7 +57,7 @@ public:
         }
     };
 
-    NotPodSharedClass &operator = (NotPodSharedClass &&data) noexcept
+    NotPodSharedClass &operator=(NotPodSharedClass &&data) noexcept
     {
         if (this != &data) {
             copyCounter = data.copyCounter;
@@ -72,22 +77,13 @@ public:
         }
     }
 
-    size_t Get0() const
-    {
-        return std::get<0>(d);
-    }
+    size_t Get0() const { return std::get<0>(d); }
 
-    double Get1() const
-    {
-        return std::get<1>(d);
-    }
+    double Get1() const { return std::get<1>(d); }
 
-    bool Get2() const
-    {
-        return std::get<2>(d);
-    }
+    bool Get2() const { return std::get<2>(d); }
 
-    bool operator == (const NotPodSharedClass &o) const
+    bool operator==(const NotPodSharedClass &o) const
     {
         return Get0() == o.Get0() && Get1() - o.Get1() < 0.0000001f && Get2() == o.Get2();
     }
@@ -97,10 +93,10 @@ private:
     int *copyCounter = nullptr;
     std::tuple<size_t, double, bool> d;
 };
-}
+} // namespace om_benchmark
 namespace std {
 template <> struct hash<om_benchmark::NotPodSharedClass> {
-    size_t operator () (const om_benchmark::NotPodSharedClass &data) const
+    size_t operator()(const om_benchmark::NotPodSharedClass &data) const
     {
         auto value = std::hash<int>()(data.Get0());
         value = omniruntime::op::HashUtil::CombineHash(value, std::hash<double>()(data.Get1()));
@@ -108,25 +104,22 @@ template <> struct hash<om_benchmark::NotPodSharedClass> {
         return value;
     }
 };
-}
+} // namespace std
 namespace omniruntime {
 namespace op {
 template <> struct GroupbyHashCalculator<omniruntime::type::Decimal128> {
-    size_t operator () (const omniruntime::type::Decimal128 &val) const
+    size_t operator()(const omniruntime::type::Decimal128 &val) const
     {
         return omniruntime::op::HashUtil::HashValue(val.LowBits(), val.HighBits());
     }
 };
 // compare city hash
 template <class T> struct GroupbyCityHashCalculator {
-    size_t operator () (const T &data) const
-    {
-        return std::hash<T>()(data);
-    }
+    size_t operator()(const T &data) const { return std::hash<T>()(data); }
 };
 
 template <> struct GroupbyCityHashCalculator<type::Decimal128> {
-    size_t operator () (const type::Decimal128 &data) const
+    size_t operator()(const type::Decimal128 &data) const
     {
         const uint64_t kMul = 0x9ddfea08eb382d69ULL;
         auto high = data.HighBits();
@@ -139,8 +132,8 @@ template <> struct GroupbyCityHashCalculator<type::Decimal128> {
         return b;
     }
 };
-}
-}
+} // namespace op
+} // namespace omniruntime
 namespace om_benchmark {
 /**
  * different data type use different random generator
@@ -270,7 +263,7 @@ public:
 
     MaxState(const MaxState &) = delete;
 
-    MaxState &operator = (const MaxState &) = delete;
+    MaxState &operator=(const MaxState &) = delete;
 
     MaxState(MaxState &&o) noexcept
     {
@@ -278,7 +271,7 @@ public:
         o.maxState = nullptr;
     }
 
-    MaxState &operator = (MaxState &&o) noexcept
+    MaxState &operator=(MaxState &&o) noexcept
     {
         maxState = o.maxState;
         o.maxState = nullptr;
@@ -300,10 +293,7 @@ public:
         }
     }
 
-    uint32_t GetResult() const
-    {
-        return *maxState;
-    }
+    uint32_t GetResult() const { return *maxState; }
 
     ~MaxState()
     {
@@ -339,7 +329,7 @@ static void InsertNonPodToUnorderedMap(benchmark::State &state)
                 }
             }
         } // for i end
-    }     // state end
+    } // state end
 }
 
 static void InsertNonPodToHashMap(benchmark::State &state)
@@ -369,7 +359,8 @@ template <template <typename> class HashAlgo> static void Calculate128ByHash(ben
     auto dataSize = state.range(0);
     for (auto _ : state) {
         omniruntime::op::BaseHashMap<omniruntime::type::Decimal128, omniruntime::type::Decimal128,
-            HashAlgo<omniruntime::type::Decimal128>, omniruntime::op::Grower, omniruntime::op::OmniHashmapAllocator>
+                                     HashAlgo<omniruntime::type::Decimal128>, omniruntime::op::Grower,
+                                     omniruntime::op::OmniHashmapAllocator>
             mUseCityHash;
         omniruntime::op::DefaultHashMap<omniruntime::type::Decimal128, omniruntime::type::Decimal128> mDefault;
 
@@ -379,110 +370,107 @@ template <template <typename> class HashAlgo> static void Calculate128ByHash(ben
             auto ret = mUseCityHash.Emplace(data);
             ret.SetValue(std::move(data));
         } // for i end
-    }     // state end
+    } // state end
 }
-}
+} // namespace om_benchmark
 
 // test different hash algorithm
 BENCHMARK(om_benchmark::Calculate128ByHash<omniruntime::op::GroupbyCityHashCalculator>)
-    ->Args({ om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::LOW_CARDINALITY})
     ->Iterations(3);
 BENCHMARK(om_benchmark::Calculate128ByHash<omniruntime::op::GroupbyHashCalculator>)
-    ->Args({ om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::LOW_CARDINALITY})
     ->Iterations(3);
 
 BENCHMARK(om_benchmark::Calculate128ByHash<omniruntime::op::GroupbyCityHashCalculator>)
-    ->Args({ om_benchmark::HIGH_CARDINALITY })
+    ->Args({om_benchmark::HIGH_CARDINALITY})
     ->Iterations(3);
 BENCHMARK(om_benchmark::Calculate128ByHash<omniruntime::op::GroupbyHashCalculator>)
-    ->Args({ om_benchmark::HIGH_CARDINALITY })
+    ->Args({om_benchmark::HIGH_CARDINALITY})
     ->Iterations(3);
 
-
 // test insert no pod
-BENCHMARK(om_benchmark::InsertNonPodToUnorderedMap)->Args({ om_benchmark::LOW_CARDINALITY_PER_ONE })->Iterations(3);
+BENCHMARK(om_benchmark::InsertNonPodToUnorderedMap)->Args({om_benchmark::LOW_CARDINALITY_PER_ONE})->Iterations(3);
 
-BENCHMARK(om_benchmark::InsertNonPodToHashMap)->Args({ om_benchmark::LOW_CARDINALITY_PER_ONE })->Iterations(3);
+BENCHMARK(om_benchmark::InsertNonPodToHashMap)->Args({om_benchmark::LOW_CARDINALITY_PER_ONE})->Iterations(3);
 
-BENCHMARK(om_benchmark::InsertNonPodToUnorderedMap)->Args({ om_benchmark::MIDDLE_CARDINALITY_PER_ONE })->Iterations(3);
+BENCHMARK(om_benchmark::InsertNonPodToUnorderedMap)->Args({om_benchmark::MIDDLE_CARDINALITY_PER_ONE})->Iterations(3);
 
-BENCHMARK(om_benchmark::InsertNonPodToHashMap)->Args({ om_benchmark::MIDDLE_CARDINALITY_PER_ONE })->Iterations(3);
+BENCHMARK(om_benchmark::InsertNonPodToHashMap)->Args({om_benchmark::MIDDLE_CARDINALITY_PER_ONE})->Iterations(3);
 
-BENCHMARK(om_benchmark::InsertNonPodToUnorderedMap)->Args({ om_benchmark::HIGH_CARDINALITY_PER_ONE })->Iterations(3);
+BENCHMARK(om_benchmark::InsertNonPodToUnorderedMap)->Args({om_benchmark::HIGH_CARDINALITY_PER_ONE})->Iterations(3);
 
-BENCHMARK(om_benchmark::InsertNonPodToHashMap)->Args({ om_benchmark::HIGH_CARDINALITY_PER_ONE })->Iterations(3);
-
+BENCHMARK(om_benchmark::InsertNonPodToHashMap)->Args({om_benchmark::HIGH_CARDINALITY_PER_ONE})->Iterations(3);
 
 // test insert MinElement times, and MinCardinality
 BENCHMARK(om_benchmark::InsertTypeToUnorderedMap<double>)
-    ->Args({om_benchmark::LOW_ELEMENTS, om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::LOW_ELEMENTS, om_benchmark::LOW_CARDINALITY})
     ->Iterations(20);
 BENCHMARK(om_benchmark::InsertTypeToHashMap<double>)
-    ->Args({om_benchmark::LOW_ELEMENTS, om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::LOW_ELEMENTS, om_benchmark::LOW_CARDINALITY})
     ->Iterations(20);
 
 BENCHMARK(om_benchmark::InsertTypeToUnorderedMap<int32_t>)
-    ->Args({om_benchmark::MIDDLE_ELEMENTS, om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::MIDDLE_ELEMENTS, om_benchmark::LOW_CARDINALITY})
     ->Iterations(10);
 BENCHMARK(om_benchmark::InsertTypeToHashMap<int32_t>)
-    ->Args({om_benchmark::MIDDLE_ELEMENTS, om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::MIDDLE_ELEMENTS, om_benchmark::LOW_CARDINALITY})
     ->Iterations(10);
 
 BENCHMARK(om_benchmark::InsertTypeToUnorderedMap<double>)
-    ->Args({om_benchmark::MIDDLE_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY })
+    ->Args({om_benchmark::MIDDLE_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY})
     ->Iterations(10);
 BENCHMARK(om_benchmark::InsertTypeToHashMap<double>)
-    ->Args({om_benchmark::MIDDLE_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY })
+    ->Args({om_benchmark::MIDDLE_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY})
     ->Iterations(10);
 
 BENCHMARK(om_benchmark::InsertTypeToUnorderedMap<double>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::LOW_CARDINALITY})
     ->Iterations(3);
 BENCHMARK(om_benchmark::InsertTypeToHashMap<double>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::LOW_CARDINALITY})
     ->Iterations(3);
 
 BENCHMARK(om_benchmark::InsertTypeToUnorderedMap<double>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY})
     ->Iterations(3);
 BENCHMARK(om_benchmark::InsertTypeToHashMap<double>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY})
     ->Iterations(3);
 
 BENCHMARK(om_benchmark::InsertTypeToUnorderedMap<double>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY})
     ->Iterations(3);
 BENCHMARK(om_benchmark::InsertTypeToHashMap<double>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY})
     ->Iterations(3);
 
 BENCHMARK(om_benchmark::ForEachTypeToUnorderedMap<int64_t>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::LOW_CARDINALITY})
     ->Iterations(3);
 BENCHMARK(om_benchmark::ForEachTypeInHashmap<int64_t>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::LOW_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::LOW_CARDINALITY})
     ->Iterations(3);
 
 BENCHMARK(om_benchmark::ForEachTypeToUnorderedMap<float>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY})
     ->Iterations(3);
 BENCHMARK(om_benchmark::ForEachTypeInHashmap<float>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::MIDDLE_CARDINALITY})
     ->Iterations(3);
 
 BENCHMARK(om_benchmark::ForEachTypeToUnorderedMap<int64_t>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY})
     ->Iterations(3);
 BENCHMARK(om_benchmark::ForEachTypeInHashmap<int64_t>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY})
     ->Iterations(3);
 
 BENCHMARK(om_benchmark::ForEachTypeToUnorderedMap<double>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY})
     ->Iterations(3);
 BENCHMARK(om_benchmark::ForEachTypeInHashmap<double>)
-    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY })
+    ->Args({om_benchmark::HIGH_ELEMENTS, om_benchmark::HIGH_CARDINALITY})
     ->Iterations(3);
-
 
 BENCHMARK_MAIN();

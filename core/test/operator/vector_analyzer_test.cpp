@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <vector>
@@ -21,11 +29,11 @@ const int32_t DATA_SIZE = 3;
 TEST(VectorAnalyzerTest, TestHashMode)
 {
     ConfigUtil::SetAggHashTableRule(AggHashTableRule::ARRAY);
-    int32_t data01[DATA_SIZE] = {0, 1, 2};  // int
+    int32_t data01[DATA_SIZE] = {0, 1, 2};      // int
     double data02[DATA_SIZE] = {6.6, 5.5, 4.4}; // double
-    int64_t data03[DATA_SIZE] = {1, 2, 3}; // long
-    int64_t data04[DATA_SIZE] = {11, 22, 33}; // decimal64
-    
+    int64_t data03[DATA_SIZE] = {1, 2, 3};      // long
+    int64_t data04[DATA_SIZE] = {11, 22, 33};   // decimal64
+
     // check data type
     // two columnar not support
     std::vector<DataTypePtr> types1 = {IntType(), DoubleType()};
@@ -73,4 +81,4 @@ TEST(VectorAnalyzerTest, TestHashMode)
     VectorHelper::FreeVecBatch(vecBatch4);
 }
 
-}
+} // namespace VectorAnalyzerTest

@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
- * Description: dict_container_test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include "gtest/gtest.h"
 #include "vector/dictionary_container.h"
@@ -36,28 +43,13 @@ template <typename T> void dict_container_get_set_value()
     delete[] values;
 }
 
-TEST(vector2, dict_container_get_set_value_int32)
-{
-    dict_container_get_set_value<int32_t>();
-}
+TEST(vector2, dict_container_get_set_value_int32) { dict_container_get_set_value<int32_t>(); }
 
-TEST(vector2, dict_container_get_set_value_int64)
-{
-    dict_container_get_set_value<int64_t>();
-}
+TEST(vector2, dict_container_get_set_value_int64) { dict_container_get_set_value<int64_t>(); }
 
-TEST(vector2, dict_container_get_set_value_double)
-{
-    dict_container_get_set_value<double>();
-}
+TEST(vector2, dict_container_get_set_value_double) { dict_container_get_set_value<double>(); }
 
-TEST(vector2, dict_container_get_set_value_boost_dec128)
-{
-    dict_container_get_set_value<boost_dec128>();
-}
+TEST(vector2, dict_container_get_set_value_boost_dec128) { dict_container_get_set_value<boost_dec128>(); }
 
-TEST(vector2, dict_container_get_set_value_string_view)
-{
-    dict_container_get_set_value<std::string_view>();
-}
-}
+TEST(vector2, dict_container_get_set_value_string_view) { dict_container_get_set_value<std::string_view>(); }
+} // namespace omniruntime::vec::test

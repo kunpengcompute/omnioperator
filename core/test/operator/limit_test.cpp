@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <vector>
 #include "gtest/gtest.h"
@@ -33,16 +41,16 @@ TEST(NativeOmniLimitOperator, TestLimitBasic)
     std::string data9[dataSize] = {"123", "456", "789", "012"};
     int16_t data10[dataSize] = {0, 1, 2, 3};
 
-    std::vector<DataTypePtr> types = { IntType(),
-        DoubleType(),
-        VarcharType(10),
-        LongType(),
-        Decimal128Type(10, 2),
-        Date32Type(),
-        Decimal64DataType::Instance(),
-        BooleanType(),
-        CharDataType::Instance(),
-        ShortType() };
+    std::vector<DataTypePtr> types = {IntType(),
+                                      DoubleType(),
+                                      VarcharType(10),
+                                      LongType(),
+                                      Decimal128Type(10, 2),
+                                      Date32Type(),
+                                      Decimal64DataType::Instance(),
+                                      BooleanType(),
+                                      CharDataType::Instance(),
+                                      ShortType()};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch1 =
         CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5, data6, data7, data8, data9, data10);
@@ -65,7 +73,7 @@ TEST(NativeOmniLimitOperator, TestLimitBasic)
     int16_t expData10[resultDataSize] = {0, 1, 2};
 
     VectorBatch *expVecBatch1 = CreateVectorBatch(sourceTypes, resultDataSize, expData1, expData2, expData3, expData4,
-        expData5, expData6, expData7, expData8, expData9, expData10);
+                                                  expData5, expData6, expData7, expData8, expData9, expData10);
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expVecBatch1));
 
@@ -86,7 +94,7 @@ TEST(NativeOmniLimitOperator, TestLimitMultiInput)
     int32_t data01[dataSize] = {0, 1, 2};
     double data02[dataSize] = {6.6, 5.5, 4.4};
 
-    std::vector<DataTypePtr> types = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), DoubleType()};
     DataTypes sourceTypes(types);
 
     VectorBatch *vecBatch1 = CreateVectorBatch(sourceTypes, dataSize, data01, data02);
@@ -134,7 +142,7 @@ TEST(NativeOmniLimitOperator, TestLimitWithNull)
     int32_t data1[dataSize] = {0, 1, 2, 0, 1, 2};
     double data2[dataSize] = {6.6, 5.5, 4.4, 3.3, 2.2, 1.1};
 
-    std::vector<DataTypePtr> types = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), DoubleType()};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch1 = CreateVectorBatch(sourceTypes, dataSize, data1, data2);
     LimitOperatorFactory *operatorFactory = LimitOperatorFactory::CreateLimitOperatorFactory(limitCount, 0);
@@ -190,18 +198,19 @@ TEST(NativeOmniLimitOperator, TestLimitOffsetBasic)
     bool data8[dataSize] = {true, false, false, true};
     std::string data9[dataSize] = {"123", "456", "789", "012"};
     int16_t data10[dataSize] = {0, 1, 2, 3};
-    std::vector<DataTypePtr> types = { IntType(), DoubleType(),
-     VarcharType(10),
-     LongType(),
-     Decimal128Type(10, 2),
-     Date32Type(),
-     Decimal64DataType::Instance(),
-     BooleanType(),
-     CharDataType::Instance(),
-     ShortType() };
+    std::vector<DataTypePtr> types = {IntType(),
+                                      DoubleType(),
+                                      VarcharType(10),
+                                      LongType(),
+                                      Decimal128Type(10, 2),
+                                      Date32Type(),
+                                      Decimal64DataType::Instance(),
+                                      BooleanType(),
+                                      CharDataType::Instance(),
+                                      ShortType()};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch1 =
-    CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5, data6, data7, data8, data9, data10);
+        CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3, data4, data5, data6, data7, data8, data9, data10);
     LimitOperatorFactory *operatorFactory = LimitOperatorFactory::CreateLimitOperatorFactory(limitCount, offset);
     LimitOperator *limitOperator = dynamic_cast<LimitOperator *>(CreateTestOperator(operatorFactory));
     limitOperator->AddInput(vecBatch1);
@@ -238,7 +247,7 @@ TEST(NativeOmniLimitOperator, TestLimitOffsetMultiInput)
     int32_t data01[dataSize] = {0, 1, 2};
     double data02[dataSize] = {6.6, 5.5, 4.4};
 
-    std::vector<DataTypePtr> types = { IntType(), DoubleType() };
+    std::vector<DataTypePtr> types = {IntType(), DoubleType()};
     DataTypes sourceTypes(types);
 
     VectorBatch *vecBatch1 = CreateVectorBatch(sourceTypes, dataSize, data01, data02);
@@ -275,4 +284,4 @@ TEST(NativeOmniLimitOperator, TestLimitOffsetMultiInput)
     omniruntime::op::Operator::DeleteOperator(limitOperator);
     delete operatorFactory;
 }
-}
+} // namespace LimitTest

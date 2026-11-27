@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <fstream>
@@ -9,7 +17,6 @@
 #include "operator/join/lookup_join_expr.h"
 #include "operator/join/hash_builder_expr.h"
 #include "tpcds_common.h"
-
 
 using namespace benchmark;
 using namespace omniruntime::op;
@@ -35,9 +42,9 @@ protected:
         auto buildTypes = LoadDataTypesFromJson(buildMetaData, "buildTypes");
         auto hashTableCount = buildMetaData["operatorCount"].get<int32_t>();
         auto buildHashKeys = GetExprsFromJson(buildMetaData["buildHashKeys"].get<std::vector<std::string>>());
-        hashBuilderOperatorFactory =
-            new HashBuilderWithExprOperatorFactory(JoinType(buildMetaData["joinType"]["value"].get<int>()),
-            DataTypes(buildTypes), buildHashKeys, hashTableCount, new OverflowConfig());
+        hashBuilderOperatorFactory = new HashBuilderWithExprOperatorFactory(
+            JoinType(buildMetaData["joinType"]["value"].get<int>()), DataTypes(buildTypes), buildHashKeys,
+            hashTableCount, new OverflowConfig());
         hashBuilderOperator = hashBuilderOperatorFactory->CreateOperator();
 
         for (const auto &vb : LoadVectorBatchFromPath(dependentDataPath, buildTypes)) {
@@ -61,10 +68,10 @@ protected:
         auto buildOutputCols = probeMetaData["buildOutputCols"].get<std::vector<int32_t>>();
         auto probeHashKeys = GetExprsFromJson(probeMetaData["probeHashKeys"].get<std::vector<std::string>>());
 
-        auto factory = new LookupJoinWithExprOperatorFactory(DataTypes(probeTypes), probeOutputCols.data(),
-            (int32_t)probeOutputCols.size(), probeHashKeys, (int32_t)probeHashKeys.size(), buildOutputCols.data(),
-            (int32_t)buildOutputCols.size(), DataTypes(buildOutputTypes), (int64_t)hashBuilderOperatorFactory, nullptr,
-            new OverflowConfig());
+        auto factory = new LookupJoinWithExprOperatorFactory(
+            DataTypes(probeTypes), probeOutputCols.data(), (int32_t)probeOutputCols.size(), probeHashKeys,
+            (int32_t)probeHashKeys.size(), buildOutputCols.data(), (int32_t)buildOutputCols.size(),
+            DataTypes(buildOutputTypes), (int64_t)hashBuilderOperatorFactory, nullptr, new OverflowConfig());
 
         Expr::DeleteExprs(probeHashKeys);
         return factory;
@@ -75,15 +82,9 @@ protected:
         return LoadDataTypesFromJson(metaJson, "probeTypes");
     }
 
-    BaseFixtureGetOutputStrategy GetOutputStrategy() override
-    {
-        return AFTER_EACH_INPUT_FINISHED;
-    }
+    BaseFixtureGetOutputStrategy GetOutputStrategy() override { return AFTER_EACH_INPUT_FINISHED; }
 
-    std::string OperatorIdentifier() override
-    {
-        return "OmniLookupJoinWithExpr.id";
-    }
+    std::string OperatorIdentifier() override { return "OmniLookupJoinWithExpr.id"; }
 
     void TearDown(State &state) override
     {
@@ -96,4 +97,4 @@ protected:
 };
 
 OMNI_BENCHMARK_DECLARE_OPERATOR_DEFAULT(TpcDsHashJoin);
-}
+} // namespace om_benchmark

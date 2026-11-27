@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -34,11 +42,11 @@ TEST(SimpleArenaAllocator, testAllocateContinueSmallSize)
     int64_t chunkSize = 4096;
     SimpleArenaAllocator arena(chunkSize);
     int64_t smallSize = 100;
-    uint8_t const * start = arena.Allocate(smallSize);
+    uint8_t const *start = arena.Allocate(smallSize);
     EXPECT_NE(start, nullptr);
     EXPECT_EQ(arena.TotalBytes(), chunkSize);
     EXPECT_EQ(arena.AvailBytes(), chunkSize - smallSize);
-    char const * p = reinterpret_cast<char *>(arena.AllocateContinue(smallSize, start));
+    char const *p = reinterpret_cast<char *>(arena.AllocateContinue(smallSize, start));
     EXPECT_NE(p, nullptr);
     EXPECT_EQ(arena.TotalBytes(), chunkSize);
     EXPECT_EQ(arena.AvailBytes(), chunkSize - 2 * smallSize);
@@ -50,7 +58,7 @@ TEST(SimpleArenaAllocator, testAllocateContinueLargeSize)
     int64_t chunkSize = 4096;
     SimpleArenaAllocator arena(chunkSize);
     int64_t smallSize = 100;
-    uint8_t const * start = arena.Allocate(smallSize);
+    uint8_t const *start = arena.Allocate(smallSize);
     EXPECT_NE(start, nullptr);
     EXPECT_EQ(arena.TotalBytes(), chunkSize);
     EXPECT_EQ(arena.AvailBytes(), chunkSize - smallSize);
@@ -127,4 +135,4 @@ TEST(SimpleArenaAllocator, testAllocateZeroSize)
     EXPECT_EQ(sizeof(zeroAddr), 8); // 8 bytes
     delete arena;
 }
-}
+} // namespace omniruntime::mem::test

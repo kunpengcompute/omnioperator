@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
- * Description: slice_test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include "gtest/gtest.h"
 #include "vector/vector.h"
@@ -64,27 +71,12 @@ template <> void v2_slice_get_set_value<std::string_view>()
     delete vector;
 }
 
-TEST(vector2, v2_slice_get_set_value_int32)
-{
-    v2_slice_get_set_value<int32_t>();
-}
-TEST(vector2, v2_slice_get_set_value_int64)
-{
-    v2_slice_get_set_value<int64_t>();
-}
-TEST(vector2, v2_slice_get_set_value_double)
-{
-    v2_slice_get_set_value<double>();
-}
-TEST(vector2, v2_slice_get_set_value_string)
-{
-    v2_slice_get_set_value<std::string_view>();
-}
+TEST(vector2, v2_slice_get_set_value_int32) { v2_slice_get_set_value<int32_t>(); }
+TEST(vector2, v2_slice_get_set_value_int64) { v2_slice_get_set_value<int64_t>(); }
+TEST(vector2, v2_slice_get_set_value_double) { v2_slice_get_set_value<double>(); }
+TEST(vector2, v2_slice_get_set_value_string) { v2_slice_get_set_value<std::string_view>(); }
 
-TEST(vector2, v2_slice_get_set_value_dec128)
-{
-    v2_slice_get_set_value<int128_t>();
-}
+TEST(vector2, v2_slice_get_set_value_dec128) { v2_slice_get_set_value<int128_t>(); }
 
 template <typename T> void v2_slice_container()
 {
@@ -116,18 +108,9 @@ template <typename T> void v2_slice_container()
     delete vector;
 }
 
-TEST(vector2, slice_container_int32)
-{
-    v2_slice_container<int32_t>();
-}
+TEST(vector2, slice_container_int32) { v2_slice_container<int32_t>(); }
 
-TEST(vector2, slice_container_int64)
-{
-    v2_slice_container<int64_t>();
-}
+TEST(vector2, slice_container_int64) { v2_slice_container<int64_t>(); }
 
-TEST(vector2, slice_container_double)
-{
-    v2_slice_container<double>();
-}
-}
+TEST(vector2, slice_container_double) { v2_slice_container<double>(); }
+} // namespace omniruntime::vec::test

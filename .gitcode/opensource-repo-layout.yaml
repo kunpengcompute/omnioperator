@@ -1,0 +1,6 @@
+project: openEuler/OmniOperator
+version: "2.2.0"
+
+files:
+  - path: "./MulanPSL2.txt"
+    type: license

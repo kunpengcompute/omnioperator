@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2023. All rights reserved.
- * Description: Fuzz test file
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "fuzz_wrapper.h"
@@ -37,19 +44,19 @@ using namespace DtFuzzFactoryCreateUtil;
 const int32_t SHORT_DECIMAL_SIZE = 18;
 const int32_t LONG_DECIMAL_SIZE = 38;
 uint16_t CHAR_SIZE = 10;
-std::vector<DataTypePtr> allSupportedBaseTypes = { ShortType(),
-                                                   IntType(),
-                                                   LongType(),
-                                                   BooleanType(),
-                                                   DoubleType(),
-                                                   Date32Type(DAY),
-                                                   Decimal64Type(SHORT_DECIMAL_SIZE, 0),
-                                                   Decimal128Type(LONG_DECIMAL_SIZE, 0),
-                                                   VarcharType(CHAR_SIZE),
-                                                   CharType(CHAR_SIZE) };
+std::vector<DataTypePtr> allSupportedBaseTypes = {ShortType(),
+                                                  IntType(),
+                                                  LongType(),
+                                                  BooleanType(),
+                                                  DoubleType(),
+                                                  Date32Type(DAY),
+                                                  Decimal64Type(SHORT_DECIMAL_SIZE, 0),
+                                                  Decimal128Type(LONG_DECIMAL_SIZE, 0),
+                                                  VarcharType(CHAR_SIZE),
+                                                  CharType(CHAR_SIZE)};
 
 VectorBatch *CreateInputForAllTypes(DataTypes &sourceTypes, void **sortDatas, int32_t dataSize, uint16_t loopCount,
-    bool isDictionary, bool hasNull)
+                                    bool isDictionary, bool hasNull)
 {
     int32_t sourceTypesSize = sourceTypes.GetSize();
     std::vector<DataTypePtr> sourceTypesVec = sourceTypes.Get();
@@ -59,11 +66,12 @@ VectorBatch *CreateInputForAllTypes(DataTypes &sourceTypes, void **sortDatas, in
 
     BaseVector *sourceVectors[sourceTypesSize];
     for (int32_t i = 0; i < sourceTypesSize; i++) {
-        int32_t capacityInBytes = (sourceTypeIds[i] == OMNI_CHAR || sourceTypeIds[i] == OMNI_VARCHAR) ?
-            static_cast<int32_t>(static_cast<VarcharDataType *>(sourceTypesVec[i].get())->GetWidth()) * totalDataSize :
-            0;
-        sourceVectors[i] =
-            VectorHelper::CreateVector(OMNI_FLAT, sourceTypeIds[i], totalDataSize, capacityInBytes);
+        int32_t capacityInBytes =
+            (sourceTypeIds[i] == OMNI_CHAR || sourceTypeIds[i] == OMNI_VARCHAR)
+                ? static_cast<int32_t>(static_cast<VarcharDataType *>(sourceTypesVec[i].get())->GetWidth()) *
+                      totalDataSize
+                : 0;
+        sourceVectors[i] = VectorHelper::CreateVector(OMNI_FLAT, sourceTypeIds[i], totalDataSize, capacityInBytes);
         VectorHelper::SetValue(sourceVectors[i], 0, sortDatas[i]);
     }
     for (int32_t i = 1; i < totalDataSize; i++) {
@@ -85,8 +93,7 @@ VectorBatch *CreateInputForAllTypes(DataTypes &sourceTypes, void **sortDatas, in
         }
         for (int32_t i = 0; i < sourceTypesSize; i++) {
             auto sortVector = sourceVectors[i];
-            sourceVectors[i] =
-                VectorHelper::CreateDictionaryVector(ids, totalDataSize, sortVector, sourceTypeIds[i]);
+            sourceVectors[i] = VectorHelper::CreateDictionaryVector(ids, totalDataSize, sortVector, sourceTypeIds[i]);
             delete sortVector;
         }
     }
@@ -98,10 +105,7 @@ VectorBatch *CreateInputForAllTypes(DataTypes &sourceTypes, void **sortDatas, in
     return sortVecBatch;
 }
 
-void DeleteOperatorFactory(omniruntime::op::OperatorFactory *operatorFactory)
-{
-    delete operatorFactory;
-}
+void DeleteOperatorFactory(omniruntime::op::OperatorFactory *operatorFactory) { delete operatorFactory; }
 
 void TestFilter(void **testData, omniruntime::type::DataTypes &sourceTypes, int32_t dataSize, uint16_t loopCount)
 {
@@ -110,7 +114,7 @@ void TestFilter(void **testData, omniruntime::type::DataTypes &sourceTypes, int3
 
     FieldExpr *col1Expr = new FieldExpr(2, LongType());
     FieldExpr *col2Expr = new FieldExpr(4, DoubleType());
-    std::vector<Expr *> projections = { col2Expr, col1Expr };
+    std::vector<Expr *> projections = {col2Expr, col1Expr};
     FieldExpr *eqLeft = new FieldExpr(4, DoubleType());
     LiteralExpr *eqRight = new LiteralExpr(50.0, DoubleType());
     BinaryExpr *eqExpr = new BinaryExpr(omniruntime::expressions::Operator::EQ, eqLeft, eqRight, BooleanType());
@@ -170,7 +174,7 @@ void TestAggregation(void **testData, omniruntime::type::DataTypes &sourceTypes,
 }
 
 void TestHashAggregation(void **testData, omniruntime::type::DataTypes &sourceTypes, int32_t dataSize,
-    uint16_t loopCount)
+                         uint16_t loopCount)
 {
     std::cout << "HashAggregation Fuzz" << std::endl;
     auto sourceVecBatch = CreateInputForAllTypes(sourceTypes, testData, dataSize, loopCount, true, true);
@@ -191,7 +195,7 @@ void TestHashAggregation(void **testData, omniruntime::type::DataTypes &sourceTy
 }
 
 void TestHashJoin(void **testData, omniruntime::type::DataTypes &sourceTypes, int32_t dataSize, uint16_t loopCount,
-    std::string filterExpr, int32_t optCount)
+                  std::string filterExpr, int32_t optCount)
 {
     std::cout << "HashJoin Fuzz" << std::endl;
     loopCount = loopCount <= 100 ? loopCount : 100;
@@ -227,7 +231,7 @@ void TestHashJoin(void **testData, omniruntime::type::DataTypes &sourceTypes, in
 }
 
 void TestLookupOuterJoin(void **testData, omniruntime::type::DataTypes &sourceTypes, int32_t dataSize,
-    uint16_t loopCount, std::string filterExpr, int32_t optCount)
+                         uint16_t loopCount, std::string filterExpr, int32_t optCount)
 {
     std::cout << "LookupOuterJoin Fuzz" << std::endl;
     loopCount = loopCount <= 100 ? loopCount : 100;
@@ -288,7 +292,7 @@ void TestProject(void **testData, omniruntime::type::DataTypes &sourceTypes, int
     LiteralExpr *addRight = new LiteralExpr(5, IntType());
     BinaryExpr *addExpr = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft, addRight, IntType());
 
-    std::vector<Expr *> exprs = { addExpr };
+    std::vector<Expr *> exprs = {addExpr};
     auto overflowConfig = new OverflowConfig();
 
     auto operatorFactory =
@@ -397,8 +401,8 @@ void TestTopNSort(void **testData, omniruntime::type::DataTypes &sourceTypes, in
 {
     std::cout << "TopNSort Fuzz" << std::endl;
     auto sourceVecBatch = CreateInputForAllTypes(sourceTypes, testData, dataSize, loopCount, false, true);
-    std::vector<omniruntime::expressions::Expr *> partitionKeys = { new FieldExpr(8, VarcharType(CHAR_SIZE)) };
-    std::vector<omniruntime::expressions::Expr *> sortKeys = { new FieldExpr(1, IntType()) };
+    std::vector<omniruntime::expressions::Expr *> partitionKeys = {new FieldExpr(8, VarcharType(CHAR_SIZE))};
+    std::vector<omniruntime::expressions::Expr *> sortKeys = {new FieldExpr(1, IntType())};
     TopNSortWithExprOperatorFactory *topNSortOperatorFactory = dynamic_cast<TopNSortWithExprOperatorFactory *>(
         CreateTopNSortFactory(sourceTypes, partitionKeys, sortKeys, dataSize));
     auto topNSortOperator = static_cast<TopNSortWithExprOperator *>(topNSortOperatorFactory->CreateOperator());
@@ -416,7 +420,7 @@ void TestTopNSort(void **testData, omniruntime::type::DataTypes &sourceTypes, in
 }
 
 void TestSortMergeJoinV3(void **testData, omniruntime::type::DataTypes &sourceTypes, int32_t dataSize,
-    uint16_t loopCount)
+                         uint16_t loopCount)
 {
     std::cout << "SortMergeJoinV3 Fuzz" << std::endl;
 
@@ -425,7 +429,7 @@ void TestSortMergeJoinV3(void **testData, omniruntime::type::DataTypes &sourceTy
         dynamic_cast<StreamedTableWithExprOperatorFactoryV3 *>(CreateStreamedWithExprOperatorFactory());
     BufferedTableWithExprOperatorFactoryV3 *sortMergeJoinV3OperatorFactory =
         dynamic_cast<BufferedTableWithExprOperatorFactoryV3 *>(
-        CreateSortMergeJoinV3Factory(streamedTableWithExprOperatorFactoryV3));
+            CreateSortMergeJoinV3Factory(streamedTableWithExprOperatorFactoryV3));
     auto sortMergeJoinV3Operator =
         static_cast<BufferedTableWithExprOperatorV3 *>(sortMergeJoinV3OperatorFactory->CreateOperator());
     sortMergeJoinV3Operator->AddInput(sourceVecBatch);
@@ -444,9 +448,10 @@ void TestWindow(void **testData, omniruntime::type::DataTypes &sourceTypes, int3
 {
     std::cout << "Window Fuzz" << std::endl;
     auto sourceVecBatch = CreateInputForAllTypes(sourceTypes, testData, dataSize, loopCount, true, true);
-    DataTypes allTypes(std::vector<DataTypePtr>({ ShortType(), IntType(), LongType(), BooleanType(), DoubleType(),
-        Date32Type(DAY), Decimal64Type(SHORT_DECIMAL_SIZE, 0), Decimal128Type(LONG_DECIMAL_SIZE, 0),
-        VarcharType(CHAR_SIZE), CharType(CHAR_SIZE), DoubleType() }));
+    DataTypes allTypes(
+        std::vector<DataTypePtr>({ShortType(), IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY),
+                                  Decimal64Type(SHORT_DECIMAL_SIZE, 0), Decimal128Type(LONG_DECIMAL_SIZE, 0),
+                                  VarcharType(CHAR_SIZE), CharType(CHAR_SIZE), DoubleType()}));
 
     // dealing data with the operator
     WindowOperatorFactory *operatorFactory = dynamic_cast<WindowOperatorFactory *>(CreateWindowFactory(sourceTypes));
@@ -471,57 +476,38 @@ void TestWindow(void **testData, omniruntime::type::DataTypes &sourceTypes, int3
 int GlobalFuzz(struct FuzzData fzd, uint16_t loopCount, std::string filterExpr, int32_t opCnt, uint16_t chooseFunc)
 {
     std::cout << "chooseFunc is [" << chooseFunc << "]" << std::endl;
-    std::cout << "input paras: shortValue = " << fzd.shortValue << ", intValue = " << fzd.intValue <<
-        ", longValue = " << fzd.longValue << ", boolValue = " << fzd.boolValue << ", doubleValue = " <<
-        fzd.doubleValue << ", highBits = " << fzd.highBits << ", lowBits = " << fzd.lowBits << ", strValue = " <<
-        fzd.strValue << ", loopCount = " << loopCount << std::endl;
+    std::cout << "input paras: shortValue = " << fzd.shortValue << ", intValue = " << fzd.intValue
+              << ", longValue = " << fzd.longValue << ", boolValue = " << fzd.boolValue
+              << ", doubleValue = " << fzd.doubleValue << ", highBits = " << fzd.highBits
+              << ", lowBits = " << fzd.lowBits << ", strValue = " << fzd.strValue << ", loopCount = " << loopCount
+              << std::endl;
 
     Decimal128 decimal128(fzd.highBits, fzd.lowBits);
     const int32_t dataSize = 10;
     CHAR_SIZE = fzd.strValue.size() == 0 ? 10 : fzd.strValue.size();
 
     // all types: short, int, long, boolean, double, date32, decimal, decimal128, varchar, char
-    void *inputDatas[dataSize] = { &(fzd.shortValue), &(fzd.intValue), &(fzd.longValue), &(fzd.boolValue),
-                                   &(fzd.doubleValue), &(fzd.intValue), &(fzd.longValue), &decimal128, &(fzd.strValue),
-                                   &(fzd.strValue) };
+    void *inputDatas[dataSize] = {&(fzd.shortValue),  &(fzd.intValue), &(fzd.longValue), &(fzd.boolValue),
+                                  &(fzd.doubleValue), &(fzd.intValue), &(fzd.longValue), &decimal128,
+                                  &(fzd.strValue),    &(fzd.strValue)};
     DataTypes sourceTypes(allSupportedBaseTypes);
 
     switch (chooseFunc) {
-        case 1:
-            TestAggregation(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
-        case 2:
-            TestFilter(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
-        case 3:
-            TestHashAggregation(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
+        case 1: TestAggregation(inputDatas, sourceTypes, dataSize, loopCount); break;
+        case 2: TestFilter(inputDatas, sourceTypes, dataSize, loopCount); break;
+        case 3: TestHashAggregation(inputDatas, sourceTypes, dataSize, loopCount); break;
         case 4: {
             std::cout << "filterExpr = " << filterExpr << ", operatorCount = " << opCnt << std::endl;
             TestHashJoin(inputDatas, sourceTypes, dataSize, loopCount, filterExpr, opCnt);
             break;
         }
-        case 5:
-            TestDistinctLimit(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
-        case 6:
-            TestProject(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
-        case 7:
-            TestSort(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
-        case 8:
-            TestSortMergeJoin(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
-        case 9:
-            TestTopN(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
-        case 10:
-            TestUnion(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
-        case 11:
-            TestWindow(inputDatas, sourceTypes, dataSize, loopCount);
-            break;
+        case 5: TestDistinctLimit(inputDatas, sourceTypes, dataSize, loopCount); break;
+        case 6: TestProject(inputDatas, sourceTypes, dataSize, loopCount); break;
+        case 7: TestSort(inputDatas, sourceTypes, dataSize, loopCount); break;
+        case 8: TestSortMergeJoin(inputDatas, sourceTypes, dataSize, loopCount); break;
+        case 9: TestTopN(inputDatas, sourceTypes, dataSize, loopCount); break;
+        case 10: TestUnion(inputDatas, sourceTypes, dataSize, loopCount); break;
+        case 11: TestWindow(inputDatas, sourceTypes, dataSize, loopCount); break;
         default: {
             TestAggregation(inputDatas, sourceTypes, dataSize, loopCount);
             TestFilter(inputDatas, sourceTypes, dataSize, loopCount);

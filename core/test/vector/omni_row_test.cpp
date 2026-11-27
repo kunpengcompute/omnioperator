@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
- * Description: omni_row_test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <iostream>
 #include "gtest/gtest.h"
@@ -127,7 +134,7 @@ TEST(omni_row, bool_write_buffer)
 
 TEST(omni_row, decimal128_write_buffer)
 {
-    type::Decimal128 value{ 123, 123 };
+    type::Decimal128 value{123, 123};
     SerializedValue<type::Decimal128> serializedValue;
     serializedValue.SetValue(value);
     auto len = serializedValue.CompactLength();
@@ -140,7 +147,7 @@ TEST(omni_row, decimal128_write_buffer)
 
 TEST(omni_row, str_write_buffer)
 {
-    std::string_view value{ "hello zy", 8 };
+    std::string_view value{"hello zy", 8};
     SerializedValue<std::string_view> serializedValue;
     serializedValue.SetValue(value);
     auto len = serializedValue.CompactLength();
@@ -154,8 +161,7 @@ TEST(omni_row, str_write_buffer)
 
 TEST(omni_row, fill_buffer_no_null)
 {
-    std::vector<DataTypePtr> types(
-        { IntDataType::Instance(), DoubleDataType::Instance(), VarcharDataType::Instance() });
+    std::vector<DataTypePtr> types({IntDataType::Instance(), DoubleDataType::Instance(), VarcharDataType::Instance()});
     RowBuffer rowBuffer(types);
     std::string_view testStr("hello world", 11);
     auto *buffer = rowBuffer.GetOneOfRow(0);
@@ -187,14 +193,14 @@ TEST(omni_row, fill_buffer_no_null)
 
 TEST(omni_row, fill_buffer_and_deserial_to_vector)
 {
-    std::vector<DataTypePtr> types({ LongDataType::Instance(), DoubleDataType::Instance(), VarcharDataType::Instance(),
-        BooleanDataType::Instance() });
+    std::vector<DataTypePtr> types({LongDataType::Instance(), DoubleDataType::Instance(), VarcharDataType::Instance(),
+                                    BooleanDataType::Instance()});
     RowBuffer rowBuffer(types);
     int32_t rowNumber = 5;
     int64_t data1[] = {-111, 222, 333, 444, -555};
     double data2[] = {999.99f, 999.0f, 999.999f, 99.96f, 999.99999f};
     std::string data3[] = {"Asleep, high machines shall no", "Asleep, indian sciences may in",
-                               "As junior schools love simply.", "A", "Ab"};
+                           "As junior schools love simply.", "A", "Ab"};
     bool data4[] = {true, false, false, true, true};
 
     DataTypes dataTypes(types);
@@ -233,14 +239,13 @@ TEST(omni_row, fill_buffer_and_deserial_to_vector)
 
 TEST(omni_row, fill_buffer_and_check_hash)
 {
-    std::vector<DataTypePtr> types(
-        { LongDataType::Instance(), DoubleDataType::Instance(), VarcharDataType::Instance() });
+    std::vector<DataTypePtr> types({LongDataType::Instance(), DoubleDataType::Instance(), VarcharDataType::Instance()});
     RowBuffer rowBuffer(types, 2);
     int32_t rowNumber = 5;
     int64_t data1[] = {111, 222, 333, 444, 555};
     double data2[] = {999.99f, 999.0f, 999.999f, 99.96f, 999.99999f};
     std::string data3[] = {"Asleep, high machines shall no", "Asleep, indian sciences may in",
-                               "As junior schools love simply.", "A", "Ab"};
+                           "As junior schools love simply.", "A", "Ab"};
 
     DataTypes dataTypes(types);
     VectorBatch *vecBatch = CreateVectorBatch(dataTypes, rowNumber, data1, data2, data3);
@@ -265,8 +270,7 @@ TEST(omni_row, fill_buffer_performance)
 {
     auto t = Timer();
     t.Start("test generate vectorBatch(5 row * 3col) time:");
-    std::vector<DataTypePtr> types(
-        { LongDataType::Instance(), DoubleDataType::Instance(), VarcharDataType::Instance() });
+    std::vector<DataTypePtr> types({LongDataType::Instance(), DoubleDataType::Instance(), VarcharDataType::Instance()});
     RowBuffer rowBuffer(types, 2);
     int32_t rowNumber = 5;
     std::vector<int64_t> data1(rowNumber);
@@ -295,7 +299,7 @@ TEST(omni_row, fill_buffer_performance)
 
 TEST(omni_row, fill_bool_buffer_and_deserial_to_vector)
 {
-    std::vector<DataTypePtr> types({ BooleanDataType::Instance() });
+    std::vector<DataTypePtr> types({BooleanDataType::Instance()});
     RowBuffer rowBuffer(types);
     int32_t rowNumber = 5;
     bool data1[] = {true, false, true, true, true};
@@ -330,4 +334,4 @@ TEST(omni_row, fill_bool_buffer_and_deserial_to_vector)
     VectorHelper::FreeVecBatch(vecBatch);
     VectorHelper::FreeVecBatch(result);
 }
-}
+} // namespace omniruntime::vec::test

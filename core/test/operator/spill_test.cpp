@@ -1,6 +1,13 @@
 /*
- * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2022-2024. All rights reserved.
- * @Description: spill test implementations
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <vector>
 #include <ctime>
@@ -23,7 +30,7 @@ TEST(SpillTest, TestWriteRead)
     int64_t data2[dataSize] = {8, 4, 0, 2, 6};
     int16_t data3[dataSize] = {5, 4, 3, 2, 1};
 
-    std::vector<DataTypePtr> types = { IntType(), LongType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), LongType(), ShortType()};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch = TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
 
@@ -59,12 +66,12 @@ TEST(SpillTest, TestSpillNoneSinceExceededLimit)
     int64_t data2[dataSize] = {6, 8, 4, 0, 2};
     int16_t data3[dataSize] = {-5, -3, 0, 2, 4};
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType(), ShortType() }));
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), ShortType()}));
     VectorBatch *vecBatch = TestUtil::CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
 
-    std::vector<int32_t> sortCols = { 0, 1, 2 };
-    std::vector<int32_t> sortAscendings = { 1, 1, 1 };
-    std::vector<int32_t> sortNullFirsts = { 0, 0, 0 };
+    std::vector<int32_t> sortCols = {0, 1, 2};
+    std::vector<int32_t> sortAscendings = {1, 1, 1};
+    std::vector<int32_t> sortNullFirsts = {0, 0, 0};
     PagesIndex pagesIndex(sourceTypes);
     pagesIndex.AddVecBatch(vecBatch);
     pagesIndex.Prepare();
@@ -76,7 +83,7 @@ TEST(SpillTest, TestSpillNoneSinceExceededLimit)
 
     std::vector<omniruntime::op::SortOrder> sortOrders;
     for (size_t i = 0; i < sortCols.size(); i++) {
-        omniruntime::op::SortOrder sortOrder { sortAscendings[i] == 1, sortNullFirsts[i] == 1 };
+        omniruntime::op::SortOrder sortOrder{sortAscendings[i] == 1, sortNullFirsts[i] == 1};
         sortOrders.emplace_back(sortOrder);
     }
 
@@ -88,4 +95,4 @@ TEST(SpillTest, TestSpillNoneSinceExceededLimit)
     delete spillTracker;
     rmdir(path.c_str());
 }
-}
+} // namespace omniruntime::SpillTest

@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <gtest/gtest.h>
@@ -19,9 +27,9 @@ TEST(ContainerVector, setAndGetValue)
     std::vector<int64_t> vectorAddresses(2);
     vectorAddresses[0] = reinterpret_cast<int64_t>(doubleVector.get());
     vectorAddresses[1] = reinterpret_cast<int64_t>(longVector.get());
-    std::vector<DataTypePtr> VECTOR_TYPES = { DoubleType(), LongType() };
+    std::vector<DataTypePtr> VECTOR_TYPES = {DoubleType(), LongType()};
     auto *vector = new ContainerVector(POSITION_COUNT, vectorAddresses, VECTOR_TYPES);
-    BaseVector* values[] = {new Vector<double>(POSITION_COUNT), new Vector<int64_t>(POSITION_COUNT)};
+    BaseVector *values[] = {new Vector<double>(POSITION_COUNT), new Vector<int64_t>(POSITION_COUNT)};
     for (int i = 0; i < VECTOR_COUNT; ++i) {
         vector->SetValue(i, reinterpret_cast<int64_t>(values[i]));
     }
@@ -39,11 +47,11 @@ TEST(ContainerVector, testNullFlagWithSet)
     auto intVector = new Vector<int32_t>(rows);
     auto longVector = new Vector<int64_t>(rows);
 
-    std::vector<int64_t> subAddrs = { reinterpret_cast<int64_t>(intVector), reinterpret_cast<int64_t>(longVector) };
-    std::vector<DataTypePtr> subTypes = { IntType(), LongType() };
+    std::vector<int64_t> subAddrs = {reinterpret_cast<int64_t>(intVector), reinterpret_cast<int64_t>(longVector)};
+    std::vector<DataTypePtr> subTypes = {IntType(), LongType()};
     auto *hasNulls = new ContainerVector(rows, subAddrs, subTypes);
 
-    std::vector<bool> nulls = { true, false, true, false, true, false, true, false, true, false };
+    std::vector<bool> nulls = {true, false, true, false, true, false, true, false, true, false};
     for (int32_t i = 0; i < rows; ++i) {
         if (nulls[i]) {
             hasNulls->SetNull(i);
@@ -62,7 +70,7 @@ TEST(ContainerVector, jniFreeVector)
     std::vector<int64_t> vectorAddresses(2);
     vectorAddresses[0] = reinterpret_cast<int64_t>(doubleVector);
     vectorAddresses[1] = reinterpret_cast<int64_t>(longVector);
-    std::vector<DataTypePtr> VECTOR_TYPES = { DoubleType(), LongType() };
+    std::vector<DataTypePtr> VECTOR_TYPES = {DoubleType(), LongType()};
     auto *vector = new ContainerVector(POSITION_COUNT, vectorAddresses, VECTOR_TYPES);
     auto *vec = (BaseVector *)vector;
 
@@ -80,8 +88,8 @@ TEST(ContainerVector, appendVector)
     auto *doubleVector = new Vector<double>(rows);
     doubleVector->SetValues(0, data1, 5);
 
-    std::vector<int64_t> vectorAddresses = { reinterpret_cast<int64_t>(doubleVector), reinterpret_cast<int64_t>(src1) };
-    std::vector<DataTypePtr> vectorTypes = { DoubleType(), LongType() };
+    std::vector<int64_t> vectorAddresses = {reinterpret_cast<int64_t>(doubleVector), reinterpret_cast<int64_t>(src1)};
+    std::vector<DataTypePtr> vectorTypes = {DoubleType(), LongType()};
     auto *vector = new ContainerVector(rows, vectorAddresses, vectorTypes);
 
     auto *src2 = new Vector<int64_t>(rows);
@@ -91,15 +99,15 @@ TEST(ContainerVector, appendVector)
     auto *doubleVector1 = new Vector<double>(rows);
     doubleVector1->SetValues(0, data22, rows);
 
-    std::vector<int64_t> vecAddr2 = { reinterpret_cast<int64_t>(doubleVector1), reinterpret_cast<int64_t>(src2) };
-    std::vector<DataTypePtr> dataTypes2 = { DoubleType(), LongType() };
+    std::vector<int64_t> vecAddr2 = {reinterpret_cast<int64_t>(doubleVector1), reinterpret_cast<int64_t>(src2)};
+    std::vector<DataTypePtr> dataTypes2 = {DoubleType(), LongType()};
     auto *vector2 = new ContainerVector(rows, vecAddr2, dataTypes2);
 
     auto *appendedDouble = new Vector<double>(10);
     auto *appendedLong = new Vector<int64_t>(10);
-    std::vector<int64_t> appendedAddr = { reinterpret_cast<int64_t>(appendedDouble),
-        reinterpret_cast<int64_t>(appendedLong) };
-    std::vector<DataTypePtr> appendedDataType = { DoubleType(), LongType() };
+    std::vector<int64_t> appendedAddr = {reinterpret_cast<int64_t>(appendedDouble),
+                                         reinterpret_cast<int64_t>(appendedLong)};
+    std::vector<DataTypePtr> appendedDataType = {DoubleType(), LongType()};
     auto *appended = new ContainerVector(rows * 2, appendedAddr, appendedDataType);
     appended->Append(vector, 0, 5);
     appended->Append(vector2, 5, 5);
@@ -124,4 +132,4 @@ TEST(ContainerVector, sliceVector)
 {
     // TODO: add UT after container vector supports this function.
 }
-}
+} // namespace ContainerVectorTest

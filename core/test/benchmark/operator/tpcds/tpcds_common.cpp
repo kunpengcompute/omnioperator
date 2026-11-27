@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <dirent.h>
@@ -7,7 +15,6 @@
 #include "../common/vector_util.h"
 #include "type/data_type_serializer.h"
 #include "tpcds_common.h"
-
 
 using namespace benchmark;
 using namespace omniruntime::op;
@@ -44,7 +51,7 @@ std::string LoadDependentDataPathFromPath(const std::string &path)
 }
 
 std::vector<VectorBatchSupplier> LoadVectorBatchFromPath(const std::string &path,
-    const std::vector<DataTypePtr> &dataTypes)
+                                                         const std::vector<DataTypePtr> &dataTypes)
 {
     std::vector<std::string> files = {};
     auto *dir = opendir(path.c_str());
@@ -97,7 +104,6 @@ std::vector<VectorBatchSupplier> LoadVectorBatchFromPath(const std::string &path
     return vectorSuppliers;
 }
 
-
 std::vector<DataTypePtr> LoadDataTypesFromJson(const nlohmann::json &metaJson, const std::string &filedName)
 {
     std::vector<omniruntime::type::DataTypePtr> dataTypes;
@@ -121,14 +127,13 @@ std::vector<Expr *> GetExprsFromJson(const std::vector<std::string> &exprs)
         auto expression = JSONParser::ParseJSON(jsonExpression);
         if (expression == nullptr) {
             omniruntime::expressions::Expr::DeleteExprs(expressions);
-            throw omniruntime::exception::OmniException("EXPRESSION_NOT_SUPPORT",
-                "The expression is not supported yet: " + jsonExpression.dump());
+            throw omniruntime::exception::OmniException(
+                "EXPRESSION_NOT_SUPPORT", "The expression is not supported yet: " + jsonExpression.dump());
         }
         expressions.push_back(expression);
     }
     return expressions;
 }
-
 
 void getJsonMeta(const std::string &dir, std::vector<std::string> &paths, const std::string &identifier)
 {
@@ -150,8 +155,7 @@ void getJsonMeta(const std::string &dir, std::vector<std::string> &paths, const 
         closedir(dirScan);
     }
 }
-}
-
+} // namespace tpc_ds_data_loader
 
 omniruntime::op::OperatorFactory *TpcDsOperatorFixture::createOperatorFactory(const benchmark::State &state)
 {
@@ -172,9 +176,8 @@ std::vector<VectorBatchSupplier> TpcDsOperatorFixture::createVecBatch(const benc
     auto metaData = tpc_ds_data_loader::LoadBenchmarkMetaFromPath(GetRealDataPath(dataPathList[state.range(0)]));
 
     return tpc_ds_data_loader::LoadVectorBatchFromPath(GetRealDataPath(dataPathList[state.range(0)]),
-        loadVectorBatchTypes(metaData));
+                                                       loadVectorBatchTypes(metaData));
 }
-
 
 void TpcDsOperatorFixture::Initialize()
 {
@@ -199,7 +202,7 @@ void TpcDsOperatorFixture::SetUp(benchmark::State &state)
 
 std::string TpcDsOperatorFixture::MessageWhenSkip(const State &state)
 {
-    return dataPathList.empty() ? "No " + OperatorIdentifier() + " in current path" :
-                                  BaseOmniFixture::MessageWhenSkip(state);
+    return dataPathList.empty() ? "No " + OperatorIdentifier() + " in current path"
+                                : BaseOmniFixture::MessageWhenSkip(state);
 }
-}
+} // namespace om_benchmark

@@ -1,6 +1,13 @@
 /*
- * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2021-2022. All rights reserved.
- * @Description: lookup join operator test implementations
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <vector>
 #include <thread>
@@ -25,13 +32,14 @@ using std::vector;
 
 namespace JoinWithPlanNodeTest {
 void DeleteHashBuilderAndLookupJoinOperatorFactory(HashBuilderWithExprOperatorFactory *hashBuilderOperatorFactory,
-    LookupJoinWithExprOperatorFactory *lookupJoinOperatorFactory)
+                                                   LookupJoinWithExprOperatorFactory *lookupJoinOperatorFactory)
 {
     delete hashBuilderOperatorFactory;
     delete lookupJoinOperatorFactory;
 }
 
-std::tuple<std::shared_ptr<const HashJoinNode>, FieldExpr *, FieldExpr *> ConstructSimpleJoinKeyHashJoinNode(JoinType joinType, bool nullAware, bool isShuffle, ExprPtr filter)
+std::tuple<std::shared_ptr<const HashJoinNode>, FieldExpr *, FieldExpr *>
+ConstructSimpleJoinKeyHashJoinNode(JoinType joinType, bool nullAware, bool isShuffle, ExprPtr filter)
 {
     std::vector<ExprPtr> leftKeys;
     std::vector<ExprPtr> rightKeys;
@@ -42,9 +50,9 @@ std::tuple<std::shared_ptr<const HashJoinNode>, FieldExpr *, FieldExpr *> Constr
     leftKeys.emplace_back(leftKey);
     rightKeys.emplace_back(rightKey);
 
-    DataTypes probeTypes(std::vector<DataTypePtr>({ LongType(), LongType() }));
-    DataTypes buildTypes(std::vector<DataTypePtr>({ LongType(), LongType() }));
-    std::vector<omniruntime::expressions::Expr*> partitionKeys;
+    DataTypes probeTypes(std::vector<DataTypePtr>({LongType(), LongType()}));
+    DataTypes buildTypes(std::vector<DataTypePtr>({LongType(), LongType()}));
+    std::vector<omniruntime::expressions::Expr *> partitionKeys;
     int index = 0;
     for (; index < probeTypes.GetSize(); index++) {
         partitionKeys.push_back(new FieldExpr(index, probeTypes.GetType(index)));
@@ -53,13 +61,16 @@ std::tuple<std::shared_ptr<const HashJoinNode>, FieldExpr *, FieldExpr *> Constr
         partitionKeys.push_back(new FieldExpr(index, buildTypes.GetType(index - probeTypes.GetSize())));
     }
 
-    return {std::make_shared<const HashJoinNode>("0", joinType, BuildSide::OMNI_BUILD_LEFT, nullAware, isShuffle, leftKeys, rightKeys, filter, nullptr, nullptr, probeTypes.Instance(), buildTypes.Instance(), partitionKeys), leftKey, rightKey};
+    return {std::make_shared<const HashJoinNode>("0", joinType, BuildSide::OMNI_BUILD_LEFT, nullAware, isShuffle,
+                                                 leftKeys, rightKeys, filter, nullptr, nullptr, probeTypes.Instance(),
+                                                 buildTypes.Instance(), partitionKeys),
+            leftKey, rightKey};
 }
 
 VectorBatch *ConstructSimpleBuildVectorBatch()
 {
     const int32_t dataSize = 10;
-    DataTypes buildTypes(std::vector<DataTypePtr>({ LongType(), LongType() }));
+    DataTypes buildTypes(std::vector<DataTypePtr>({LongType(), LongType()}));
     int64_t buildData0[dataSize] = {1, 2, 1, 2, 3, 4, 5, 6, 7, 1};
     int64_t buildData1[dataSize] = {79, 79, 70, 70, 70, 70, 70, 70, 70, 70};
     return CreateVectorBatch(buildTypes, dataSize, buildData0, buildData1);
@@ -68,7 +79,7 @@ VectorBatch *ConstructSimpleBuildVectorBatch()
 VectorBatch *ConstructSimpleProbeVectorBatch()
 {
     const int32_t dataSize = 10;
-    DataTypes probeTypes(std::vector<DataTypePtr>({ LongType(), LongType() }));
+    DataTypes probeTypes(std::vector<DataTypePtr>({LongType(), LongType()}));
     int64_t probeData0[] = {1, 2, 3, 4, 5, 6, 1, 1, 2, 3};
     int64_t probeData1[] = {78, 78, 78, 78, 78, 78, 78, 82, 82, 65};
     return CreateVectorBatch(probeTypes, dataSize, probeData0, probeData1);
@@ -89,9 +100,9 @@ VectorBatch *ConstructSimpleExpectedVectorBatch()
     auto expectedVec1 = CreateVector<int64_t>(originalDataSize, expectedData1);
     int32_t ids[expectedDataSize] = {0, 0, 0, 1, 1, 2, 3, 4, 5, 6, 6, 6, 7, 7, 7, 8, 8, 9};
     auto expectedDictVec0 =
-            VectorHelper::CreateDictionary(ids, expectedDataSize, reinterpret_cast<Vector<int64_t> *>(expectedVec0));
+        VectorHelper::CreateDictionary(ids, expectedDataSize, reinterpret_cast<Vector<int64_t> *>(expectedVec0));
     auto expectedDictVec1 =
-            VectorHelper::CreateDictionary(ids, expectedDataSize, reinterpret_cast<Vector<int64_t> *>(expectedVec1));
+        VectorHelper::CreateDictionary(ids, expectedDataSize, reinterpret_cast<Vector<int64_t> *>(expectedVec1));
     auto expectedVec2 = CreateVector<int64_t>(expectedDataSize, expectedData2);
     auto expectedVec3 = CreateVector<int64_t>(expectedDataSize, expectedData3);
     delete expectedVec0;
@@ -109,14 +120,17 @@ TEST(NativeOmniJoinWithPlanNodeTest, TestInnerEqualityJoinWithOneBuildOp)
 {
     auto *queryConfig = new config::QueryConfig();
     auto [joinNode, leftKey, rightKey] = ConstructSimpleJoinKeyHashJoinNode(OMNI_JOIN_TYPE_INNER, false, true, nullptr);
-    HashBuilderWithExprOperatorFactory *hashBuilderFactory = HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(joinNode, *queryConfig);
+    HashBuilderWithExprOperatorFactory *hashBuilderFactory =
+        HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(joinNode, *queryConfig);
     auto *hashBuilderOperator = dynamic_cast<HashBuilderWithExprOperator *>(hashBuilderFactory->CreateOperator());
     VectorBatch *vecBatch = ConstructSimpleBuildVectorBatch();
     hashBuilderOperator->AddInput(vecBatch);
     VectorBatch *hashBuildOutput = nullptr;
     hashBuilderOperator->GetOutput(&hashBuildOutput);
 
-    LookupJoinWithExprOperatorFactory *lookupJoinFactory = LookupJoinWithExprOperatorFactory::CreateLookupJoinWithExprOperatorFactory(joinNode, hashBuilderFactory, *queryConfig);
+    LookupJoinWithExprOperatorFactory *lookupJoinFactory =
+        LookupJoinWithExprOperatorFactory::CreateLookupJoinWithExprOperatorFactory(joinNode, hashBuilderFactory,
+                                                                                   *queryConfig);
     auto *lookupJoinOperator = dynamic_cast<LookupJoinWithExprOperator *>(lookupJoinFactory->CreateOperator());
     VectorBatch *probeVecBatch = ConstructSimpleProbeVectorBatch();
     lookupJoinOperator->AddInput(probeVecBatch);
@@ -142,14 +156,17 @@ TEST(NativeOmniJoinWithPlanNodeTest, TestInnerEqualityJoinWithOneBuildOp)
 TEST(NativeOmniJoinWithPlanNodeTest, TestFullEqualityJoinWithOneBuildOp)
 {
     auto [joinNode, leftKey, rightKey] = ConstructSimpleJoinKeyHashJoinNode(OMNI_JOIN_TYPE_FULL, false, true, nullptr);
-    HashBuilderWithExprOperatorFactory *hashBuilderFactory = HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(joinNode, config::QueryConfig());
+    HashBuilderWithExprOperatorFactory *hashBuilderFactory =
+        HashBuilderWithExprOperatorFactory::CreateHashBuilderWithExprOperatorFactory(joinNode, config::QueryConfig());
     auto *hashBuilderOperator = dynamic_cast<HashBuilderWithExprOperator *>(CreateTestOperator(hashBuilderFactory));
     VectorBatch *vecBatch = ConstructSimpleBuildVectorBatch();
     hashBuilderOperator->AddInput(vecBatch);
     VectorBatch *hashBuildOutput = nullptr;
     hashBuilderOperator->GetOutput(&hashBuildOutput);
 
-    LookupJoinWrapperOperatorFactory *lookupJoinWrapperOperatorFactory = LookupJoinWrapperOperatorFactory::CreateLookupJoinWrapperOperatorFactory(joinNode, hashBuilderFactory, config::QueryConfig());
+    LookupJoinWrapperOperatorFactory *lookupJoinWrapperOperatorFactory =
+        LookupJoinWrapperOperatorFactory::CreateLookupJoinWrapperOperatorFactory(joinNode, hashBuilderFactory,
+                                                                                 config::QueryConfig());
     auto lookupJoinWrapperOperator = lookupJoinWrapperOperatorFactory->CreateOperator();
     VectorBatch *probeVecBatch = ConstructSimpleProbeVectorBatch();
     lookupJoinWrapperOperator->AddInput(probeVecBatch);
@@ -194,4 +211,4 @@ TEST(NativeOmniJoinWithPlanNodeTest, TestFullEqualityJoinWithOneBuildOp)
     delete hashBuilderFactory;
     delete lookupJoinWrapperOperatorFactory;
 }
-}
+} // namespace JoinWithPlanNodeTest

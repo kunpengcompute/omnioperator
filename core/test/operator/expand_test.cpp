@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Description: expand operator test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <string>
@@ -20,26 +27,24 @@ using namespace std;
 using namespace TestUtil;
 
 namespace ExpandTest {
-    void VerifyOutput(omniruntime::op::Operator *op,
-                      VectorBatch *&outputVecBatch,
-                      const int32_t numRows,
-                      int32_t valueOffset)
-    {
-        op->GetOutput(&outputVecBatch);
-        auto vec = reinterpret_cast<Vector<int32_t> *>(outputVecBatch->Get(0));
-        for (int32_t i = 0; i < numRows; ++i) {
-            int32_t val = vec->GetValue(i);
-            bool isNull = vec->IsNull(i);
-            if (i % 2 == 0) {
-                EXPECT_EQ(val, i + valueOffset);
-                EXPECT_FALSE(isNull);
-            } else {
-                EXPECT_TRUE(isNull);
-            }
+void VerifyOutput(omniruntime::op::Operator *op, VectorBatch *&outputVecBatch, const int32_t numRows,
+                  int32_t valueOffset)
+{
+    op->GetOutput(&outputVecBatch);
+    auto vec = reinterpret_cast<Vector<int32_t> *>(outputVecBatch->Get(0));
+    for (int32_t i = 0; i < numRows; ++i) {
+        int32_t val = vec->GetValue(i);
+        bool isNull = vec->IsNull(i);
+        if (i % 2 == 0) {
+            EXPECT_EQ(val, i + valueOffset);
+            EXPECT_FALSE(isNull);
+        } else {
+            EXPECT_TRUE(isNull);
         }
-        VectorHelper::FreeVecBatch(outputVecBatch);
-        outputVecBatch = nullptr;
     }
+    VectorHelper::FreeVecBatch(outputVecBatch);
+    outputVecBatch = nullptr;
+}
 
 TEST(ExpandTest, Simple)
 {
@@ -51,11 +56,11 @@ TEST(ExpandTest, Simple)
     auto *addRight = new LiteralExpr(5, IntType());
     auto *addExpr = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft, addRight, IntType());
     std::vector<Expr *> exprs = {addExpr, filed0};
-    std::vector<DataTypePtr> vecOfTypes = { IntType() };
+    std::vector<DataTypePtr> vecOfTypes = {IntType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     std::vector<std::shared_ptr<ExpressionEvaluator>> exprEvaluators;
-    for (const auto& expr : exprs) {
+    for (const auto &expr : exprs) {
         std::vector<Expr *> projection = {expr};
         auto exprEvaluator = std::make_shared<ExpressionEvaluator>(projection, inputTypes, overflowConfig);
         exprEvaluators.push_back(exprEvaluator);
@@ -84,4 +89,4 @@ TEST(ExpandTest, Simple)
     delete factory;
     delete overflowConfig;
 }
-}
+} // namespace ExpandTest

@@ -1,6 +1,13 @@
 /*
- * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
- * @Description: sort operator test implementations
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -30,7 +37,7 @@ const int32_t PROBE_POSITION_COUNT = 1000;
 const int32_t TIME_TO_SLEEP = 100;
 
 void DeleteNestedLoopJoinOperatorFactory(NestedLoopJoinBuildOperatorFactory *nestedLoopJoinBuildOperatorFactory,
-    NestLoopJoinLookupOperatorFactory *nestLoopJoinLookupOperatorFactory)
+                                         NestLoopJoinLookupOperatorFactory *nestLoopJoinLookupOperatorFactory)
 {
     delete nestedLoopJoinBuildOperatorFactory;
     delete nestLoopJoinLookupOperatorFactory;
@@ -111,7 +118,7 @@ VectorBatch *CreateProbeInputForAllTypes(DataTypes &probeTypes, void **probeData
 }
 
 VectorBatch *CreateExpectVecBatchForAllTypesWithNoFilter(VectorBatch *probeVecBatch, VectorBatch *buildVecBatch,
-    int32_t *probeRows, int32_t *buildRows, int32_t rowSize)
+                                                         int32_t *probeRows, int32_t *buildRows, int32_t rowSize)
 {
     int32_t probeVecCount = probeVecBatch->GetVectorCount();
     int32_t buildVecCount = buildVecBatch->GetVectorCount();
@@ -129,7 +136,8 @@ VectorBatch *CreateExpectVecBatchForAllTypesWithNoFilter(VectorBatch *probeVecBa
 }
 
 VectorBatch *CreateExpectVecBatchForAllTypesWithLeftJoin(VectorBatch *probeVecBatch, VectorBatch *buildVecBatch,
-    int32_t *probeRows, int32_t *buildRows, int32_t rowSize, int32_t *nullPosition, int32_t nullPositionSize)
+                                                         int32_t *probeRows, int32_t *buildRows, int32_t rowSize,
+                                                         int32_t *nullPosition, int32_t nullPositionSize)
 {
     int32_t probeVecCount = probeVecBatch->GetVectorCount();
     int32_t buildVecCount = buildVecBatch->GetVectorCount();
@@ -237,7 +245,6 @@ VectorBatch *CreateVectorBatchWithDict(const DataTypes &types, int32_t rowCount,
     return vectorBatch;
 }
 
-
 TEST(NestedLoopJoinTest, TestComparePerf) {}
 
 TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnChar)
@@ -252,16 +259,17 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnChar)
     const int32_t dataSize = 11;
     const int32_t builddataSize = 5;
     const int32_t probeDatasize = 7;
-    void *joinDatas[dataSize] = {&intValue, &longValue, &boolValue, &doubleValue, &intValue, &longValue, &decimal128,
-                                 &stringValue, &stringValue, &shortValue};
+    void *joinDatas[dataSize] = {&intValue,  &longValue,  &boolValue,   &doubleValue, &intValue,
+                                 &longValue, &decimal128, &stringValue, &stringValue, &shortValue};
     void *probeDatas[dataSize] = {&intValue, &longValue, &boolValue, &doubleValue, &intValue, &longValue};
     void *buildDatas[dataSize] = {&decimal128, &stringValue, &stringValue, &shortValue};
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY),
-        Decimal64Type(2, 0), Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType() }));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY),
+                                                  Decimal64Type(2, 0), Decimal128Type(2, 0), VarcharType(2),
+                                                  CharType(2), ShortType()}));
     DataTypes probeDataTypes(std::vector<DataTypePtr>(
-        { IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY), Decimal64Type(2, 0) }));
+        {IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY), Decimal64Type(2, 0)}));
     DataTypes buildDataTypes(
-        std::vector<DataTypePtr>({ Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType() }));
+        std::vector<DataTypePtr>({Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType()}));
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
     int32_t buildColumns[4] = {0, 1, 2, 3};
@@ -271,10 +279,10 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnChar)
     }
     auto buildVecBatch = CreateBuildInputForAllTypes(buildDataTypes, buildDatas, builddataSize, false);
     auto probeVecBatch = CreateProbeInputForAllTypes(probeDataTypes, probeDatas, probeDatasize, false);
-    int32_t probeRows[35] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5,
-                             6, 6, 6, 6, 6};
-    int32_t buildRows[35] = {0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4,
-                             0, 1, 2, 3, 4};
+    int32_t probeRows[35] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3,
+                             3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6};
+    int32_t buildRows[35] = {0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2,
+                             3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4};
     auto expectVecBatch =
         CreateExpectVecBatchForAllTypesWithNoFilter(probeVecBatch, buildVecBatch, probeRows, buildRows, 35);
 
@@ -288,13 +296,12 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnChar)
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
 
-
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_INNER;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, nullptr, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, nullptr,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -303,7 +310,7 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnChar)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
@@ -323,16 +330,17 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnCharWithDictionary)
     const int32_t dataSize = 11;
     const int32_t builddataSize = 5;
     const int32_t probeDatasize = 7;
-    void *joinDatas[dataSize] = {&intValue, &longValue, &boolValue, &doubleValue, &intValue, &longValue, &decimal128,
-                                 &stringValue, &stringValue, &shortValue};
+    void *joinDatas[dataSize] = {&intValue,  &longValue,  &boolValue,   &doubleValue, &intValue,
+                                 &longValue, &decimal128, &stringValue, &stringValue, &shortValue};
     void *probeDatas[dataSize] = {&intValue, &longValue, &boolValue, &doubleValue, &intValue, &longValue};
     void *buildDatas[dataSize] = {&decimal128, &stringValue, &stringValue, &shortValue};
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY),
-        Decimal64Type(2, 0), Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType() }));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY),
+                                                  Decimal64Type(2, 0), Decimal128Type(2, 0), VarcharType(2),
+                                                  CharType(2), ShortType()}));
     DataTypes probeDataTypes(std::vector<DataTypePtr>(
-        { IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY), Decimal64Type(2, 0) }));
+        {IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY), Decimal64Type(2, 0)}));
     DataTypes buildDataTypes(
-        std::vector<DataTypePtr>({ Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType() }));
+        std::vector<DataTypePtr>({Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType()}));
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
     int32_t buildColumns[4] = {0, 1, 2, 3};
@@ -342,10 +350,10 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnCharWithDictionary)
     }
     auto buildVecBatch = CreateBuildInputForAllTypes(buildDataTypes, buildDatas, builddataSize, true);
     auto probeVecBatch = CreateProbeInputForAllTypes(probeDataTypes, probeDatas, probeDatasize, true);
-    int32_t probeRows[35] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5,
-                             6, 6, 6, 6, 6};
-    int32_t buildRows[35] = {0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4,
-                             0, 1, 2, 3, 4};
+    int32_t probeRows[35] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3,
+                             3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6};
+    int32_t buildRows[35] = {0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2,
+                             3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4};
     auto expectVecBatch =
         CreateExpectVecBatchForAllTypesWithNoFilter(probeVecBatch, buildVecBatch, probeRows, buildRows, 35);
 
@@ -359,13 +367,12 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnCharWithDictionary)
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
 
-
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_INNER;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, nullptr, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, nullptr,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -374,7 +381,7 @@ TEST(NestedLoopJoinTest, TestCrossNoEqualityJoinOnCharWithDictionary)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
@@ -394,16 +401,17 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnChar)
     const int32_t dataSize = 11;
     const int32_t builddataSize = 5;
     const int32_t probeDatasize = 7;
-    void *joinDatas[dataSize] = {&intValue, &longValue, &boolValue, &doubleValue, &intValue, &longValue, &decimal128,
-                                 &stringValue, &stringValue, &shortValue};
+    void *joinDatas[dataSize] = {&intValue,  &longValue,  &boolValue,   &doubleValue, &intValue,
+                                 &longValue, &decimal128, &stringValue, &stringValue, &shortValue};
     void *probeDatas[dataSize] = {&intValue, &longValue, &boolValue, &doubleValue, &intValue, &longValue};
     void *buildDatas[dataSize] = {&decimal128, &stringValue, &stringValue, &shortValue};
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY),
-        Decimal64Type(2, 0), Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType() }));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY),
+                                                  Decimal64Type(2, 0), Decimal128Type(2, 0), VarcharType(2),
+                                                  CharType(2), ShortType()}));
     DataTypes probeDataTypes(std::vector<DataTypePtr>(
-        { IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY), Decimal64Type(2, 0) }));
+        {IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY), Decimal64Type(2, 0)}));
     DataTypes buildDataTypes(
-        std::vector<DataTypePtr>({ Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType() }));
+        std::vector<DataTypePtr>({Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType()}));
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
     int32_t buildColumns[4] = {0, 1, 2, 3};
@@ -428,13 +436,12 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnChar)
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
 
-
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_INNER;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -443,7 +450,7 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnChar)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
@@ -463,16 +470,17 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnCharWithDictionary)
     const int32_t dataSize = 11;
     const int32_t builddataSize = 5;
     const int32_t probeDatasize = 7;
-    void *joinDatas[dataSize] = {&intValue, &longValue, &boolValue, &doubleValue, &intValue, &longValue, &decimal128,
-                                 &stringValue, &stringValue, &shortValue};
+    void *joinDatas[dataSize] = {&intValue,  &longValue,  &boolValue,   &doubleValue, &intValue,
+                                 &longValue, &decimal128, &stringValue, &stringValue, &shortValue};
     void *probeDatas[dataSize] = {&intValue, &longValue, &boolValue, &doubleValue, &intValue, &longValue};
     void *buildDatas[dataSize] = {&decimal128, &stringValue, &stringValue, &shortValue};
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY),
-        Decimal64Type(2, 0), Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType() }));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY),
+                                                  Decimal64Type(2, 0), Decimal128Type(2, 0), VarcharType(2),
+                                                  CharType(2), ShortType()}));
     DataTypes probeDataTypes(std::vector<DataTypePtr>(
-        { IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY), Decimal64Type(2, 0) }));
+        {IntType(), LongType(), BooleanType(), DoubleType(), Date32Type(DAY), Decimal64Type(2, 0)}));
     DataTypes buildDataTypes(
-        std::vector<DataTypePtr>({ Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType() }));
+        std::vector<DataTypePtr>({Decimal128Type(2, 0), VarcharType(2), CharType(2), ShortType()}));
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
     int32_t buildColumns[4] = {0, 1, 2, 3};
@@ -497,13 +505,12 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnCharWithDictionary)
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
 
-
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_INNER;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -512,7 +519,7 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnCharWithDictionary)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
@@ -522,21 +529,21 @@ TEST(NestedLoopJoinTest, TestInnerNoEqualityJoinOnCharWithDictionary)
 
 TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnChar)
 {
-    DataTypes buildTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
+    DataTypes buildTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
     const int32_t buildDataSize = 4;
     int32_t buildData0[buildDataSize] = {20, 16, 13, 5};
     std::string buildData1[buildDataSize] = {"1000", "2000", "3000", "4000"};
     auto buildVecBatch = CreateVectorBatch(buildTypes, buildDataSize, buildData0, buildData1);
 
-    DataTypes probeTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
+    DataTypes probeTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
     const int32_t probeDataSize = 5;
     int32_t probeData0[probeDataSize] = {20, 16, 13, 4, 22};
     std::string probeData1[probeDataSize] = {"35709", "65709", "31904", "12477", "90419"};
     auto probeVecBatch = CreateVectorBatch(probeTypes, probeDataSize, probeData0, probeData1);
 
-    DataTypes buildDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes probeDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5), IntType(), VarcharType(5) }));
+    DataTypes buildDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes probeDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5), IntType(), VarcharType(5)}));
 
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
@@ -549,7 +556,7 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnChar)
     int32_t buildRows[5] = {0, 1, 2, 3, 1};
     int32_t nullPosition[2] = {3, 4};
     auto expectVecBatch = CreateExpectVecBatchForAllTypesWithLeftJoin(probeVecBatch, buildVecBatch, probeRows,
-        buildRows, 5, nullPosition, 2);
+                                                                      buildRows, 5, nullPosition, 2);
 
     auto nestedLoopJoinBuildOperatorFactory =
         new NestedLoopJoinBuildOperatorFactory(buildDataTypes, buildColumns, buildDataTypes.GetSize());
@@ -561,13 +568,12 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnChar)
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
 
-
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_LEFT;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -576,7 +582,7 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnChar)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
@@ -586,22 +592,21 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnChar)
 
 TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnCharWithDictionary)
 {
-    DataTypes buildTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
+    DataTypes buildTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
     const int32_t buildDataSize = 4;
     int32_t buildData0[buildDataSize] = {20, 16, 13, 5};
     std::string buildData1[buildDataSize] = {"1000", "2000", "3000", "4000"};
     auto buildVecBatch = CreateVectorBatchWithDict(buildTypes, buildDataSize, buildData0, buildData1);
 
-    DataTypes probeTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
+    DataTypes probeTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
     const int32_t probeDataSize = 5;
     int32_t probeData0[probeDataSize] = {20, 16, 13, 4, 22};
     std::string probeData1[probeDataSize] = {"35709", "65709", "31904", "12477", "90419"};
     auto probeVecBatch = CreateVectorBatchWithDict(probeTypes, probeDataSize, probeData0, probeData1);
 
-    DataTypes buildDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
-    DataTypes probeDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10), IntType(), VarcharType(10) }));
-
+    DataTypes buildDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
+    DataTypes probeDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10), IntType(), VarcharType(10)}));
 
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
@@ -614,7 +619,7 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnCharWithDictionary)
     int32_t buildRows[5] = {0, 1, 2, 3, 1};
     int32_t nullPosition[2] = {3, 4};
     auto expectVecBatch = CreateExpectVecBatchForAllTypesWithLeftJoin(probeVecBatch, buildVecBatch, probeRows,
-        buildRows, 5, nullPosition, 2);
+                                                                      buildRows, 5, nullPosition, 2);
 
     auto nestedLoopJoinBuildOperatorFactory =
         new NestedLoopJoinBuildOperatorFactory(buildDataTypes, buildColumns, buildDataTypes.GetSize());
@@ -626,13 +631,12 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnCharWithDictionary)
     VectorBatch *nestedLoopBuildOutput = nullptr;
     nestedLoopJoinBuildOperator->GetOutput(&nestedLoopBuildOutput);
 
-
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_LEFT;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -641,7 +645,7 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnCharWithDictionary)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
@@ -651,21 +655,21 @@ TEST(NestedLoopJoinTest, TestLeftNoEqualityJoinOnCharWithDictionary)
 
 TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnChar)
 {
-    DataTypes buildTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
+    DataTypes buildTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
     const int32_t buildDataSize = 4;
     int32_t buildData0[buildDataSize] = {20, 16, 13, 5};
     std::string buildData1[buildDataSize] = {"1000", "2000", "3000", "4000"};
     auto buildVecBatch = CreateVectorBatch(buildTypes, buildDataSize, buildData0, buildData1);
 
-    DataTypes probeTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
+    DataTypes probeTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
     const int32_t probeDataSize = 5;
     int32_t probeData0[probeDataSize] = {20, 16, 13, 4, 22};
     std::string probeData1[probeDataSize] = {"35709", "65709", "31904", "12477", "90419"};
     auto probeVecBatch = CreateVectorBatch(probeTypes, probeDataSize, probeData0, probeData1);
 
-    DataTypes buildDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes probeDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5), IntType(), VarcharType(5) }));
+    DataTypes buildDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes probeDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5), IntType(), VarcharType(5)}));
 
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
@@ -678,7 +682,7 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnChar)
     int32_t buildRows[5] = {0, 1, 2, 3, 1};
     int32_t nullPosition[2] = {3, 4};
     auto expectVecBatch = CreateExpectVecBatchForAllTypesWithLeftJoin(probeVecBatch, buildVecBatch, probeRows,
-        buildRows, 5, nullPosition, 2);
+                                                                      buildRows, 5, nullPosition, 2);
 
     auto nestedLoopJoinBuildOperatorFactory =
         new NestedLoopJoinBuildOperatorFactory(buildDataTypes, buildColumns, buildDataTypes.GetSize());
@@ -692,9 +696,9 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnChar)
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_LEFT;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -703,7 +707,7 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnChar)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
@@ -713,22 +717,21 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnChar)
 
 TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnCharWithDictionary)
 {
-    DataTypes buildTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
+    DataTypes buildTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
     const int32_t buildDataSize = 4;
     int32_t buildData0[buildDataSize] = {20, 16, 13, 5};
     std::string buildData1[buildDataSize] = {"1000", "2000", "3000", "4000"};
     auto buildVecBatch = CreateVectorBatchWithDict(buildTypes, buildDataSize, buildData0, buildData1);
 
-    DataTypes probeTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
+    DataTypes probeTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
     const int32_t probeDataSize = 5;
     int32_t probeData0[probeDataSize] = {20, 16, 13, 4, 22};
     std::string probeData1[probeDataSize] = {"35709", "65709", "31904", "12477", "90419"};
     auto probeVecBatch = CreateVectorBatchWithDict(probeTypes, probeDataSize, probeData0, probeData1);
 
-    DataTypes buildDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
-    DataTypes probeDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10), IntType(), VarcharType(10) }));
-
+    DataTypes buildDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
+    DataTypes probeDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10), IntType(), VarcharType(10)}));
 
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
@@ -741,7 +744,7 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnCharWithDictionary)
     int32_t buildRows[5] = {0, 1, 2, 3, 1};
     int32_t nullPosition[2] = {3, 4};
     auto expectVecBatch = CreateExpectVecBatchForAllTypesWithLeftJoin(probeVecBatch, buildVecBatch, probeRows,
-        buildRows, 5, nullPosition, 2);
+                                                                      buildRows, 5, nullPosition, 2);
 
     auto nestedLoopJoinBuildOperatorFactory =
         new NestedLoopJoinBuildOperatorFactory(buildDataTypes, buildColumns, buildDataTypes.GetSize());
@@ -756,9 +759,9 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnCharWithDictionary)
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_LEFT;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -767,7 +770,7 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnCharWithDictionary)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
@@ -777,8 +780,8 @@ TEST(NestedLoopJoinTest, TestRightNoEqualityJoinOnCharWithDictionary)
 
 TEST(NestedLoopJoinTest, TestOperatorWithoutInput)
 {
-    DataTypes buildDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
-    DataTypes probeDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
+    DataTypes buildDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
+    DataTypes probeDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
 
     int32_t buildColumns[2] = {0, 1};
     int32_t probeColumns[2] = {0, 1};
@@ -801,13 +804,13 @@ TEST(NestedLoopJoinTest, TestOperatorWithoutInput)
 
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_LEFT;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     omniruntime::op::Operator::DeleteOperator(nestedLoopJoinBuildOperator);
     omniruntime::op::Operator::DeleteOperator(nestLoopJoinLookupOperator);
     DeleteNestedLoopJoinOperatorFactory(nestedLoopJoinBuildOperatorFactory, nestLoopJoinLookupOperatorFactory);
@@ -815,21 +818,21 @@ TEST(NestedLoopJoinTest, TestOperatorWithoutInput)
 
 TEST(NestedLoopJoinTest, TestLeftJoinOperatorWithoutBuildInput)
 {
-    DataTypes buildTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
+    DataTypes buildTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
     const int32_t buildDataSize = 0;
     int32_t buildData0[buildDataSize] = {};
     std::string buildData1[buildDataSize] = {};
     auto buildVecBatch = CreateVectorBatch(buildTypes, buildDataSize, buildData0, buildData1);
 
-    DataTypes probeTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
+    DataTypes probeTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
     const int32_t probeDataSize = 5;
     int32_t probeData0[probeDataSize] = {20, 16, 13, 4, 22};
     std::string probeData1[probeDataSize] = {"35709", "65709", "31904", "12477", "90419"};
     auto probeVecBatch = CreateVectorBatch(probeTypes, probeDataSize, probeData0, probeData1);
 
-    DataTypes buildDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes probeDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5), IntType(), VarcharType(5) }));
+    DataTypes buildDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes probeDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5), IntType(), VarcharType(5)}));
 
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
@@ -852,15 +855,14 @@ TEST(NestedLoopJoinTest, TestLeftJoinOperatorWithoutBuildInput)
     int32_t buildRows[5] = {0, 0, 0, 0, 0};
     int32_t nullPosition[5] = {0, 1, 2, 3, 4};
     auto expectVecBatch = CreateExpectVecBatchForAllTypesWithLeftJoin(probeVecBatch, buildVecBatch, probeRows,
-        buildRows, 5, nullPosition, 5);
-
+                                                                      buildRows, 5, nullPosition, 5);
 
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_LEFT;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -869,7 +871,7 @@ TEST(NestedLoopJoinTest, TestLeftJoinOperatorWithoutBuildInput)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     VectorHelper::FreeVecBatch(buildVecBatch);
@@ -880,21 +882,21 @@ TEST(NestedLoopJoinTest, TestLeftJoinOperatorWithoutBuildInput)
 
 TEST(NestedLoopJoinTest, TestCrossJoinOperatorWithoutBuildInput)
 {
-    DataTypes buildTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
+    DataTypes buildTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
     const int32_t buildDataSize = 0;
     int32_t buildData0[buildDataSize] = {};
     std::string buildData1[buildDataSize] = {};
     auto buildVecBatch = CreateVectorBatch(buildTypes, buildDataSize, buildData0, buildData1);
 
-    DataTypes probeTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
+    DataTypes probeTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
     const int32_t probeDataSize = 5;
     int32_t probeData0[probeDataSize] = {20, 16, 13, 4, 22};
     std::string probeData1[probeDataSize] = {"35709", "65709", "31904", "12477", "90419"};
     auto probeVecBatch = CreateVectorBatch(probeTypes, probeDataSize, probeData0, probeData1);
 
-    DataTypes buildDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes probeDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5), IntType(), VarcharType(5) }));
+    DataTypes buildDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes probeDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5), IntType(), VarcharType(5)}));
 
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
@@ -917,14 +919,14 @@ TEST(NestedLoopJoinTest, TestCrossJoinOperatorWithoutBuildInput)
     int32_t buildRows[0] = {};
     int32_t nullPosition[0] = {};
     auto expectVecBatch = CreateExpectVecBatchForAllTypesWithLeftJoin(probeVecBatch, buildVecBatch, probeRows,
-        buildRows, 0, nullPosition, 0);
+                                                                      buildRows, 0, nullPosition, 0);
 
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_LEFT;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -933,7 +935,7 @@ TEST(NestedLoopJoinTest, TestCrossJoinOperatorWithoutBuildInput)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     VectorHelper::FreeVecBatch(buildVecBatch);
@@ -944,21 +946,21 @@ TEST(NestedLoopJoinTest, TestCrossJoinOperatorWithoutBuildInput)
 
 TEST(NestedLoopJoinTest, TestInnerJoinOperatorWithoutBuildInput)
 {
-    DataTypes buildTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(10) }));
+    DataTypes buildTypes(std::vector<DataTypePtr>({IntType(), VarcharType(10)}));
     const int32_t buildDataSize = 0;
     int32_t buildData0[buildDataSize] = {};
     std::string buildData1[buildDataSize] = {};
     auto buildVecBatch = CreateVectorBatch(buildTypes, buildDataSize, buildData0, buildData1);
 
-    DataTypes probeTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
+    DataTypes probeTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
     const int32_t probeDataSize = 5;
     int32_t probeData0[probeDataSize] = {20, 16, 13, 4, 22};
     std::string probeData1[probeDataSize] = {"35709", "65709", "31904", "12477", "90419"};
     auto probeVecBatch = CreateVectorBatch(probeTypes, probeDataSize, probeData0, probeData1);
 
-    DataTypes buildDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes probeDataTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5) }));
-    DataTypes joinTypes(std::vector<DataTypePtr>({ IntType(), VarcharType(5), IntType(), VarcharType(5) }));
+    DataTypes buildDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes probeDataTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5)}));
+    DataTypes joinTypes(std::vector<DataTypePtr>({IntType(), VarcharType(5), IntType(), VarcharType(5)}));
 
     int32_t joinTypesSize = joinTypes.GetSize();
     int32_t joinColumns[joinTypesSize];
@@ -981,14 +983,14 @@ TEST(NestedLoopJoinTest, TestInnerJoinOperatorWithoutBuildInput)
     int32_t buildRows[0] = {};
     int32_t nullPosition[0] = {};
     auto expectVecBatch = CreateExpectVecBatchForAllTypesWithLeftJoin(probeVecBatch, buildVecBatch, probeRows,
-        buildRows, 0, nullPosition, 0);
+                                                                      buildRows, 0, nullPosition, 0);
 
     auto nestedLoopJoinBuildOperatorFactoryAddr = (int64_t)nestedLoopJoinBuildOperatorFactory;
     int32_t probeOutputColsCount = probeDataTypes.GetSize();
     JoinType &&joinTypePtr = OMNI_JOIN_TYPE_INNER;
-    auto nestLoopJoinLookupOperatorFactory =
-        NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(joinTypePtr, probeDataTypes,
-        probeColumns, probeOutputColsCount, joinFilter, nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
+    auto nestLoopJoinLookupOperatorFactory = NestLoopJoinLookupOperatorFactory::CreateNestLoopJoinLookupOperatorFactory(
+        joinTypePtr, probeDataTypes, probeColumns, probeOutputColsCount, joinFilter,
+        nestedLoopJoinBuildOperatorFactoryAddr, nullptr);
     auto nestLoopJoinLookupOperator =
         dynamic_cast<NestLoopJoinLookupOperator *>(nestLoopJoinLookupOperatorFactory->CreateOperator());
     nestLoopJoinLookupOperator->AddInput(probeVecBatch);
@@ -997,7 +999,7 @@ TEST(NestedLoopJoinTest, TestInnerJoinOperatorWithoutBuildInput)
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVecBatch));
 
-    Expr::DeleteExprs({ joinFilter });
+    Expr::DeleteExprs({joinFilter});
     VectorHelper::FreeVecBatch(outputVecBatch);
     VectorHelper::FreeVecBatch(expectVecBatch);
     VectorHelper::FreeVecBatch(buildVecBatch);
@@ -1005,4 +1007,4 @@ TEST(NestedLoopJoinTest, TestInnerJoinOperatorWithoutBuildInput)
     omniruntime::op::Operator::DeleteOperator(nestLoopJoinLookupOperator);
     DeleteNestedLoopJoinOperatorFactory(nestedLoopJoinBuildOperatorFactory, nestLoopJoinLookupOperatorFactory);
 }
-}
+} // namespace NestedLoopJoinTest

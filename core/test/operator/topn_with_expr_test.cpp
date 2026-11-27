@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2020-2020. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -26,7 +34,7 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithAllExpr)
     int64_t data2[dataSize] = {2L, 5L, 3L, 11L, 4L, 3L, 0L, 23L};
     int64_t data3[dataSize] = {5L, 3L, 2L, 6L, 1L, 4L, 7L, 8L};
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType() }));
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType()}));
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
 
     int32_t ascendings[sortKeyCnt] = {false, true};
@@ -38,10 +46,10 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithAllExpr)
     FieldExpr *modLeft = new FieldExpr(2, LongType());
     LiteralExpr *modRight = new LiteralExpr(3L, LongType());
     BinaryExpr *modExpr = new BinaryExpr(omniruntime::expressions::Operator::MOD, modLeft, modRight, LongType());
-    std::vector<Expr *> sortExprs = { addExpr, modExpr };
+    std::vector<Expr *> sortExprs = {addExpr, modExpr};
     auto overflowConfig = new OverflowConfig();
-    auto topNWithExprOperatorFactory = new TopNWithExprOperatorFactory(sourceTypes, expectedDataSize, 0, sortExprs,
-        ascendings, nullFirsts, sortKeyCnt, overflowConfig);
+    auto topNWithExprOperatorFactory = new TopNWithExprOperatorFactory(
+        sourceTypes, expectedDataSize, 0, sortExprs, ascendings, nullFirsts, sortKeyCnt, overflowConfig);
     auto topNWithExprOperator = static_cast<TopNWithExprOperator *>(CreateTestOperator(topNWithExprOperatorFactory));
 
     topNWithExprOperator->AddInput(vecBatch);
@@ -53,7 +61,7 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithAllExpr)
     int64_t expData3[dataSize] = {8, 7, 3, 1, 2};
     int32_t expData4[dataSize] = {20, 18, 13, 13, 13};
     int64_t expData5[dataSize] = {2, 1, 0, 1, 2};
-    DataTypes expectTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType(), IntType(), LongType() }));
+    DataTypes expectTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType(), IntType(), LongType()}));
     VectorBatch *expectVectorBatch =
         CreateVectorBatch(expectTypes, expectedDataSize, expData1, expData2, expData3, expData4, expData5);
 
@@ -79,7 +87,7 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithPartialExpr)
     int64_t data2[dataSize] = {2L, 5L, 3L, 11L, 4L, 3L, 0L, 23L};
     int64_t data3[dataSize] = {5L, 3L, 2L, 6L, 1L, 4L, 7L, 8L};
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType() }));
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType()}));
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
 
     int32_t ascendings[sortKeyCnt] = {false, true};
@@ -89,10 +97,10 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithPartialExpr)
     FieldExpr *modLeft = new FieldExpr(2, LongType());
     LiteralExpr *modRight = new LiteralExpr(3L, LongType());
     BinaryExpr *modExpr = new BinaryExpr(omniruntime::expressions::Operator::MOD, modLeft, modRight, LongType());
-    std::vector<Expr *> sortKeys = { col0, modExpr };
+    std::vector<Expr *> sortKeys = {col0, modExpr};
     auto overflowConfig = new OverflowConfig();
-    TopNWithExprOperatorFactory *topNWithExprOperatorFactory = new TopNWithExprOperatorFactory(sourceTypes,
-        expectedDataSize, 0, sortKeys, ascendings, nullFirsts, sortKeyCnt, overflowConfig);
+    TopNWithExprOperatorFactory *topNWithExprOperatorFactory = new TopNWithExprOperatorFactory(
+        sourceTypes, expectedDataSize, 0, sortKeys, ascendings, nullFirsts, sortKeyCnt, overflowConfig);
     TopNWithExprOperator *topNWithExprOperator =
         static_cast<TopNWithExprOperator *>(CreateTestOperator(topNWithExprOperatorFactory));
 
@@ -104,7 +112,7 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithPartialExpr)
     int64_t expData2[dataSize] = {23, 0, 5, 4, 3};
     int64_t expData3[dataSize] = {8, 7, 3, 1, 2};
     int64_t expData4[dataSize] = {2, 1, 0, 1, 2};
-    DataTypes expectTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType(), LongType() }));
+    DataTypes expectTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType(), LongType()}));
     VectorBatch *expectVectorBatch =
         CreateVectorBatch(expectTypes, expectedDataSize, expData1, expData2, expData3, expData4);
 
@@ -130,7 +138,7 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithNoExpr)
     int64_t data2[dataSize] = {2L, 5L, 3L, 11L, 4L, 3L, 0L, 23L};
     int64_t data3[dataSize] = {5L, 3L, 2L, 6L, 1L, 4L, 7L, 8L};
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType() }));
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType()}));
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
 
     int32_t ascendings[sortKeyCnt] = {false, true};
@@ -138,10 +146,10 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithNoExpr)
 
     FieldExpr *col0 = new FieldExpr(0, IntType());
     FieldExpr *col2 = new FieldExpr(2, LongType());
-    std::vector<Expr *> sortExprs = { col0, col2 };
+    std::vector<Expr *> sortExprs = {col0, col2};
     auto overflowConfig = new OverflowConfig();
-    TopNWithExprOperatorFactory *topNWithExprOperatorFactory = new TopNWithExprOperatorFactory(sourceTypes,
-        expectedDataSize, 0, sortExprs, ascendings, nullFirsts, sortKeyCnt, overflowConfig);
+    TopNWithExprOperatorFactory *topNWithExprOperatorFactory = new TopNWithExprOperatorFactory(
+        sourceTypes, expectedDataSize, 0, sortExprs, ascendings, nullFirsts, sortKeyCnt, overflowConfig);
     TopNWithExprOperator *topNWithExprOperator =
         static_cast<TopNWithExprOperator *>(CreateTestOperator(topNWithExprOperatorFactory));
 
@@ -152,7 +160,7 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithNoExpr)
     int32_t expData1[dataSize] = {15, 13, 8, 8, 8};
     int64_t expData2[dataSize] = {23, 0, 4, 3, 5};
     int64_t expData3[dataSize] = {8, 7, 1, 2, 3};
-    DataTypes expectTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType() }));
+    DataTypes expectTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType()}));
     VectorBatch *expectVectorBatch = CreateVectorBatch(expectTypes, expectedDataSize, expData1, expData2, expData3);
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVectorBatch));
@@ -179,7 +187,7 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithExprAndOffset)
     int64_t data2[dataSize] = {2L, 5L, 3L, 11L, 4L, 3L, 0L, 23L};
     int64_t data3[dataSize] = {5L, 3L, 2L, 6L, 1L, 4L, 7L, 8L};
 
-    DataTypes sourceTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType() }));
+    DataTypes sourceTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType()}));
     VectorBatch *vecBatch = CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
 
     int32_t ascendings[sortKeyCnt] = {false, true};
@@ -187,12 +195,12 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithExprAndOffset)
 
     FieldExpr *col0 = new FieldExpr(0, IntType());
     FieldExpr *col2 = new FieldExpr(2, LongType());
-    std::vector<Expr *> sortExprs = { col0, col2 };
+    std::vector<Expr *> sortExprs = {col0, col2};
     auto overflowConfig = new OverflowConfig();
-    TopNWithExprOperatorFactory *topNWithExprOperatorFactory = new TopNWithExprOperatorFactory(sourceTypes,
-     limitDataSize, offset, sortExprs, ascendings, nullFirsts, sortKeyCnt, overflowConfig);
+    TopNWithExprOperatorFactory *topNWithExprOperatorFactory = new TopNWithExprOperatorFactory(
+        sourceTypes, limitDataSize, offset, sortExprs, ascendings, nullFirsts, sortKeyCnt, overflowConfig);
     TopNWithExprOperator *topNWithExprOperator =
-            static_cast<TopNWithExprOperator *>(CreateTestOperator(topNWithExprOperatorFactory));
+        static_cast<TopNWithExprOperator *>(CreateTestOperator(topNWithExprOperatorFactory));
 
     topNWithExprOperator->AddInput(vecBatch);
     VectorBatch *outputVecBatch;
@@ -200,8 +208,8 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithExprAndOffset)
 
     int32_t expData1[dataSize] = {8, 8, 8};
     int64_t expData2[dataSize] = {4, 3, 5};
-    int64_t expData3[dataSize] = { 1, 2, 3};
-    DataTypes expectTypes(std::vector<DataTypePtr>({ IntType(), LongType(), LongType() }));
+    int64_t expData3[dataSize] = {1, 2, 3};
+    DataTypes expectTypes(std::vector<DataTypePtr>({IntType(), LongType(), LongType()}));
     VectorBatch *expectVectorBatch = CreateVectorBatch(expectTypes, expectedDataSize, expData1, expData2, expData3);
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectVectorBatch));
@@ -213,4 +221,4 @@ TEST(NativeOmniTopNWithExprOperatorTest, TestTopNWithExprAndOffset)
     VectorHelper::FreeVecBatch(outputVecBatch);
     delete overflowConfig;
 }
-}
+} // namespace TopnWithExprTest

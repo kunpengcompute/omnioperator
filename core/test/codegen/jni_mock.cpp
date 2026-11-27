@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
- * Description: jni mock
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "jni_mock.h"
@@ -19,42 +26,21 @@ static jint GetEnv(JavaVM *vm, void **pEnv, jint version)
     return static_cast<JavaVMMock *>(vm)->GetEnv(pEnv, version);
 }
 
-static struct JNIInvokeInterface_ jniInvokeInterface = { nullptr, nullptr, nullptr, nullptr, AttachCurrentThread,
-                                                         nullptr, GetEnv,  nullptr };
+static struct JNIInvokeInterface_ jniInvokeInterface = {nullptr, nullptr, nullptr, nullptr, AttachCurrentThread,
+                                                        nullptr, GetEnv,  nullptr};
 
-JavaVMMock::JavaVMMock()
-{
-    functions = &jniInvokeInterface;
-}
-JavaVMMock::~JavaVMMock()
-{
-    functions = nullptr;
-}
+JavaVMMock::JavaVMMock() { functions = &jniInvokeInterface; }
+JavaVMMock::~JavaVMMock() { functions = nullptr; }
 
-static jclass FindClass(JNIEnv *env, const char *name)
-{
-    return static_cast<JNIEnvMock *>(env)->FindClass(name);
-}
+static jclass FindClass(JNIEnv *env, const char *name) { return static_cast<JNIEnvMock *>(env)->FindClass(name); }
 
-static jthrowable ExceptionOccurred(JNIEnv *env)
-{
-    return static_cast<JNIEnvMock *>(env)->ExceptionOccurred();
-}
+static jthrowable ExceptionOccurred(JNIEnv *env) { return static_cast<JNIEnvMock *>(env)->ExceptionOccurred(); }
 
-static void ExceptionClear(JNIEnv *env)
-{
-    static_cast<JNIEnvMock *>(env)->ExceptionClear();
-}
+static void ExceptionClear(JNIEnv *env) { static_cast<JNIEnvMock *>(env)->ExceptionClear(); }
 
-static jobject NewGlobalRef(JNIEnv *env, jobject obj)
-{
-    return static_cast<JNIEnvMock *>(env)->NewGlobalRef(obj);
-}
+static jobject NewGlobalRef(JNIEnv *env, jobject obj) { return static_cast<JNIEnvMock *>(env)->NewGlobalRef(obj); }
 
-static void DeleteLocalRef(JNIEnv *env, jobject obj)
-{
-    static_cast<JNIEnvMock *>(env)->DeleteLocalRef(obj);
-}
+static void DeleteLocalRef(JNIEnv *env, jobject obj) { static_cast<JNIEnvMock *>(env)->DeleteLocalRef(obj); }
 
 static jmethodID GetStaticMethodID(JNIEnv *env, jclass clazz, const char *name, const char *sig)
 {
@@ -77,7 +63,7 @@ static jobject CallStaticObjectMethod(JNIEnv *env, jclass cls, jmethodID methodI
 
 static void CallStaticVoidMethodV(JNIEnv *env, jclass cls, jmethodID methodID, va_list args)
 {
-    InAndOutputInfos infos {};
+    InAndOutputInfos infos{};
     static_cast<JNIEnvMock *>(env)->CallStaticVoidMethodV(cls, methodID, infos);
 }
 
@@ -124,10 +110,7 @@ static void SetObjectArrayElement(JNIEnv *env, jobjectArray array, jsize index, 
     return static_cast<JNIEnvMock *>(env)->SetObjectArrayElement(array, index, val);
 }
 
-static jboolean ExceptionCheck(JNIEnv *env)
-{
-    return static_cast<JNIEnvMock *>(env)->ExceptionCheck();
-}
+static jboolean ExceptionCheck(JNIEnv *env) { return static_cast<JNIEnvMock *>(env)->ExceptionCheck(); }
 
 static struct JNINativeInterface_ jniNativeInterface;
 
@@ -154,24 +137,9 @@ JNIEnvMock::JNIEnvMock()
     functions = &jniNativeInterface;
 }
 
-JNIEnvMock::~JNIEnvMock()
-{
-    functions = nullptr;
-}
+JNIEnvMock::~JNIEnvMock() { functions = nullptr; }
 
-JavaVMMock *omniruntime::mock::CreateJavaVMMock()
-{
-    return new JavaVMMock;
-}
-void omniruntime::mock::DestroyJavaVMMock(JavaVMMock *javaVM)
-{
-    delete javaVM;
-}
-JNIEnvMock *omniruntime::mock::CreateJNIEnvMock()
-{
-    return new JNIEnvMock;
-}
-void omniruntime::mock::DestroyJNIEnvMock(JNIEnvMock *env)
-{
-    delete env;
-}
+JavaVMMock *omniruntime::mock::CreateJavaVMMock() { return new JavaVMMock; }
+void omniruntime::mock::DestroyJavaVMMock(JavaVMMock *javaVM) { delete javaVM; }
+JNIEnvMock *omniruntime::mock::CreateJNIEnvMock() { return new JNIEnvMock; }
+void omniruntime::mock::DestroyJNIEnvMock(JNIEnvMock *env) { delete env; }

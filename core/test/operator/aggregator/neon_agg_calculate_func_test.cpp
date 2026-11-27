@@ -1,6 +1,13 @@
 /*
- * @Copyright: Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
- * @Description: all neon aggregator function test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include <arm_neon.h>
 #include <iostream>
@@ -29,7 +36,7 @@ template <typename T> T SimdWithNull(T *values, uint8_t *nulls, int32_t size)
     int64_t result = 0;
     int64_t flag = 0;
     ReduceWithNullsExternal<T, int64_t, int64_t, op::StateCountHandler, ReduceFunc::Sum>(&result, flag, values, size,
-        nulls);
+                                                                                         nulls);
     return result;
 }
 
@@ -50,7 +57,7 @@ template <typename T> T SimdSumWithDict(int32_t size, T *values, int32_t *indexs
     int64_t result = 0;
     int64_t flag = 0;
     ReduceWithDicExternal<T, int64_t, int64_t, op::StateCountHandler, ReduceFunc::Sum>(&result, flag, values, size,
-        indexs);
+                                                                                       indexs);
     return result;
 }
 
@@ -59,7 +66,7 @@ template <typename T> T SimdWithDictWithNull(const T *values, const uint8_t *nul
     double result = 0;
     int64_t flag = 0;
     ReduceWithDicAndNullsExternal<T, double, int64_t, op::StateCountHandler, ReduceFunc::Sum>(&result, flag, values,
-        size, nulls, indexs);
+                                                                                              size, nulls, indexs);
     return result;
 }
 
@@ -68,8 +75,7 @@ template <typename T> T SimdMinWithDictWithNull(const T *values, const uint8_t *
     T result = std::numeric_limits<T>::max();
     int64_t flag = 0;
     ReduceWithDicAndNullsExternal<T, T, int64_t, op::StateCountHandler, ReduceFunc::Min>(&result, flag, values, size,
-        nulls,
-        indexs);
+                                                                                         nulls, indexs);
     return result;
 }
 
@@ -91,8 +97,7 @@ template <typename T> T SimdMaxWithDictWithNull(const T *values, const uint8_t *
     T result = 0;
     int64_t flag = 0;
     ReduceWithDicAndNullsExternal<T, T, int64_t, op::StateCountHandler, ReduceFunc::Max>(&result, flag, values, size,
-        nulls,
-        indexs);
+                                                                                         nulls, indexs);
     return result;
 }
 
@@ -130,7 +135,6 @@ template <typename T> T GccSumDict(int n, T *data, int *idx)
     }
     return total_sum;
 }
-
 
 int32_t GccTestNoNull(int32_t *values, int32_t size)
 {
@@ -211,9 +215,9 @@ template <typename T> void TestSimdSumWithDictNull(int32_t size)
     }
 
     auto ret = Calc<T, const T *, const uint8_t *, int32_t *, int32_t>("SimdWithDictWithNull", SimdWithDictWithNull,
-        values, nulls, indexs, (size));
+                                                                       values, nulls, indexs, (size));
     auto expect = Calc<T, const T *, const uint8_t *, int32_t *, int32_t>("GccWithDictWithNull", GccWithDictWithNull,
-        values, nulls, indexs, (size));
+                                                                          values, nulls, indexs, (size));
     EXPECT_EQ(ret, expect);
 }
 
@@ -230,10 +234,10 @@ template <typename T> void TestSimdMinWithDictNull(int32_t size)
         nulls[i] = i % 20 == 0;
     }
 
-    auto ret = Calc<T, const T *, const uint8_t *, int32_t *, int32_t>("SimdMinWithDictWithNull",
-        SimdMinWithDictWithNull, values, nulls, indexs, (size));
-    auto expect = Calc<T, const T *, const uint8_t *, int32_t *, int32_t>("GccMinWithDictWithNull",
-        GccMinWithDictWithNull, values, nulls, indexs, (size));
+    auto ret = Calc<T, const T *, const uint8_t *, int32_t *, int32_t>(
+        "SimdMinWithDictWithNull", SimdMinWithDictWithNull, values, nulls, indexs, (size));
+    auto expect = Calc<T, const T *, const uint8_t *, int32_t *, int32_t>(
+        "GccMinWithDictWithNull", GccMinWithDictWithNull, values, nulls, indexs, (size));
     EXPECT_EQ(ret, expect);
 }
 
@@ -251,9 +255,9 @@ template <typename T> void TestSimdMaxWithDictNull(int32_t size)
     }
 
     Calc<T, const T *, const uint8_t *, int32_t *, int32_t>("SimdMaxWithDictWithNull", SimdMaxWithDictWithNull, values,
-        nulls, indexs, (size));
+                                                            nulls, indexs, (size));
     Calc<T, const T *, const uint8_t *, int32_t *, int32_t>("GccMaxWithDictWithNull", GccMaxWithDictWithNull, values,
-        nulls, indexs, (size));
+                                                            nulls, indexs, (size));
 }
 
 void Verify()
@@ -289,9 +293,8 @@ void Verify()
         }
         int64_t flag = 0;
         int32_t actual = 0;
-        ReduceWithNullsExternal<int32_t, int32_t, int64_t, op::StateCountHandler, ReduceFunc::Sum>(&actual, flag,
-            data.data(),
-            value, nulls);
+        ReduceWithNullsExternal<int32_t, int32_t, int64_t, op::StateCountHandler, ReduceFunc::Sum>(
+            &actual, flag, data.data(), value, nulls);
         if (expect != actual) {
             for (int i = 0; i < value; ++i) {
                 std::cout << data[i] << std::endl;
@@ -316,4 +319,4 @@ TEST(AggregatorNeonTest, simd_neon)
     TestSimdMinWithDictNull<int32_t>(99999);
     TestSimdMaxWithDictNull<int32_t>(99999);
 }
-}
+} // namespace omniruntime

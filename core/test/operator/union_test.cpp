@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2020-2021. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <vector>
@@ -26,7 +34,7 @@ TEST(NativeOmniUnionOperator, TestUnionByThreeColumn)
     int32_t data4[dataSize] = {10, 11, 12, 10, 11, 12};
     double data5[dataSize] = {16.6, 15.5, 14.4, 13.3, 12.2, 11.1};
     int16_t data6[dataSize] = {16, 15, 14, 13, 12, 11};
-    std::vector<DataTypePtr> types = { IntType(), DoubleType(), ShortType() };
+    std::vector<DataTypePtr> types = {IntType(), DoubleType(), ShortType()};
     DataTypes sourceTypes(types);
     VectorBatch *vecBatch1 = CreateVectorBatch(sourceTypes, dataSize, data1, data2, data3);
     VectorBatch *vecBatch2 = CreateVectorBatch(sourceTypes, dataSize, data4, data5, data6);
@@ -62,4 +70,4 @@ TEST(NativeOmniUnionOperator, TestUnionByThreeColumn)
     omniruntime::op::Operator::DeleteOperator(unionOperator);
     delete operatorFactory;
 }
-}
+} // namespace UnionTest

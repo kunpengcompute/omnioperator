@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2023-2023. All rights reserved.
- * Description: ...
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 #include "gtest/gtest.h"
 #include "codegen/bloom_filter.h"
@@ -15,7 +22,7 @@ using namespace omniruntime::TestUtil;
 namespace BloomFilterTest {
 TEST(BloomFilterTest, TestBloomFilterInit)
 {
-    std::vector<DataTypePtr> vecOfTypes = { IntType() };
+    std::vector<DataTypePtr> vecOfTypes = {IntType()};
     DataTypes inputTypes(vecOfTypes);
     // construct data
     const int32_t rowNum = 12;
@@ -44,7 +51,7 @@ TEST(BloomFilterTest, TestBloomFilterPutLong)
     int32_t numWords = 1048576; // 1MBytes
 
     int32_t byteLength = numWords * sizeof(uint64_t) + sizeof(versionJava) + sizeof(hashFuncNum) + sizeof(numWords);
-    byte *in = new byte[byteLength]{ (byte)0 };
+    byte *in = new byte[byteLength]{(byte)0};
     (reinterpret_cast<int32_t *>(in))[0] = 1;
     (reinterpret_cast<int32_t *>(in))[1] = hashFuncNum;
     (reinterpret_cast<int32_t *>(in))[2] = numWords;
@@ -62,7 +69,7 @@ TEST(BloomFilterTest, TestBloomFilterMightContain)
     int32_t numWords = 1048576; // 1MBytes
 
     int32_t byteLength = numWords * sizeof(uint64_t) + sizeof(versionJava) + sizeof(hashFuncNum) + sizeof(numWords);
-    byte *in = new byte[byteLength]{ (byte)0 };
+    byte *in = new byte[byteLength]{(byte)0};
     (reinterpret_cast<int32_t *>(in))[0] = 1;
     (reinterpret_cast<int32_t *>(in))[1] = hashFuncNum;
     (reinterpret_cast<int32_t *>(in))[2] = numWords;
@@ -78,4 +85,4 @@ TEST(BloomFilterTest, TestBloomFilterMightContain)
     delete bf;
     delete[] in;
 }
-}
+} // namespace BloomFilterTest

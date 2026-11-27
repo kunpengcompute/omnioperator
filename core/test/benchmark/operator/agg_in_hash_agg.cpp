@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2022. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "common/common.h"
@@ -31,9 +39,9 @@ protected:
 
         auto aggFuncType = aggFuncTypes[AggType(state)];
 
-        std::vector<uint32_t> hashChannels{ 0 };
-        std::vector<DataTypePtr> hashTypes{ IntType() };
-        std::vector<uint32_t> aggColVector{ 1 };
+        std::vector<uint32_t> hashChannels{0};
+        std::vector<DataTypePtr> hashTypes{IntType()};
+        std::vector<uint32_t> aggColVector{1};
         if (aggFuncType[0] == OMNI_AGGREGATION_TYPE_COUNT_ALL) {
             aggColVector.clear();
         }
@@ -43,9 +51,9 @@ protected:
         std::vector<DataTypes> aggInputTypesWrap = AggregatorUtil::WrapWithVector(DataTypes(inputOutputTypes[key][0]));
         std::vector<DataTypes> aggOutputTypesWrap = AggregatorUtil::WrapWithVector(DataTypes(inputOutputTypes[key][1]));
 
-        HashAggregationOperatorFactory *factory =
-            new HashAggregationOperatorFactory(hashChannels, DataTypes(hashTypes), aggColVectorWrap, aggInputTypesWrap,
-            aggOutputTypesWrap, aggFuncType, maskChannels, AggregatorUtil::WrapWithVector(InputRaw(state), 1),
+        HashAggregationOperatorFactory *factory = new HashAggregationOperatorFactory(
+            hashChannels, DataTypes(hashTypes), aggColVectorWrap, aggInputTypesWrap, aggOutputTypesWrap, aggFuncType,
+            maskChannels, AggregatorUtil::WrapWithVector(InputRaw(state), 1),
             AggregatorUtil::WrapWithVector(OutputPartial(state), 1));
         factory->Init();
         return factory;
@@ -65,21 +73,11 @@ protected:
                 break;
             }
             case OMNI_DECIMAL64:
-            case OMNI_LONG:
-                vectorBatch->Append(createLongVector(state));
-                break;
-            case OMNI_INT:
-                vectorBatch->Append(createIntVector(state));
-                break;
-            case OMNI_DOUBLE:
-                vectorBatch->Append(createDoubleVector(state));
-                break;
-            case OMNI_DECIMAL128:
-                vectorBatch->Append(createDecimal128Vector(state));
-                break;
-            case OMNI_CONTAINER:
-                vectorBatch->Append(createPartialAverageVector(state));
-                break;
+            case OMNI_LONG: vectorBatch->Append(createLongVector(state)); break;
+            case OMNI_INT: vectorBatch->Append(createIntVector(state)); break;
+            case OMNI_DOUBLE: vectorBatch->Append(createDoubleVector(state)); break;
+            case OMNI_DECIMAL128: vectorBatch->Append(createDecimal128Vector(state)); break;
+            case OMNI_CONTAINER: vectorBatch->Append(createPartialAverageVector(state)); break;
             default:
                 throw std::runtime_error("Unsupported vector type" + TypeUtil::TypeToStringLog(vectorType->GetId()));
         }
@@ -155,91 +153,86 @@ protected:
     }
 
 private:
-    std::vector<DataTypePtr> containerFieldTypes{ DoubleType(), LongType() };
+    std::vector<DataTypePtr> containerFieldTypes{DoubleType(), LongType()};
     const int32_t totalPages = 1000;
     const int32_t rowsPerPage = 3000;
     const int32_t varcharLength = 128;
     const int32_t maskValidRatio = 50; // percentage of valid rows in mask
     const int32_t nullRatio = 25;      // percentage of null rows
     std::map<std::string, std::vector<std::vector<DataTypePtr>>> inputOutputTypes = {
-        { "sum_true_true_int", { { IntType() }, { IntType() } } },
-        { "sum_true_true_long", { { LongType() }, { LongType() } } },
-        { "sum_true_true_double", { { DoubleType() }, { DoubleType() } } },
-        { "sum_true_true_decimal64", { { Decimal64Type() }, { VarcharType(sizeof(DecimalPartialResult))} } },
-        { "sum_true_true_decimal128", { { Decimal128Type() }, { VarcharType(sizeof(DecimalPartialResult))} } },
-        { "sum_true_false_int", { { IntType() }, { IntType() } } },
-        { "sum_true_false_long", { { LongType() }, { LongType() } } },
-        { "sum_true_false_double", { { DoubleType() }, { DoubleType() } } },
-        { "sum_true_false_decimal64", { { Decimal64Type() }, { Decimal64Type()} } },
-        { "sum_true_false_decimal128", { { Decimal128Type() }, { Decimal128Type()} } },
-        { "sum_false_false_int", { { IntType() }, { IntType() } } },
-        { "sum_false_false_long", { { LongType() }, { LongType() } } },
-        { "sum_false_false_double", { { DoubleType() }, { DoubleType() } } },
-        { "sum_false_false_decimal64", { { VarcharType(sizeof(DecimalPartialResult)) }, { Decimal64Type()} } },
-        { "sum_false_false_decimal128", { { VarcharType(sizeof(DecimalPartialResult)) }, { Decimal128Type()} } },
-        { "avg_true_true_int", { { IntType() }, { ContainerType(std::vector<DataTypePtr>(containerFieldTypes)) } } },
-        { "avg_true_true_long", { { LongType() }, { ContainerType(std::vector<DataTypePtr>(containerFieldTypes)) } } },
-        { "avg_true_true_double", { { DoubleType() },
-                                    { ContainerType(std::vector<DataTypePtr>(containerFieldTypes)) } } },
-        { "avg_true_true_decimal64", { { Decimal64Type() }, { VarcharType(sizeof(DecimalPartialResult))} } },
-        { "avg_true_true_decimal128", { { Decimal128Type() }, { VarcharType(sizeof(DecimalPartialResult))} } },
-        { "avg_true_false_int", { { IntType() }, { DoubleType() } } },
-        { "avg_true_false_long", { { LongType() }, { DoubleType() } } },
-        { "avg_true_false_double", { { DoubleType() }, { DoubleType() } } },
-        { "avg_true_false_decimal64", { { Decimal64Type() }, { Decimal64Type()} } },
-        { "avg_true_false_decimal128", { { Decimal128Type() }, { Decimal128Type()} } },
-        { "avg_false_false_int", { { ContainerType(std::vector<DataTypePtr>(containerFieldTypes)) },
-                                   { DoubleType() } } },
-        { "avg_false_false_long", { { ContainerType(std::vector<DataTypePtr>(containerFieldTypes)) },
-                                    { DoubleType() } } },
-        { "avg_false_false_double", { { ContainerType(std::vector<DataTypePtr>(containerFieldTypes)) },
-                                      { DoubleType() } } },
-        { "avg_false_false_decimal64", { { VarcharType(sizeof(DecimalPartialResult)) }, { Decimal64Type()} } },
-        { "avg_false_false_decimal128", { { VarcharType(sizeof(DecimalPartialResult)) }, { Decimal128Type()} } },
-        { "minMax_true_true_int", { { IntType() }, { IntType() } } },
-        { "minMax_true_true_long", { { LongType() }, { LongType() } } },
-        { "minMax_true_true_double", { { DoubleType() }, { DoubleType() } } },
-        { "minMax_true_true_decimal64", { { Decimal64Type() }, { Decimal64Type()} } },
-        { "minMax_true_true_decimal128", { { Decimal128Type() }, { Decimal128Type()} } },
-        { "minMax_true_true_char", { { VarcharType(varcharLength) }, { VarcharType(varcharLength)} } },
-        { "minMax_true_false_int", { { IntType() }, { IntType() } } },
-        { "minMax_true_false_long", { { LongType() }, { LongType() } } },
-        { "minMax_true_false_double", { { DoubleType() }, { DoubleType() } } },
-        { "minMax_true_false_decimal64", { { Decimal64Type() }, { Decimal64Type()} } },
-        { "minMax_true_false_decimal128", { { Decimal128Type() }, { Decimal128Type()} } },
-        { "minMax_true_false_char", { { VarcharType(varcharLength) }, { VarcharType(varcharLength)} } },
-        { "minMax_false_false_int", { { IntType() }, { IntType() } } },
-        { "minMax_false_false_long", { { LongType() }, { LongType() } } },
-        { "minMax_false_false_double", { { DoubleType() }, { DoubleType() } } },
-        { "minMax_false_false_decimal64", { { Decimal64Type() }, { Decimal64Type()} } },
-        { "minMax_false_false_decimal128", { { Decimal128Type() }, { Decimal128Type()} } },
-        { "minMax_false_false_char", { { VarcharType(varcharLength) }, { VarcharType(varcharLength)} } },
-        { "count_true_true_int", { { IntType() }, { LongType() } } },
-        { "count_true_true_long", { { LongType() }, { LongType() } } },
-        { "count_true_true_double", { { DoubleType() }, { LongType() } } },
-        { "count_true_true_decimal64", { { Decimal64Type() }, { LongType()} } },
-        { "count_true_true_decimal128", { { Decimal128Type() }, { LongType()} } },
-        { "count_true_true_char", { { VarcharType(varcharLength) }, { LongType()} } },
-        { "count_true_false_int", { { IntType() }, { LongType() } } },
-        { "count_true_false_long", { { LongType() }, { LongType() } } },
-        { "count_true_false_double", { { DoubleType() }, { LongType() } } },
-        { "count_true_false_decimal64", { { Decimal64Type() }, { LongType()} } },
-        { "count_true_false_decimal128", { { Decimal128Type() }, { LongType()} } },
-        { "count_true_false_char", { { VarcharType(varcharLength) }, { LongType()} } },
-        { "count_false_false_int", { { LongType() }, { LongType()} } },
-        { "count_false_false_long", { { LongType() }, { LongType()} } },
-        { "count_false_false_double", { { LongType() }, { LongType()} } },
-        { "count_false_false_decimal64", { { LongType() }, { LongType()} } },
-        { "count_false_false_decimal128", { { LongType() }, { LongType()} } },
-        { "count_false_false_char", { { LongType() }, { LongType()} } } };
+        {"sum_true_true_int", {{IntType()}, {IntType()}}},
+        {"sum_true_true_long", {{LongType()}, {LongType()}}},
+        {"sum_true_true_double", {{DoubleType()}, {DoubleType()}}},
+        {"sum_true_true_decimal64", {{Decimal64Type()}, {VarcharType(sizeof(DecimalPartialResult))}}},
+        {"sum_true_true_decimal128", {{Decimal128Type()}, {VarcharType(sizeof(DecimalPartialResult))}}},
+        {"sum_true_false_int", {{IntType()}, {IntType()}}},
+        {"sum_true_false_long", {{LongType()}, {LongType()}}},
+        {"sum_true_false_double", {{DoubleType()}, {DoubleType()}}},
+        {"sum_true_false_decimal64", {{Decimal64Type()}, {Decimal64Type()}}},
+        {"sum_true_false_decimal128", {{Decimal128Type()}, {Decimal128Type()}}},
+        {"sum_false_false_int", {{IntType()}, {IntType()}}},
+        {"sum_false_false_long", {{LongType()}, {LongType()}}},
+        {"sum_false_false_double", {{DoubleType()}, {DoubleType()}}},
+        {"sum_false_false_decimal64", {{VarcharType(sizeof(DecimalPartialResult))}, {Decimal64Type()}}},
+        {"sum_false_false_decimal128", {{VarcharType(sizeof(DecimalPartialResult))}, {Decimal128Type()}}},
+        {"avg_true_true_int", {{IntType()}, {ContainerType(std::vector<DataTypePtr>(containerFieldTypes))}}},
+        {"avg_true_true_long", {{LongType()}, {ContainerType(std::vector<DataTypePtr>(containerFieldTypes))}}},
+        {"avg_true_true_double", {{DoubleType()}, {ContainerType(std::vector<DataTypePtr>(containerFieldTypes))}}},
+        {"avg_true_true_decimal64", {{Decimal64Type()}, {VarcharType(sizeof(DecimalPartialResult))}}},
+        {"avg_true_true_decimal128", {{Decimal128Type()}, {VarcharType(sizeof(DecimalPartialResult))}}},
+        {"avg_true_false_int", {{IntType()}, {DoubleType()}}},
+        {"avg_true_false_long", {{LongType()}, {DoubleType()}}},
+        {"avg_true_false_double", {{DoubleType()}, {DoubleType()}}},
+        {"avg_true_false_decimal64", {{Decimal64Type()}, {Decimal64Type()}}},
+        {"avg_true_false_decimal128", {{Decimal128Type()}, {Decimal128Type()}}},
+        {"avg_false_false_int", {{ContainerType(std::vector<DataTypePtr>(containerFieldTypes))}, {DoubleType()}}},
+        {"avg_false_false_long", {{ContainerType(std::vector<DataTypePtr>(containerFieldTypes))}, {DoubleType()}}},
+        {"avg_false_false_double", {{ContainerType(std::vector<DataTypePtr>(containerFieldTypes))}, {DoubleType()}}},
+        {"avg_false_false_decimal64", {{VarcharType(sizeof(DecimalPartialResult))}, {Decimal64Type()}}},
+        {"avg_false_false_decimal128", {{VarcharType(sizeof(DecimalPartialResult))}, {Decimal128Type()}}},
+        {"minMax_true_true_int", {{IntType()}, {IntType()}}},
+        {"minMax_true_true_long", {{LongType()}, {LongType()}}},
+        {"minMax_true_true_double", {{DoubleType()}, {DoubleType()}}},
+        {"minMax_true_true_decimal64", {{Decimal64Type()}, {Decimal64Type()}}},
+        {"minMax_true_true_decimal128", {{Decimal128Type()}, {Decimal128Type()}}},
+        {"minMax_true_true_char", {{VarcharType(varcharLength)}, {VarcharType(varcharLength)}}},
+        {"minMax_true_false_int", {{IntType()}, {IntType()}}},
+        {"minMax_true_false_long", {{LongType()}, {LongType()}}},
+        {"minMax_true_false_double", {{DoubleType()}, {DoubleType()}}},
+        {"minMax_true_false_decimal64", {{Decimal64Type()}, {Decimal64Type()}}},
+        {"minMax_true_false_decimal128", {{Decimal128Type()}, {Decimal128Type()}}},
+        {"minMax_true_false_char", {{VarcharType(varcharLength)}, {VarcharType(varcharLength)}}},
+        {"minMax_false_false_int", {{IntType()}, {IntType()}}},
+        {"minMax_false_false_long", {{LongType()}, {LongType()}}},
+        {"minMax_false_false_double", {{DoubleType()}, {DoubleType()}}},
+        {"minMax_false_false_decimal64", {{Decimal64Type()}, {Decimal64Type()}}},
+        {"minMax_false_false_decimal128", {{Decimal128Type()}, {Decimal128Type()}}},
+        {"minMax_false_false_char", {{VarcharType(varcharLength)}, {VarcharType(varcharLength)}}},
+        {"count_true_true_int", {{IntType()}, {LongType()}}},
+        {"count_true_true_long", {{LongType()}, {LongType()}}},
+        {"count_true_true_double", {{DoubleType()}, {LongType()}}},
+        {"count_true_true_decimal64", {{Decimal64Type()}, {LongType()}}},
+        {"count_true_true_decimal128", {{Decimal128Type()}, {LongType()}}},
+        {"count_true_true_char", {{VarcharType(varcharLength)}, {LongType()}}},
+        {"count_true_false_int", {{IntType()}, {LongType()}}},
+        {"count_true_false_long", {{LongType()}, {LongType()}}},
+        {"count_true_false_double", {{DoubleType()}, {LongType()}}},
+        {"count_true_false_decimal64", {{Decimal64Type()}, {LongType()}}},
+        {"count_true_false_decimal128", {{Decimal128Type()}, {LongType()}}},
+        {"count_true_false_char", {{VarcharType(varcharLength)}, {LongType()}}},
+        {"count_false_false_int", {{LongType()}, {LongType()}}},
+        {"count_false_false_long", {{LongType()}, {LongType()}}},
+        {"count_false_false_double", {{LongType()}, {LongType()}}},
+        {"count_false_false_decimal64", {{LongType()}, {LongType()}}},
+        {"count_false_false_decimal128", {{LongType()}, {LongType()}}},
+        {"count_false_false_char", {{LongType()}, {LongType()}}}};
 
-    std::map<std::string, std::vector<uint32_t>> aggFuncTypes = { { "sum", { OMNI_AGGREGATION_TYPE_SUM } },
-                                                                  { "avg", { OMNI_AGGREGATION_TYPE_AVG } },
-                                                                  { "min", { OMNI_AGGREGATION_TYPE_MIN } },
-                                                                  { "max", { OMNI_AGGREGATION_TYPE_MAX } },
-                                                                  { "count", { OMNI_AGGREGATION_TYPE_COUNT_COLUMN } },
-                                                                  { "count_all",
-                                                                    { OMNI_AGGREGATION_TYPE_COUNT_ALL } } };
+    std::map<std::string, std::vector<uint32_t>> aggFuncTypes = {{"sum", {OMNI_AGGREGATION_TYPE_SUM}},
+                                                                 {"avg", {OMNI_AGGREGATION_TYPE_AVG}},
+                                                                 {"min", {OMNI_AGGREGATION_TYPE_MIN}},
+                                                                 {"max", {OMNI_AGGREGATION_TYPE_MAX}},
+                                                                 {"count", {OMNI_AGGREGATION_TYPE_COUNT_COLUMN}},
+                                                                 {"count_all", {OMNI_AGGREGATION_TYPE_COUNT_ALL}}};
 
     OMNI_BENCHMARK_PARAM(bool, HasNull, false, true);
     OMNI_BENCHMARK_PARAM(bool, IsDictionary, false, true);
@@ -251,10 +244,7 @@ private:
     OMNI_BENCHMARK_PARAM(int32_t, NumGroups, 1, 10, 100, 1000);
 
 private:
-    std::string to_string(const bool v)
-    {
-        return v ? "true" : "false";
-    }
+    std::string to_string(const bool v) { return v ? "true" : "false"; }
 
     std::string GetKey(const State &state)
     {
@@ -263,7 +253,7 @@ private:
         if (aggFuncType[0] == OMNI_AGGREGATION_TYPE_MIN || aggFuncType[0] == OMNI_AGGREGATION_TYPE_MAX) {
             key = "minMax_";
         } else if (aggFuncType[0] == OMNI_AGGREGATION_TYPE_COUNT_ALL ||
-            aggFuncType[0] == OMNI_AGGREGATION_TYPE_COUNT_COLUMN) {
+                   aggFuncType[0] == OMNI_AGGREGATION_TYPE_COUNT_COLUMN) {
             key = "count_";
         } else {
             key = AggType(state) + "_";
@@ -411,7 +401,7 @@ private:
         DecimalPartialResult v;
         if (!IsDictionary(state)) {
             auto *vector = VectorHelper::CreateVector(OMNI_FLAT, OMNI_VARCHAR, rowsPerPage,
-                sizeof(DecimalPartialResult) * rowsPerPage);
+                                                      sizeof(DecimalPartialResult) * rowsPerPage);
             for (int32_t r = 0; r < rowsPerPage; ++r) {
                 v.sum = Decimal128(static_cast<int64_t>(rand() % 256 - 128));
                 v.count = rand() % 1024 + 1;
@@ -445,7 +435,7 @@ private:
         DecimalPartialResult v;
         if (!IsDictionary(state)) {
             auto *vector = VectorHelper::CreateVector(OMNI_FLAT, OMNI_VARCHAR, rowsPerPage,
-                sizeof(DecimalPartialResult) * rowsPerPage);
+                                                      sizeof(DecimalPartialResult) * rowsPerPage);
             for (int32_t r = 0; r < rowsPerPage; ++r) {
                 v.sum = Decimal128(static_cast<int64_t>(rand() % 256 - 128));
                 v.count = 1;
@@ -485,7 +475,7 @@ private:
         std::vector<int64_t> vectorAddresses(2);
         vectorAddresses[0] = reinterpret_cast<int64_t>(doubleVector);
         vectorAddresses[1] = reinterpret_cast<int64_t>(longVector);
-        std::vector<DataTypePtr> dataTypes{ DoubleType(), LongType() };
+        std::vector<DataTypePtr> dataTypes{DoubleType(), LongType()};
         return new ContainerVector(rowsPerPage, vectorAddresses, dataTypes);
     }
 
@@ -563,4 +553,4 @@ private:
 };
 
 OMNI_BENCHMARK_DECLARE_OPERATOR_DEFAULT(AggInHashAggBenchmark);
-}
+} // namespace om_benchmark

@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2023. All rights reserved.
- * Description: CodegenUtil Class
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "codegen_util.h"
@@ -43,14 +50,12 @@ int64_t GetRawAddr(const DataTypes &types, int32_t i, BaseVector *colVec)
         case OMNI_CHAR:
             return reinterpret_cast<int64_t>(unsafe::UnsafeStringVector::GetValues(
                 reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(colVec)));
-        default:
-            LogError("Do not support such vector type %d", types.GetIds()[i]);
-            return 0;
+        default: LogError("Do not support such vector type %d", types.GetIds()[i]); return 0;
     }
 }
 
 void GetDataFromVecBatch(VectorBatch &vecBatch, intptr_t valueAddrs[], intptr_t nullAddrs[], intptr_t offsetAddrs[],
-    intptr_t dictionaries[], const DataTypes &types)
+                         intptr_t dictionaries[], const DataTypes &types)
 {
     intptr_t valuesAddress;
     intptr_t dictVecAddress;
@@ -72,8 +77,8 @@ void GetDataFromVecBatch(VectorBatch &vecBatch, intptr_t valueAddrs[], intptr_t 
 }
 
 VectorBatch *FilterAndProject(std::unique_ptr<omniruntime::codegen::Filter> &filter,
-    std::vector<std::unique_ptr<omniruntime::codegen::Projection>> &projections, int32_t numCols, VectorBatch *vecBatch,
-    int32_t &numSelectedRows, const DataTypes &types)
+                              std::vector<std::unique_ptr<omniruntime::codegen::Projection>> &projections,
+                              int32_t numCols, VectorBatch *vecBatch, int32_t &numSelectedRows, const DataTypes &types)
 {
     const int vectorCount = static_cast<int32_t>(vecBatch->GetVectorCount());
     int64_t valueAddrs[vectorCount];
@@ -88,7 +93,7 @@ VectorBatch *FilterAndProject(std::unique_ptr<omniruntime::codegen::Filter> &fil
     auto context = new omniruntime::op::ExecutionContext();
     if (filter != nullptr) {
         numSelectedRows = filter->GetFilterFunc()(valueAddrs, rowCount, selectedRows, nullAddrs, offsetAddrs,
-            reinterpret_cast<int64_t>(context), dictionaries);
+                                                  reinterpret_cast<int64_t>(context), dictionaries);
     }
 
     if (context->HasError()) {
@@ -103,7 +108,7 @@ VectorBatch *FilterAndProject(std::unique_ptr<omniruntime::codegen::Filter> &fil
     for (uint32_t i = 0; i < projections.size(); i++) {
         BaseVector *col =
             projections[i]->Project(vecBatch, (filter != nullptr) ? selectedRows : nullptr, numSelectedRows, valueAddrs,
-            nullAddrs, offsetAddrs, context, dictionaries, types.GetIds());
+                                    nullAddrs, offsetAddrs, context, dictionaries, types.GetIds());
         if (context->HasError()) {
             VectorHelper::FreeVecBatch(ret);
             VectorHelper::FreeVecBatch(vecBatch);
@@ -122,11 +127,12 @@ VectorBatch *FilterAndProject(std::unique_ptr<omniruntime::codegen::Filter> &fil
 }
 
 unique_ptr<Filter> GenerateFilterAndProjections(Expr *filterExpr, std::vector<Expr *> &projExprs, DataTypes &inputTypes,
-    std::vector<std::unique_ptr<Projection>> &projections, OverflowConfig *overflowConfig)
+                                                std::vector<std::unique_ptr<Projection>> &projections,
+                                                OverflowConfig *overflowConfig)
 {
     for (uint32_t i = 0; i < projExprs.size(); i++) {
         auto projection = make_unique<Projection>(*(projExprs[i]), filterExpr != nullptr, projExprs[i]->GetReturnType(),
-            inputTypes, overflowConfig);
+                                                  inputTypes, overflowConfig);
         projections.push_back(move(projection));
     }
     if (filterExpr == nullptr) {
@@ -135,4 +141,4 @@ unique_ptr<Filter> GenerateFilterAndProjections(Expr *filterExpr, std::vector<Ex
     }
     return std::move(make_unique<Filter>(*filterExpr, inputTypes, nullptr));
 }
-}
+} // namespace CodegenUtil

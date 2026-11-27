@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -106,7 +114,8 @@ TEST(BigInteger, MultiplyPowerOfTen)
     bigInteger = BigInteger("1234");
     bigInteger.MultiplyByPowerOfTen(100);
     EXPECT_EQ("5827249F27165024FBC47DFCA9359BF316332D1B91ACEECF471FBAB06D9B2"
-              "0000000000000000000000000", bigInteger.ToHexString());
+              "0000000000000000000000000",
+              bigInteger.ToHexString());
 
     bigInteger = BigInteger("1234");
     bigInteger.MultiplyByPowerOfTen(1000);
@@ -123,7 +132,8 @@ TEST(BigInteger, MultiplyPowerOfTen)
               "00000000000000000000000000000000000000000000000000000000000000"
               "00000000000000000000000000000000000000000000000000000000000000"
               "00000000000000000000000000000000000000000000000000000000000000"
-              "0000000000000000000000000000", bigInteger.ToHexString());
+              "0000000000000000000000000000",
+              bigInteger.ToHexString());
 }
 
 TEST(BigInteger, DivideModuloIntBignum)
@@ -180,4 +190,4 @@ TEST(BigInteger, Square)
     bigInteger.Square();
     EXPECT_EQ("64", bigInteger.ToHexString());
 }
-}
+} // namespace omniruntime::type

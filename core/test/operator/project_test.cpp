@@ -1,6 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2023. All rights reserved.
- * Description: project operator test
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <string>
@@ -25,7 +32,7 @@ TEST(ProjectionTest, Cast)
     const int32_t numRows = 10;
     int64_t *col1 = MakeLongs(numRows);
     int32_t *col2 = MakeInts(numRows);
-    std::vector<DataTypePtr> vecOfTypes = { LongType(), IntType() };
+    std::vector<DataTypePtr> vecOfTypes = {LongType(), IntType()};
     DataTypes inputTypes(vecOfTypes);
     auto data1 = new FieldExpr(0, LongType());
     std::string castStr = "CAST";
@@ -38,7 +45,7 @@ TEST(ProjectionTest, Cast)
     args2.push_back(data2);
     auto castExpr2 = GetFuncExpr(castStr, args2, LongType());
 
-    std::vector<Expr *> exprs = { castExpr1, castExpr2 };
+    std::vector<Expr *> exprs = {castExpr1, castExpr2};
 
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -71,7 +78,7 @@ TEST(ProjectionTest, CastDouble)
     const int32_t numRows = 1000;
     double *col1 = MakeDoubles(numRows);
     double *col2 = MakeDoubles(numRows);
-    std::vector<DataTypePtr> vecOfTypes = { DoubleType(), DoubleType() };
+    std::vector<DataTypePtr> vecOfTypes = {DoubleType(), DoubleType()};
 
     auto data1 = new FieldExpr(0, DoubleType());
     std::string castStr = "CAST";
@@ -84,7 +91,7 @@ TEST(ProjectionTest, CastDouble)
     args2.push_back(data2);
     auto castExpr2 = GetFuncExpr(castStr, args2, LongType());
 
-    std::vector<Expr *> exprs = { castExpr1, castExpr2 };
+    std::vector<Expr *> exprs = {castExpr1, castExpr2};
 
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -117,13 +124,13 @@ TEST(ProjectionTest, CastInt64ToDecimal128)
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1000;
     int64_t *col1 = MakeLongs(numRows);
-    std::vector<DataTypePtr> vecOfTypes = { LongType() };
+    std::vector<DataTypePtr> vecOfTypes = {LongType()};
     auto data1 = new FieldExpr(0, LongType());
     std::string castStr = "CAST";
     std::vector<Expr *> args1;
     args1.push_back(data1);
     auto castExpr = GetFuncExpr(castStr, args1, Decimal128Type(38, 0));
-    std::vector<Expr *> exprs = { castExpr };
+    std::vector<Expr *> exprs = {castExpr};
 
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -154,14 +161,14 @@ TEST(ProjectionTest, MakeDecimal64ToDiffScale)
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1000;
     int64_t *col1 = MakeLongs(numRows);
-    std::vector<DataTypePtr> vecOfTypes = { Decimal64Type(7, 2) };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal64Type(7, 2)};
     auto data1 = new FieldExpr(0, Decimal64Type(7, 2));
     auto data2 = new FieldExpr(0, Decimal64Type(7, 2));
 
     std::string castStr = "CAST";
-    auto makeExpr1 = GetFuncExpr(castStr, { data1 }, Decimal64Type(7, 4));
-    auto makeExpr2 = GetFuncExpr(castStr, { data2 }, Decimal64Type(7, 0));
-    std::vector<Expr *> exprs = { makeExpr1, makeExpr2 };
+    auto makeExpr1 = GetFuncExpr(castStr, {data1}, Decimal64Type(7, 4));
+    auto makeExpr2 = GetFuncExpr(castStr, {data2}, Decimal64Type(7, 0));
+    std::vector<Expr *> exprs = {makeExpr1, makeExpr2};
 
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -196,14 +203,14 @@ TEST(ProjectionTest, MakeDecimal128ToDiffScale)
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1000;
     int64_t *col1 = MakeDecimals(numRows);
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type(38, 2) };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type(38, 2)};
     auto data1 = new FieldExpr(0, Decimal128Type(38, 2));
     auto data2 = new FieldExpr(0, Decimal128Type(7, 2));
 
     std::string castStr = "CAST";
-    auto makeExpr1 = GetFuncExpr(castStr, { data1 }, Decimal128Type(38, 4));
-    auto makeExpr2 = GetFuncExpr(castStr, { data2 }, Decimal128Type(38, 0));
-    std::vector<Expr *> exprs = { makeExpr1, makeExpr2 };
+    auto makeExpr1 = GetFuncExpr(castStr, {data1}, Decimal128Type(38, 4));
+    auto makeExpr2 = GetFuncExpr(castStr, {data2}, Decimal128Type(38, 0));
+    std::vector<Expr *> exprs = {makeExpr1, makeExpr2};
 
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -237,15 +244,15 @@ TEST(ProjectionTest, MakeDecimal64To128WithDiffScale)
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1000;
     int64_t *col1 = MakeLongs(numRows);
-    std::vector<DataTypePtr> vecOfTypes = { Decimal64Type(7, 2) };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal64Type(7, 2)};
     auto data1 = new FieldExpr(0, Decimal64Type(7, 2));
     auto data2 = new FieldExpr(0, Decimal64Type(7, 2));
     auto data3 = new FieldExpr(0, Decimal64Type(7, 2));
     std::string castStr = "CAST";
-    auto makeExpr1 = GetFuncExpr(castStr, { data1 }, Decimal128Type(38, 2));
-    auto makeExpr2 = GetFuncExpr(castStr, { data2 }, Decimal128Type(38, 4));
-    auto makeExpr3 = GetFuncExpr(castStr, { data3 }, Decimal128Type(38, 0));
-    std::vector<Expr *> exprs = { makeExpr1, makeExpr2, makeExpr3 };
+    auto makeExpr1 = GetFuncExpr(castStr, {data1}, Decimal128Type(38, 2));
+    auto makeExpr2 = GetFuncExpr(castStr, {data2}, Decimal128Type(38, 4));
+    auto makeExpr3 = GetFuncExpr(castStr, {data3}, Decimal128Type(38, 0));
+    std::vector<Expr *> exprs = {makeExpr1, makeExpr2, makeExpr3};
 
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -285,8 +292,8 @@ TEST(ProjectionTest, Simple)
     auto *addLeft = new FieldExpr(0, IntType());
     auto *addRight = new LiteralExpr(5, IntType());
     auto *addExpr = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft, addRight, IntType());
-    std::vector<Expr *> exprs = { addExpr };
-    std::vector<DataTypePtr> vecOfTypes = { IntType() };
+    std::vector<Expr *> exprs = {addExpr};
+    std::vector<DataTypePtr> vecOfTypes = {IntType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -330,7 +337,7 @@ TEST(ProjectionTest, AbsWithNullValues)
     int32_t *col1 = MakeInts(numRows, -5);
     int64_t *col2 = MakeLongs(numRows, -5);
     int64_t *col3 = MakeLongs(numRows, -5);
-    std::vector<DataTypePtr> vecOfTypes = { IntType(), LongType(), Decimal64Type() };
+    std::vector<DataTypePtr> vecOfTypes = {IntType(), LongType(), Decimal64Type()};
     auto data1 = new FieldExpr(0, IntType());
     std::string funcStr = "abs";
     std::vector<Expr *> args1;
@@ -347,7 +354,7 @@ TEST(ProjectionTest, AbsWithNullValues)
     args3.push_back(data3);
     auto absExpr3 = GetFuncExpr(funcStr, args3, Decimal64Type(7, 2));
 
-    std::vector<Expr *> exprs = { absExpr1, absExpr2, absExpr3 };
+    std::vector<Expr *> exprs = {absExpr1, absExpr2, absExpr3};
 
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -402,8 +409,8 @@ TEST(ProjectionTest, Negatives)
     auto *subLeft = new FieldExpr(0, IntType());
     auto *subRight = new LiteralExpr(500, IntType());
     auto *subExpr = new BinaryExpr(omniruntime::expressions::Operator::SUB, subLeft, subRight, IntType());
-    std::vector<Expr *> exprs = { subExpr };
-    std::vector<DataTypePtr> vecOfTypes = { IntType() };
+    std::vector<Expr *> exprs = {subExpr};
+    std::vector<DataTypePtr> vecOfTypes = {IntType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -435,8 +442,8 @@ TEST(ProjectionTest, Longs)
     auto *mulLeft = new FieldExpr(0, LongType());
     auto *mulRight = new LiteralExpr(5000000L, LongType());
     auto *mulExpr = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, mulRight, LongType());
-    std::vector<Expr *> exprs = { mulExpr };
-    std::vector<DataTypePtr> vecOfTypes = { LongType() };
+    std::vector<Expr *> exprs = {mulExpr};
+    std::vector<DataTypePtr> vecOfTypes = {LongType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -469,8 +476,8 @@ TEST(ProjectionTest, Doubles)
     auto *divLeft = new FieldExpr(0, DoubleType());
     auto *divRight = new LiteralExpr(2.0, DoubleType());
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, divLeft, divRight, DoubleType());
-    std::vector<Expr *> exprs = { divExpr };
-    std::vector<DataTypePtr> vecOfTypes = { DoubleType() };
+    std::vector<Expr *> exprs = {divExpr};
+    std::vector<DataTypePtr> vecOfTypes = {DoubleType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -505,8 +512,8 @@ TEST(ProjectionTest, Doubles_DivideByZero)
     auto *divLeft = new FieldExpr(0, DoubleType());
     auto *divRight = new FieldExpr(1, DoubleType());
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, divLeft, divRight, DoubleType());
-    std::vector<Expr *> exprs = { divExpr };
-    std::vector<DataTypePtr> vecOfTypes = { DoubleType(), DoubleType() };
+    std::vector<Expr *> exprs = {divExpr};
+    std::vector<DataTypePtr> vecOfTypes = {DoubleType(), DoubleType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -538,8 +545,8 @@ TEST(ProjectionTest, Bytes_DivideByZero)
     auto *divLeft = new FieldExpr(0, ByteType());
     auto *divRight = new FieldExpr(1, ByteType());
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, divLeft, divRight, ByteType());
-    std::vector<Expr *> exprs = { divExpr };
-    std::vector<DataTypePtr> vecOfTypes = { ByteType(), ByteType() };
+    std::vector<Expr *> exprs = {divExpr};
+    std::vector<DataTypePtr> vecOfTypes = {ByteType(), ByteType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -571,8 +578,8 @@ TEST(ProjectionTest, Shorts_DivideByZero)
     auto *divLeft = new FieldExpr(0, ShortType());
     auto *divRight = new FieldExpr(1, ShortType());
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, divLeft, divRight, ShortType());
-    std::vector<Expr *> exprs = { divExpr };
-    std::vector<DataTypePtr> vecOfTypes = { ShortType(), ShortType() };
+    std::vector<Expr *> exprs = {divExpr};
+    std::vector<DataTypePtr> vecOfTypes = {ShortType(), ShortType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -592,7 +599,8 @@ TEST(ProjectionTest, Shorts_DivideByZero)
     delete overflowConfig;
 }
 
-TEST(ProjectionTest, testModShort) {
+TEST(ProjectionTest, testModShort)
+{
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1;
     auto left = new LiteralExpr(static_cast<int16_t>(12250), ShortType());
@@ -600,7 +608,7 @@ TEST(ProjectionTest, testModShort) {
 
     auto *modExpr = new BinaryExpr(omniruntime::expressions::Operator::MOD, left, right, ShortType());
 
-    std::vector<Expr *> exprs = { modExpr };
+    std::vector<Expr *> exprs = {modExpr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -622,7 +630,8 @@ TEST(ProjectionTest, testModShort) {
     delete overflowConfig;
 }
 
-TEST(ProjectionTest, testModByte) {
+TEST(ProjectionTest, testModByte)
+{
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1;
     auto left = new LiteralExpr(static_cast<int8_t>(100), ByteType());
@@ -630,7 +639,7 @@ TEST(ProjectionTest, testModByte) {
 
     auto *modExpr = new BinaryExpr(omniruntime::expressions::Operator::MOD, left, right, ByteType());
 
-    std::vector<Expr *> exprs = { modExpr };
+    std::vector<Expr *> exprs = {modExpr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -662,8 +671,8 @@ TEST(ProjectionTest, testModDoubles)
     auto *modLeft = new FieldExpr(0, DoubleType());
     auto *modRight = new FieldExpr(1, DoubleType());
     auto *modExpr = new BinaryExpr(omniruntime::expressions::Operator::MOD, modLeft, modRight, DoubleType());
-    std::vector<Expr *> exprs = { modExpr };
-    std::vector<DataTypePtr> vecOfTypes = { DoubleType(), DoubleType() };
+    std::vector<Expr *> exprs = {modExpr};
+    std::vector<DataTypePtr> vecOfTypes = {DoubleType(), DoubleType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -704,8 +713,8 @@ TEST(ProjectionTest, testModDoubles2)
     auto *modLeft = new FieldExpr(0, DoubleType());
     auto *modRight = new LiteralExpr(-45.8, DoubleType());
     auto *modExpr = new BinaryExpr(omniruntime::expressions::Operator::MOD, modLeft, modRight, DoubleType());
-    std::vector<Expr *> exprs = { modExpr };
-    std::vector<DataTypePtr> vecOfTypes = { DoubleType() };
+    std::vector<Expr *> exprs = {modExpr};
+    std::vector<DataTypePtr> vecOfTypes = {DoubleType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -743,8 +752,8 @@ TEST(ProjectionTest, DoublesModulusByZero)
     auto *divLeft = new FieldExpr(0, DoubleType());
     auto *divRight = new LiteralExpr(0, DoubleType());
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::MOD, divLeft, divRight, DoubleType());
-    std::vector<Expr *> exprs = { divExpr };
-    std::vector<DataTypePtr> vecOfTypes = { DoubleType() };
+    std::vector<Expr *> exprs = {divExpr};
+    std::vector<DataTypePtr> vecOfTypes = {DoubleType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -781,9 +790,9 @@ TEST(ProjectionTest, MultipleColumns)
     auto *addRight = new LiteralExpr(1L, LongType());
     auto *addExpr = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft, addRight, LongType());
 
-    std::vector<Expr *> exprs = { subExpr, addExpr };
+    std::vector<Expr *> exprs = {subExpr, addExpr};
 
-    std::vector<DataTypePtr> vecOfTypes = { IntType(), IntType(), LongType() };
+    std::vector<DataTypePtr> vecOfTypes = {IntType(), IntType(), LongType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -837,8 +846,8 @@ TEST(ProjectionTest, BenchmarkMultipleColumns)
     auto *addRight = new LiteralExpr(1L, LongType());
     auto *addExpr = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft, addRight, LongType());
 
-    std::vector<Expr *> exprs = { subExpr, addExpr };
-    std::vector<DataTypePtr> vecOfTypes = { IntType(), IntType(), LongType(), VarcharType(1000) };
+    std::vector<Expr *> exprs = {subExpr, addExpr};
+    std::vector<DataTypePtr> vecOfTypes = {IntType(), IntType(), LongType(), VarcharType(1000)};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -878,7 +887,7 @@ TEST(ProjectionTest, BenchmarkMultipleColumns)
     args.push_back(substrIndex);
     args.push_back(substrLen);
     auto substrExpr = GetFuncExpr(funcStr, args, VarcharType());
-    std::vector<Expr *> exprs2 = { subExpr2, substrExpr };
+    std::vector<Expr *> exprs2 = {subExpr2, substrExpr};
 
     auto exprEvaluator2 = std::make_shared<ExpressionEvaluator>(exprs2, inputTypes, overflowConfig);
     factory = new ProjectionOperatorFactory(move(exprEvaluator2));
@@ -928,8 +937,8 @@ TEST(ProjectionTest, DependOtherColumn)
     auto *fexp = new FieldExpr(2, LongType());
     auto *ifExpr = new IfExpr(condition, texp, fexp);
 
-    std::vector<Expr *> exprs = { mulExpr, ifExpr };
-    std::vector<DataTypePtr> vecOfTypes = { IntType(), IntType(), LongType() };
+    std::vector<Expr *> exprs = {mulExpr, ifExpr};
+    std::vector<DataTypePtr> vecOfTypes = {IntType(), IntType(), LongType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -960,7 +969,7 @@ TEST(ProjectionTest, DependOtherColumn)
 TEST(ProjectionTest, ProjectString1)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    std::vector<DataTypePtr> vecOfTypes = { VarcharType() };
+    std::vector<DataTypePtr> vecOfTypes = {VarcharType()};
     DataTypes inputTypes(vecOfTypes);
     const int32_t numRows = 100;
     auto cols = new std::string[numRows];
@@ -984,7 +993,7 @@ TEST(ProjectionTest, ProjectString1)
     args.push_back(substrLen);
     auto substrExpr = GetFuncExpr(funcStr, args, VarcharType());
     auto *col0 = new FieldExpr(0, VarcharType());
-    std::vector<Expr *> exprs = { substrExpr, col0 };
+    std::vector<Expr *> exprs = {substrExpr, col0};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
@@ -1020,7 +1029,7 @@ TEST(ProjectionTest, DictionaryVecTest)
         col1[i] = i % 5;
         col2[i] = i % 11;
     }
-    DataTypes inputTypes1(std::vector<DataTypePtr>({ IntType(), IntType() }));
+    DataTypes inputTypes1(std::vector<DataTypePtr>({IntType(), IntType()}));
     auto *t = CreateVectorBatch(inputTypes1, numRows, col1, col2);
 
     int32_t ids[] = {3, 4, 5, 6, 7, 8, 9, 9, 9, 9};
@@ -1031,7 +1040,7 @@ TEST(ProjectionTest, DictionaryVecTest)
     auto dicVec = VectorHelper::CreateDictionary(ids, numRows, dictionary.get());
     t->Append(dicVec);
 
-    std::vector<DataTypePtr> vecOfTypes({ IntType(), IntType(), IntType() });
+    std::vector<DataTypePtr> vecOfTypes({IntType(), IntType(), IntType()});
     DataTypes inputTypes2(vecOfTypes);
 
     auto *addLeft1 = new FieldExpr(0, IntType());
@@ -1046,7 +1055,7 @@ TEST(ProjectionTest, DictionaryVecTest)
     auto *addRight3 = new LiteralExpr(10, IntType());
     auto *addExpr3 = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft3, addRight3, IntType());
 
-    std::vector<Expr *> exprs = { addExpr1, addExpr2, addExpr3 };
+    std::vector<Expr *> exprs = {addExpr1, addExpr2, addExpr3};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes2, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
@@ -1084,8 +1093,8 @@ TEST(ProjectionTest, Decimal128Arithmetic)
     auto *addRight = new LiteralExpr(new std::string("20"), Decimal128Type(38, 0));
     auto *addExpr = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft, addRight, Decimal128Type(38, 0));
 
-    std::vector<Expr *> exprs = { addExpr };
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<Expr *> exprs = {addExpr};
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -1127,8 +1136,8 @@ TEST(ProjectionTest, Decimal128Arithmetic2)
     auto *subExpr1 =
         new BinaryExpr(omniruntime::expressions::Operator::SUB, subLeft1, subRight1, Decimal128Type(38, 0));
 
-    std::vector<Expr *> exprs = { subExpr0, subExpr1 };
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type(), Decimal128Type() };
+    std::vector<Expr *> exprs = {subExpr0, subExpr1};
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type(), Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -1176,8 +1185,8 @@ TEST(ProjectionTest, Decimal128Arithmetic3)
     auto *addExpr1 =
         new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft1, addRight1, Decimal128Type(38, 0));
 
-    std::vector<Expr *> exprs = { addExpr0, addExpr1 };
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type(), Decimal128Type() };
+    std::vector<Expr *> exprs = {addExpr0, addExpr1};
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type(), Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -1217,8 +1226,8 @@ TEST(ProjectionTest, Decimal128Multiply)
     auto *mulRight = new LiteralExpr(new std::string("3"), Decimal128Type(38, 0));
     auto *mulExpr = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, mulRight, Decimal128Type(38, 0));
 
-    std::vector<Expr *> exprs = { mulExpr };
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<Expr *> exprs = {mulExpr};
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -1250,10 +1259,10 @@ TEST(ProjectionTest, Decimal128Divide)
     int64_t *col1 = MakeDecimals(numRows);
     auto *divRight = new LiteralExpr(new std::string("20"), Decimal128Type(38, 0));
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, new FieldExpr(0, Decimal128Type(38, 0)),
-        divRight, Decimal128Type(38, 0));
-    std::vector<Expr *> exprs = { divExpr };
+                                   divRight, Decimal128Type(38, 0));
+    std::vector<Expr *> exprs = {divExpr};
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -1292,9 +1301,9 @@ TEST(ProjectionTest, MultipleDecimal128Columns)
     auto *mulRight = new LiteralExpr(new std::string("20"), Decimal128Type(38, 0));
     auto *mulExpr = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, mulRight, Decimal128Type(38, 0));
 
-    std::vector<Expr *> exprs = { addExpr, mulExpr };
+    std::vector<Expr *> exprs = {addExpr, mulExpr};
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type(), Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type(), Decimal128Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -1330,7 +1339,7 @@ TEST(ProjectionTest, MultipleDecimal128Columns)
 TEST(ProjectionTest, StringSubstr)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    std::vector<DataTypePtr> vecOfTypes = { VarcharType() };
+    std::vector<DataTypePtr> vecOfTypes = {VarcharType()};
     DataTypes inputTypes(vecOfTypes);
     const int32_t numRows = 100;
     auto *strings = new std::string[numRows];
@@ -1362,7 +1371,7 @@ TEST(ProjectionTest, StringSubstr)
     auto concatExpr = GetFuncExpr(concatStr, concatArgs, VarcharType());
 
     auto col0 = new FieldExpr(0, VarcharType());
-    std::vector<Expr *> exprs = { concatExpr, col0 };
+    std::vector<Expr *> exprs = {concatExpr, col0};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
@@ -1414,7 +1423,7 @@ TEST(ProjectionTest, SlicedDictionaryVecTest)
 
     VectorBatch *vecBatch = new VectorBatch(slicedCol1->GetSize());
 
-    auto inputVec = std::vector<DataTypePtr>({ IntType(), IntType(), IntType() });
+    auto inputVec = std::vector<DataTypePtr>({IntType(), IntType(), IntType()});
     DataTypes inputTypes1(inputVec);
     vecBatch->Append(slicedCol1);
     vecBatch->Append(slicedCol2);
@@ -1432,7 +1441,7 @@ TEST(ProjectionTest, SlicedDictionaryVecTest)
     LiteralExpr *addRight3 = new LiteralExpr(10, IntType());
     BinaryExpr *addExpr3 = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft3, addRight3, IntType());
 
-    std::vector<Expr *> exprs = { addExpr1, addExpr2, addExpr3 };
+    std::vector<Expr *> exprs = {addExpr1, addExpr2, addExpr3};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes1, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(std::move(exprEvaluator));
@@ -1483,13 +1492,13 @@ TEST(ProjectionTest, SlicedDictionaryVecWithNullTest)
 
     VectorBatch *t = new VectorBatch(slicedCol1->GetSize());
     t->Append(slicedCol1);
-    auto inputVec = std::vector<DataTypePtr>({ IntType() });
+    auto inputVec = std::vector<DataTypePtr>({IntType()});
     DataTypes inputTypes(inputVec);
 
     FieldExpr *addLeft = new FieldExpr(0, IntType());
     FieldExpr *addRight = new FieldExpr(0, IntType());
     BinaryExpr *addExpr = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft, addRight, IntType());
-    std::vector<Expr *> exprs = { addExpr };
+    std::vector<Expr *> exprs = {addExpr};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(std::move(exprEvaluator));
@@ -1526,11 +1535,9 @@ TEST(ProjectionTest, Tpcds96)
     auto *col1 = new int64_t[21];
     auto *col2 = new int64_t[21];
     auto *col3 = new int64_t[21];
-    vector<long> v0 = { 48, 9, 20, 16, 5, 20, 58, 12, 4, 71, 2, 13, 1, 1, 3, 80, 22, 22, 23, 14, 23 };
-    vector<long> v1 = {
-        139650736612376, 102, 71, 23, 13, 122, 46, 2, 52, 51, 39, 3, 63, 28, 38, 43, 52, 16, 72, 54, 2
-    };
-    vector<long> v2 = { 33, 17, 14, 0, 49, 21, 8, 56, 16, 2, 18, 47, 0, 15, 27, 58, 0, 4, 5, 3, 23 };
+    vector<long> v0 = {48, 9, 20, 16, 5, 20, 58, 12, 4, 71, 2, 13, 1, 1, 3, 80, 22, 22, 23, 14, 23};
+    vector<long> v1 = {139650736612376, 102, 71, 23, 13, 122, 46, 2, 52, 51, 39, 3, 63, 28, 38, 43, 52, 16, 72, 54, 2};
+    vector<long> v2 = {33, 17, 14, 0, 49, 21, 8, 56, 16, 2, 18, 47, 0, 15, 27, 58, 0, 4, 5, 3, 23};
     vector<long> v3(21, 0);
 
     for (int i = 0; i < numRows; i++) {
@@ -1548,9 +1555,9 @@ TEST(ProjectionTest, Tpcds96)
     auto *addExpr2 = new BinaryExpr(omniruntime::expressions::Operator::ADD, addExpr1, addCol2_0, LongType());
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, addCol2_1, addExpr2, LongType());
     auto *expectRes = new FieldExpr(3, LongType());
-    std::vector<Expr *> exprs = { divExpr, expectRes };
+    std::vector<Expr *> exprs = {divExpr, expectRes};
 
-    std::vector<DataTypePtr> vecOfTypes = { LongType(), LongType(), LongType(), LongType() };
+    std::vector<DataTypePtr> vecOfTypes = {LongType(), LongType(), LongType(), LongType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -1623,8 +1630,8 @@ TEST(ProjectionTest, Round)
             col5[idx++] = i / 0.0;
         }
     }
-    std::vector<DataTypePtr> vecOfTypes = { IntType(),    LongType(),   DoubleType(),
-        DoubleType(), DoubleType(), DoubleType() };
+    std::vector<DataTypePtr> vecOfTypes = {IntType(),    LongType(),   DoubleType(),
+                                           DoubleType(), DoubleType(), DoubleType()};
     std::string funcStr = "round";
 
     // rounded to tenths. since int type, no decimals, so should be same as input
@@ -1678,7 +1685,7 @@ TEST(ProjectionTest, Round)
     args5.push_back(new LiteralExpr(data5Decimal, IntType()));
     auto roundExpr5 = GetFuncExpr(funcStr, args5, DoubleType());
 
-    std::vector<Expr *> exprs = { roundExpr0, roundExpr1, roundExpr2, roundExpr3, roundExpr4, roundExpr5 };
+    std::vector<Expr *> exprs = {roundExpr0, roundExpr1, roundExpr2, roundExpr3, roundExpr4, roundExpr5};
 
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -1737,7 +1744,7 @@ TEST(ProjectionTest, Round)
 TEST(ProjectionTest, ConcatStrAndChar)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    std::vector<DataTypePtr> vecOfTypes = { CharType() };
+    std::vector<DataTypePtr> vecOfTypes = {CharType()};
     DataTypes inputTypes(vecOfTypes);
     const int32_t numRows = 1;
     auto *strings = new std::string[numRows];
@@ -1753,7 +1760,7 @@ TEST(ProjectionTest, ConcatStrAndChar)
     concatArgs2.push_back(new FieldExpr(0, CharType(16)));
     concatArgs2.push_back(new LiteralExpr(new std::string("store"), VarcharType()));
     auto concatCharStr = GetFuncExpr(concatStr, concatArgs2, CharType(21));
-    std::vector<Expr *> exprs = { concatStrChar, concatCharStr };
+    std::vector<Expr *> exprs = {concatStrChar, concatCharStr};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
@@ -1781,7 +1788,7 @@ TEST(ProjectionTest, ConcatStrAndChar)
 TEST(ProjectionTest, varcharExpand)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    std::vector<DataTypePtr> vecOfTypes = { VarcharType() };
+    std::vector<DataTypePtr> vecOfTypes = {VarcharType()};
     DataTypes inputTypes(vecOfTypes);
     const int32_t numRows = 100;
 
@@ -1811,7 +1818,7 @@ TEST(ProjectionTest, varcharExpand)
 
     std::string substrStr = "substr";
     DataTypePtr retType = VarcharType();
-    std::vector<Expr *> args { substrData, substrIndex, substrLen };
+    std::vector<Expr *> args{substrData, substrIndex, substrLen};
     auto substrExpr = GetFuncExpr(substrStr, args, VarcharType());
     std::string baseStr(" world");
     int32_t avgStrLen = 200;
@@ -1830,7 +1837,7 @@ TEST(ProjectionTest, varcharExpand)
     auto concatExpr = GetFuncExpr(concatStr, concatArgs, VarcharType());
 
     FieldExpr *col0 = new FieldExpr(0, VarcharType());
-    std::vector<Expr *> exprs = { concatExpr, col0 };
+    std::vector<Expr *> exprs = {concatExpr, col0};
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
@@ -1872,7 +1879,7 @@ TEST(ProjectionTest, testDivDecimal128)
 
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, addLeft, addRight, Decimal128Type(38, 2));
 
-    std::vector<Expr *> exprs = { divExpr };
+    std::vector<Expr *> exprs = {divExpr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -1903,7 +1910,7 @@ TEST(ProjectionTest, testAddDecimal128)
 
     auto *addExpr = new BinaryExpr(omniruntime::expressions::Operator::ADD, addLeft, addRight, Decimal128Type(9, 5));
 
-    std::vector<Expr *> exprs = { addExpr };
+    std::vector<Expr *> exprs = {addExpr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -1935,7 +1942,7 @@ TEST(ProjectionTest, testDecimal128Between)
 
     auto expr = new BetweenExpr(value, lowerBound, upperBound);
 
-    std::vector<Expr *> exprs = { expr };
+    std::vector<Expr *> exprs = {expr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -1964,9 +1971,9 @@ TEST(ProjectionTest, testDecimal128In)
     auto arg0 = new LiteralExpr(new std::string("1234"), Decimal128Type(6, 0));
     auto arg1 = new LiteralExpr(new std::string("12345"), Decimal128Type(6, 0));
     auto arg2 = new LiteralExpr(new std::string("123456"), Decimal128Type(6, 0));
-    std::vector<Expr *> args = { arg0, arg1, arg2 };
+    std::vector<Expr *> args = {arg0, arg1, arg2};
     auto expr = new InExpr(args);
-    std::vector<Expr *> exprs = { expr };
+    std::vector<Expr *> exprs = {expr};
 
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
@@ -2004,7 +2011,7 @@ TEST(ProjectionTest, testDecimal128Comprehensive)
     auto right = new LiteralExpr(new std::string("1234"), Decimal128Type(4, 2));
     auto expr = new BinaryExpr(omniruntime::expressions::Operator::GT, ifExpr, right, BooleanType());
 
-    std::vector<Expr *> exprs = { expr };
+    std::vector<Expr *> exprs = {expr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -2030,8 +2037,8 @@ TEST(ProjectionTest, TestAndExprWithNull)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 9;
-    bool col1[numRows] = { true, true, true, false, false, false, true, false, false };
-    bool col2[numRows] = { true, false, true, true, false, false, true, false, false };
+    bool col1[numRows] = {true, true, true, false, false, false, true, false, false};
+    bool col2[numRows] = {true, false, true, true, false, false, true, false, false};
 
     auto andLeft = new FieldExpr(0, BooleanType());
     auto andRight = new FieldExpr(1, BooleanType());
@@ -2045,9 +2052,9 @@ TEST(ProjectionTest, TestAndExprWithNull)
     auto isNullExpr = new IsNullExpr(andExpr1);
     auto isNullExpr1 = new IsNullExpr(andExpr2);
     auto notExpr = new UnaryExpr(omniruntime::expressions::Operator::NOT, isNullExpr1, BooleanType());
-    std::vector<Expr *> exprs = { andExpr, isNullExpr, notExpr };
+    std::vector<Expr *> exprs = {andExpr, isNullExpr, notExpr};
 
-    std::vector<DataTypePtr> vecOfTypes = { BooleanType(), BooleanType() };
+    std::vector<DataTypePtr> vecOfTypes = {BooleanType(), BooleanType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -2100,14 +2107,14 @@ TEST(ProjectionTest, TestOrExprWithNull)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 9;
-    bool col1[numRows] = { true, true, true, false, false, false, true, false, false };
-    bool col2[numRows] = { true, false, true, true, false, false, true, false, false };
+    bool col1[numRows] = {true, true, true, false, false, false, true, false, false};
+    bool col2[numRows] = {true, false, true, true, false, false, true, false, false};
 
     auto orLeft = new FieldExpr(0, BooleanType());
     auto orRight = new FieldExpr(1, BooleanType());
     auto *orExpr = new BinaryExpr(omniruntime::expressions::Operator::OR, orLeft, orRight, BooleanType());
-    std::vector<Expr *> exprs = { orExpr };
-    std::vector<DataTypePtr> vecOfTypes = { BooleanType(), BooleanType() };
+    std::vector<Expr *> exprs = {orExpr};
+    std::vector<DataTypePtr> vecOfTypes = {BooleanType(), BooleanType()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -2156,7 +2163,7 @@ TEST(ProjectionTest, testSubDecimal64)
 
     auto *subExpr = new BinaryExpr(omniruntime::expressions::Operator::SUB, subLeft, subRight, Decimal64Type(8, 4));
 
-    std::vector<Expr *> exprs = { subExpr };
+    std::vector<Expr *> exprs = {subExpr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -2187,7 +2194,7 @@ TEST(ProjectionTest, testMulDecimal64)
 
     auto *mulExpr = new BinaryExpr(omniruntime::expressions::Operator::MUL, mulLeft, mulRight, Decimal64Type(7, 4));
 
-    std::vector<Expr *> exprs = { mulExpr };
+    std::vector<Expr *> exprs = {mulExpr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -2218,7 +2225,7 @@ TEST(ProjectionTest, testDivDecimal64)
 
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, left, right, Decimal64Type(2, 1));
 
-    std::vector<Expr *> exprs = { divExpr };
+    std::vector<Expr *> exprs = {divExpr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -2249,7 +2256,7 @@ TEST(ProjectionTest, testModDecimal64)
 
     auto *modExpr = new BinaryExpr(omniruntime::expressions::Operator::MOD, left, right, Decimal64Type(4, 3));
 
-    std::vector<Expr *> exprs = { modExpr };
+    std::vector<Expr *> exprs = {modExpr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -2282,7 +2289,7 @@ TEST(ProjectionTest, testDecimal64ArithOutputDecimal128)
     auto subRight = new LiteralExpr(2L, Decimal64Type(18, 0));
 
     auto *subExpr = new BinaryExpr(omniruntime::expressions::Operator::SUB, subLeft, subRight, Decimal128Type(19, 0));
-    std::vector<Expr *> exprs = { addExpr, subExpr };
+    std::vector<Expr *> exprs = {addExpr, subExpr};
 
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
@@ -2319,9 +2326,9 @@ TEST(ProjectionTest, testDecimal64In)
     auto arg1 = new LiteralExpr(120945L, Decimal64Type(6, 2));
     auto arg2 = new LiteralExpr(65781L, Decimal64Type(6, 2));
     auto arg3 = new LiteralExpr(65781L, Decimal64Type(6, 2));
-    std::vector<Expr *> args = { arg0, arg1, arg2, arg3 };
+    std::vector<Expr *> args = {arg0, arg1, arg2, arg3};
     auto expr = new InExpr(args);
-    std::vector<Expr *> exprs = { expr };
+    std::vector<Expr *> exprs = {expr};
 
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
@@ -2352,7 +2359,7 @@ TEST(ProjectionTest, testDecimal64Between)
     auto lowerBound = new LiteralExpr(87230L, Decimal64Type(5, 4));
     auto upperBound = new LiteralExpr(876903L, Decimal64Type(6, 1));
     auto expr = new BetweenExpr(value, lowerBound, upperBound);
-    std::vector<Expr *> exprs = { expr };
+    std::vector<Expr *> exprs = {expr};
 
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
@@ -2392,7 +2399,7 @@ TEST(ProjectionTest, testDecimal64Comprehensive)
     auto right = new BinaryExpr(omniruntime::expressions::Operator::SUB, subLeft, subRight, Decimal64Type(7, 3));
     auto expr = new BinaryExpr(omniruntime::expressions::Operator::GT, ifExpr, right, BooleanType());
 
-    std::vector<Expr *> exprs = { expr };
+    std::vector<Expr *> exprs = {expr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -2421,10 +2428,10 @@ TEST(ProjectionTest, Decimal64ColDivide)
     int64_t *col1 = MakeLongs(numRows, -500);
     auto *divRight = new LiteralExpr(92122L, Decimal64Type(8, 4));
     auto *divExpr = new BinaryExpr(omniruntime::expressions::Operator::DIV, new FieldExpr(0, Decimal64Type(8, 4)),
-        divRight, Decimal64Type(8, 4));
-    std::vector<Expr *> exprs = { divExpr };
+                                   divRight, Decimal64Type(8, 4));
+    std::vector<Expr *> exprs = {divExpr};
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal64Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal64Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -2508,7 +2515,7 @@ VectorBatch *CreateExpectVecBatchForConcat(const DataTypes &expectDataType, cons
         if (expectDatas[i] == "NULL") {
             expectVec->SetNull(i);
         } else {
-            auto strView = std::string_view { expectDatas[i] };
+            auto strView = std::string_view{expectDatas[i]};
             expectVec->SetValue(i, strView);
         }
     }
@@ -2520,8 +2527,8 @@ TEST(ProjectionTest, ConcatStrCharTest)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     auto concatExpr = GetConcatFuncExpr(CharType(20), VarcharType(30), CharType(100));
-    std::vector<Expr *> exprs = { concatExpr };
-    std::vector<DataTypePtr> vecOfTypes = { CharType(20), VarcharType(30) };
+    std::vector<Expr *> exprs = {concatExpr};
+    std::vector<DataTypePtr> vecOfTypes = {CharType(20), VarcharType(30)};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -2534,12 +2541,11 @@ TEST(ProjectionTest, ConcatStrCharTest)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    std::vector<std::string> expectedDatas = { "NULL",        "NULL",
-        "NULL",        "",
-        "John",        "Rebecca",
-        "RebeccaJohn", "Rebecca-Rebecca-Rebecca-Rebeca-John-John-John-John" };
-    std::vector<DataTypePtr> outTypes = { CharType(100) };
-    auto expect = CreateExpectVecBatchForConcat(DataTypes { outTypes }, expectedDatas);
+    std::vector<std::string> expectedDatas = {
+        "NULL", "NULL",    "NULL",        "",
+        "John", "Rebecca", "RebeccaJohn", "Rebecca-Rebecca-Rebecca-Rebeca-John-John-John-John"};
+    std::vector<DataTypePtr> outTypes = {CharType(100)};
+    auto expect = CreateExpectVecBatchForConcat(DataTypes{outTypes}, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
 
     VectorHelper::FreeVecBatch(outputVecBatch);
@@ -2554,8 +2560,8 @@ TEST(ProjectionTest, ConcatCharStrTest)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     auto concatExpr = GetConcatFuncExpr(VarcharType(20), CharType(30), CharType(100));
-    std::vector<Expr *> exprs = { concatExpr };
-    std::vector<DataTypePtr> vecOfTypes = { VarcharType(20), CharType(30) };
+    std::vector<Expr *> exprs = {concatExpr};
+    std::vector<DataTypePtr> vecOfTypes = {VarcharType(20), CharType(30)};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -2568,16 +2574,16 @@ TEST(ProjectionTest, ConcatCharStrTest)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    std::vector<std::string> expectedDatas = { "NULL",
-        "NULL",
-        "NULL",
-        "",
-        "                              John",
-        "Rebecca",
-        "Rebecca                       John",
-        "Rebecca-Rebecca-Rebecca-Rebeca-John-John-John-John" };
-    std::vector<DataTypePtr> outTypes = { CharType(100) };
-    auto expect = CreateExpectVecBatchForConcat(DataTypes { outTypes }, expectedDatas);
+    std::vector<std::string> expectedDatas = {"NULL",
+                                              "NULL",
+                                              "NULL",
+                                              "",
+                                              "                              John",
+                                              "Rebecca",
+                                              "Rebecca                       John",
+                                              "Rebecca-Rebecca-Rebecca-Rebeca-John-John-John-John"};
+    std::vector<DataTypePtr> outTypes = {CharType(100)};
+    auto expect = CreateExpectVecBatchForConcat(DataTypes{outTypes}, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
 
     VectorHelper::FreeVecBatch(outputVecBatch);
@@ -2592,8 +2598,8 @@ TEST(ProjectionTest, ConcatStrStrTest)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     auto concatExpr = GetConcatFuncExpr(VarcharType(20), VarcharType(30), VarcharType(100));
-    std::vector<Expr *> exprs = { concatExpr };
-    std::vector<DataTypePtr> vecOfTypes = { VarcharType(20), VarcharType(30) };
+    std::vector<Expr *> exprs = {concatExpr};
+    std::vector<DataTypePtr> vecOfTypes = {VarcharType(20), VarcharType(30)};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -2606,13 +2612,12 @@ TEST(ProjectionTest, ConcatStrStrTest)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    std::vector<std::string> expectedDatas = { "NULL",        "NULL",
-        "NULL",        "",
-        "John",        "Rebecca",
-        "RebeccaJohn", "Rebecca-Rebecca-Rebecca-Rebeca-John-John-John-John" };
+    std::vector<std::string> expectedDatas = {
+        "NULL", "NULL",    "NULL",        "",
+        "John", "Rebecca", "RebeccaJohn", "Rebecca-Rebecca-Rebecca-Rebeca-John-John-John-John"};
 
-    std::vector<DataTypePtr> outTypes = { VarcharType(100) };
-    auto expect = CreateExpectVecBatchForConcat(DataTypes { outTypes }, expectedDatas);
+    std::vector<DataTypePtr> outTypes = {VarcharType(100)};
+    auto expect = CreateExpectVecBatchForConcat(DataTypes{outTypes}, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
 
     VectorHelper::FreeVecBatch(outputVecBatch);
@@ -2627,8 +2632,8 @@ TEST(ProjectionTest, ConcatCharCharTest)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     auto concatExpr = GetConcatFuncExpr(CharType(20), CharType(30), CharType(51));
-    std::vector<Expr *> exprs = { concatExpr };
-    std::vector<DataTypePtr> vecOfTypes = { CharType(20), CharType(30) };
+    std::vector<Expr *> exprs = {concatExpr};
+    std::vector<DataTypePtr> vecOfTypes = {CharType(20), CharType(30)};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -2641,16 +2646,16 @@ TEST(ProjectionTest, ConcatCharCharTest)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    std::vector<std::string> expectedDatas = { "NULL",
-        "NULL",
-        "NULL",
-        "",
-        "                              John",
-        "Rebecca",
-        "Rebecca                       John",
-        "Rebecca-Rebecca-Rebecca-Rebeca-John-John-John-John" };
-    std::vector<DataTypePtr> outTypes = { CharType(51) };
-    auto expect = CreateExpectVecBatchForConcat(DataTypes { outTypes }, expectedDatas);
+    std::vector<std::string> expectedDatas = {"NULL",
+                                              "NULL",
+                                              "NULL",
+                                              "",
+                                              "                              John",
+                                              "Rebecca",
+                                              "Rebecca                       John",
+                                              "Rebecca-Rebecca-Rebecca-Rebeca-John-John-John-John"};
+    std::vector<DataTypePtr> outTypes = {CharType(51)};
+    auto expect = CreateExpectVecBatchForConcat(DataTypes{outTypes}, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
 
     VectorHelper::FreeVecBatch(outputVecBatch);
@@ -2675,18 +2680,18 @@ Expr *GetStringFuncExpr(std::vector<DataTypePtr> inputTypes, DataTypePtr returnT
 TEST(ProjectionTest, ReplaceStrWithRep)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    vector<DataTypePtr> vecTypes = { VarcharType(20), VarcharType(10), VarcharType(10) };
+    vector<DataTypePtr> vecTypes = {VarcharType(20), VarcharType(10), VarcharType(10)};
     string replaceFuncStr = "replace";
     auto replaceFuncExpr = GetStringFuncExpr(vecTypes, VarcharType(100), replaceFuncStr);
-    vector<Expr *> exprs = { replaceFuncExpr };
+    vector<Expr *> exprs = {replaceFuncExpr};
     DataTypes inputTypes(vecTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
 
-    string str[] = { "varchar100", "varchar200", "varchar300" };
-    string search[] = { "char1", "char2", "char3" };
-    string replace[] = { "opera", "*#", "VARCHAR" };
+    string str[] = {"varchar100", "varchar200", "varchar300"};
+    string search[] = {"char1", "char2", "char3"};
+    string replace[] = {"opera", "*#", "VARCHAR"};
     auto input = CreateVectorBatch(inputTypes, 3, str, search, replace);
 
     auto op = factory->CreateOperator();
@@ -2694,8 +2699,8 @@ TEST(ProjectionTest, ReplaceStrWithRep)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    vector<DataTypePtr> expectedTypes = { VarcharType(100) };
-    string expectedDatas[] = { "varopera00", "var*#00", "varVARCHAR00" };
+    vector<DataTypePtr> expectedTypes = {VarcharType(100)};
+    string expectedDatas[] = {"varopera00", "var*#00", "varVARCHAR00"};
 
     auto expect = CreateVectorBatch(DataTypes(expectedTypes), 3, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
@@ -2710,17 +2715,17 @@ TEST(ProjectionTest, ReplaceStrWithRep)
 TEST(ProjectionTest, ReplaceStrWithoutRep)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    vector<DataTypePtr> vecTypes = { VarcharType(20), VarcharType(10) };
+    vector<DataTypePtr> vecTypes = {VarcharType(20), VarcharType(10)};
     string replaceFuncStr = "replace";
     auto replaceFuncExpr = GetStringFuncExpr(vecTypes, VarcharType(100), replaceFuncStr);
-    vector<Expr *> exprs = { replaceFuncExpr };
+    vector<Expr *> exprs = {replaceFuncExpr};
     DataTypes inputTypes(vecTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
 
-    string str[] = { "varchar100", "varchar200", "varchar300" };
-    string search[] = { "char1", "char2", "char3" };
+    string str[] = {"varchar100", "varchar200", "varchar300"};
+    string search[] = {"char1", "char2", "char3"};
     auto input = CreateVectorBatch(inputTypes, 3, str, search);
 
     auto op = factory->CreateOperator();
@@ -2728,8 +2733,8 @@ TEST(ProjectionTest, ReplaceStrWithoutRep)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    vector<DataTypePtr> expectedTypes = { VarcharType(100) };
-    string expectedDatas[] = { "var00", "var00", "var00" };
+    vector<DataTypePtr> expectedTypes = {VarcharType(100)};
+    string expectedDatas[] = {"var00", "var00", "var00"};
 
     auto expect = CreateVectorBatch(DataTypes(expectedTypes), 3, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
@@ -2744,16 +2749,16 @@ TEST(ProjectionTest, ReplaceStrWithoutRep)
 TEST(ProjectionTest, LowerStr)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    vector<DataTypePtr> vecTypes = { VarcharType(20) };
+    vector<DataTypePtr> vecTypes = {VarcharType(20)};
     string lowerFuncStr = "lower";
     auto lowerFuncExpr = GetStringFuncExpr(vecTypes, VarcharType(20), lowerFuncStr);
-    vector<Expr *> exprs = { lowerFuncExpr };
+    vector<Expr *> exprs = {lowerFuncExpr};
     DataTypes inputTypes(vecTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
 
-    string str[] = { "VARchar100", "Char200", "var**VAR" };
+    string str[] = {"VARchar100", "Char200", "var**VAR"};
     auto input = CreateVectorBatch(inputTypes, 3, str);
 
     auto op = factory->CreateOperator();
@@ -2761,8 +2766,8 @@ TEST(ProjectionTest, LowerStr)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    vector<DataTypePtr> expectedTypes = { VarcharType(20) };
-    string expectedDatas[] = { "varchar100", "char200", "var**var" };
+    vector<DataTypePtr> expectedTypes = {VarcharType(20)};
+    string expectedDatas[] = {"varchar100", "char200", "var**var"};
 
     auto expect = CreateVectorBatch(DataTypes(expectedTypes), 3, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
@@ -2777,16 +2782,16 @@ TEST(ProjectionTest, LowerStr)
 TEST(ProjectionTest, LowerChar)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    vector<DataTypePtr> vecTypes = { CharType(20) };
+    vector<DataTypePtr> vecTypes = {CharType(20)};
     string lowerFuncStr = "lower";
     auto lowerFuncExpr = GetStringFuncExpr(vecTypes, CharType(20), lowerFuncStr);
-    vector<Expr *> exprs = { lowerFuncExpr };
+    vector<Expr *> exprs = {lowerFuncExpr};
     DataTypes inputTypes(vecTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
 
-    string str[] = { "VARchar100", "Char200", "var**VAR" };
+    string str[] = {"VARchar100", "Char200", "var**VAR"};
     auto input = CreateVectorBatch(inputTypes, 3, str);
 
     auto op = factory->CreateOperator();
@@ -2794,8 +2799,8 @@ TEST(ProjectionTest, LowerChar)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    vector<DataTypePtr> expectedTypes = { CharType(20) };
-    string expectedDatas[] = { "varchar100", "char200", "var**var" };
+    vector<DataTypePtr> expectedTypes = {CharType(20)};
+    string expectedDatas[] = {"varchar100", "char200", "var**var"};
 
     auto expect = CreateVectorBatch(DataTypes(expectedTypes), 3, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
@@ -2810,16 +2815,16 @@ TEST(ProjectionTest, LowerChar)
 TEST(ProjectionTest, LengthChar)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    vector<DataTypePtr> vecTypes = { CharType(20) };
+    vector<DataTypePtr> vecTypes = {CharType(20)};
     string lenFuncStr = "length";
     auto lenFuncExpr = GetStringFuncExpr(vecTypes, LongType(), lenFuncStr);
-    vector<Expr *> exprs = { lenFuncExpr };
+    vector<Expr *> exprs = {lenFuncExpr};
     DataTypes inputTypes(vecTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
 
-    string str[] = { "VARchar100", "Char200", "var**VAR" };
+    string str[] = {"VARchar100", "Char200", "var**VAR"};
     auto input = CreateVectorBatch(inputTypes, 3, str);
 
     auto op = factory->CreateOperator();
@@ -2827,8 +2832,8 @@ TEST(ProjectionTest, LengthChar)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    vector<DataTypePtr> expectedTypes = { LongType() };
-    int64_t expectedDatas[] = { 20, 20, 20 };
+    vector<DataTypePtr> expectedTypes = {LongType()};
+    int64_t expectedDatas[] = {20, 20, 20};
 
     auto expect = CreateVectorBatch(DataTypes(expectedTypes), 3, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
@@ -2844,16 +2849,16 @@ TEST(ProjectionTest, LengthChar)
 TEST(ProjectionTest, LengthStr)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
-    vector<DataTypePtr> vecTypes = { VarcharType(20) };
+    vector<DataTypePtr> vecTypes = {VarcharType(20)};
     string lenFuncStr = "length";
     auto lenFuncExpr = GetStringFuncExpr(vecTypes, LongType(), lenFuncStr);
-    vector<Expr *> exprs = { lenFuncExpr };
+    vector<Expr *> exprs = {lenFuncExpr};
     DataTypes inputTypes(vecTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto *factory = new ProjectionOperatorFactory(move(exprEvaluator));
 
-    string str[] = { "VARchar100", "Char200", "var**VAR" };
+    string str[] = {"VARchar100", "Char200", "var**VAR"};
     auto input = CreateVectorBatch(inputTypes, 3, str);
 
     auto op = factory->CreateOperator();
@@ -2861,8 +2866,8 @@ TEST(ProjectionTest, LengthStr)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    vector<DataTypePtr> expectedTypes = { LongType() };
-    int64_t expectedDatas[] = { 10, 7, 8 };
+    vector<DataTypePtr> expectedTypes = {LongType()};
+    int64_t expectedDatas[] = {10, 7, 8};
 
     auto expect = CreateVectorBatch(DataTypes(expectedTypes), 3, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
@@ -2884,7 +2889,7 @@ TEST(ProjectionTest, MightContain)
     int32_t numWords = 1048576; // 1MBytes
 
     int64_t byteLength = numWords * sizeof(int64_t) + sizeof(versionJava) + sizeof(hashFuncNum) + sizeof(numWords);
-    auto *in = new int8_t[byteLength] { 0 };
+    auto *in = new int8_t[byteLength]{0};
     (reinterpret_cast<int32_t *>(in))[0] = 1;
     (reinterpret_cast<int32_t *>(in))[1] = hashFuncNum;
     (reinterpret_cast<int32_t *>(in))[2] = numWords;
@@ -2900,15 +2905,15 @@ TEST(ProjectionTest, MightContain)
     hashArgs.push_back(hashValue);
     string mightContainFuncStr = "might_contain";
     auto mightContainFuncExpr = GetFuncExpr(mightContainFuncStr, hashArgs, BooleanType());
-    vector<Expr *> exprs = { mightContainFuncExpr };
-    std::vector<DataTypePtr> vecTypes = { LongType() };
+    vector<Expr *> exprs = {mightContainFuncExpr};
+    std::vector<DataTypePtr> vecTypes = {LongType()};
     DataTypes inputTypes(vecTypes);
     auto overflowConfig = new OverflowConfig();
 
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
     auto factory = new ProjectionOperatorFactory(move(exprEvaluator));
 
-    int64_t value[] = { 11L, 30L, 55L};
+    int64_t value[] = {11L, 30L, 55L};
     auto input = CreateVectorBatch(inputTypes, 3, value);
 
     auto op = factory->CreateOperator();
@@ -2916,8 +2921,8 @@ TEST(ProjectionTest, MightContain)
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
 
-    vector<DataTypePtr> expectedTypes = { BooleanType() };
-    bool expectedDatas[] = { true, false, true};
+    vector<DataTypePtr> expectedTypes = {BooleanType()};
+    bool expectedDatas[] = {true, false, true};
 
     auto expect = CreateVectorBatch(DataTypes(expectedTypes), 3, expectedDatas);
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expect));
@@ -2942,7 +2947,7 @@ TEST(ProjectionTest, testDecimal128NegativeLiteral)
     auto *subExpr =
         new BinaryExpr(omniruntime::expressions::Operator::SUB, literalLeft, literalRight, Decimal128Type(38, 16));
 
-    std::vector<Expr *> exprs = { subExpr };
+    std::vector<Expr *> exprs = {subExpr};
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
@@ -2968,8 +2973,8 @@ TEST(ProjectionTest, ProjectCastIntToString)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 3;
-    auto *col = new int[3] { 123, 312, 456 };
-    std::vector<DataTypePtr> vecOfTypes = { IntType() };
+    auto *col = new int[3]{123, 312, 456};
+    std::vector<DataTypePtr> vecOfTypes = {IntType()};
 
     auto data = new FieldExpr(0, IntType());
     std::string castStr = "CAST";
@@ -2977,7 +2982,7 @@ TEST(ProjectionTest, ProjectCastIntToString)
     args.push_back(data);
     auto castExpr = GetFuncExpr(castStr, args, VarcharType(4));
 
-    std::vector<Expr *> exprs = { castExpr };
+    std::vector<Expr *> exprs = {castExpr};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3008,7 +3013,7 @@ TEST(ProjectionTest, ProjectCastDecimal128ToString)
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 3;
     auto *col = MakeDecimals(numRows, 10);
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type()};
 
     auto data = new FieldExpr(0, Decimal128Type(38, 0));
     std::string castStr = "CAST";
@@ -3016,7 +3021,7 @@ TEST(ProjectionTest, ProjectCastDecimal128ToString)
     args.push_back(data);
     auto castExpr = GetFuncExpr(castStr, args, VarcharType(5));
 
-    std::vector<Expr *> exprs = { castExpr };
+    std::vector<Expr *> exprs = {castExpr};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3047,7 +3052,7 @@ TEST(ProjectionTest, ProjectCastDoubleToString)
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 3;
     auto *col = MakeDoubles(numRows, 10);
-    std::vector<DataTypePtr> vecOfTypes = { DoubleType() };
+    std::vector<DataTypePtr> vecOfTypes = {DoubleType()};
 
     auto data = new FieldExpr(0, DoubleType());
     std::string castStr = "CAST";
@@ -3055,7 +3060,7 @@ TEST(ProjectionTest, ProjectCastDoubleToString)
     args.push_back(data);
     auto castExpr = GetFuncExpr(castStr, args, VarcharType(5));
 
-    std::vector<Expr *> exprs = { castExpr };
+    std::vector<Expr *> exprs = {castExpr};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig(omniruntime::op::OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3068,7 +3073,7 @@ TEST(ProjectionTest, ProjectCastDoubleToString)
     op->AddInput(copy);
     VectorBatch *outputVecBatch = nullptr;
     op->GetOutput(&outputVecBatch);
-    string res[] = { "10.0", "11.0", "12.0" };
+    string res[] = {"10.0", "11.0", "12.0"};
     auto *vcVec = reinterpret_cast<Vector<LargeStringContainer<std::string_view>> *>(outputVecBatch->Get(0));
     for (int32_t i = 0; i < numRows; i++) {
         EXPECT_TRUE(vcVec->GetValue(i) == res[i]);
@@ -3100,9 +3105,9 @@ TEST(ProjectionTest, ProjectCastStringToString)
     std::vector<Expr *> args2;
     args2.push_back(data2);
     auto castExpr2 = GetFuncExpr(castStr, args2, VarcharType(10));
-    std::vector<Expr *> exprs = { castExpr1, castExpr2 };
+    std::vector<Expr *> exprs = {castExpr1, castExpr2};
 
-    std::vector<DataTypePtr> vecOfTypes = { VarcharType(18) };
+    std::vector<DataTypePtr> vecOfTypes = {VarcharType(18)};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3136,14 +3141,14 @@ TEST(ProjectionTest, ProjectCastStrStrZh)
     const int32_t numRows = 1;
 
     std::string castStr = "CAST";
-    std::vector<Expr *> args1 = { new FieldExpr(0, VarcharType(18)) };
+    std::vector<Expr *> args1 = {new FieldExpr(0, VarcharType(18))};
     auto castExpr1 = GetFuncExpr(castStr, args1, VarcharType(1024));
 
-    std::vector<Expr *> args2 = { new FieldExpr(0, VarcharType(18)) };
+    std::vector<Expr *> args2 = {new FieldExpr(0, VarcharType(18))};
     auto castExpr2 = GetFuncExpr(castStr, args2, VarcharType(7));
-    std::vector<Expr *> exprs = { castExpr1, castExpr2 };
+    std::vector<Expr *> exprs = {castExpr1, castExpr2};
 
-    std::vector<DataTypePtr> vecOfTypes = { VarcharType(18) };
+    std::vector<DataTypePtr> vecOfTypes = {VarcharType(18)};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3170,7 +3175,7 @@ TEST(ProjectionTest, ProjectCastStrStrZh)
         expected2[i] = "cast乌s斯";
     }
 
-    DataTypes outputTypes({ VarcharType(1024), VarcharType(7) });
+    DataTypes outputTypes({VarcharType(1024), VarcharType(7)});
     VectorBatch *expectedRet = CreateVectorBatch(outputTypes, numRows, expected1, expected2);
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectedRet));
@@ -3192,14 +3197,14 @@ TEST(ProjectionTest, ProjectCastStrStrWithOverflowConfig)
     const int32_t numRows = 1;
 
     std::string castStr = "CAST";
-    std::vector<Expr *> args1 = { new FieldExpr(0, VarcharType(18)) };
+    std::vector<Expr *> args1 = {new FieldExpr(0, VarcharType(18))};
     auto castExpr1 = GetFuncExpr(castStr, args1, VarcharType(1024));
 
-    std::vector<Expr *> args2 = { new FieldExpr(0, VarcharType(18)) };
+    std::vector<Expr *> args2 = {new FieldExpr(0, VarcharType(18))};
     auto castExpr2 = GetFuncExpr(castStr, args2, VarcharType(7));
-    std::vector<Expr *> exprs = { castExpr1, castExpr2 };
+    std::vector<Expr *> exprs = {castExpr1, castExpr2};
 
-    std::vector<DataTypePtr> vecOfTypes = { VarcharType(18) };
+    std::vector<DataTypePtr> vecOfTypes = {VarcharType(18)};
     DataTypes inputTypes(vecOfTypes);
 
     auto overflowConfig = new OverflowConfig(omniruntime::op::OVERFLOW_CONFIG_NULL);
@@ -3227,7 +3232,7 @@ TEST(ProjectionTest, ProjectCastStrStrWithOverflowConfig)
         expected2[i] = "cast乌s斯";
     }
 
-    DataTypes outputTypes({ VarcharType(1024), VarcharType(7) });
+    DataTypes outputTypes({VarcharType(1024), VarcharType(7)});
     VectorBatch *expectedRet = CreateVectorBatch(outputTypes, numRows, expected1, expected2);
 
     EXPECT_TRUE(VecBatchMatch(outputVecBatch, expectedRet));
@@ -3248,7 +3253,7 @@ TEST(ProjectionTest, ProjectCastIntToDecimal)
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 10;
     auto *col1 = MakeInts(numRows);
-    std::vector<DataTypePtr> vecOfTypes = { IntType() };
+    std::vector<DataTypePtr> vecOfTypes = {IntType()};
 
     auto data = new FieldExpr(0, IntType());
     std::string castStr = "CAST";
@@ -3256,7 +3261,7 @@ TEST(ProjectionTest, ProjectCastIntToDecimal)
     args.push_back(data);
     auto castExpr = GetFuncExpr(castStr, args, Decimal128Type(38, 0));
 
-    std::vector<Expr *> exprs = { castExpr };
+    std::vector<Expr *> exprs = {castExpr};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3285,8 +3290,8 @@ TEST(ProjectionTest, ProjectCastIntToDecimal64)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 3;
-    auto *col = new int[3] { 123, 312, 456 };
-    std::vector<DataTypePtr> vecOfTypes = { IntType() };
+    auto *col = new int[3]{123, 312, 456};
+    std::vector<DataTypePtr> vecOfTypes = {IntType()};
 
     auto data = new FieldExpr(0, IntType());
     std::string castStr = "CAST";
@@ -3294,7 +3299,7 @@ TEST(ProjectionTest, ProjectCastIntToDecimal64)
     args.push_back(data);
     auto castExpr = GetFuncExpr(castStr, args, Decimal64Type(18, 2));
 
-    std::vector<Expr *> exprs = { castExpr };
+    std::vector<Expr *> exprs = {castExpr};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3324,16 +3329,16 @@ TEST(ProjectionTest, ProjectSparkConfig)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     std::string castStr = "CAST";
-    std::vector<Expr *> argLeft { new FieldExpr(0, Decimal64Type(7, 0)) };
+    std::vector<Expr *> argLeft{new FieldExpr(0, Decimal64Type(7, 0))};
     FuncExpr *subLeft = GetFuncExpr(castStr, argLeft, Decimal64Type(8, 0));
     auto *col = new int64_t[1];
     col[0] = 123;
-    std::vector<Expr *> argRight { new FieldExpr(0, Decimal64Type(7, 0)) };
+    std::vector<Expr *> argRight{new FieldExpr(0, Decimal64Type(7, 0))};
     FuncExpr *subRight = GetFuncExpr(castStr, argRight, Decimal64Type(8, 0));
     auto *addExprs = new BinaryExpr(omniruntime::expressions::Operator::ADD, subLeft, subRight, Decimal64Type(8, 0));
 
-    std::vector<Expr *> exprs = { addExprs };
-    std::vector<DataTypePtr> vecOfTypes = { Decimal64Type() };
+    std::vector<Expr *> exprs = {addExprs};
+    std::vector<DataTypePtr> vecOfTypes = {Decimal64Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig(OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3367,8 +3372,8 @@ TEST(ProjectionTest, ProjectMulDecimal64)
     auto *mulExprs2 =
         new BinaryExpr(omniruntime::expressions::Operator::MUL, mulExprs1, mulRight2, Decimal64Type(7, 0));
 
-    std::vector<Expr *> exprs = { mulExprs2 };
-    std::vector<DataTypePtr> vecOfTypes = { Decimal64Type() };
+    std::vector<Expr *> exprs = {mulExprs2};
+    std::vector<DataTypePtr> vecOfTypes = {Decimal64Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig(OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3394,8 +3399,8 @@ TEST(ProjectionTest, AddDecimal)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 2;
-    auto *col1 = new int64_t[4] { 1, 0, 2, 0 };
-    auto *col2 = new int64_t[2] { 1, 2 };
+    auto *col1 = new int64_t[4]{1, 0, 2, 0};
+    auto *col2 = new int64_t[2]{1, 2};
     auto *right1 = new FieldExpr(0, Decimal128Type(38, 0));
     auto *left1 = new FieldExpr(0, Decimal128Type(38, 0));
     auto *addExpr1 = new BinaryExpr(omniruntime::expressions::Operator::ADD, right1, left1, Decimal128Type(38, 0));
@@ -3408,9 +3413,9 @@ TEST(ProjectionTest, AddDecimal)
     auto *right4 = new FieldExpr(0, Decimal128Type(38, 0));
     auto *left4 = new FieldExpr(1, Decimal64Type(18, 0));
     auto *addExpr4 = new BinaryExpr(omniruntime::expressions::Operator::ADD, right4, left4, Decimal128Type(38, 0));
-    std::vector<Expr *> exprs = { addExpr1, addExpr2, addExpr3, addExpr4 };
+    std::vector<Expr *> exprs = {addExpr1, addExpr2, addExpr3, addExpr4};
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type(), Decimal64Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type(), Decimal64Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig();
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3442,8 +3447,8 @@ TEST(ProjectionTest, AddDecimalReturnNull)
 {
     ConfigUtil::SetEnableBatchExprEvaluate(false);
     const int32_t numRows = 1;
-    auto *col1 = new int64_t[2] { -1, INT64_MAX };
-    auto *col2 = new int64_t[1] { INT64_MAX };
+    auto *col1 = new int64_t[2]{-1, INT64_MAX};
+    auto *col2 = new int64_t[1]{INT64_MAX};
     auto *right1 = new FieldExpr(0, Decimal128Type(38, 0));
     auto *left1 = new FieldExpr(0, Decimal128Type(38, 0));
     auto *addExpr1 = new BinaryExpr(omniruntime::expressions::Operator::ADD, right1, left1, Decimal128Type(38, 0));
@@ -3456,9 +3461,9 @@ TEST(ProjectionTest, AddDecimalReturnNull)
     auto *right4 = new FieldExpr(0, Decimal128Type(38, 0));
     auto *left4 = new FieldExpr(1, Decimal64Type(18, 0));
     auto *addExpr4 = new BinaryExpr(omniruntime::expressions::Operator::ADD, right4, left4, Decimal128Type(38, 0));
-    std::vector<Expr *> exprs = { addExpr1, addExpr2, addExpr3, addExpr4 };
+    std::vector<Expr *> exprs = {addExpr1, addExpr2, addExpr3, addExpr4};
 
-    std::vector<DataTypePtr> vecOfTypes = { Decimal128Type(), Decimal64Type() };
+    std::vector<DataTypePtr> vecOfTypes = {Decimal128Type(), Decimal64Type()};
     DataTypes inputTypes(vecOfTypes);
     auto overflowConfig = new OverflowConfig(OVERFLOW_CONFIG_NULL);
     auto exprEvaluator = std::make_shared<ExpressionEvaluator>(exprs, inputTypes, overflowConfig);
@@ -3495,7 +3500,7 @@ TEST(ProjectionTest, Nulls)
     const int32_t numRows = 100;
     auto nullExpr = new LiteralExpr(true, BooleanType());
     nullExpr->isNull = true;
-    std::vector<Expr *> exprs = { nullExpr };
+    std::vector<Expr *> exprs = {nullExpr};
 
     std::vector<DataTypePtr> vecOfTypes = {};
     DataTypes inputTypes(vecOfTypes);
@@ -3517,4 +3522,4 @@ TEST(ProjectionTest, Nulls)
     delete factory;
     delete overflowConfig;
 }
-}
+} // namespace ProjectionTest

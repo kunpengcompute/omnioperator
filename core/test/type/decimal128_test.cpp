@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -10,13 +18,10 @@ using namespace omniruntime::type;
 
 namespace Decimal128Test {
 #ifdef DIV_CAL_NEED_CHECK
-Decimal128Wrapper Negate(const Decimal128Wrapper &value)
-{
-    return Decimal128Wrapper::Negate(value);
-}
+Decimal128Wrapper Negate(const Decimal128Wrapper &value) { return Decimal128Wrapper::Negate(value); }
 
 bool AssertDivide(Decimal128Wrapper &dividend, Decimal128Wrapper &divisor, int32_t dividendScaleFactor,
-    int32_t divisorScaleFactor, Decimal128Wrapper &expectQuotient, Decimal128Wrapper &expectRemainder)
+                  int32_t divisorScaleFactor, Decimal128Wrapper &expectQuotient, Decimal128Wrapper &expectRemainder)
 {
     if (dividendScaleFactor >= Decimal128::MAX_LONG_PRECISION) {
         std::cout << "error" << std::endl;
@@ -42,7 +47,8 @@ bool AssertDivide(Decimal128Wrapper &dividend, Decimal128Wrapper &divisor, int32
 }
 
 bool AssertDivideAllSign(Decimal128Wrapper &dividend, Decimal128Wrapper &divisor, int32_t dividendScaleFactor,
-    int32_t divisorScaleFactor, Decimal128Wrapper &expectQuotient, Decimal128Wrapper &expectRemainder)
+                         int32_t divisorScaleFactor, Decimal128Wrapper &expectQuotient,
+                         Decimal128Wrapper &expectRemainder)
 {
     Decimal128Wrapper negateDividend = Negate(dividend);
     Decimal128Wrapper negateDivisor = Negate(divisor);
@@ -54,15 +60,15 @@ bool AssertDivideAllSign(Decimal128Wrapper &dividend, Decimal128Wrapper &divisor
     EXPECT_EQ(allSignResult1, true);
 
     bool allSignResult2 = AssertDivide(dividend, negateDivisor, dividendScaleFactor, divisorScaleFactor,
-        negateExQuotient, expectRemainder);
+                                       negateExQuotient, expectRemainder);
     EXPECT_EQ(allSignResult2, true);
 
     bool allSignResult3 = AssertDivide(negateDividend, divisor, dividendScaleFactor, divisorScaleFactor,
-        negateExQuotient, expectRemainder);
+                                       negateExQuotient, expectRemainder);
     EXPECT_EQ(allSignResult3, true);
 
     bool allSignResult4 = AssertDivide(negateDividend, negateDivisor, dividendScaleFactor, divisorScaleFactor,
-        expectQuotient, expectRemainder);
+                                       expectQuotient, expectRemainder);
     EXPECT_EQ(allSignResult4, true);
 
     return allSignResult1 && allSignResult2 && allSignResult3 && allSignResult4;
@@ -689,7 +695,6 @@ TEST(Decimal128, div_roundup_3)
     EXPECT_THROW(AssertDivideAllSign(lValue32, rValue32, 0, 0, expectQuotient32, expectRemainder32), std::exception);
 }
 
-
 TEST(Decimal128, add)
 {
     // 0 + 0 = 0
@@ -1023,7 +1028,6 @@ TEST(Decimal128, rescaleGT18)
     result21 = value21.ReScale(37);
     EXPECT_EQ(Decimal128Wrapper(0x785EE10D5DA46D9, 0xF436A000000000), result21);
 
-
     // -1  (37) = -10000000000000000000000000000000000000
     Decimal128Wrapper value22(0x8000000000000000, 0x1);
     Decimal128Wrapper result22;
@@ -1072,4 +1076,4 @@ TEST(Decimal128, DecimalRepresentationEquivalence)
     Decimal128Wrapper c5(-3, 0);
     EXPECT_EQ(a5, c5);
 }
-}
+} // namespace Decimal128Test

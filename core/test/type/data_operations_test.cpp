@@ -1,5 +1,13 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2021-2024. All rights reserved.
+ * Copyright (c) 2026 Huawei Technologies Co., Ltd
+ * OmniOperator is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *          http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include "gtest/gtest.h"
@@ -13,7 +21,7 @@ namespace DataOperationsTest {
 TEST(ConvertDateStringToInteger, NormalDate)
 {
     int64_t result;
-    const char* dateStr = "2024-01-01";
+    const char *dateStr = "2024-01-01";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_SUCCESS);
 
@@ -33,7 +41,7 @@ TEST(ConvertDateStringToInteger, NormalDate)
 TEST(ConvertDateStringToInteger, EpochDate)
 {
     int64_t result;
-    const char* dateStr = "1970-01-01";
+    const char *dateStr = "1970-01-01";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_SUCCESS);
     EXPECT_EQ(result, 0);
@@ -42,7 +50,7 @@ TEST(ConvertDateStringToInteger, EpochDate)
 TEST(ConvertDateStringToInteger, MinYear)
 {
     int64_t result;
-    const char* dateStr = "0000-01-01";
+    const char *dateStr = "0000-01-01";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_SUCCESS);
 
@@ -62,7 +70,7 @@ TEST(ConvertDateStringToInteger, MinYear)
 TEST(ConvertDateStringToInteger, MaxYear)
 {
     int64_t result;
-    const char* dateStr = "9999-12-31";
+    const char *dateStr = "9999-12-31";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_SUCCESS);
 
@@ -82,7 +90,7 @@ TEST(ConvertDateStringToInteger, MaxYear)
 TEST(ConvertDateStringToInteger, LeapYearFeb29)
 {
     int64_t result;
-    const char* dateStr = "2024-02-29";
+    const char *dateStr = "2024-02-29";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_SUCCESS);
 
@@ -102,7 +110,7 @@ TEST(ConvertDateStringToInteger, LeapYearFeb29)
 TEST(ConvertDateStringToInteger, NonLeapYearFeb29Invalid)
 {
     int64_t result;
-    const char* dateStr = "2023-02-29";
+    const char *dateStr = "2023-02-29";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -110,7 +118,7 @@ TEST(ConvertDateStringToInteger, NonLeapYearFeb29Invalid)
 TEST(ConvertDateStringToInteger, InvalidFormatMissingSeparator)
 {
     int64_t result;
-    const char* dateStr = "20240101";
+    const char *dateStr = "20240101";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -118,7 +126,7 @@ TEST(ConvertDateStringToInteger, InvalidFormatMissingSeparator)
 TEST(ConvertDateStringToInteger, InvalidFormatWrongSeparator)
 {
     int64_t result;
-    const char* dateStr = "2024/01/01";
+    const char *dateStr = "2024/01/01";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -126,7 +134,7 @@ TEST(ConvertDateStringToInteger, InvalidFormatWrongSeparator)
 TEST(ConvertDateStringToInteger, InvalidFormatTooShort)
 {
     int64_t result;
-    const char* dateStr = "2024-01-";
+    const char *dateStr = "2024-01-";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -134,7 +142,7 @@ TEST(ConvertDateStringToInteger, InvalidFormatTooShort)
 TEST(ConvertDateStringToInteger, InvalidFormatTooLong)
 {
     int64_t result;
-    const char* dateStr = "2024-01-01-";
+    const char *dateStr = "2024-01-01-";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -142,7 +150,7 @@ TEST(ConvertDateStringToInteger, InvalidFormatTooLong)
 TEST(ConvertDateStringToInteger, InvalidMonth)
 {
     int64_t result;
-    const char* dateStr = "2024-13-01";
+    const char *dateStr = "2024-13-01";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -150,7 +158,7 @@ TEST(ConvertDateStringToInteger, InvalidMonth)
 TEST(ConvertDateStringToInteger, InvalidMonthZero)
 {
     int64_t result;
-    const char* dateStr = "2024-00-01";
+    const char *dateStr = "2024-00-01";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -158,7 +166,7 @@ TEST(ConvertDateStringToInteger, InvalidMonthZero)
 TEST(ConvertDateStringToInteger, InvalidDay)
 {
     int64_t result;
-    const char* dateStr = "2024-01-32";
+    const char *dateStr = "2024-01-32";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -166,7 +174,7 @@ TEST(ConvertDateStringToInteger, InvalidDay)
 TEST(ConvertDateStringToInteger, InvalidDayZero)
 {
     int64_t result;
-    const char* dateStr = "2024-01-00";
+    const char *dateStr = "2024-01-00";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -174,7 +182,7 @@ TEST(ConvertDateStringToInteger, InvalidDayZero)
 TEST(ConvertDateStringToInteger, InvalidDayForMonth)
 {
     int64_t result;
-    const char* dateStr = "2024-04-31";
+    const char *dateStr = "2024-04-31";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -182,7 +190,7 @@ TEST(ConvertDateStringToInteger, InvalidDayForMonth)
 TEST(ConvertDateStringToInteger, YearOverflowNegative)
 {
     int64_t result;
-    const char* dateStr = "-0001-01-01";
+    const char *dateStr = "-0001-01-01";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -190,7 +198,7 @@ TEST(ConvertDateStringToInteger, YearOverflowNegative)
 TEST(ConvertDateStringToInteger, YearOverflowTooLarge)
 {
     int64_t result;
-    const char* dateStr = "10000-01-01";
+    const char *dateStr = "10000-01-01";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_OVERFLOW);
 }
@@ -198,7 +206,7 @@ TEST(ConvertDateStringToInteger, YearOverflowTooLarge)
 TEST(ConvertDateStringToInteger, WithLeadingSpaces)
 {
     int64_t result;
-    const char* dateStr = "  2024-01-01";
+    const char *dateStr = "  2024-01-01";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_SUCCESS);
 
@@ -218,7 +226,7 @@ TEST(ConvertDateStringToInteger, WithLeadingSpaces)
 TEST(ConvertDateStringToInteger, WithTrailingSpaces)
 {
     int64_t result;
-    const char* dateStr = "2024-01-01  ";
+    const char *dateStr = "2024-01-01  ";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_SUCCESS);
 
@@ -238,7 +246,7 @@ TEST(ConvertDateStringToInteger, WithTrailingSpaces)
 TEST(ConvertDateStringToInteger, WithBothSpaces)
 {
     int64_t result;
-    const char* dateStr = "  2024-01-01  ";
+    const char *dateStr = "  2024-01-01  ";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_SUCCESS);
 
@@ -258,7 +266,7 @@ TEST(ConvertDateStringToInteger, WithBothSpaces)
 TEST(ConvertDateStringToInteger, OnlySpaces)
 {
     int64_t result;
-    const char* dateStr = "     ";
+    const char *dateStr = "     ";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -266,7 +274,7 @@ TEST(ConvertDateStringToInteger, OnlySpaces)
 TEST(ConvertDateStringToInteger, EmptyString)
 {
     int64_t result;
-    const char* dateStr = "";
+    const char *dateStr = "";
     Status status = ConvertDateStringToInteger(result, dateStr, 0);
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -274,7 +282,7 @@ TEST(ConvertDateStringToInteger, EmptyString)
 TEST(ConvertDateStringToInteger, NotADate)
 {
     int64_t result;
-    const char* dateStr = "hello-world";
+    const char *dateStr = "hello-world";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -282,7 +290,7 @@ TEST(ConvertDateStringToInteger, NotADate)
 TEST(ConvertDateStringToInteger, CenturyLeapYear)
 {
     int64_t result;
-    const char* dateStr = "2000-02-29";
+    const char *dateStr = "2000-02-29";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::CONVERT_SUCCESS);
 
@@ -302,7 +310,7 @@ TEST(ConvertDateStringToInteger, CenturyLeapYear)
 TEST(ConvertDateStringToInteger, CenturyNonLeapYear)
 {
     int64_t result;
-    const char* dateStr = "1900-02-29";
+    const char *dateStr = "1900-02-29";
     Status status = ConvertDateStringToInteger(result, dateStr, strlen(dateStr));
     EXPECT_EQ(status, Status::IS_NOT_A_NUMBER);
 }
@@ -310,26 +318,17 @@ TEST(ConvertDateStringToInteger, CenturyNonLeapYear)
 TEST(ConvertDateStringToInteger, DifferentMonths)
 {
     struct TestCase {
-        const char* dateStr;
+        const char *dateStr;
         bool shouldSucceed;
     };
 
     TestCase testCases[] = {
-        {"2024-01-31", true},
-        {"2024-02-28", true},
-        {"2024-03-31", true},
-        {"2024-04-30", true},
-        {"2024-05-31", true},
-        {"2024-06-30", true},
-        {"2024-07-31", true},
-        {"2024-08-31", true},
-        {"2024-09-30", true},
-        {"2024-10-31", true},
-        {"2024-11-30", true},
-        {"2024-12-31", true},
+        {"2024-01-31", true}, {"2024-02-28", true}, {"2024-03-31", true}, {"2024-04-30", true},
+        {"2024-05-31", true}, {"2024-06-30", true}, {"2024-07-31", true}, {"2024-08-31", true},
+        {"2024-09-30", true}, {"2024-10-31", true}, {"2024-11-30", true}, {"2024-12-31", true},
     };
 
-    for (const auto& testCase : testCases) {
+    for (const auto &testCase : testCases) {
         int64_t result;
         Status status = ConvertDateStringToInteger(result, testCase.dateStr, strlen(testCase.dateStr));
         EXPECT_EQ(status, Status::CONVERT_SUCCESS);
@@ -354,7 +353,7 @@ TEST(ConvertDateStringToInteger, DifferentMonths)
 TEST(ConvertDateStringToInteger, DifferentYears)
 {
     struct TestCase {
-        const char* dateStr;
+        const char *dateStr;
         int64_t expectedTimestamp;
     };
 
@@ -364,7 +363,7 @@ TEST(ConvertDateStringToInteger, DifferentYears)
         {"2020-01-01", 1577836800000},
     };
 
-    for (const auto& testCase : testCases) {
+    for (const auto &testCase : testCases) {
         int64_t result;
         Status status = ConvertDateStringToInteger(result, testCase.dateStr, strlen(testCase.dateStr));
         EXPECT_EQ(status, Status::CONVERT_SUCCESS);
@@ -372,4 +371,4 @@ TEST(ConvertDateStringToInteger, DifferentYears)
     }
 }
 
-}
+} // namespace DataOperationsTest
