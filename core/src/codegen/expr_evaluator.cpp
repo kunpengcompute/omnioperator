@@ -626,6 +626,7 @@ BaseVector *Projection::ColumnProjectionProxy(VectorBatch *vecBatch, int32_t sel
             return ColumnProjectionMapVectorSliceHelper(vecBatch, selectedRows, numSelectedRows);
         case OMNI_ROW:
             return ColumnProjectionStructVectorSliceHelper(vecBatch, selectedRows, numSelectedRows);
+        case OMNI_TIME_WITHOUT_TIME_ZONE:
         case OMNI_TIMESTAMP_WITHOUT_TIME_ZONE:
         case OMNI_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
             return ColumnProjectionHelper<int64_t>(vecBatch, selectedRows, numSelectedRows);
@@ -1003,6 +1004,9 @@ BaseVector *ColumnProjectionProxy(BaseVector *colVec, int32_t numSelectedRows, i
         case OMNI_TIMESTAMP:
         case OMNI_DECIMAL64:
         case OMNI_INTERVAL_DAY_TIME:
+        case OMNI_TIME_WITHOUT_TIME_ZONE:
+        case OMNI_TIMESTAMP_WITHOUT_TIME_ZONE:
+        case OMNI_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
             return ColumnProjectionHelper<int64_t>(colVec, numSelectedRows);
         case OMNI_DOUBLE:
             return ColumnProjectionHelper<double>(colVec, numSelectedRows);

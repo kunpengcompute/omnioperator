@@ -1038,7 +1038,10 @@ BaseVector *VectorHelper::CopyPositionsVector(BaseVector *vector, int *positions
         case type::OMNI_LONG:
         case type::OMNI_TIMESTAMP:
         case type::OMNI_DATE64:
-        case type::OMNI_DECIMAL64: {
+        case type::OMNI_DECIMAL64:
+        case type::OMNI_TIME_WITHOUT_TIME_ZONE:
+        case type::OMNI_TIMESTAMP_WITHOUT_TIME_ZONE:
+        case type::OMNI_TIMESTAMP_WITH_LOCAL_TIME_ZONE: {
             return reinterpret_cast<Vector<int64_t> *>(vector)->CopyPositions(positions, offset, length);
         }
         case type::OMNI_DOUBLE: {

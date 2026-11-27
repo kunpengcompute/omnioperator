@@ -256,6 +256,44 @@ void ExpressionCodeGen::Visit(const BinaryExpr &binaryExpr)
             builder->CreateAnd(right->isNull, builder->CreateNot(left->data)))));
         return;
     }
+    if (bExpr->left->GetReturnTypeId() == OMNI_BOOLEAN) {
+        if (bExpr->right->GetReturnTypeId() != OMNI_BOOLEAN) {
+            LogWarn("Boolean binary expression has mismatched operand types: left = %d, right = %d",
+                static_cast<int32_t>(bExpr->left->GetReturnTypeId()),
+                static_cast<int32_t>(bExpr->right->GetReturnTypeId()));
+            this->value = CreateInvalidCodeGenValue();
+            return;
+        }
+        Value *cmp = nullptr;
+        switch (bExpr->op) {
+            case omniruntime::expressions::Operator::EQ:
+                cmp = builder->CreateICmpEQ(left->data, right->data, "relational_eq");
+                break;
+            case omniruntime::expressions::Operator::NEQ:
+                cmp = builder->CreateICmpNE(left->data, right->data, "relational_neq");
+                break;
+            case omniruntime::expressions::Operator::LT:
+                cmp = builder->CreateICmpULT(left->data, right->data, "relational_lt");
+                break;
+            case omniruntime::expressions::Operator::GT:
+                cmp = builder->CreateICmpUGT(left->data, right->data, "relational_gt");
+                break;
+            case omniruntime::expressions::Operator::LTE:
+                cmp = builder->CreateICmpULE(left->data, right->data, "relational_le");
+                break;
+            case omniruntime::expressions::Operator::GTE:
+                cmp = builder->CreateICmpUGE(left->data, right->data, "relational_ge");
+                break;
+            default:
+                LogWarn("Unsupported boolean binary operator %u", static_cast<uint32_t>(bExpr->op));
+                this->value = CreateInvalidCodeGenValue();
+                return;
+        }
+        Value *isNeitherNull = builder->CreateNot(builder->CreateOr(left->isNull, right->isNull));
+        this->value = make_shared<CodeGenValue>(builder->CreateAnd(isNeitherNull, cmp),
+            builder->CreateOr(left->isNull, right->isNull));
+        return;
+    }
     if (bExpr->left->GetReturnTypeId() == OMNI_BYTE) {
         Value *nullFlag = builder->CreateAlloca(Type::getInt1Ty(*context), nullptr, "null_flag");
         builder->CreateStore(ConstantInt::get(IntegerType::getInt1Ty(*context), 0), nullFlag);
