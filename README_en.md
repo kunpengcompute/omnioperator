@@ -265,44 +265,16 @@ Check the **PermitRootLogin** configuration item in **/etc/ssh/sshd\_config**.
 **Table  1**  Public network address statement
 
 <a name="table5591719574"></a>
-<table><tbody><tr id="row13592819778"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.1.1"><p id="p559212199711"><a name="p559212199711"></a><a name="p559212199711"></a>Open-Source/Third-Party Software</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.1.1 "><p id="p1259291919710"><a name="p1259291919710"></a><a name="p1259291919710"></a>GCC</p>
-</td>
-</tr>
-<tr id="row959213199719"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.2.1"><p id="p25928193714"><a name="p25928193714"></a><a name="p25928193714"></a>Type</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.2.1 "><p id="p259214193711"><a name="p259214193711"></a><a name="p259214193711"></a>Open-source software</p>
-</td>
-</tr>
-<tr id="row15921819775"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.3.1"><p id="p145921119774"><a name="p145921119774"></a><a name="p145921119774"></a>Public IP Address/Public URL/Domain Name/Email Address</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.3.1 "><p id="p8592141918714"><a name="p8592141918714"></a><a name="p8592141918714"></a><a href="https://gcc.gnu.org/bugs/" target="_blank" rel="noopener noreferrer">https://gcc.gnu.org/bugs/</a></p>
-</td>
-</tr>
-<tr id="row559214191971"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.4.1"><p id="p1359219191070"><a name="p1359219191070"></a><a name="p1359219191070"></a>File Type</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.4.1 "><p id="p1059214191475"><a name="p1059214191475"></a><a name="p1059214191475"></a>Binary</p>
-</td>
-</tr>
-<tr id="row185922197711"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.5.1"><p id="p7593619372"><a name="p7593619372"></a><a name="p7593619372"></a>File Name</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.5.1 "><p id="p1559317198713"><a name="p1559317198713"></a><a name="p1559317198713"></a>libboostkit-omniop-vector-2.0.0-aarch64.so</p>
-</td>
-</tr>
-<tr id="row0593141917711"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.6.1"><p id="p1459319197711"><a name="p1459319197711"></a><a name="p1459319197711"></a>Usage</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.6.1 "><p id="p2059320191370"><a name="p2059320191370"></a><a name="p2059320191370"></a>This email address is the official address of the open-source component GCC, and is used only to compile the open-source component. This email address is not used inside this product.</p>
-</td>
-</tr>
-<tr id="row259317197712"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.7.1"><p id="p195931919976"><a name="p195931919976"></a><a name="p195931919976"></a>Software Package</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.7.1 "><p id="p12877016104"><a name="p12877016104"></a><a name="p12877016104"></a>BoostKit-omniop_2.0.0.zip</p>
-<p id="p1959311194714"><a name="p1959311194714"></a><a name="p1959311194714"></a>boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz</p>
-</td>
-</tr>
-</tbody>
-</table>
+
+| Item | Details |
+| --- | --- |
+| Open-Source/Third-Party Software | GCC |
+| Type | Open-source software |
+| Public IP Address/Public URL/Domain Name/Email Address | [https://gcc.gnu.org/bugs/](https://gcc.gnu.org/bugs/) |
+| File Type | Binary |
+| File Name | libboostkit-omniop-vector-2.0.0-aarch64.so |
+| Usage | This email address is the official address of the open-source component GCC, and is used only to compile the open-source component. This email address is not used inside this product. |
+| Software Package | BoostKit-omniop_2.0.0.zip, boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz |
 
 ## Disclaimer<a name="EN-US_TOPIC_0000002515818292"></a>
 

@@ -278,44 +278,16 @@ OmniOperator 执行总耗时为 2577.709 s，Velox 为 4208.967 s。OmniOperator
 **表 1** 公网地址声明<a id="公网地址声明"></a>
 
 <a name="table5591719574"></a>
-<table><tbody><tr id="row13592819778"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.1.1"><p id="p559212199711"><a name="p559212199711"></a><a name="p559212199711"></a>开源软件/第三方软件</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.1.1 "><p id="p1259291919710"><a name="p1259291919710"></a><a name="p1259291919710"></a>GCC</p>
-</td>
-</tr>
-<tr id="row959213199719"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.2.1"><p id="p25928193714"><a name="p25928193714"></a><a name="p25928193714"></a>类型</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.2.1 "><p id="p259214193711"><a name="p259214193711"></a><a name="p259214193711"></a>开源软件</p>
-</td>
-</tr>
-<tr id="row15921819775"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.3.1"><p id="p145921119774"><a name="p145921119774"></a><a name="p145921119774"></a>公网IP地址/公网URL地址/域名/邮箱地址</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.3.1 "><p id="p8592141918714"><a name="p8592141918714"></a><a name="p8592141918714"></a><a href="https://gcc.gnu.org/bugs/" target="_blank" rel="noopener noreferrer">GCC官方Bug报告指南</a></p>
-</td>
-</tr>
-<tr id="row559214191971"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.4.1"><p id="p1359219191070"><a name="p1359219191070"></a><a name="p1359219191070"></a>所在文件类型</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.4.1 "><p id="p1059214191475"><a name="p1059214191475"></a><a name="p1059214191475"></a>二进制</p>
-</td>
-</tr>
-<tr id="row185922197711"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.5.1"><p id="p7593619372"><a name="p7593619372"></a><a name="p7593619372"></a>文件名</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.5.1 "><p id="p1559317198713"><a name="p1559317198713"></a><a name="p1559317198713"></a>libboostkit-omniop-vector-2.0.0-aarch64.so</p>
-</td>
-</tr>
-<tr id="row0593141917711"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.6.1"><p id="p1459319197711"><a name="p1459319197711"></a><a name="p1459319197711"></a>用途描述</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.6.1 "><p id="p2059320191370"><a name="p2059320191370"></a><a name="p2059320191370"></a>对应的邮箱地址为GCC开源组件官网地址，为编译开源组件时被动引入，产品实际未使用。</p>
-</td>
-</tr>
-<tr id="row259317197712"><th class="firstcol" valign="top" width="30%" id="mcps1.2.3.7.1"><p id="p195931919976"><a name="p195931919976"></a><a name="p195931919976"></a>软件包</p>
-</th>
-<td class="cellrowborder" valign="top" width="70%" headers="mcps1.2.3.7.1 "><p id="p12877016104"><a name="p12877016104"></a><a name="p12877016104"></a>BoostKit-omniop_2.0.0.zip</p>
-<p id="p1959311194714"><a name="p1959311194714"></a><a name="p1959311194714"></a>boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz</p>
-</td>
-</tr>
-</tbody>
-</table>
+
+| 项目 | 说明 |
+| --- | --- |
+| 开源软件/第三方软件 | GCC |
+| 类型 | 开源软件 |
+| 公网IP地址/公网URL地址/域名/邮箱地址 | [GCC官方Bug报告指南](https://gcc.gnu.org/bugs/) |
+| 所在文件类型 | 二进制 |
+| 文件名 | libboostkit-omniop-vector-2.0.0-aarch64.so |
+| 用途描述 | 对应的邮箱地址为GCC开源组件官网地址，为编译开源组件时被动引入，产品实际未使用。 |
+| 软件包 | BoostKit-omniop_2.0.0.zip, boostkit-omniop-operator-2.0.0-aarch64-centos.tar.gz |
 
 ## 免责声明<a name="ZH-CN_TOPIC_0000002515818292"></a>
 
