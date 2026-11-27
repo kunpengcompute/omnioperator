@@ -25,9 +25,14 @@ void RegisterMapFunctions(const std::string &prefix)
     std::vector<DataTypeId> supportValueTypes = {OMNI_BOOLEAN, OMNI_BYTE, OMNI_SHORT, OMNI_INT, OMNI_LONG, OMNI_FLOAT,
         OMNI_DOUBLE, OMNI_VARCHAR,  OMNI_DATE32, OMNI_DATE64, OMNI_TIME32, OMNI_TIME64, OMNI_TIMESTAMP, OMNI_DECIMAL64, OMNI_DECIMAL128};
 
-    for (auto &valueType : supportValueTypes) {
-        VectorFunction::RegisterVectorFunction("element_at", {OMNI_MAP, OMNI_VARCHAR}, valueType,
-        std::make_shared<SubscriptImpl>());
+    std::vector<DataTypeId> elementAtKeyTypes = {OMNI_BOOLEAN, OMNI_BYTE, OMNI_SHORT, OMNI_INT, OMNI_LONG,
+        OMNI_FLOAT, OMNI_DOUBLE, OMNI_VARCHAR};
+    for (auto keyType : elementAtKeyTypes) {
+        for (auto &valueType : supportValueTypes) {
+            auto impl = std::make_shared<SubscriptImpl>();
+            VectorFunction::RegisterVectorFunction("element_at", {OMNI_MAP, keyType}, valueType, impl);
+            VectorFunction::RegisterVectorFunction("try_element_at", {OMNI_MAP, keyType}, valueType, impl);
+        }
     }
 
     VectorFunction::RegisterVectorFunction("map_from_arrays", {OMNI_ARRAY, OMNI_ARRAY}, OMNI_MAP,
