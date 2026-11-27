@@ -3,35 +3,11 @@ This document describes how to compile and deploy the openLooKeng (OLK) and Omni
 
 # Preparing the compilation environment
 
-## Configure HTTP proxy
-
-### Edit file /etc/profile
-
-Add the following information to the file `/etc/profile`
-
-```
-export http_proxy=http://username:password@proxy.huawei.com:8080
-export https_proxy=http://username:password@proxy.huawei.com:8080
-export no_proxy=127.0.0.1,*.huawei.com,localhost,local,*.local,10.*
-```
-
-Notices:
-
-- Enter your own domain username and password for the username and password.
-
-- Special characters in the username and password must be escaped. For details, see the following links:
-
-  Common escape character ：<http://3ms.huawei.com/hi/group/4125/wiki_5843646.html>
-
-  All escape character：<http://3ms.huawei.com/hi/group/2901257/wiki_6179442.html>
-
 ### Check whether the external network can be pinged
 
 Type the  command `curl www.baidu.com ` on the command line.
 
 Normally, the following information is displayed, indicating that the external network can be pinged successfully.
-
-![1661582746423](http://image.huawei.com/tiny-lts/v1/images/5498ed56051b5e62988d9e2e182b60a3_865x593.png@900-0-90-f.png)
 
 ## Configure Ubuntu mirror source
 
@@ -50,10 +26,6 @@ deb-src http://mirrors.aliyun.com/ubuntu/ bionic-proposed main restricted univer
 deb-src http://mirrors.aliyun.com/ubuntu/ bionic-backports main restricted universe multiverse
 ```
 
-Another solution is to configure the HUAWEI CLOUD source. However, the following error will be reported during subsequent use, which may be caused by the server side.
-
-![1661585348159](http://image.huawei.com/tiny-lts/v1/images/ddba80d5d937f8ac532fec970b66d604_865x399.png@900-0-90-f.png)
-
 After the Ubuntu mirror source configuration, run the following command:
 
 ```
@@ -61,11 +33,11 @@ apt update
 apt upgrade
 ```
 
-For details about the above configuration, refer to the reference link <http://mirrors.tools.huawei.com/> .
+For details about the Ubuntu mirror configuration, refer to <https://mirrors.aliyun.com/ubuntu/> .
 
 ## Install OmniOperatorJit Dependencies
 
-The components required for OmniOperatorJit compilation include cmake, LLVM, googletest, jemalloc, json, huawei securec, JDK, and protobuf. The involved software is as follows:
+The components required for OmniOperatorJit compilation include cmake, LLVM, googletest, jemalloc, json, securec, JDK, and protobuf. The involved software is as follows:
 
 | Software       | Version |
 | -------------- | -------- |
@@ -78,13 +50,11 @@ The components required for OmniOperatorJit compilation include cmake, LLVM, goo
 | gtest          | 1.10.0   |
 | jemalloc       | 5.2.1    |
 | json           | 3.7.3    |
-| huawei securec | 无       |
+| securec        | 无       |
 | JDK            | 1.8      |
 | protobuf       | 无       |
 
 ### Confirm the Python Version 3
-
-![1661586155228](http://image.huawei.com/tiny-lts/v1/images/538785cfce46f6cac67e0d4600956db0_544x89.png)
 
 Python3 is installed by default.
 
@@ -94,13 +64,9 @@ Python3 is installed by default.
 
 Run the command `apt-get install gcc `
 
-![1661586482227](http://image.huawei.com/tiny-lts/v1/images/16619fd9c801e744c233b363b18def61_831x131.png)
-
 #### Install g++
 
 Run the command `apt-get install gcc-c++ `
-
-![1661586482227](http://image.huawei.com/tiny-lts/v1/images/4c2cc402beb2f009462560a2f56c1ea7_845x131.png@900-0-90-f.png)
 
 ### Install zlib
 
@@ -121,8 +87,6 @@ Run the command `cat /usr/lib64/pkgconfig/zlib.pc ` to check whether zlib has be
 ### Install autoconf
 
 Run the command `apt-get install autoconf `
-
-![1661587943041](http://image.huawei.com/tiny-lts/v1/images/65ede1529b53f9d8c20dd062e1696aec_848x186.png@900-0-90-f.png)
 
 ### Install cmake
 
@@ -269,9 +233,9 @@ Run the command `vi /etc/profile `,and add the following content to the file:
 
   Adjust the path that the variables point to based on the path of the LLVM compiled previously.
 
-- Configure huawei securec
+- Configure securec
 
-  To compile OmniOperatorJit,  the huawei securec configuration is as follows:
+  To compile OmniOperatorJit,  the securec configuration is as follows:
 
   ```
   export LD_LIBRARY_PATH(add the path) ":/opt/omni-operator/software/libboundscheck/lib"
@@ -285,10 +249,6 @@ Run the command `vi /etc/profile `,and add the following content to the file:
 - Configure JDK
 
   Run the command `find / -name "jni.h" ` to find the JDK installation location and configure it in `/etc/profile`
-
-  ![1661592130232](http://image.huawei.com/tiny-lts/v1/images/260d2c72c5a7446a2adc40818f93281c_628x47.png)
-
-  ![1661592155915](http://image.huawei.com/tiny-lts/v1/images/079e4d3db80efc911d9c6caf1eb9a7dd_865x130.png)
 
   Finally,run the command `source /etc/profile` to update environment variables.
 
@@ -304,7 +264,7 @@ Run the command `vi /etc/profile `,and add the following content to the file:
 code repository
 
 - openLooKeng Extension code repository: <https://github.com/kunpengcompute/boostkit-bigdata/tree/main/omnioperator/omniop-openlookeng-extension> 
-- OmniOperatorJIT code repository:<https://codehub-y.huawei.com/Kunpeng-Computing-DC/BigData/OmniOperatorJIT> 
+- OmniOperatorJIT code repository:<https://gitcode.com/openeuler/OmniOperator>
 - openLooKeng code repository:<https://gitee.com/openlookeng/hetu-core> 
 
 Clone code from the preceding repositories to the local host. The compilation sequence is OmniOperator Jit Core, OmniOperator Jit bindings, omniop-openlookeng-extension, and openLooKeng.
@@ -331,23 +291,7 @@ Clone code from the preceding repositories to the local host. The compilation se
     sh build.sh coverage [op/vec/llvm/all] [--disable-cpuchecker] [--enable-dt]
     ```
 
-    Notice: run the following command to download the jar package before compilation:
-
-    ```
-    wget https://szxy1.artifactory.cd-cloud-artifact.tools.huawei.com/artifactory/sz-maven-public/com/huawei/devtest/devtestcov-maven-plugin/2.1.1/devtestcov-maven-plugin-2.1.1.jar --proxy=off --no-check-certificate
-  
-    wget https://szxy1.artifactory.cd-cloud-artifact.tools.huawei.com/artifactory/sz-maven-public/com/huawei/devtest/devtestcov-maven-plugin/2.1.1/devtestcov-maven-plugin-2.1.1.pom --proxy=off --no-check-certificate
-  
-    mvn install:install-file -Dfile=devtestcov-maven-plugin-2.1.1.jar -DpomFile=devtestcov-maven-plugin-2.1.1.pom
-    ```
-  
-    ```
-    wget https://cmc.centralrepo.rnd.huawei.com/artifactory/product_maven/com/huawei/bepcloud/rebuild-maven-plugin/2.1.T1.SPC2/rebuild-maven-plugin-2.1.T1.SPC2.jar --proxy=off --no-check-certificate
-    
-    wget https://cmc.centralrepo.rnd.huawei.com/artifactory/product_maven/com/huawei/bepcloud/rebuild-maven-plugin/2.1.T1.SPC2/rebuild-maven-plugin-2.1.T1.SPC2.pom --proxy=off --no-check-certificate
-    
-    mvn install:install-file -Dfile=rebuild-maven-plugin-2.1.T1.SPC2.jar -DpomFile=rebuild-maven-plugin-2.1.T1.SPC2.pom
-    ```
+    Notice: the coverage build requires additional Maven plugins that are not distributed with this repository.
 
 ### Compile OmniOperatorJit bindings
 
@@ -404,7 +348,7 @@ boostkit-omniop-bindings-1.0.0-aarch64.jar
 # Common issues
 1. ***Error***: fatal, unable to access 'https://github.com/jemalloc/jemalloc.git/': server certificate verification failed. CAfile: /etc/ssl/certs/ca-certificates.crt CRLfile: none. <br/>
       ***Solution***: `export GIT_SSL_NO_VERIFY=1`
-2. ***Error***: fatal, unable to access 'https://codehub-dg-y.huawei.com/data-app-lab/omni-runtime.git/': Received HTTP code 504 from proxy after CONNECT. <br/>
+2. ***Error***: fatal, unable to access 'https://gitcode.com/openeuler/OmniOperator.git/': Received HTTP code 504 from proxy after CONNECT. <br/>
       ***Solution***: `unset http_proxy; unset https_proxy`
 3. ***Tip***: If your username or password has some special characters, please add `'\'` before them when configuring proxy.
 
