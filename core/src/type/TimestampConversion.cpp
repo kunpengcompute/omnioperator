@@ -954,7 +954,9 @@ Expected<ParsedTimestampWithTimeZone> fromTimestampWithTimezoneString(const char
 
         std::string_view timeZoneName(str + pos, timezonePos - pos);
 
-        if ((timeZone = tz::locateZone(timeZoneName, false)) == nullptr) {
+        if (timeZoneName == "Z" || timeZoneName == "z") {
+            timeZone = tz::locateZone("UTC", false);
+        } else if ((timeZone = tz::locateZone(timeZoneName, false)) == nullptr) {
             int64_t offsetMillis = 0;
             size_t offsetPos = 0;
             if (tryParsePrestoTimeOffsetString(str + pos, timezonePos - pos, offsetPos, offsetMillis)) {
